@@ -12,6 +12,7 @@ import Clients from "./pages/Clients";
 import Technicians from "./pages/Technicians";
 import Vehicles from "./pages/Vehicles";
 import Services from "./pages/Services";
+import BusinessRules from "./pages/BusinessRules";
 import Layout from "./components/Layout";
 import NotFound from "@/pages/not-found";
 
@@ -41,6 +42,7 @@ function AppRoutes() {
         <Route path="/technicians" component={Technicians} />
         <Route path="/vehicles" component={Vehicles} />
         <Route path="/services" component={Services} />
+        <Route path="/business-rules" component={BusinessRules} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

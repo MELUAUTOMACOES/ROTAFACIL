@@ -11,7 +11,8 @@ import {
   UserCog,
   Wrench,
   LogOut,
-  X
+  X,
+  FileText
 } from "lucide-react";
 
 interface SidebarProps {
@@ -27,6 +28,7 @@ const navigation = [
   { name: "Técnicos", href: "/technicians", icon: UserCog },
   { name: "Veículos", href: "/vehicles", icon: Car },
   { name: "Serviços", href: "/services", icon: Wrench },
+  { name: "Regras de Negócio", href: "/business-rules", icon: FileText },
 ];
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {

@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { 
   insertUserSchema, loginSchema, insertClientSchema, insertServiceSchema,
   insertTechnicianSchema, insertVehicleSchema, insertAppointmentSchema,
-  insertChecklistSchema
+  insertChecklistSchema, insertBusinessRulesSchema
 } from "@shared/schema";
 
 const JWT_SECRET = process.env.JWT_SECRET || "rotafacil-secret-key";
@@ -384,6 +384,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Checklist deleted successfully" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Business Rules routes
+  app.get("/api/business-rules", authenticateToken, async (req: any, res) => {
+    try {
+      const businessRules = await storage.getBusinessRules(req.user.userId);
+      res.json(businessRules || {});
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/business-rules", authenticateToken, async (req: any, res) => {
+    try {
+      const businessRulesData = insertBusinessRulesSchema.parse(req.body);
+      const businessRules = await storage.createBusinessRules(businessRulesData, req.user.userId);
+      res.json(businessRules);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/business-rules/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const businessRulesData = insertBusinessRulesSchema.partial().parse(req.body);
+      const businessRules = await storage.updateBusinessRules(id, businessRulesData, req.user.userId);
+      res.json(businessRules);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
     }
   });
 
