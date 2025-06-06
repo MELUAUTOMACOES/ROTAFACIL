@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { apiRequest } from "./queryClient";
-import type { User } from "@shared/schema";
+import type { User } from "../../../shared/schema";
 
 interface AuthContextType {
   user: User | null;
