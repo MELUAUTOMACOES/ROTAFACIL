@@ -1,16 +1,19 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { insertAppointmentSchema, type InsertAppointment, type Appointment, type Client, type Service, type Technician } from "@shared/schema";
+import { extendedInsertAppointmentSchema, type InsertAppointment, type Appointment, type Client, type Service, type Technician } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar, Clock, MapPin } from "lucide-react";
+import { Calendar, Clock, MapPin, UserPlus, Upload, FileSpreadsheet } from "lucide-react";
+import NewClientDialog from "./NewClientDialog";
 
 interface AppointmentFormProps {
   appointment?: Appointment | null;

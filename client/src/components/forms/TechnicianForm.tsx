@@ -2,14 +2,16 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { insertTechnicianSchema, type InsertTechnician, type Technician } from "@shared/schema";
+import { extendedInsertTechnicianSchema, type InsertTechnician, type Technician } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { UserCog, Mail, Phone, Wrench } from "lucide-react";
+import { UserCog, Mail, Phone, Wrench, MapPin, FileText } from "lucide-react";
 
 interface TechnicianFormProps {
   technician?: Technician | null;
@@ -21,18 +23,30 @@ export default function TechnicianForm({ technician, onClose }: TechnicianFormPr
   const queryClient = useQueryClient();
   
   const form = useForm<InsertTechnician>({
-    resolver: zodResolver(insertTechnicianSchema),
+    resolver: zodResolver(extendedInsertTechnicianSchema),
     defaultValues: technician ? {
       name: technician.name,
       email: technician.email || "",
       phone: technician.phone,
+      documento: technician.documento,
+      cep: technician.cep,
+      logradouro: technician.logradouro,
+      numero: technician.numero,
+      complemento: technician.complemento || "",
       specialization: technician.specialization || "",
+      observacoes: technician.observacoes || "",
       isActive: technician.isActive,
     } : {
       name: "",
       email: "",
       phone: "",
+      documento: "",
+      cep: "",
+      logradouro: "",
+      numero: "",
+      complemento: "",
       specialization: "",
+      observacoes: "",
       isActive: true,
     },
   });
