@@ -90,6 +90,7 @@ export class MemStorage implements IStorage {
       ...insertUser, 
       id, 
       password: hashedPassword,
+      plan: insertUser.plan || "basic",
       createdAt: new Date()
     };
     this.users.set(id, user);
@@ -124,7 +125,14 @@ export class MemStorage implements IStorage {
 
   async createClient(insertClient: InsertClient, userId: number): Promise<Client> {
     const id = this.currentId++;
-    const client: Client = { ...insertClient, id, userId, createdAt: new Date() };
+    const client: Client = { 
+      ...insertClient, 
+      id, 
+      userId, 
+      email: insertClient.email ?? null,
+      phone: insertClient.phone ?? null,
+      createdAt: new Date() 
+    };
     this.clients.set(id, client);
     return client;
   }
@@ -157,7 +165,14 @@ export class MemStorage implements IStorage {
 
   async createService(insertService: InsertService, userId: number): Promise<Service> {
     const id = this.currentId++;
-    const service: Service = { ...insertService, id, userId, createdAt: new Date() };
+    const service: Service = { 
+      ...insertService, 
+      id, 
+      userId, 
+      description: insertService.description ?? null,
+      price: insertService.price ?? null,
+      createdAt: new Date() 
+    };
     this.services.set(id, service);
     return service;
   }
@@ -190,7 +205,15 @@ export class MemStorage implements IStorage {
 
   async createTechnician(insertTechnician: InsertTechnician, userId: number): Promise<Technician> {
     const id = this.currentId++;
-    const technician: Technician = { ...insertTechnician, id, userId, createdAt: new Date() };
+    const technician: Technician = { 
+      ...insertTechnician, 
+      id, 
+      userId, 
+      email: insertTechnician.email ?? null,
+      specialization: insertTechnician.specialization ?? null,
+      isActive: insertTechnician.isActive ?? true,
+      createdAt: new Date() 
+    };
     this.technicians.set(id, technician);
     return technician;
   }
@@ -223,7 +246,13 @@ export class MemStorage implements IStorage {
 
   async createVehicle(insertVehicle: InsertVehicle, userId: number): Promise<Vehicle> {
     const id = this.currentId++;
-    const vehicle: Vehicle = { ...insertVehicle, id, userId, createdAt: new Date() };
+    const vehicle: Vehicle = { 
+      ...insertVehicle, 
+      id, 
+      userId, 
+      technicianId: insertVehicle.technicianId ?? null,
+      createdAt: new Date() 
+    };
     this.vehicles.set(id, vehicle);
     return vehicle;
   }
@@ -256,7 +285,15 @@ export class MemStorage implements IStorage {
 
   async createAppointment(insertAppointment: InsertAppointment, userId: number): Promise<Appointment> {
     const id = this.currentId++;
-    const appointment: Appointment = { ...insertAppointment, id, userId, createdAt: new Date() };
+    const appointment: Appointment = { 
+      ...insertAppointment, 
+      id, 
+      userId, 
+      status: insertAppointment.status ?? "pending",
+      priority: insertAppointment.priority ?? "medium",
+      notes: insertAppointment.notes ?? null,
+      createdAt: new Date() 
+    };
     this.appointments.set(id, appointment);
     return appointment;
   }
@@ -298,7 +335,14 @@ export class MemStorage implements IStorage {
 
   async createChecklist(insertChecklist: InsertChecklist, userId: number): Promise<Checklist> {
     const id = this.currentId++;
-    const checklist: Checklist = { ...insertChecklist, id, userId, createdAt: new Date() };
+    const checklist: Checklist = { 
+      ...insertChecklist, 
+      id, 
+      userId, 
+      notes: insertChecklist.notes ?? null,
+      checkDate: insertChecklist.checkDate ?? new Date(),
+      createdAt: new Date() 
+    };
     this.checklists.set(id, checklist);
     return checklist;
   }
