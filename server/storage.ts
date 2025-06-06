@@ -1,10 +1,16 @@
-import { 
-  users, clients, services, technicians, vehicles, appointments, checklists,
-  type User, type InsertUser, type Client, type InsertClient,
-  type Service, type InsertService, type Technician, type InsertTechnician,
-  type Vehicle, type InsertVehicle, type Appointment, type InsertAppointment,
-  type Checklist, type InsertChecklist
+import {
+  type User, type InsertUser,
+  type Client, type InsertClient,
+  type Service, type InsertService,
+  type Technician, type InsertTechnician,
+  type Vehicle, type InsertVehicle,
+  type Appointment, type InsertAppointment,
+  type Checklist, type InsertChecklist,
+  type BusinessRules, type InsertBusinessRules,
+  users, clients, services, technicians, vehicles, appointments, checklists, businessRules
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export interface IStorage {
@@ -57,335 +63,286 @@ export interface IStorage {
   updateChecklist(id: number, checklist: Partial<InsertChecklist>, userId: number): Promise<Checklist>;
   deleteChecklist(id: number, userId: number): Promise<boolean>;
 
+  // Business Rules
+  getBusinessRules(userId: number): Promise<BusinessRules | undefined>;
+  createBusinessRules(businessRules: InsertBusinessRules, userId: number): Promise<BusinessRules>;
+  updateBusinessRules(id: number, businessRules: Partial<InsertBusinessRules>, userId: number): Promise<BusinessRules>;
+
   // Route optimization
   optimizeRoute(appointmentIds: number[], userId: number): Promise<{ optimizedOrder: Appointment[], totalDistance: number, estimatedTime: number }>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private clients: Map<number, Client>;
-  private services: Map<number, Service>;
-  private technicians: Map<number, Technician>;
-  private vehicles: Map<number, Vehicle>;
-  private appointments: Map<number, Appointment>;
-  private checklists: Map<number, Checklist>;
-  private currentId: number;
-
-  constructor() {
-    this.users = new Map();
-    this.clients = new Map();
-    this.services = new Map();
-    this.technicians = new Map();
-    this.vehicles = new Map();
-    this.appointments = new Map();
-    this.checklists = new Map();
-    this.currentId = 1;
-  }
-
+export class DatabaseStorage implements IStorage {
   // Users
   async createUser(insertUser: InsertUser): Promise<User> {
     const hashedPassword = await bcrypt.hash(insertUser.password, 10);
-    const id = this.currentId++;
-    const user: User = { 
-      ...insertUser, 
-      id, 
-      password: hashedPassword,
-      plan: insertUser.plan || "basic",
-      createdAt: new Date()
-    };
-    this.users.set(id, user);
+    const [user] = await db
+      .insert(users)
+      .values({ ...insertUser, password: hashedPassword })
+      .returning();
     return user;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.email === email);
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user || undefined;
   }
 
   async getUserById(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
   }
 
   async validateUser(email: string, password: string): Promise<User | null> {
     const user = await this.getUserByEmail(email);
-    if (!user) return null;
-    
-    const isValid = await bcrypt.compare(password, user.password);
-    return isValid ? user : null;
+    if (user && await bcrypt.compare(password, user.password)) {
+      return user;
+    }
+    return null;
   }
 
   // Clients
   async getClients(userId: number): Promise<Client[]> {
-    return Array.from(this.clients.values()).filter(client => client.userId === userId);
+    return await db.select().from(clients).where(eq(clients.userId, userId));
   }
 
   async getClient(id: number, userId: number): Promise<Client | undefined> {
-    const client = this.clients.get(id);
-    return client && client.userId === userId ? client : undefined;
+    const [client] = await db.select().from(clients).where(and(eq(clients.id, id), eq(clients.userId, userId)));
+    return client || undefined;
   }
 
   async createClient(insertClient: InsertClient, userId: number): Promise<Client> {
-    const id = this.currentId++;
-    const client: Client = { 
-      ...insertClient, 
-      id, 
-      userId, 
-      email: insertClient.email ?? null,
-      phone: insertClient.phone ?? null,
-      createdAt: new Date() 
-    };
-    this.clients.set(id, client);
+    const [client] = await db
+      .insert(clients)
+      .values({ ...insertClient, userId })
+      .returning();
     return client;
   }
 
   async updateClient(id: number, clientData: Partial<InsertClient>, userId: number): Promise<Client> {
-    const client = await this.getClient(id, userId);
-    if (!client) throw new Error("Client not found");
-    
-    const updatedClient = { ...client, ...clientData };
-    this.clients.set(id, updatedClient);
-    return updatedClient;
+    const [client] = await db
+      .update(clients)
+      .set(clientData)
+      .where(and(eq(clients.id, id), eq(clients.userId, userId)))
+      .returning();
+    return client;
   }
 
   async deleteClient(id: number, userId: number): Promise<boolean> {
-    const client = await this.getClient(id, userId);
-    if (!client) return false;
-    
-    return this.clients.delete(id);
+    const result = await db
+      .delete(clients)
+      .where(and(eq(clients.id, id), eq(clients.userId, userId)));
+    return (result.rowCount || 0) > 0;
   }
 
   // Services
   async getServices(userId: number): Promise<Service[]> {
-    return Array.from(this.services.values()).filter(service => service.userId === userId);
+    return await db.select().from(services).where(eq(services.userId, userId));
   }
 
   async getService(id: number, userId: number): Promise<Service | undefined> {
-    const service = this.services.get(id);
-    return service && service.userId === userId ? service : undefined;
+    const [service] = await db.select().from(services).where(and(eq(services.id, id), eq(services.userId, userId)));
+    return service || undefined;
   }
 
   async createService(insertService: InsertService, userId: number): Promise<Service> {
-    const id = this.currentId++;
-    const service: Service = { 
-      ...insertService, 
-      id, 
-      userId, 
-      description: insertService.description ?? null,
-      price: insertService.price ?? null,
-      createdAt: new Date() 
-    };
-    this.services.set(id, service);
+    const [service] = await db
+      .insert(services)
+      .values({ ...insertService, userId })
+      .returning();
     return service;
   }
 
   async updateService(id: number, serviceData: Partial<InsertService>, userId: number): Promise<Service> {
-    const service = await this.getService(id, userId);
-    if (!service) throw new Error("Service not found");
-    
-    const updatedService = { ...service, ...serviceData };
-    this.services.set(id, updatedService);
-    return updatedService;
+    const [service] = await db
+      .update(services)
+      .set(serviceData)
+      .where(and(eq(services.id, id), eq(services.userId, userId)))
+      .returning();
+    return service;
   }
 
   async deleteService(id: number, userId: number): Promise<boolean> {
-    const service = await this.getService(id, userId);
-    if (!service) return false;
-    
-    return this.services.delete(id);
+    const result = await db
+      .delete(services)
+      .where(and(eq(services.id, id), eq(services.userId, userId)));
+    return (result.rowCount || 0) > 0;
   }
 
   // Technicians
   async getTechnicians(userId: number): Promise<Technician[]> {
-    return Array.from(this.technicians.values()).filter(technician => technician.userId === userId);
+    return await db.select().from(technicians).where(eq(technicians.userId, userId));
   }
 
   async getTechnician(id: number, userId: number): Promise<Technician | undefined> {
-    const technician = this.technicians.get(id);
-    return technician && technician.userId === userId ? technician : undefined;
+    const [technician] = await db.select().from(technicians).where(and(eq(technicians.id, id), eq(technicians.userId, userId)));
+    return technician || undefined;
   }
 
   async createTechnician(insertTechnician: InsertTechnician, userId: number): Promise<Technician> {
-    const id = this.currentId++;
-    const technician: Technician = { 
-      ...insertTechnician, 
-      id, 
-      userId, 
-      email: insertTechnician.email ?? null,
-      specialization: insertTechnician.specialization ?? null,
-      isActive: insertTechnician.isActive ?? true,
-      createdAt: new Date() 
-    };
-    this.technicians.set(id, technician);
+    const [technician] = await db
+      .insert(technicians)
+      .values({ ...insertTechnician, userId })
+      .returning();
     return technician;
   }
 
   async updateTechnician(id: number, technicianData: Partial<InsertTechnician>, userId: number): Promise<Technician> {
-    const technician = await this.getTechnician(id, userId);
-    if (!technician) throw new Error("Technician not found");
-    
-    const updatedTechnician = { ...technician, ...technicianData };
-    this.technicians.set(id, updatedTechnician);
-    return updatedTechnician;
+    const [technician] = await db
+      .update(technicians)
+      .set(technicianData)
+      .where(and(eq(technicians.id, id), eq(technicians.userId, userId)))
+      .returning();
+    return technician;
   }
 
   async deleteTechnician(id: number, userId: number): Promise<boolean> {
-    const technician = await this.getTechnician(id, userId);
-    if (!technician) return false;
-    
-    return this.technicians.delete(id);
+    const result = await db
+      .delete(technicians)
+      .where(and(eq(technicians.id, id), eq(technicians.userId, userId)));
+    return (result.rowCount || 0) > 0;
   }
 
   // Vehicles
   async getVehicles(userId: number): Promise<Vehicle[]> {
-    return Array.from(this.vehicles.values()).filter(vehicle => vehicle.userId === userId);
+    return await db.select().from(vehicles).where(eq(vehicles.userId, userId));
   }
 
   async getVehicle(id: number, userId: number): Promise<Vehicle | undefined> {
-    const vehicle = this.vehicles.get(id);
-    return vehicle && vehicle.userId === userId ? vehicle : undefined;
+    const [vehicle] = await db.select().from(vehicles).where(and(eq(vehicles.id, id), eq(vehicles.userId, userId)));
+    return vehicle || undefined;
   }
 
   async createVehicle(insertVehicle: InsertVehicle, userId: number): Promise<Vehicle> {
-    const id = this.currentId++;
-    const vehicle: Vehicle = { 
-      ...insertVehicle, 
-      id, 
-      userId, 
-      technicianId: insertVehicle.technicianId ?? null,
-      createdAt: new Date() 
-    };
-    this.vehicles.set(id, vehicle);
+    const [vehicle] = await db
+      .insert(vehicles)
+      .values({ ...insertVehicle, userId })
+      .returning();
     return vehicle;
   }
 
   async updateVehicle(id: number, vehicleData: Partial<InsertVehicle>, userId: number): Promise<Vehicle> {
-    const vehicle = await this.getVehicle(id, userId);
-    if (!vehicle) throw new Error("Vehicle not found");
-    
-    const updatedVehicle = { ...vehicle, ...vehicleData };
-    this.vehicles.set(id, updatedVehicle);
-    return updatedVehicle;
+    const [vehicle] = await db
+      .update(vehicles)
+      .set(vehicleData)
+      .where(and(eq(vehicles.id, id), eq(vehicles.userId, userId)))
+      .returning();
+    return vehicle;
   }
 
   async deleteVehicle(id: number, userId: number): Promise<boolean> {
-    const vehicle = await this.getVehicle(id, userId);
-    if (!vehicle) return false;
-    
-    return this.vehicles.delete(id);
+    const result = await db
+      .delete(vehicles)
+      .where(and(eq(vehicles.id, id), eq(vehicles.userId, userId)));
+    return (result.rowCount || 0) > 0;
   }
 
   // Appointments
   async getAppointments(userId: number): Promise<Appointment[]> {
-    return Array.from(this.appointments.values()).filter(appointment => appointment.userId === userId);
+    return await db.select().from(appointments).where(eq(appointments.userId, userId));
   }
 
   async getAppointment(id: number, userId: number): Promise<Appointment | undefined> {
-    const appointment = this.appointments.get(id);
-    return appointment && appointment.userId === userId ? appointment : undefined;
+    const [appointment] = await db.select().from(appointments).where(and(eq(appointments.id, id), eq(appointments.userId, userId)));
+    return appointment || undefined;
   }
 
   async createAppointment(insertAppointment: InsertAppointment, userId: number): Promise<Appointment> {
-    const id = this.currentId++;
-    const appointment: Appointment = { 
-      ...insertAppointment, 
-      id, 
-      userId, 
-      status: insertAppointment.status ?? "pending",
-      priority: insertAppointment.priority ?? "medium",
-      notes: insertAppointment.notes ?? null,
-      createdAt: new Date() 
-    };
-    this.appointments.set(id, appointment);
+    const [appointment] = await db
+      .insert(appointments)
+      .values({ ...insertAppointment, userId })
+      .returning();
     return appointment;
   }
 
   async updateAppointment(id: number, appointmentData: Partial<InsertAppointment>, userId: number): Promise<Appointment> {
-    const appointment = await this.getAppointment(id, userId);
-    if (!appointment) throw new Error("Appointment not found");
-    
-    const updatedAppointment = { ...appointment, ...appointmentData };
-    this.appointments.set(id, updatedAppointment);
-    return updatedAppointment;
+    const [appointment] = await db
+      .update(appointments)
+      .set(appointmentData)
+      .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
+      .returning();
+    return appointment;
   }
 
   async deleteAppointment(id: number, userId: number): Promise<boolean> {
-    const appointment = await this.getAppointment(id, userId);
-    if (!appointment) return false;
-    
-    return this.appointments.delete(id);
+    const result = await db
+      .delete(appointments)
+      .where(and(eq(appointments.id, id), eq(appointments.userId, userId)));
+    return (result.rowCount || 0) > 0;
   }
 
   async getAppointmentsByDate(date: string, userId: number): Promise<Appointment[]> {
-    const targetDate = new Date(date);
-    return Array.from(this.appointments.values()).filter(appointment => {
-      const appointmentDate = new Date(appointment.scheduledDate);
-      return appointment.userId === userId &&
-             appointmentDate.toDateString() === targetDate.toDateString();
-    });
+    return await db.select().from(appointments).where(eq(appointments.userId, userId));
   }
 
   // Checklists
   async getChecklists(userId: number): Promise<Checklist[]> {
-    return Array.from(this.checklists.values()).filter(checklist => checklist.userId === userId);
+    return await db.select().from(checklists).where(eq(checklists.userId, userId));
   }
 
   async getChecklist(id: number, userId: number): Promise<Checklist | undefined> {
-    const checklist = this.checklists.get(id);
-    return checklist && checklist.userId === userId ? checklist : undefined;
+    const [checklist] = await db.select().from(checklists).where(and(eq(checklists.id, id), eq(checklists.userId, userId)));
+    return checklist || undefined;
   }
 
   async createChecklist(insertChecklist: InsertChecklist, userId: number): Promise<Checklist> {
-    const id = this.currentId++;
-    const checklist: Checklist = { 
-      ...insertChecklist, 
-      id, 
-      userId, 
-      notes: insertChecklist.notes ?? null,
-      checkDate: insertChecklist.checkDate ?? new Date(),
-      createdAt: new Date() 
-    };
-    this.checklists.set(id, checklist);
+    const [checklist] = await db
+      .insert(checklists)
+      .values({ ...insertChecklist, userId })
+      .returning();
     return checklist;
   }
 
   async updateChecklist(id: number, checklistData: Partial<InsertChecklist>, userId: number): Promise<Checklist> {
-    const checklist = await this.getChecklist(id, userId);
-    if (!checklist) throw new Error("Checklist not found");
-    
-    const updatedChecklist = { ...checklist, ...checklistData };
-    this.checklists.set(id, updatedChecklist);
-    return updatedChecklist;
+    const [checklist] = await db
+      .update(checklists)
+      .set(checklistData)
+      .where(and(eq(checklists.id, id), eq(checklists.userId, userId)))
+      .returning();
+    return checklist;
   }
 
   async deleteChecklist(id: number, userId: number): Promise<boolean> {
-    const checklist = await this.getChecklist(id, userId);
-    if (!checklist) return false;
-    
-    return this.checklists.delete(id);
+    const result = await db
+      .delete(checklists)
+      .where(and(eq(checklists.id, id), eq(checklists.userId, userId)));
+    return (result.rowCount || 0) > 0;
+  }
+
+  // Business Rules
+  async getBusinessRules(userId: number): Promise<BusinessRules | undefined> {
+    const [rules] = await db.select().from(businessRules).where(eq(businessRules.userId, userId));
+    return rules || undefined;
+  }
+
+  async createBusinessRules(insertBusinessRules: InsertBusinessRules, userId: number): Promise<BusinessRules> {
+    const [rules] = await db
+      .insert(businessRules)
+      .values({ ...insertBusinessRules, userId })
+      .returning();
+    return rules;
+  }
+
+  async updateBusinessRules(id: number, rulesData: Partial<InsertBusinessRules>, userId: number): Promise<BusinessRules> {
+    const [rules] = await db
+      .update(businessRules)
+      .set(rulesData)
+      .where(and(eq(businessRules.id, id), eq(businessRules.userId, userId)))
+      .returning();
+    return rules;
   }
 
   // Route optimization
   async optimizeRoute(appointmentIds: number[], userId: number): Promise<{ optimizedOrder: Appointment[], totalDistance: number, estimatedTime: number }> {
-    const appointments = await Promise.all(
-      appointmentIds.map(id => this.getAppointment(id, userId))
-    );
-    
-    const validAppointments = appointments.filter(Boolean) as Appointment[];
-    
-    // Simple optimization simulation - in real implementation this would use Google Maps API
-    const optimizedOrder = [...validAppointments].sort((a, b) => 
-      new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()
-    );
-    
-    // Simulate distance and time calculations
-    const totalDistance = validAppointments.length * 5 + Math.random() * 10; // km
-    const estimatedTime = validAppointments.length * 45 + Math.random() * 30; // minutes
-    
+    const appointmentsList = await db.select().from(appointments).where(eq(appointments.userId, userId));
+
+    // Simple optimization - in production you'd implement actual routing algorithms
     return {
-      optimizedOrder,
-      totalDistance: Math.round(totalDistance * 100) / 100,
-      estimatedTime: Math.round(estimatedTime)
+      optimizedOrder: appointmentsList,
+      totalDistance: appointmentsList.length * 5, // Mock calculation
+      estimatedTime: appointmentsList.length * 30 // Mock calculation
     };
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

@@ -100,6 +100,24 @@ export const checklists = pgTable("checklists", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Business rules table
+export const businessRules = pgTable("business_rules", {
+  id: serial("id").primaryKey(),
+  maximoParadasPorRota: integer("maximo_paradas_por_rota").notNull().default(10),
+  horarioInicioTrabalho: text("horario_inicio_trabalho").notNull().default("08:00"),
+  horarioFimTrabalho: text("horario_fim_trabalho").notNull().default("18:00"),
+  tempoDeslocamentoBuffer: integer("tempo_deslocamento_buffer").notNull().default(15), // in minutes
+  minutosEntreParadas: integer("minutos_entre_paradas").notNull().default(30),
+  distanciaMaximaEntrePontos: decimal("distancia_maxima_entre_pontos", { precision: 8, scale: 2 }).notNull().default("50.00"), // in km
+  enderecoEmpresaCep: text("endereco_empresa_cep").notNull(),
+  enderecoEmpresaLogradouro: text("endereco_empresa_logradouro").notNull(),
+  enderecoEmpresaNumero: text("endereco_empresa_numero").notNull(),
+  enderecoEmpresaComplemento: text("endereco_empresa_complemento"),
+  areaOperacao: text("area_operacao").notNull().default("Cidade"),
+  userId: integer("user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -142,10 +160,39 @@ export const insertChecklistSchema = createInsertSchema(checklists).omit({
   createdAt: true,
 });
 
+export const insertBusinessRulesSchema = createInsertSchema(businessRules).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+}).extend({
+  enderecoEmpresaCep: z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no formato XXXXX-XXX"),
+});
+
 // Login schema
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
+});
+
+// CEP validation schema
+export const cepSchema = z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no formato XXXXX-XXX");
+
+// Client schema with extended validation
+export const extendedInsertClientSchema = insertClientSchema.extend({
+  cep: cepSchema,
+  numero: z.string().regex(/^\d+$/, "Número deve conter apenas dígitos"),
+});
+
+// Technician schema with extended validation  
+export const extendedInsertTechnicianSchema = insertTechnicianSchema.extend({
+  cep: cepSchema,
+  numero: z.string().regex(/^\d+$/, "Número deve conter apenas dígitos"),
+});
+
+// Appointment schema with extended validation
+export const extendedInsertAppointmentSchema = insertAppointmentSchema.extend({
+  cep: cepSchema,
+  numero: z.string().regex(/^\d+$/, "Número deve conter apenas dígitos"),
 });
 
 // Types
@@ -163,4 +210,6 @@ export type Appointment = typeof appointments.$inferSelect;
 export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
 export type Checklist = typeof checklists.$inferSelect;
 export type InsertChecklist = z.infer<typeof insertChecklistSchema>;
+export type BusinessRules = typeof businessRules.$inferSelect;
+export type InsertBusinessRules = z.infer<typeof insertBusinessRulesSchema>;
 export type LoginData = z.infer<typeof loginSchema>;
