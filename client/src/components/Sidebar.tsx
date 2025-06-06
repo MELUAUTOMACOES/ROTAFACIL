@@ -59,9 +59,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       `}>
         {/* Header */}
         <div className="flex items-center justify-between h-16 bg-black px-6">
-          <h1 className="text-xl font-bold text-white">
-            Rota<span className="text-burnt-yellow">Fácil</span>
-          </h1>
+          <Link href="/dashboard">
+            <h1 className="text-xl font-bold text-white cursor-pointer hover:opacity-80 transition-opacity">
+              Rota<span className="text-burnt-yellow">Fácil</span>
+            </h1>
+          </Link>
           <Button
             variant="ghost"
             size="sm"

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { getAuthHeaders } from "@/lib/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,34 +36,18 @@ interface TodayAppointment {
 }
 
 export default function Dashboard() {
+  const [, setLocation] = useLocation();
+  
   const { data: appointments = [] } = useQuery({
     queryKey: ["/api/appointments"],
-    queryFn: async () => {
-      const response = await fetch("/api/appointments", {
-        headers: getAuthHeaders(),
-      });
-      return response.json();
-    },
   });
 
   const { data: clients = [] } = useQuery({
     queryKey: ["/api/clients"],
-    queryFn: async () => {
-      const response = await fetch("/api/clients", {
-        headers: getAuthHeaders(),
-      });
-      return response.json();
-    },
   });
 
   const { data: technicians = [] } = useQuery({
     queryKey: ["/api/technicians"],
-    queryFn: async () => {
-      const response = await fetch("/api/technicians", {
-        headers: getAuthHeaders(),
-      });
-      return response.json();
-    },
   });
 
   // Calculate stats
@@ -260,6 +245,7 @@ export default function Dashboard() {
               <Button
                 variant="outline"
                 className="flex items-center justify-start p-4 h-auto border-gray-200 hover:bg-gray-50"
+                onClick={() => setLocation("/appointments")}
               >
                 <div className="w-10 h-10 bg-burnt-yellow rounded-lg flex items-center justify-center mr-4">
                   <Plus className="text-white h-5 w-5" />
@@ -273,6 +259,7 @@ export default function Dashboard() {
               <Button
                 variant="outline"
                 className="flex items-center justify-start p-4 h-auto border-gray-200 hover:bg-gray-50"
+                onClick={() => setLocation("/routes")}
               >
                 <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center mr-4">
                   <Route className="text-white h-5 w-5" />
@@ -286,6 +273,7 @@ export default function Dashboard() {
               <Button
                 variant="outline"
                 className="flex items-center justify-start p-4 h-auto border-gray-200 hover:bg-gray-50"
+                onClick={() => setLocation("/clients")}
               >
                 <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center mr-4">
                   <UserPlus className="text-white h-5 w-5" />
@@ -299,13 +287,14 @@ export default function Dashboard() {
               <Button
                 variant="outline"
                 className="flex items-center justify-start p-4 h-auto border-gray-200 hover:bg-gray-50"
+                onClick={() => setLocation("/business-rules")}
               >
                 <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center mr-4">
                   <BarChart3 className="text-white h-5 w-5" />
                 </div>
                 <div className="text-left">
-                  <h4 className="font-medium text-gray-900">Relatórios</h4>
-                  <p className="text-sm text-gray-600">Ver performance</p>
+                  <h4 className="font-medium text-gray-900">Configurações</h4>
+                  <p className="text-sm text-gray-600">Regras de negócio</p>
                 </div>
               </Button>
             </div>

@@ -61,11 +61,26 @@ export default function BusinessRules() {
 
   const createOrUpdateMutation = useMutation({
     mutationFn: async (data: InsertBusinessRules) => {
-      if (businessRules?.id) {
-        return await apiRequest(`/api/business-rules/${businessRules.id}`, "PATCH", data);
-      } else {
-        return await apiRequest("/api/business-rules", "POST", data);
+      const url = businessRules?.id ? `/api/business-rules/${businessRules.id}` : "/api/business-rules";
+      const method = businessRules?.id ? "PATCH" : "POST";
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...(localStorage.getItem("token") && {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          }),
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Erro ao salvar regras de negócio");
       }
+
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/business-rules'] });
@@ -350,6 +365,7 @@ export default function BusinessRules() {
                         <Input
                           placeholder="Sala 101"
                           {...field}
+                          value={field.value || ""}
                         />
                       </FormControl>
                       <FormMessage />
