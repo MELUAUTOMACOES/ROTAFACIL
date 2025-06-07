@@ -296,14 +296,14 @@ export default function Appointments() {
 
               // Validar campos obrigatórios e formatos
               const validationErrors = [];
+              const phone1 = values[3];
               
               // Validar campos obrigatórios
               if (!clientName) validationErrors.push("Cliente (coluna 2) está vazio");
+              if (!phone1) validationErrors.push("Telefone 1 (coluna 4) está vazio");
               if (!serviceName) validationErrors.push("Serviço (coluna 6) está vazio");
-              if (!technicianName) validationErrors.push("Técnico (coluna 7) está vazio");
               if (!dateTime) validationErrors.push("Data/Hora (coluna 8) está vazia");
               if (!cep) validationErrors.push("CEP (coluna 11) está vazio");
-              if (!logradouro) validationErrors.push("Logradouro (coluna 12) está vazio");
               if (!numero) validationErrors.push("Número (coluna 13) está vazio");
               
               // Validar formato do CEP
@@ -321,12 +321,8 @@ export default function Appointments() {
                 continue;
               }
 
-              // Encontrar cliente
+              // Encontrar ou usar cliente (não obrigatório estar cadastrado)
               const client = clients.find((c: Client) => c.name.toLowerCase() === clientName.toLowerCase());
-              if (!client) {
-                errors.push(`Linha ${i + 1}: Cliente "${clientName}" não encontrado`);
-                continue;
-              }
 
               // Encontrar serviço
               const service = services.find((s: Service) => s.name.toLowerCase() === serviceName.toLowerCase());
@@ -335,12 +331,8 @@ export default function Appointments() {
                 continue;
               }
 
-              // Encontrar técnico
+              // Encontrar técnico (opcional)
               const technician = technicians.find((t: Technician) => t.name.toLowerCase() === technicianName.toLowerCase());
-              if (!technician) {
-                errors.push(`Linha ${i + 1}: Técnico "${technicianName}" não encontrado`);
-                continue;
-              }
 
               // Validar e converter data com múltiplos formatos
               let scheduledDate;
@@ -384,9 +376,9 @@ export default function Appointments() {
               }
 
               appointmentsToImport.push({
-                clientId: client.id,
+                clientId: client?.id || null,
                 serviceId: service.id,
-                technicianId: technician.id,
+                technicianId: technician?.id || null,
                 scheduledDate,
                 status: values[8] || "scheduled",
                 priority: values[9] || "normal",

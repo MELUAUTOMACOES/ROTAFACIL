@@ -74,9 +74,9 @@ export const vehicles = pgTable("vehicles", {
 // Appointments table
 export const appointments = pgTable("appointments", {
   id: serial("id").primaryKey(),
-  clientId: integer("client_id").notNull().references(() => clients.id),
+  clientId: integer("client_id").references(() => clients.id),
   serviceId: integer("service_id").notNull().references(() => services.id),
-  technicianId: integer("technician_id").notNull().references(() => technicians.id),
+  technicianId: integer("technician_id").references(() => technicians.id),
   scheduledDate: timestamp("scheduled_date").notNull(),
   status: text("status").notNull().default("scheduled"), // scheduled, in_progress, completed, cancelled
   priority: text("priority").notNull().default("normal"), // normal, high, urgent
