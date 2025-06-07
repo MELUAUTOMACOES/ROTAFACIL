@@ -27,11 +27,13 @@ export default function ServiceForm({ service, onClose }: ServiceFormProps) {
       description: service.description || "",
       duration: service.duration,
       price: service.price || "",
+      cost: service.cost || "",
     } : {
       name: "",
       description: "",
       duration: 60,
       price: "",
+      cost: "",
     },
   });
 
@@ -127,25 +129,25 @@ export default function ServiceForm({ service, onClose }: ServiceFormProps) {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="duration" className="flex items-center">
-              <Clock className="h-4 w-4 mr-1" />
-              Duração (minutos) *
-            </Label>
-            <Input
-              {...form.register("duration", { valueAsNumber: true })}
-              type="number"
-              min="1"
-              step="15"
-              placeholder="60"
-              className="mt-1"
-            />
-            {form.formState.errors.duration && (
-              <p className="text-sm text-red-600 mt-1">{form.formState.errors.duration.message}</p>
-            )}
-          </div>
+        <div>
+          <Label htmlFor="duration" className="flex items-center">
+            <Clock className="h-4 w-4 mr-1" />
+            Duração (minutos) *
+          </Label>
+          <Input
+            {...form.register("duration", { valueAsNumber: true })}
+            type="number"
+            min="1"
+            step="15"
+            placeholder="60"
+            className="mt-1"
+          />
+          {form.formState.errors.duration && (
+            <p className="text-sm text-red-600 mt-1">{form.formState.errors.duration.message}</p>
+          )}
+        </div>
 
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <Label htmlFor="price" className="flex items-center">
               <DollarSign className="h-4 w-4 mr-1" />
@@ -161,6 +163,24 @@ export default function ServiceForm({ service, onClose }: ServiceFormProps) {
             />
             {form.formState.errors.price && (
               <p className="text-sm text-red-600 mt-1">{form.formState.errors.price.message}</p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor="cost" className="flex items-center">
+              <DollarSign className="h-4 w-4 mr-1" />
+              Custo (R$)
+            </Label>
+            <Input
+              {...form.register("cost")}
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="50.00"
+              className="mt-1"
+            />
+            {form.formState.errors.cost && (
+              <p className="text-sm text-red-600 mt-1">{form.formState.errors.cost.message}</p>
             )}
           </div>
         </div>

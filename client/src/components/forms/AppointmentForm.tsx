@@ -138,10 +138,10 @@ export default function AppointmentForm({
   });
 
   const onSubmit = (data: InsertAppointment) => {
-    // Ensure scheduledDate is a proper Date object
+    // Ensure scheduledDate is properly formatted
     const formData = {
       ...data,
-      scheduledDate: new Date(data.scheduledDate)
+      scheduledDate: data.scheduledDate instanceof Date ? data.scheduledDate.toISOString() : new Date(data.scheduledDate).toISOString()
     };
     
     if (appointment) {
