@@ -177,7 +177,7 @@ export default function Routes() {
     });
 
     return grouped;
-  }, [appointments, selectedDate, searchTerm, selectedService, selectedTechnician, clients, services, technicians]);
+  }, [appointments, selectedDate, searchTerm, selectedService, selectedTechnician, selectedStatus, clients, services, technicians]);
 
   return (
     <div className="space-y-6">
