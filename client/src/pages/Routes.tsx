@@ -135,13 +135,13 @@ export default function Routes() {
       }
 
       // Filter by service
-      if (selectedService) {
+      if (selectedService && selectedService !== "all") {
         const service = getService(apt.serviceId);
         if (service?.id.toString() !== selectedService) return false;
       }
 
       // Filter by technician
-      if (selectedTechnician) {
+      if (selectedTechnician && selectedTechnician !== "all") {
         const technician = getTechnician(apt.technicianId);
         if (technician?.id.toString() !== selectedTechnician) return false;
       }
@@ -232,7 +232,7 @@ export default function Routes() {
                   <SelectValue placeholder="Todos os serviços" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos os serviços</SelectItem>
+                  <SelectItem value="all">Todos os serviços</SelectItem>
                   {services.map((service: Service) => (
                     <SelectItem key={service.id} value={service.id.toString()}>
                       {service.name}
@@ -249,7 +249,7 @@ export default function Routes() {
                   <SelectValue placeholder="Todos os técnicos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos os técnicos</SelectItem>
+                  <SelectItem value="all">Todos os técnicos</SelectItem>
                   {technicians.map((technician: Technician) => (
                     <SelectItem key={technician.id} value={technician.id.toString()}>
                       {technician.name}

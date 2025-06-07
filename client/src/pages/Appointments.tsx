@@ -221,9 +221,18 @@ export default function Appointments() {
               const logradouro = values[11];
               const numero = values[12];
 
-              // Validar campos obrigatórios
-              if (!clientName || !serviceName || !technicianName || !dateTime || !cep || !logradouro || !numero) {
-                errors.push(`Linha ${i + 1}: Campos obrigatórios em branco`);
+              // Validar campos obrigatórios individualmente
+              const missingFields = [];
+              if (!clientName) missingFields.push("Cliente (coluna 2)");
+              if (!serviceName) missingFields.push("Serviço (coluna 6)");
+              if (!technicianName) missingFields.push("Técnico (coluna 7)");
+              if (!dateTime) missingFields.push("Data/Hora (coluna 8)");
+              if (!cep) missingFields.push("CEP (coluna 11)");
+              if (!logradouro) missingFields.push("Logradouro (coluna 12)");
+              if (!numero) missingFields.push("Número (coluna 13)");
+              
+              if (missingFields.length > 0) {
+                errors.push(`Linha ${i + 1}: Campos obrigatórios em branco - ${missingFields.join(", ")}`);
                 continue;
               }
 
