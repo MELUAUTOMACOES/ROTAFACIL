@@ -202,15 +202,7 @@ export default function AppointmentForm({
           </Button>
         </NewClientDialog>
 
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="text-blue-600 border-blue-600 hover:bg-blue-50"
-          onClick={handleImportCSV}
-        >
-          <FileSpreadsheet className="h-4 w-4 mr-2" />
-          Importar CSV
-        </Button>
+
       </div>
 
       <Form {...form}>
@@ -311,7 +303,7 @@ export default function AppointmentForm({
                   <Input
                     type="datetime-local"
                     {...field}
-                    value={field.value ? new Date(field.value.getTime() - field.value.getTimezoneOffset() * 60000).toISOString().slice(0, -1) : ""}
+                    value={field.value ? new Date(field.value.getTime() - field.value.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""}
                     onChange={(e) => field.onChange(new Date(e.target.value))}
                   />
                 </FormControl>

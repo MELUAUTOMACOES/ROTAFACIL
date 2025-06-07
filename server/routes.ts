@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { 
   insertUserSchema, loginSchema, insertClientSchema, insertServiceSchema,
   insertTechnicianSchema, insertVehicleSchema, insertAppointmentSchema,
-  insertChecklistSchema, insertBusinessRulesSchema
+  insertChecklistSchema, insertBusinessRulesSchema, extendedInsertAppointmentSchema
 } from "@shared/schema";
 
 const JWT_SECRET = process.env.JWT_SECRET || "rotafacil-secret-key";
@@ -296,7 +296,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/appointments", authenticateToken, async (req: any, res) => {
     try {
-      const appointmentData = insertAppointmentSchema.parse(req.body);
+      const appointmentData = extendedInsertAppointmentSchema.parse(req.body);
       const appointment = await storage.createAppointment(appointmentData, req.user.userId);
       res.json(appointment);
     } catch (error: any) {
@@ -307,7 +307,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/appointments/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const appointmentData = insertAppointmentSchema.partial().parse(req.body);
+      const appointmentData = extendedInsertAppointmentSchema.partial().parse(req.body);
       const appointment = await storage.updateAppointment(id, appointmentData, req.user.userId);
       res.json(appointment);
     } catch (error: any) {
