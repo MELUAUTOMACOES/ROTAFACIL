@@ -150,7 +150,12 @@ export default function Routes() {
         if (technician?.id.toString() !== selectedTechnician) return false;
       }
 
-      return apt.status === 'scheduled';
+      // Filter by status
+      if (selectedStatus && selectedStatus !== "all") {
+        if (apt.status !== selectedStatus) return false;
+      }
+
+      return true;
     });
 
     // Group by date
@@ -205,7 +210,7 @@ export default function Routes() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div>
               <label className="text-sm font-medium mb-2 block">Data</label>
               <Input
@@ -259,6 +264,22 @@ export default function Routes() {
                       {technician.name}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Status</label>
+              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os status</SelectItem>
+                  <SelectItem value="scheduled">Agendado</SelectItem>
+                  <SelectItem value="in_progress">Em Andamento</SelectItem>
+                  <SelectItem value="completed">Concluído</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -330,11 +351,28 @@ export default function Routes() {
                               <p className="text-xs text-gray-500">
                                 {appointment.logradouro}, {appointment.numero} - {appointment.cep}
                               </p>
-                              <div className="flex items-center mt-1">
-                                <span className="text-xs text-gray-500">Técnico: </span>
-                                <span className="text-xs font-medium text-gray-700 ml-1">
-                                  {technician?.name || "Técnico"}
-                                </span>
+                              <div className="flex items-center justify-between mt-1">
+                                <div className="flex items-center">
+                                  <span className="text-xs text-gray-500">Técnico: </span>
+                                  <span className="text-xs font-medium text-gray-700 ml-1">
+                                    {technician?.name || "Técnico"}
+                                  </span>
+                                </div>
+                                <Badge 
+                                  className={`text-xs px-2 py-1 ${
+                                    appointment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                    appointment.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                                    appointment.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
+                                    appointment.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                                    'bg-gray-100 text-gray-800'
+                                  }`}
+                                >
+                                  {appointment.status === 'completed' ? 'Concluído' :
+                                   appointment.status === 'in_progress' ? 'Em Andamento' :
+                                   appointment.status === 'scheduled' ? 'Agendado' :
+                                   appointment.status === 'cancelled' ? 'Cancelado' :
+                                   appointment.status}
+                                </Badge>
                               </div>
                             </div>
                           </div>
