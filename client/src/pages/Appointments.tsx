@@ -168,15 +168,88 @@ export default function Appointments() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
-      toast({
-        title: "Sucesso",
-        description: `${data.success} agendamentos importados com sucesso. ${data.errors || 0} erros encontrados.`,
-      });
+      
+      // Log detalhado dos resultados do backend
+      console.group("📊 RESULTADO DA IMPORTAÇÃO NO BACKEND");
+      console.log(`✅ Sucessos: ${data.success}`);
+      console.log(`❌ Erros: ${data.errors}`);
+      
+      if (data.detailedErrors && data.detailedErrors.length > 0) {
+        console.log("\n📋 Erros detalhados do servidor:");
+        data.detailedErrors.forEach((error: string, index: number) => {
+          console.log(`   ${index + 1}. ${error}`);
+        });
+      }
+      
+      if (data.processedItems) {
+        console.log(`\n📈 Itens processados: ${data.processedItems.length}`);
+        const successItems = data.processedItems.filter((item: any) => item.status === 'success');
+        const errorItems = data.processedItems.filter((item: any) => item.status === 'error');
+        console.log(`   • Sucessos: ${successItems.length}`);
+        console.log(`   • Erros: ${errorItems.length}`);
+      }
+      console.groupEnd();
+      
+      // Toast com resultado
+      if (data.errors > 0) {
+        const errorMessage = data.detailedErrors ? 
+          data.detailedErrors.slice(0, 2).join('\n') + 
+          (data.detailedErrors.length > 2 ? `\n... e mais ${data.detailedErrors.length - 2} erros` : '') : 
+          `${data.errors} erros encontrados`;
+          
+        toast({
+          title: `Importação parcial: ${data.success} sucessos, ${data.errors} erros`,
+          description: errorMessage,
+          variant: "destructive",
+        });
+        
+        // Gerar relatório de erros do backend se houver
+        if (data.detailedErrors && data.detailedErrors.length > 0) {
+          const backendErrorReport = [
+            "RELATÓRIO DE ERROS - PROCESSAMENTO NO SERVIDOR",
+            "=" + "=".repeat(50),
+            "",
+            `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
+            "",
+            "RESUMO:",
+            "-".repeat(20),
+            `Total processado: ${data.success + data.errors}`,
+            `Sucessos: ${data.success}`,
+            `Erros: ${data.errors}`,
+            `Taxa de sucesso: ${((data.success / (data.success + data.errors)) * 100).toFixed(1)}%`,
+            "",
+            "ERROS DO SERVIDOR:",
+            "-".repeat(40),
+            ...data.detailedErrors.map((error: string, index: number) => `${index + 1}. ${error}`),
+          ].join('\n');
+
+          const backendLogBlob = new Blob([backendErrorReport], { type: "text/plain;charset=utf-8;" });
+          const backendLogLink = document.createElement("a");
+          const backendLogUrl = URL.createObjectURL(backendLogBlob);
+          backendLogLink.setAttribute("href", backendLogUrl);
+          backendLogLink.setAttribute("download", `relatorio_servidor_${new Date().toISOString().split('T')[0]}_${new Date().toTimeString().split(' ')[0].replace(/:/g, '')}.txt`);
+          backendLogLink.style.visibility = "hidden";
+          document.body.appendChild(backendLogLink);
+          
+          setTimeout(() => {
+            if (confirm("Deseja baixar o relatório de erros do servidor?")) {
+              backendLogLink.click();
+            }
+            document.body.removeChild(backendLogLink);
+          }, 1500);
+        }
+      } else {
+        toast({
+          title: "Sucesso",
+          description: `${data.success} agendamentos importados com sucesso!`,
+        });
+      }
     },
     onError: (error: any) => {
+      console.error("❌ Erro na comunicação com o servidor:", error);
       toast({
-        title: "Erro",
-        description: error.message || "Erro ao importar agendamentos",
+        title: "Erro de comunicação",
+        description: error.message || "Erro ao conectar com o servidor",
         variant: "destructive",
       });
     },

@@ -312,20 +312,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       let successCount = 0;
-      let errorCount = 0;
+      const detailedErrors: string[] = [];
+      const processedItems: any[] = [];
 
-      for (const appointmentData of appointments) {
+      for (let i = 0; i < appointments.length; i++) {
+        const appointmentData = appointments[i];
         try {
           const validatedData = extendedInsertAppointmentSchema.parse(appointmentData);
-          await storage.createAppointment(validatedData, req.user.userId);
+          const createdAppointment = await storage.createAppointment(validatedData, req.user.userId);
           successCount++;
-        } catch (error) {
-          errorCount++;
+          processedItems.push({
+            index: i + 1,
+            status: 'success',
+            appointment: createdAppointment
+          });
+        } catch (error: any) {
+          let errorMessage = `Item ${i + 1}: `;
+          
+          if (error.name === 'ZodError') {
+            // Erro de validação do Zod - extrair detalhes específicos
+            const zodErrors = error.errors.map((err: any) => {
+              const field = err.path.join('.');
+              return `${field}: ${err.message}`;
+            });
+            errorMessage += `Erro de validação - ${zodErrors.join('; ')}`;
+          } else if (error.code === '23505') {
+            // Erro de duplicação no PostgreSQL
+            errorMessage += `Agendamento duplicado`;
+          } else if (error.code === '23503') {
+            // Erro de chave estrangeira
+            errorMessage += `Referência inválida (cliente, serviço ou técnico não existe)`;
+          } else {
+            errorMessage += `${error.message || 'Erro desconhecido'}`;
+          }
+          
+          detailedErrors.push(errorMessage);
+          processedItems.push({
+            index: i + 1,
+            status: 'error',
+            error: errorMessage,
+            data: appointmentData
+          });
         }
       }
 
-      res.json({ success: successCount, errors: errorCount });
+      // Log detalhado no servidor
+      console.log(`📊 Importação CSV concluída para usuário ${req.user.userId}:`);
+      console.log(`   • Total de itens: ${appointments.length}`);
+      console.log(`   • Sucessos: ${successCount}`);
+      console.log(`   • Erros: ${detailedErrors.length}`);
+      
+      if (detailedErrors.length > 0) {
+        console.log(`📋 Erros detalhados:`);
+        detailedErrors.forEach(error => console.log(`   • ${error}`));
+      }
+
+      res.json({ 
+        success: successCount, 
+        errors: detailedErrors.length,
+        detailedErrors,
+        processedItems
+      });
     } catch (error: any) {
+      console.error(`❌ Erro fatal na importação CSV:`, error);
       res.status(500).json({ message: error.message });
     }
   });
