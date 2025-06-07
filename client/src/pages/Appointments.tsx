@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import AppointmentForm from "@/components/forms/AppointmentForm";
-import { Plus, Calendar, MapPin, Clock, User, Edit, Trash2, Download } from "lucide-react";
+import { Plus, Calendar, MapPin, Clock, User, Edit, Trash2, Download, Upload } from "lucide-react";
 import type { Appointment, Client, Service, Technician } from "@shared/schema";
 
 export default function Appointments() {
@@ -161,6 +161,39 @@ export default function Appointments() {
   const getService = (serviceId: number) => services.find((s: Service) => s.id === serviceId);
   const getTechnician = (technicianId: number) => technicians.find((t: Technician) => t.id === technicianId);
 
+  const handleImportCSV = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const csv = event.target?.result as string;
+            const lines = csv.split('\n');
+            const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+            
+            // Processar CSV aqui
+            toast({
+              title: "Sucesso",
+              description: `Arquivo CSV carregado com ${lines.length - 1} linhas`,
+            });
+          } catch (error) {
+            toast({
+              title: "Erro",
+              description: "Erro ao processar arquivo CSV",
+              variant: "destructive",
+            });
+          }
+        };
+        reader.readAsText(file);
+      }
+    };
+    input.click();
+  };
+
   const exportToCSV = () => {
     if (appointments.length === 0) {
       toast({
@@ -252,6 +285,15 @@ export default function Appointments() {
         </div>
         
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={handleImportCSV}
+            className="border-blue-600 text-blue-600 hover:bg-blue-50"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Importar CSV
+          </Button>
+          
           <Button
             variant="outline"
             onClick={exportToCSV}

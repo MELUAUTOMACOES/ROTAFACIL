@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar, Clock, MapPin, UserPlus, Upload, FileSpreadsheet } from "lucide-react";
+import { Calendar, Clock, MapPin, UserPlus } from "lucide-react";
 import NewClientDialog from "./NewClientDialog";
 
 interface AppointmentFormProps {
@@ -167,23 +167,7 @@ export default function AppointmentForm({
     }
   };
 
-  const handleImportCSV = () => {
-    // Create file input element
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.csv';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        // Here you would implement CSV parsing and bulk import
-        toast({
-          title: "Funcionalidade em desenvolvimento",
-          description: "A importação de CSV será implementada em breve.",
-        });
-      }
-    };
-    input.click();
-  };
+
 
   return (
     <div className="space-y-6">
