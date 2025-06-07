@@ -168,6 +168,7 @@ export default function Appointments() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       
       // Log detalhado dos resultados do backend
       console.group("📊 RESULTADO DA IMPORTAÇÃO NO BACKEND");
@@ -673,23 +674,22 @@ export default function Appointments() {
         </div>
         
         <div className="flex items-center gap-3">
-          <div className="flex flex-col gap-1">
-            <Button
-              variant="outline"
-              onClick={handleImportCSV}
-              className="border-blue-600 text-blue-600 hover:bg-blue-50"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Importar CSV
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={downloadCSVTemplate}
-              className="text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-50 h-auto py-1"
-            >
-              Baixar CSV Modelo
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            onClick={handleImportCSV}
+            className="border-blue-600 text-blue-600 hover:bg-blue-50"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Importar CSV
+          </Button>
+          
+          <Button
+            variant="ghost"
+            onClick={downloadCSVTemplate}
+            className="text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+          >
+            Baixar CSV Modelo
+          </Button>
           
           <Button
             variant="outline"

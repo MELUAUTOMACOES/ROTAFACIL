@@ -338,12 +338,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
           
-          // Remover clientData e usar o clientId (criado ou existente)
+          // Preparar dados do agendamento com clientId correto
           const { clientData, ...cleanAppointmentData } = appointmentData;
           cleanAppointmentData.clientId = clientId;
           
+          console.log(`🔧 Criando agendamento com clientId: ${cleanAppointmentData.clientId}`);
           const validatedData = extendedInsertAppointmentSchema.parse(cleanAppointmentData);
           const createdAppointment = await storage.createAppointment(validatedData, req.user.userId);
+          console.log(`✅ Agendamento criado: ID ${createdAppointment.id}, clientId: ${createdAppointment.clientId}`);
           successCount++;
           processedItems.push({
             index: i + 1,
