@@ -36,6 +36,7 @@ export const services = pgTable("services", {
   description: text("description"),
   duration: integer("duration").notNull(), // in minutes
   price: decimal("price", { precision: 10, scale: 2 }),
+  cost: decimal("cost", { precision: 10, scale: 2 }),
   userId: integer("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -193,6 +194,12 @@ export const extendedInsertTechnicianSchema = insertTechnicianSchema.extend({
 export const extendedInsertAppointmentSchema = insertAppointmentSchema.extend({
   cep: cepSchema,
   numero: z.string().regex(/^\d+$/, "Número deve conter apenas dígitos"),
+  scheduledDate: z.union([z.string(), z.date()]).transform((val) => {
+    if (typeof val === 'string') {
+      return new Date(val);
+    }
+    return val;
+  }),
 });
 
 // Types
