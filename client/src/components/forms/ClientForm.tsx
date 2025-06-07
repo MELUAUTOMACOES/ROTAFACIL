@@ -2,10 +2,11 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { insertClientSchema, type InsertClient, type Client } from "@shared/schema";
+import { extendedInsertClientSchema, type InsertClient, type Client } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Users, Mail, Phone, MapPin } from "lucide-react";
@@ -20,17 +21,27 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
   const queryClient = useQueryClient();
   
   const form = useForm<InsertClient>({
-    resolver: zodResolver(insertClientSchema),
+    resolver: zodResolver(extendedInsertClientSchema),
     defaultValues: client ? {
       name: client.name,
       email: client.email || "",
-      phone: client.phone || "",
-      address: client.address,
+      phone1: client.phone1 || "",
+      phone2: client.phone2 || "",
+      cep: client.cep,
+      logradouro: client.logradouro,
+      numero: client.numero,
+      complemento: client.complemento || "",
+      observacoes: client.observacoes || "",
     } : {
       name: "",
       email: "",
-      phone: "",
-      address: "",
+      phone1: "",
+      phone2: "",
+      cep: "",
+      logradouro: "",
+      numero: "",
+      complemento: "",
+      observacoes: "",
     },
   });
 
@@ -126,33 +137,108 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
           )}
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="phone1" className="flex items-center">
+              <Phone className="h-4 w-4 mr-1" />
+              Telefone 1
+            </Label>
+            <Input
+              {...form.register("phone1")}
+              placeholder="(11) 99999-9999"
+              className="mt-1"
+            />
+            {form.formState.errors.phone1 && (
+              <p className="text-sm text-red-600 mt-1">{form.formState.errors.phone1.message}</p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor="phone2" className="flex items-center">
+              <Phone className="h-4 w-4 mr-1" />
+              Telefone 2
+            </Label>
+            <Input
+              {...form.register("phone2")}
+              placeholder="(11) 99999-9999"
+              className="mt-1"
+            />
+            {form.formState.errors.phone2 && (
+              <p className="text-sm text-red-600 mt-1">{form.formState.errors.phone2.message}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <Label htmlFor="cep">CEP *</Label>
+            <Input
+              {...form.register("cep")}
+              placeholder="00000-000"
+              maxLength={9}
+              className="mt-1"
+              onChange={(e) => {
+                let value = e.target.value.replace(/\D/g, '');
+                if (value.length > 5) {
+                  value = value.slice(0, 5) + '-' + value.slice(5, 8);
+                }
+                form.setValue("cep", value);
+              }}
+            />
+            {form.formState.errors.cep && (
+              <p className="text-sm text-red-600 mt-1">{form.formState.errors.cep.message}</p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor="numero">Número *</Label>
+            <Input
+              {...form.register("numero")}
+              placeholder="123"
+              className="mt-1"
+            />
+            {form.formState.errors.numero && (
+              <p className="text-sm text-red-600 mt-1">{form.formState.errors.numero.message}</p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor="complemento">Complemento</Label>
+            <Input
+              {...form.register("complemento")}
+              placeholder="Apto 123"
+              className="mt-1"
+            />
+            {form.formState.errors.complemento && (
+              <p className="text-sm text-red-600 mt-1">{form.formState.errors.complemento.message}</p>
+            )}
+          </div>
+        </div>
+
         <div>
-          <Label htmlFor="phone" className="flex items-center">
-            <Phone className="h-4 w-4 mr-1" />
-            Telefone
+          <Label htmlFor="logradouro" className="flex items-center">
+            <MapPin className="h-4 w-4 mr-1" />
+            Logradouro *
           </Label>
           <Input
-            {...form.register("phone")}
-            placeholder="(11) 99999-9999"
+            {...form.register("logradouro")}
+            placeholder="Rua, Av, etc."
             className="mt-1"
           />
-          {form.formState.errors.phone && (
-            <p className="text-sm text-red-600 mt-1">{form.formState.errors.phone.message}</p>
+          {form.formState.errors.logradouro && (
+            <p className="text-sm text-red-600 mt-1">{form.formState.errors.logradouro.message}</p>
           )}
         </div>
 
         <div>
-          <Label htmlFor="address" className="flex items-center">
-            <MapPin className="h-4 w-4 mr-1" />
-            Endereço *
-          </Label>
-          <Input
-            {...form.register("address")}
-            placeholder="Endereço completo"
-            className="mt-1"
+          <Label htmlFor="observacoes">Observações</Label>
+          <Textarea
+            {...form.register("observacoes")}
+            placeholder="Observações sobre o cliente..."
+            className="mt-1 min-h-[80px]"
           />
-          {form.formState.errors.address && (
-            <p className="text-sm text-red-600 mt-1">{form.formState.errors.address.message}</p>
+          {form.formState.errors.observacoes && (
+            <p className="text-sm text-red-600 mt-1">{form.formState.errors.observacoes.message}</p>
           )}
         </div>
 

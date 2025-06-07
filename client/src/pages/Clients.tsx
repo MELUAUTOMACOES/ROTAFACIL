@@ -155,16 +155,28 @@ export default function Clients() {
                     </div>
                   )}
                   
-                  {client.phone && (
+                  {client.phone1 && (
                     <div className="flex items-center space-x-2 text-sm text-gray-600">
                       <Phone className="h-4 w-4" />
-                      <span>{client.phone}</span>
+                      <span>{client.phone1}</span>
+                    </div>
+                  )}
+                  
+                  {client.phone2 && (
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <Phone className="h-4 w-4" />
+                      <span>{client.phone2}</span>
                     </div>
                   )}
                   
                   <div className="flex items-start space-x-2 text-sm text-gray-600">
                     <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    <span className="leading-relaxed">{client.address}</span>
+                    <span className="leading-relaxed">
+                      {client.logradouro}, {client.numero}
+                      {client.complemento && `, ${client.complemento}`}
+                      <br />
+                      CEP: {client.cep}
+                    </span>
                   </div>
                 </div>
                 

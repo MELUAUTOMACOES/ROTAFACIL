@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import AppointmentForm from "@/components/forms/AppointmentForm";
-import { Plus, Calendar, MapPin, Clock, User, Edit, Trash2 } from "lucide-react";
+import { Plus, Calendar, MapPin, Clock, User, Edit, Trash2, Download } from "lucide-react";
 import type { Appointment, Client, Service, Technician } from "@shared/schema";
 
 export default function Appointments() {
@@ -161,6 +161,79 @@ export default function Appointments() {
   const getService = (serviceId: number) => services.find((s: Service) => s.id === serviceId);
   const getTechnician = (technicianId: number) => technicians.find((t: Technician) => t.id === technicianId);
 
+  const exportToCSV = () => {
+    if (appointments.length === 0) {
+      toast({
+        title: "Aviso",
+        description: "Não há agendamentos para exportar",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const csvHeaders = [
+      "ID",
+      "Cliente",
+      "Email Cliente",
+      "Telefone 1",
+      "Telefone 2",
+      "Serviço",
+      "Técnico",
+      "Data/Hora",
+      "Status",
+      "Prioridade",
+      "CEP",
+      "Logradouro",
+      "Número",
+      "Complemento",
+      "Observações"
+    ];
+
+    const csvData = appointments.map((appointment: Appointment) => {
+      const client = getClient(appointment.clientId);
+      const service = getService(appointment.serviceId);
+      const technician = getTechnician(appointment.technicianId);
+      const { date, time } = formatDateTime(appointment.scheduledDate.toString());
+
+      return [
+        appointment.id,
+        client?.name || "Cliente não encontrado",
+        client?.email || "",
+        client?.phone1 || "",
+        client?.phone2 || "",
+        service?.name || "Serviço não encontrado",
+        technician?.name || "Técnico não encontrado",
+        `${date} ${time}`,
+        getStatusText(appointment.status),
+        getPriorityText(appointment.priority),
+        appointment.cep,
+        appointment.logradouro,
+        appointment.numero,
+        appointment.complemento || "",
+        appointment.notes || ""
+      ];
+    });
+
+    const csvContent = [csvHeaders, ...csvData]
+      .map(row => row.map(field => `"${field}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `agendamentos_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "Sucesso",
+      description: "Agendamentos exportados com sucesso",
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -178,23 +251,34 @@ export default function Appointments() {
           <p className="text-gray-600">Gerencie todos os seus agendamentos</p>
         </div>
         
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Agendamento
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <AppointmentForm
-              appointment={selectedAppointment}
-              onClose={handleFormClose}
-              clients={clients}
-              services={services}
-              technicians={technicians}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={exportToCSV}
+            className="border-burnt-yellow text-burnt-yellow hover:bg-burnt-yellow hover:text-white"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Exportar CSV
+          </Button>
+          
+          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Agendamento
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <AppointmentForm
+                appointment={selectedAppointment}
+                onClose={handleFormClose}
+                clients={clients}
+                services={services}
+                technicians={technicians}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Appointments List */}
