@@ -221,18 +221,30 @@ export default function Appointments() {
               const logradouro = values[11];
               const numero = values[12];
 
-              // Validar campos obrigatórios individualmente
-              const missingFields = [];
-              if (!clientName) missingFields.push("Cliente (coluna 2)");
-              if (!serviceName) missingFields.push("Serviço (coluna 6)");
-              if (!technicianName) missingFields.push("Técnico (coluna 7)");
-              if (!dateTime) missingFields.push("Data/Hora (coluna 8)");
-              if (!cep) missingFields.push("CEP (coluna 11)");
-              if (!logradouro) missingFields.push("Logradouro (coluna 12)");
-              if (!numero) missingFields.push("Número (coluna 13)");
+              // Validar campos obrigatórios e formatos
+              const validationErrors = [];
               
-              if (missingFields.length > 0) {
-                errors.push(`Linha ${i + 1}: Campos obrigatórios em branco - ${missingFields.join(", ")}`);
+              // Validar campos obrigatórios
+              if (!clientName) validationErrors.push("Cliente (coluna 2) está vazio");
+              if (!serviceName) validationErrors.push("Serviço (coluna 6) está vazio");
+              if (!technicianName) validationErrors.push("Técnico (coluna 7) está vazio");
+              if (!dateTime) validationErrors.push("Data/Hora (coluna 8) está vazia");
+              if (!cep) validationErrors.push("CEP (coluna 11) está vazio");
+              if (!logradouro) validationErrors.push("Logradouro (coluna 12) está vazio");
+              if (!numero) validationErrors.push("Número (coluna 13) está vazio");
+              
+              // Validar formato do CEP
+              if (cep && !/^\d{5}-?\d{3}$/.test(cep)) {
+                validationErrors.push(`CEP "${cep}" inválido (formato esperado: XXXXX-XXX)`);
+              }
+              
+              // Validar se o número é numérico
+              if (numero && isNaN(Number(numero))) {
+                validationErrors.push(`Número "${numero}" deve ser numérico`);
+              }
+              
+              if (validationErrors.length > 0) {
+                errors.push(`Linha ${i + 1}: ${validationErrors.join("; ")}`);
                 continue;
               }
 
@@ -257,15 +269,44 @@ export default function Appointments() {
                 continue;
               }
 
-              // Validar e converter data
+              // Validar e converter data com múltiplos formatos
               let scheduledDate;
               try {
-                scheduledDate = new Date(dateTime).toISOString();
-                if (isNaN(Date.parse(scheduledDate))) {
+                // Tentar diferentes formatos de data
+                let dateObj;
+                
+                // Formato ISO (YYYY-MM-DD HH:MM:SS)
+                if (/^\d{4}-\d{2}-\d{2}/.test(dateTime)) {
+                  dateObj = new Date(dateTime);
+                }
+                // Formato brasileiro (DD/MM/YYYY HH:MM)
+                else if (/^\d{2}\/\d{2}\/\d{4}/.test(dateTime)) {
+                  const [datePart, timePart = "00:00"] = dateTime.split(" ");
+                  const [day, month, year] = datePart.split("/");
+                  dateObj = new Date(`${year}-${month}-${day} ${timePart}`);
+                }
+                // Formato americano (MM/DD/YYYY HH:MM)
+                else if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(dateTime)) {
+                  dateObj = new Date(dateTime);
+                }
+                else {
+                  dateObj = new Date(dateTime);
+                }
+                
+                if (isNaN(dateObj.getTime())) {
                   throw new Error("Data inválida");
                 }
+                
+                // Verificar se a data não é muito antiga (antes de 2020) ou muito futura (depois de 2030)
+                const year = dateObj.getFullYear();
+                if (year < 2020 || year > 2030) {
+                  errors.push(`Linha ${i + 1}: Data "${dateTime}" fora do intervalo válido (2020-2030)`);
+                  continue;
+                }
+                
+                scheduledDate = dateObj.toISOString();
               } catch {
-                errors.push(`Linha ${i + 1}: Data/hora inválida "${dateTime}"`);
+                errors.push(`Linha ${i + 1}: Data/hora "${dateTime}" inválida. Formatos aceitos: YYYY-MM-DD HH:MM, DD/MM/YYYY HH:MM`);
                 continue;
               }
 
@@ -285,25 +326,85 @@ export default function Appointments() {
             }
 
             if (errors.length > 0) {
-              // Mostrar todos os erros detalhadamente
-              const errorMessage = errors.slice(0, 5).join('\n') + (errors.length > 5 ? `\n... e mais ${errors.length - 5} erros` : '');
+              // Criar um relatório detalhado de erros
+              const errorReport = {
+                totalLines: lines.length - 1,
+                validAppointments: appointmentsToImport.length,
+                errorCount: errors.length,
+                errors: errors
+              };
+
+              // Mostrar primeiros 3 erros no toast
+              const shortErrorMessage = errors.slice(0, 3).join('\n') + 
+                (errors.length > 3 ? `\n... e mais ${errors.length - 3} erros` : '');
               
               toast({
                 title: `${errors.length} erros encontrados na importação`,
-                description: errorMessage,
+                description: shortErrorMessage,
                 variant: "destructive",
               });
               
-              // Log completo no console para debug
-              console.group("📋 Relatório detalhado de erros na importação:");
-              console.log(`Total de linhas processadas: ${lines.length - 1}`);
-              console.log(`Agendamentos válidos: ${appointmentsToImport.length}`);
-              console.log(`Erros encontrados: ${errors.length}`);
-              console.log("\n📝 Lista completa de erros:");
-              errors.forEach((error, index) => {
-                console.log(`${index + 1}. ${error}`);
+              // Log detalhado no console
+              console.group("📋 RELATÓRIO DETALHADO DE IMPORTAÇÃO CSV");
+              console.log(`📊 Resumo:`);
+              console.log(`   • Total de linhas processadas: ${errorReport.totalLines}`);
+              console.log(`   • Agendamentos válidos: ${errorReport.validAppointments}`);
+              console.log(`   • Erros encontrados: ${errorReport.errorCount}`);
+              console.log(`   • Taxa de sucesso: ${((errorReport.validAppointments / errorReport.totalLines) * 100).toFixed(1)}%`);
+              console.log("\n📝 LISTA COMPLETA DE ERROS:");
+              errorReport.errors.forEach((error, index) => {
+                console.log(`   ${index + 1}. ${error}`);
               });
+              console.log("\n💡 DICAS PARA CORREÇÃO:");
+              console.log("   • Verifique se os nomes de clientes, serviços e técnicos estão exatamente como cadastrados");
+              console.log("   • Formato de data aceito: YYYY-MM-DD HH:MM:SS ou DD/MM/YYYY HH:MM");
+              console.log("   • CEP deve estar no formato XXXXX-XXX");
+              console.log("   • Campos obrigatórios não podem estar vazios");
               console.groupEnd();
+
+              // Criar arquivo de log para download
+              const logContent = [
+                "RELATÓRIO DE ERROS - IMPORTAÇÃO CSV",
+                "=" + "=".repeat(40),
+                "",
+                `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
+                `Arquivo processado: ${file.name}`,
+                "",
+                "RESUMO:",
+                `-".repeat(20)`,
+                `Total de linhas: ${errorReport.totalLines}`,
+                `Agendamentos válidos: ${errorReport.validAppointments}`,
+                `Erros encontrados: ${errorReport.errorCount}`,
+                `Taxa de sucesso: ${((errorReport.validAppointments / errorReport.totalLines) * 100).toFixed(1)}%`,
+                "",
+                "ERROS DETALHADOS:",
+                "-".repeat(40),
+                ...errorReport.errors.map((error, index) => `${index + 1}. ${error}`),
+                "",
+                "DICAS PARA CORREÇÃO:",
+                "-".repeat(40),
+                "• Verifique se os nomes de clientes, serviços e técnicos estão exatamente como cadastrados no sistema",
+                "• Formato de data aceito: YYYY-MM-DD HH:MM:SS ou DD/MM/YYYY HH:MM",
+                "• CEP deve estar no formato XXXXX-XXX",
+                "• Campos obrigatórios não podem estar vazios",
+                "• Use apenas caracteres válidos (evite caracteres especiais nos nomes)"
+              ].join('\n');
+
+              const logBlob = new Blob([logContent], { type: "text/plain;charset=utf-8;" });
+              const logLink = document.createElement("a");
+              const logUrl = URL.createObjectURL(logBlob);
+              logLink.setAttribute("href", logUrl);
+              logLink.setAttribute("download", `relatorio_erros_${new Date().toISOString().split('T')[0]}_${new Date().toTimeString().split(' ')[0].replace(/:/g, '')}.txt`);
+              logLink.style.visibility = "hidden";
+              document.body.appendChild(logLink);
+              
+              // Perguntar se o usuário quer baixar o relatório
+              setTimeout(() => {
+                if (confirm("Deseja baixar um relatório detalhado dos erros encontrados?")) {
+                  logLink.click();
+                }
+                document.body.removeChild(logLink);
+              }, 1000);
             }
 
             if (appointmentsToImport.length > 0) {
