@@ -150,7 +150,7 @@ export default function Routes() {
     });
 
     // Group by date
-    const grouped = filtered.reduce((acc, apt) => {
+    const grouped = filtered.reduce((acc: Record<string, Appointment[]>, apt: Appointment) => {
       const date = new Date(apt.scheduledDate).toLocaleDateString('pt-BR');
       if (!acc[date]) {
         acc[date] = [];
@@ -161,7 +161,7 @@ export default function Routes() {
 
     // Sort appointments within each day by time
     Object.keys(grouped).forEach(date => {
-      grouped[date].sort((a, b) => 
+      grouped[date].sort((a: Appointment, b: Appointment) => 
         new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()
       );
     });
@@ -192,6 +192,76 @@ export default function Routes() {
         </Button>
       </div>
 
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Filter className="h-5 w-5 mr-2" />
+            Filtros
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Data</label>
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Buscar Cliente</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  placeholder="Nome do cliente..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Serviço</label>
+              <Select value={selectedService} onValueChange={setSelectedService}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os serviços" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Todos os serviços</SelectItem>
+                  {services.map((service: Service) => (
+                    <SelectItem key={service.id} value={service.id.toString()}>
+                      {service.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Técnico</label>
+              <Select value={selectedTechnician} onValueChange={setSelectedTechnician}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os técnicos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Todos os técnicos</SelectItem>
+                  {technicians.map((technician: Technician) => (
+                    <SelectItem key={technician.id} value={technician.id.toString()}>
+                      {technician.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Appointments Selection */}
         <Card>
@@ -205,57 +275,70 @@ export default function Routes() {
             </p>
           </CardHeader>
           <CardContent className="p-6">
-            {availableAppointments.length === 0 ? (
+            {Object.keys(filteredAndGroupedAppointments).length === 0 ? (
               <div className="text-center py-8">
                 <Route className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">Nenhum agendamento disponível para roteirização</p>
+                <p className="text-gray-600">Nenhum agendamento encontrado</p>
                 <p className="text-sm text-gray-500 mt-2">
-                  Apenas agendamentos futuros com status "Agendado" aparecem aqui
+                  Ajuste os filtros para ver os agendamentos disponíveis
                 </p>
               </div>
             ) : (
-              <div className="space-y-4 max-h-96 overflow-y-auto">
-                {availableAppointments.map((appointment: Appointment) => {
-                  const client = getClient(appointment.clientId);
-                  const service = getService(appointment.serviceId);
-                  const technician = getTechnician(appointment.technicianId);
-                  const { date, time } = formatDateTime(appointment.scheduledDate.toString());
-                  const isSelected = selectedAppointments.includes(appointment.id);
-
-                  return (
-                    <div 
-                      key={appointment.id}
-                      className={`flex items-center space-x-4 p-4 border rounded-lg cursor-pointer transition-colors
-                        ${isSelected 
-                          ? "border-burnt-yellow bg-burnt-yellow bg-opacity-5" 
-                          : "border-gray-200 hover:bg-gray-50"
-                        }`}
-                      onClick={() => handleAppointmentToggle(appointment.id)}
-                    >
-                      <Checkbox 
-                        checked={isSelected}
-                        onChange={() => handleAppointmentToggle(appointment.id)}
-                        className="text-burnt-yellow"
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-medium text-gray-900">
-                            {client?.name || "Cliente"}
-                          </h4>
-                          <span className="text-sm text-gray-500">{time}</span>
-                        </div>
-                        <p className="text-sm text-gray-600">{service?.name || "Serviço"}</p>
-                        <p className="text-xs text-gray-500">{appointment.address}</p>
-                        <div className="flex items-center mt-2">
-                          <span className="text-xs text-gray-500">Técnico: </span>
-                          <span className="text-xs font-medium text-gray-700 ml-1">
-                            {technician?.name || "Técnico"}
-                          </span>
-                        </div>
-                      </div>
+              <div className="space-y-6 max-h-96 overflow-y-auto">
+                {Object.entries(filteredAndGroupedAppointments).map(([date, dayAppointments]) => (
+                  <div key={date}>
+                    <div className="flex items-center mb-3">
+                      <Calendar className="h-4 w-4 mr-2 text-burnt-yellow" />
+                      <h3 className="font-semibold text-gray-900">{date}</h3>
+                      <span className="ml-2 text-sm text-gray-500">({(dayAppointments as Appointment[]).length} agendamentos)</span>
                     </div>
-                  );
-                })}
+                    <div className="space-y-3 pl-6">
+                      {(dayAppointments as Appointment[]).map((appointment: Appointment) => {
+                        const client = getClient(appointment.clientId);
+                        const service = getService(appointment.serviceId);
+                        const technician = getTechnician(appointment.technicianId);
+                        const { time } = formatDateTime(appointment.scheduledDate.toString());
+                        const isSelected = selectedAppointments.includes(appointment.id);
+
+                        return (
+                          <div 
+                            key={appointment.id}
+                            className={`flex items-center space-x-4 p-3 border rounded-lg cursor-pointer transition-colors
+                              ${isSelected 
+                                ? "border-burnt-yellow bg-burnt-yellow bg-opacity-5" 
+                                : "border-gray-200 hover:bg-gray-50"
+                              }`}
+                            onClick={() => handleAppointmentToggle(appointment.id)}
+                          >
+                            <Checkbox 
+                              checked={isSelected}
+                              onChange={() => handleAppointmentToggle(appointment.id)}
+                              className="text-burnt-yellow"
+                            />
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <h4 className="font-medium text-gray-900">
+                                  {client?.name || "Cliente"}
+                                </h4>
+                                <span className="text-sm text-gray-500">{time}</span>
+                              </div>
+                              <p className="text-sm text-gray-600">{service?.name || "Serviço"}</p>
+                              <p className="text-xs text-gray-500">
+                                {appointment.logradouro}, {appointment.numero} - {appointment.cep}
+                              </p>
+                              <div className="flex items-center mt-1">
+                                <span className="text-xs text-gray-500">Técnico: </span>
+                                <span className="text-xs font-medium text-gray-700 ml-1">
+                                  {technician?.name || "Técnico"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
@@ -318,7 +401,9 @@ export default function Routes() {
                         </div>
                         <div className="flex-1">
                           <h5 className="font-medium text-gray-900">{client?.name || "Cliente"}</h5>
-                          <p className="text-sm text-gray-600">{appointment.address}</p>
+                          <p className="text-sm text-gray-600">
+                            {appointment.logradouro}, {appointment.numero} - {appointment.cep}
+                          </p>
                           <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
                             <span>{time}</span>
                             <span>{distance} km</span>

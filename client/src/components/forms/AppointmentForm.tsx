@@ -138,10 +138,10 @@ export default function AppointmentForm({
   });
 
   const onSubmit = (data: InsertAppointment) => {
-    // Ensure scheduledDate is properly formatted
+    // Convert scheduledDate to Date object for the mutations
     const formData = {
       ...data,
-      scheduledDate: data.scheduledDate instanceof Date ? data.scheduledDate.toISOString() : new Date(data.scheduledDate).toISOString()
+      scheduledDate: data.scheduledDate instanceof Date ? data.scheduledDate : new Date(data.scheduledDate)
     };
     
     if (appointment) {
