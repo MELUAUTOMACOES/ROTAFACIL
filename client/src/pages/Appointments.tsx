@@ -215,7 +215,7 @@ export default function Appointments() {
     });
 
     const csvContent = [csvHeaders, ...csvData]
-      .map(row => row.map(field => `"${field}"`).join(","))
+      .map((row: any[]) => row.map((field: any) => `"${field}"`).join(","))
       .join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -347,7 +347,7 @@ export default function Appointments() {
                         
                         <div className="flex items-center space-x-2">
                           <MapPin className="h-4 w-4" />
-                          <span>{appointment.address}</span>
+                          <span>{appointment.logradouro}, {appointment.numero}{appointment.complemento && `, ${appointment.complemento}`}</span>
                         </div>
                         
                         <div className="flex items-center space-x-2">

@@ -49,6 +49,10 @@ export default function AppointmentForm({
       numero: appointment.numero,
       complemento: appointment.complemento || "",
     } : {
+      clientId: 0,
+      serviceId: 0,
+      technicianId: 0,
+      scheduledDate: new Date(),
       status: "scheduled",
       priority: "normal",
       notes: "",

@@ -83,17 +83,18 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               
               return (
                 <li key={item.name}>
-                  <Link href={item.href}>
-                    <a className={`
+                  <Link 
+                    href={item.href}
+                    className={`
                       flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors
                       ${active 
                         ? "bg-gray-100 text-burnt-yellow" 
                         : "text-gray-700 hover:bg-gray-100"
                       }
-                    `}>
-                      <Icon className={`h-5 w-5 mr-3 ${active ? "text-burnt-yellow" : "text-gray-600"}`} />
-                      {item.name}
-                    </a>
+                    `}
+                  >
+                    <Icon className={`h-5 w-5 mr-3 ${active ? "text-burnt-yellow" : "text-gray-600"}`} />
+                    {item.name}
                   </Link>
                 </li>
               );

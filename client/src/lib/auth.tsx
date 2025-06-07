@@ -84,7 +84,10 @@ export function useAuth() {
 }
 
 // Utility function to get auth headers
-export function getAuthHeaders() {
+export function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem("token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
+  }
+  return {};
 }
