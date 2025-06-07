@@ -21,10 +21,11 @@ interface OptimizedRoute {
 export default function Routes() {
   const [selectedAppointments, setSelectedAppointments] = useState<number[]>([]);
   const [optimizedRoute, setOptimizedRoute] = useState<OptimizedRoute | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [selectedService, setSelectedService] = useState<string>("");
   const [selectedTechnician, setSelectedTechnician] = useState<string>("");
+  const [selectedStatus, setSelectedStatus] = useState<string>("");
   const { toast } = useToast();
 
   const { data: appointments = [] } = useQuery({
@@ -69,6 +70,9 @@ export default function Routes() {
 
   const optimizeRouteMutation = useMutation({
     mutationFn: async (appointmentIds: number[]) => {
+      if (appointmentIds.length === 0) {
+        throw new Error("Selecione pelo menos um agendamento para otimizar a rota");
+      }
       const response = await apiRequest("POST", "/api/gerar-rota", { appointmentIds });
       return response.json();
     },
@@ -109,9 +113,9 @@ export default function Routes() {
     optimizeRouteMutation.mutate(selectedAppointments);
   };
 
-  const getClient = (clientId: number) => clients.find((c: Client) => c.id === clientId);
+  const getClient = (clientId: number | null) => clientId ? clients.find((c: Client) => c.id === clientId) : null;
   const getService = (serviceId: number) => services.find((s: Service) => s.id === serviceId);
-  const getTechnician = (technicianId: number) => technicians.find((t: Technician) => t.id === technicianId);
+  const getTechnician = (technicianId: number | null) => technicianId ? technicians.find((t: Technician) => t.id === technicianId) : null;
 
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);

@@ -351,6 +351,23 @@ export default function Appointments() {
               // Encontrar técnico (opcional)
               const technician = technicians.find((t: Technician) => t.name.toLowerCase() === technicianName.toLowerCase());
 
+              // Validar e normalizar prioridade
+              let normalizedPriority = "normal";
+              const priorityValue = values[9];
+              if (priorityValue) {
+                const lowerPriority = priorityValue.toLowerCase().trim();
+                if (lowerPriority === "normal") {
+                  normalizedPriority = "normal";
+                } else if (lowerPriority === "alta" || lowerPriority === "high") {
+                  normalizedPriority = "high";
+                } else if (lowerPriority === "urgente" || lowerPriority === "urgent") {
+                  normalizedPriority = "urgent";
+                } else {
+                  errors.push(`Linha ${i + 1}: Prioridade "${priorityValue}" inválida. Use: Normal, Alta ou Urgente`);
+                  continue;
+                }
+              }
+
               // Validar e converter data com múltiplos formatos
               let scheduledDate;
               try {
@@ -399,7 +416,7 @@ export default function Appointments() {
                 technicianId: technician?.id || null,
                 scheduledDate,
                 status: values[8] || "scheduled",
-                priority: values[9] || "normal",
+                priority: normalizedPriority,
                 cep,
                 logradouro,
                 numero,
@@ -675,20 +692,20 @@ export default function Appointments() {
         
         <div className="flex items-center gap-3">
           <Button
+            variant="ghost"
+            onClick={downloadCSVTemplate}
+            className="text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+          >
+            Baixar CSV Modelo
+          </Button>
+          
+          <Button
             variant="outline"
             onClick={handleImportCSV}
             className="border-blue-600 text-blue-600 hover:bg-blue-50"
           >
             <Upload className="h-4 w-4 mr-2" />
             Importar CSV
-          </Button>
-          
-          <Button
-            variant="ghost"
-            onClick={downloadCSVTemplate}
-            className="text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-          >
-            Baixar CSV Modelo
           </Button>
           
           <Button
