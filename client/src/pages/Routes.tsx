@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
@@ -6,8 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Route, MapPin, Clock, Navigation, TrendingUp } from "lucide-react";
+import { Route, MapPin, Clock, Navigation, TrendingUp, Filter, Search, Calendar } from "lucide-react";
 import type { Appointment, Client, Service, Technician } from "@shared/schema";
 
 interface OptimizedRoute {
@@ -19,6 +21,10 @@ interface OptimizedRoute {
 export default function Routes() {
   const [selectedAppointments, setSelectedAppointments] = useState<number[]>([]);
   const [optimizedRoute, setOptimizedRoute] = useState<OptimizedRoute | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedService, setSelectedService] = useState<string>("");
+  const [selectedTechnician, setSelectedTechnician] = useState<string>("");
   const { toast } = useToast();
 
   const { data: appointments = [] } = useQuery({
@@ -115,12 +121,53 @@ export default function Routes() {
     };
   };
 
-  // Filter appointments to show only today's or future scheduled ones
-  const availableAppointments = appointments.filter((apt: Appointment) => {
-    const appointmentDate = new Date(apt.scheduledDate);
-    const today = new Date();
-    return appointmentDate >= today && apt.status === 'scheduled';
-  });
+  // Filter and organize appointments
+  const filteredAndGroupedAppointments = useMemo(() => {
+    let filtered = appointments.filter((apt: Appointment) => {
+      // Filter by date
+      const appointmentDate = new Date(apt.scheduledDate).toISOString().split('T')[0];
+      if (selectedDate && appointmentDate !== selectedDate) return false;
+
+      // Filter by search term (client name)
+      if (searchTerm) {
+        const client = getClient(apt.clientId);
+        if (!client?.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      }
+
+      // Filter by service
+      if (selectedService) {
+        const service = getService(apt.serviceId);
+        if (service?.id.toString() !== selectedService) return false;
+      }
+
+      // Filter by technician
+      if (selectedTechnician) {
+        const technician = getTechnician(apt.technicianId);
+        if (technician?.id.toString() !== selectedTechnician) return false;
+      }
+
+      return apt.status === 'scheduled';
+    });
+
+    // Group by date
+    const grouped = filtered.reduce((acc, apt) => {
+      const date = new Date(apt.scheduledDate).toLocaleDateString('pt-BR');
+      if (!acc[date]) {
+        acc[date] = [];
+      }
+      acc[date].push(apt);
+      return acc;
+    }, {} as Record<string, Appointment[]>);
+
+    // Sort appointments within each day by time
+    Object.keys(grouped).forEach(date => {
+      grouped[date].sort((a, b) => 
+        new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()
+      );
+    });
+
+    return grouped;
+  }, [appointments, selectedDate, searchTerm, selectedService, selectedTechnician, clients, services, technicians]);
 
   return (
     <div className="space-y-6">

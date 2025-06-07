@@ -304,6 +304,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/appointments/import", authenticateToken, async (req: any, res) => {
+    try {
+      const { appointments } = req.body;
+      if (!Array.isArray(appointments)) {
+        return res.status(400).json({ message: "Appointments array is required" });
+      }
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const appointmentData of appointments) {
+        try {
+          const validatedData = extendedInsertAppointmentSchema.parse(appointmentData);
+          await storage.createAppointment(validatedData, req.user.userId);
+          successCount++;
+        } catch (error) {
+          errorCount++;
+        }
+      }
+
+      res.json({ success: successCount, errors: errorCount });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.put("/api/appointments/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);

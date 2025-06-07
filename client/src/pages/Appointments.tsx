@@ -161,6 +161,27 @@ export default function Appointments() {
   const getService = (serviceId: number) => services.find((s: Service) => s.id === serviceId);
   const getTechnician = (technicianId: number) => technicians.find((t: Technician) => t.id === technicianId);
 
+  const importCSVMutation = useMutation({
+    mutationFn: async (appointments: any[]) => {
+      const response = await apiRequest("POST", "/api/appointments/import", { appointments });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
+      toast({
+        title: "Sucesso",
+        description: `${data.success} agendamentos importados com sucesso. ${data.errors || 0} erros encontrados.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao importar agendamentos",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleImportCSV = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -172,14 +193,107 @@ export default function Appointments() {
         reader.onload = (event) => {
           try {
             const csv = event.target?.result as string;
-            const lines = csv.split('\n');
-            const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+            const lines = csv.split('\n').filter(line => line.trim());
             
-            // Processar CSV aqui
-            toast({
-              title: "Sucesso",
-              description: `Arquivo CSV carregado com ${lines.length - 1} linhas`,
-            });
+            if (lines.length < 2) {
+              toast({
+                title: "Erro",
+                description: "Arquivo CSV deve conter pelo menos uma linha de dados",
+                variant: "destructive",
+              });
+              return;
+            }
+
+            const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+            const appointmentsToImport = [];
+            const errors = [];
+
+            for (let i = 1; i < lines.length; i++) {
+              const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
+              
+              if (values.length < headers.length) continue;
+
+              const clientName = values[1];
+              const serviceName = values[5];
+              const technicianName = values[6];
+              const dateTime = values[7];
+              const cep = values[10];
+              const logradouro = values[11];
+              const numero = values[12];
+
+              // Validar campos obrigatórios
+              if (!clientName || !serviceName || !technicianName || !dateTime || !cep || !logradouro || !numero) {
+                errors.push(`Linha ${i + 1}: Campos obrigatórios em branco`);
+                continue;
+              }
+
+              // Encontrar cliente
+              const client = clients.find((c: Client) => c.name.toLowerCase() === clientName.toLowerCase());
+              if (!client) {
+                errors.push(`Linha ${i + 1}: Cliente "${clientName}" não encontrado`);
+                continue;
+              }
+
+              // Encontrar serviço
+              const service = services.find((s: Service) => s.name.toLowerCase() === serviceName.toLowerCase());
+              if (!service) {
+                errors.push(`Linha ${i + 1}: Serviço "${serviceName}" não encontrado`);
+                continue;
+              }
+
+              // Encontrar técnico
+              const technician = technicians.find((t: Technician) => t.name.toLowerCase() === technicianName.toLowerCase());
+              if (!technician) {
+                errors.push(`Linha ${i + 1}: Técnico "${technicianName}" não encontrado`);
+                continue;
+              }
+
+              // Validar e converter data
+              let scheduledDate;
+              try {
+                scheduledDate = new Date(dateTime).toISOString();
+                if (isNaN(Date.parse(scheduledDate))) {
+                  throw new Error("Data inválida");
+                }
+              } catch {
+                errors.push(`Linha ${i + 1}: Data/hora inválida "${dateTime}"`);
+                continue;
+              }
+
+              appointmentsToImport.push({
+                clientId: client.id,
+                serviceId: service.id,
+                technicianId: technician.id,
+                scheduledDate,
+                status: values[8] || "scheduled",
+                priority: values[9] || "normal",
+                cep,
+                logradouro,
+                numero,
+                complemento: values[13] || "",
+                notes: values[14] || ""
+              });
+            }
+
+            if (errors.length > 0) {
+              toast({
+                title: "Erros encontrados",
+                description: `${errors.length} erros encontrados. ${appointmentsToImport.length} agendamentos válidos serão importados.`,
+                variant: "destructive",
+              });
+              console.log("Erros de importação:", errors);
+            }
+
+            if (appointmentsToImport.length > 0) {
+              importCSVMutation.mutate(appointmentsToImport);
+            } else {
+              toast({
+                title: "Erro",
+                description: "Nenhum agendamento válido encontrado no arquivo",
+                variant: "destructive",
+              });
+            }
+
           } catch (error) {
             toast({
               title: "Erro",
