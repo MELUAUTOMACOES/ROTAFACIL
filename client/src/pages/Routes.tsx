@@ -129,8 +129,9 @@ export default function Routes() {
   const filteredAndGroupedAppointments = useMemo(() => {
     let filtered = appointments.filter((apt: Appointment) => {
       // Filter by date
-      const appointmentDate = new Date(apt.scheduledDate).toISOString().split('T')[0];
-      if (selectedDate && appointmentDate !== selectedDate) return false;
+      const appointmentDate = new Date(apt.scheduledDate);
+      const localDate = new Date(appointmentDate.getTime() - appointmentDate.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+      if (selectedDate && localDate !== selectedDate) return false;
 
       // Filter by search term (client name)
       if (searchTerm) {

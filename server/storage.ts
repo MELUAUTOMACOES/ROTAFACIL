@@ -10,7 +10,7 @@ import {
   users, clients, services, technicians, vehicles, appointments, checklists, businessRules
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export interface IStorage {
@@ -334,7 +334,8 @@ export class DatabaseStorage implements IStorage {
 
   // Route optimization
   async optimizeRoute(appointmentIds: number[], userId: number): Promise<{ optimizedOrder: Appointment[], totalDistance: number, estimatedTime: number }> {
-    const appointmentsList = await db.select().from(appointments).where(eq(appointments.userId, userId));
+    const allAppointments = await db.select().from(appointments).where(eq(appointments.userId, userId));
+    const appointmentsList = allAppointments.filter(apt => appointmentIds.includes(apt.id));
 
     // Simple optimization - in production you'd implement actual routing algorithms
     return {
