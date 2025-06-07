@@ -138,10 +138,16 @@ export default function AppointmentForm({
   });
 
   const onSubmit = (data: InsertAppointment) => {
+    // Ensure scheduledDate is a proper Date object
+    const formData = {
+      ...data,
+      scheduledDate: new Date(data.scheduledDate)
+    };
+    
     if (appointment) {
-      updateMutation.mutate(data);
+      updateMutation.mutate(formData);
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(formData);
     }
   };
 
