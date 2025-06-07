@@ -433,6 +433,10 @@ export default function Appointments() {
               console.log("   • Formato de data aceito: YYYY-MM-DD HH:MM:SS ou DD/MM/YYYY HH:MM");
               console.log("   • CEP deve estar no formato XXXXX-XXX");
               console.log("   • Campos obrigatórios não podem estar vazios");
+              console.log("\n📋 ORDEM DOS CAMPOS NO CSV:");
+              console.log("   1. ID | 2. Cliente | 3. Email Cliente | 4. Telefone 1 | 5. Telefone 2");
+              console.log("   6. Serviço | 7. Técnico | 8. Data/Hora | 9. Status | 10. Prioridade");
+              console.log("   11. CEP | 12. Logradouro | 13. Número | 14. Complemento | 15. Observações");
               console.groupEnd();
 
               // Criar arquivo de log para download
@@ -460,7 +464,15 @@ export default function Appointments() {
                 "• Formato de data aceito: YYYY-MM-DD HH:MM:SS ou DD/MM/YYYY HH:MM",
                 "• CEP deve estar no formato XXXXX-XXX",
                 "• Campos obrigatórios não podem estar vazios",
-                "• Use apenas caracteres válidos (evite caracteres especiais nos nomes)"
+                "• Use apenas caracteres válidos (evite caracteres especiais nos nomes)",
+                "",
+                "ORDEM DOS CAMPOS NO CSV:",
+                "-".repeat(40),
+                "1. ID | 2. Cliente | 3. Email Cliente | 4. Telefone 1 | 5. Telefone 2",
+                "6. Serviço | 7. Técnico | 8. Data/Hora | 9. Status | 10. Prioridade", 
+                "11. CEP | 12. Logradouro | 13. Número | 14. Complemento | 15. Observações",
+                "",
+                "OBSERVAÇÃO: Use o botão 'Baixar CSV Modelo' para obter um arquivo com a estrutura correta."
               ].join('\n');
 
               const logBlob = new Blob([logContent], { type: "text/plain;charset=utf-8;" });
@@ -502,6 +514,63 @@ export default function Appointments() {
       }
     };
     input.click();
+  };
+
+  const downloadCSVTemplate = () => {
+    const templateHeaders = [
+      "ID",
+      "Cliente", 
+      "Email Cliente",
+      "Telefone 1",
+      "Telefone 2", 
+      "Serviço",
+      "Técnico",
+      "Data/Hora",
+      "Status",
+      "Prioridade",
+      "CEP",
+      "Logradouro", 
+      "Número",
+      "Complemento",
+      "Observações"
+    ];
+
+    const exampleRow = [
+      "1",
+      "João Silva",
+      "joao@email.com", 
+      "(11) 99999-9999",
+      "(11) 88888-8888",
+      "Instalação",
+      "Carlos Técnico",
+      "2024-12-25 14:30",
+      "scheduled",
+      "normal", 
+      "01234-567",
+      "Rua das Flores",
+      "123",
+      "Apto 45",
+      "Cliente preferencial"
+    ];
+
+    const csvContent = [templateHeaders, exampleRow]
+      .map(row => row.map(field => `"${field}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "modelo_importacao_agendamentos.csv");
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "Modelo baixado",
+      description: "Use este arquivo como base para importar seus agendamentos",
+    });
   };
 
   const exportToCSV = () => {
@@ -595,14 +664,23 @@ export default function Appointments() {
         </div>
         
         <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            onClick={handleImportCSV}
-            className="border-blue-600 text-blue-600 hover:bg-blue-50"
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Importar CSV
-          </Button>
+          <div className="flex flex-col gap-1">
+            <Button
+              variant="outline"
+              onClick={handleImportCSV}
+              className="border-blue-600 text-blue-600 hover:bg-blue-50"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Importar CSV
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={downloadCSVTemplate}
+              className="text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-50 h-auto py-1"
+            >
+              Baixar CSV Modelo
+            </Button>
+          </div>
           
           <Button
             variant="outline"
