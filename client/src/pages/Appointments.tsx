@@ -285,12 +285,25 @@ export default function Appointments() {
             }
 
             if (errors.length > 0) {
+              // Mostrar todos os erros detalhadamente
+              const errorMessage = errors.slice(0, 5).join('\n') + (errors.length > 5 ? `\n... e mais ${errors.length - 5} erros` : '');
+              
               toast({
-                title: "Erros encontrados",
-                description: `${errors.length} erros encontrados. ${appointmentsToImport.length} agendamentos válidos serão importados.`,
+                title: `${errors.length} erros encontrados na importação`,
+                description: errorMessage,
                 variant: "destructive",
               });
-              console.log("Erros de importação:", errors);
+              
+              // Log completo no console para debug
+              console.group("📋 Relatório detalhado de erros na importação:");
+              console.log(`Total de linhas processadas: ${lines.length - 1}`);
+              console.log(`Agendamentos válidos: ${appointmentsToImport.length}`);
+              console.log(`Erros encontrados: ${errors.length}`);
+              console.log("\n📝 Lista completa de erros:");
+              errors.forEach((error, index) => {
+                console.log(`${index + 1}. ${error}`);
+              });
+              console.groupEnd();
             }
 
             if (appointmentsToImport.length > 0) {
