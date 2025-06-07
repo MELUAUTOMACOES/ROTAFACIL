@@ -318,7 +318,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (let i = 0; i < appointments.length; i++) {
         const appointmentData = appointments[i];
         try {
-          const validatedData = extendedInsertAppointmentSchema.parse(appointmentData);
+          let clientId = appointmentData.clientId;
+          
+          // Criar cliente automaticamente se necessário
+          if (!clientId && appointmentData.clientData) {
+            try {
+              const newClient = await storage.createClient(appointmentData.clientData, req.user.userId);
+              clientId = newClient.id;
+              console.log(`📝 Cliente criado automaticamente: ${appointmentData.clientData.name} (ID: ${clientId})`);
+            } catch (clientError: any) {
+              detailedErrors.push(`Item ${i + 1}: Erro ao criar cliente "${appointmentData.clientData.name}" - ${clientError.message}`);
+              processedItems.push({
+                index: i + 1,
+                status: 'error',
+                error: `Erro ao criar cliente: ${clientError.message}`,
+                data: appointmentData
+              });
+              continue;
+            }
+          }
+          
+          // Remover clientData e usar o clientId (criado ou existente)
+          const { clientData, ...cleanAppointmentData } = appointmentData;
+          cleanAppointmentData.clientId = clientId;
+          
+          const validatedData = extendedInsertAppointmentSchema.parse(cleanAppointmentData);
           const createdAppointment = await storage.createAppointment(validatedData, req.user.userId);
           successCount++;
           processedItems.push({

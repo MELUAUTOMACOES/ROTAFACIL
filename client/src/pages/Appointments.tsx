@@ -157,9 +157,9 @@ export default function Appointments() {
     };
   };
 
-  const getClient = (clientId: number) => clients.find((c: Client) => c.id === clientId);
+  const getClient = (clientId: number | null) => clientId ? clients.find((c: Client) => c.id === clientId) : null;
   const getService = (serviceId: number) => services.find((s: Service) => s.id === serviceId);
-  const getTechnician = (technicianId: number) => technicians.find((t: Technician) => t.id === technicianId);
+  const getTechnician = (technicianId: number | null) => technicianId ? technicians.find((t: Technician) => t.id === technicianId) : null;
 
   const importCSVMutation = useMutation({
     mutationFn: async (appointments: any[]) => {
@@ -321,8 +321,24 @@ export default function Appointments() {
                 continue;
               }
 
-              // Encontrar ou usar cliente (não obrigatório estar cadastrado)
-              const client = clients.find((c: Client) => c.name.toLowerCase() === clientName.toLowerCase());
+              // Encontrar cliente ou preparar dados para criação automática
+              let client = clients.find((c: Client) => c.name.toLowerCase() === clientName.toLowerCase());
+              let clientData = null;
+              
+              if (!client) {
+                // Preparar dados do cliente para criação automática
+                clientData = {
+                  name: clientName,
+                  email: values[2] || "",
+                  phone1: phone1,
+                  phone2: values[4] || "",
+                  cep: cep,
+                  logradouro: logradouro,
+                  numero: numero,
+                  complemento: values[13] || "",
+                  notes: `Cliente criado automaticamente via importação CSV em ${new Date().toLocaleString('pt-BR')}`
+                };
+              }
 
               // Encontrar serviço
               const service = services.find((s: Service) => s.name.toLowerCase() === serviceName.toLowerCase());
@@ -377,6 +393,7 @@ export default function Appointments() {
 
               appointmentsToImport.push({
                 clientId: client?.id || null,
+                clientData: clientData, // Dados para criar cliente se necessário
                 serviceId: service.id,
                 technicianId: technician?.id || null,
                 scheduledDate,
