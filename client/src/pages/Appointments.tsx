@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
@@ -14,8 +14,33 @@ import type { Appointment, Client, Service, Technician } from "@shared/schema";
 export default function Appointments() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [prefilledData, setPrefilledData] = useState<any>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Verificar parâmetros da URL ao carregar a página
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const preselected = urlParams.get('preselected');
+    
+    if (preselected === 'true') {
+      const data = {
+        date: urlParams.get('date'),
+        cep: urlParams.get('cep'),
+        numero: urlParams.get('numero'),
+        serviceId: urlParams.get('serviceId'),
+        technicianId: urlParams.get('technicianId'),
+      };
+      
+      if (data.date && data.cep && data.numero && data.serviceId && data.technicianId) {
+        setPrefilledData(data);
+        setIsFormOpen(true);
+        
+        // Limpar parâmetros da URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, []);
 
   const { data: appointments = [], isLoading } = useQuery({
     queryKey: ["/api/appointments"],

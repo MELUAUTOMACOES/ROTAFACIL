@@ -19,6 +19,13 @@ interface AppointmentFormProps {
   services: Service[];
   technicians: Technician[];
   onClose: () => void;
+  prefilledData?: {
+    date?: string;
+    cep?: string;
+    numero?: string;
+    serviceId?: string;
+    technicianId?: string;
+  } | null;
 }
 
 export default function AppointmentForm({ 
@@ -26,7 +33,8 @@ export default function AppointmentForm({
   clients, 
   services, 
   technicians, 
-  onClose 
+  onClose,
+  prefilledData 
 }: AppointmentFormProps) {
   const [selectedClient, setSelectedClient] = useState<number | null>(
     appointment?.clientId || null
@@ -48,6 +56,18 @@ export default function AppointmentForm({
       logradouro: appointment.logradouro,
       numero: appointment.numero,
       complemento: appointment.complemento || "",
+    } : prefilledData ? {
+      clientId: 0,
+      serviceId: prefilledData.serviceId ? parseInt(prefilledData.serviceId) : 0,
+      technicianId: prefilledData.technicianId ? parseInt(prefilledData.technicianId) : 0,
+      scheduledDate: prefilledData.date ? new Date(prefilledData.date) : new Date(),
+      status: "scheduled",
+      priority: "normal",
+      notes: "",
+      cep: prefilledData.cep || "",
+      logradouro: "",
+      numero: prefilledData.numero || "",
+      complemento: "",
     } : {
       clientId: 0,
       serviceId: 0,

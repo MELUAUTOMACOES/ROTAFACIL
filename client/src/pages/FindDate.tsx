@@ -227,7 +227,7 @@ export default function FindDate() {
                   <SelectContent>
                     {services.map((service) => (
                       <SelectItem key={service.id} value={service.id.toString()}>
-                        {service.name} - R$ {typeof service.price === 'number' ? service.price.toFixed(2) : parseFloat(service.price || '0').toFixed(2)}
+                        {service.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
