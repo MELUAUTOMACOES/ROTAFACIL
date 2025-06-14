@@ -12,7 +12,8 @@ import {
   Wrench,
   LogOut,
   X,
-  FileText
+  FileText,
+  Search
 } from "lucide-react";
 
 interface SidebarProps {
@@ -23,6 +24,7 @@ interface SidebarProps {
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Agendamentos", href: "/appointments", icon: Calendar },
+  { name: "Ache uma data", href: "/find-date", icon: Search },
   { name: "Roteirização", href: "/routes", icon: MapPin },
   { name: "Clientes", href: "/clients", icon: Users },
   { name: "Técnicos", href: "/technicians", icon: UserCog },

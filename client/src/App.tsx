@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "./lib/auth.tsx";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Appointments from "./pages/Appointments";
+import FindDate from "./pages/FindDate";
 import Routes from "./pages/Routes";
 import Clients from "./pages/Clients";
 import Technicians from "./pages/Technicians";
@@ -37,6 +38,7 @@ function AppRoutes() {
         <Route path="/" component={Dashboard} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/appointments" component={Appointments} />
+        <Route path="/find-date" component={FindDate} />
         <Route path="/routes" component={Routes} />
         <Route path="/clients" component={Clients} />
         <Route path="/technicians" component={Technicians} />
