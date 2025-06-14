@@ -8,7 +8,15 @@ import {
   insertChecklistSchema, insertBusinessRulesSchema, extendedInsertAppointmentSchema
 } from "@shared/schema";
 
-const JWT_SECRET = process.env.JWT_SECRET || "rotafacil-secret-key";
+// 🔐 CONFIGURAÇÃO OBRIGATÓRIA: JWT_SECRET deve estar definido nas variáveis de ambiente
+// Esta chave é usada para assinar e verificar tokens de autenticação
+if (!process.env.JWT_SECRET) {
+  throw new Error(
+    "JWT_SECRET must be set in environment variables. Generate a secure random string (32+ characters) for production."
+  );
+}
+
+const JWT_SECRET = process.env.JWT_SECRET as string;
 
 // Auth middleware
 function authenticateToken(req: any, res: any, next: any) {
