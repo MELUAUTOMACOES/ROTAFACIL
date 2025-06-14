@@ -756,6 +756,7 @@ export default function Appointments() {
                 clients={clients}
                 services={services}
                 technicians={technicians}
+                prefilledData={prefilledData}
               />
             </DialogContent>
           </Dialog>
@@ -785,6 +786,7 @@ export default function Appointments() {
                   clients={clients}
                   services={services}
                   technicians={technicians}
+                  prefilledData={prefilledData}
                 />
               </DialogContent>
             </Dialog>

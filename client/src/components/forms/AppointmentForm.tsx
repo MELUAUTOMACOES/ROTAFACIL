@@ -315,8 +315,12 @@ export default function AppointmentForm({
                     {...field}
                     value={field.value ? new Date(field.value.getTime() - field.value.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""}
                     onChange={(e) => field.onChange(new Date(e.target.value))}
+                    disabled={!!prefilledData?.date}
                   />
                 </FormControl>
+                {prefilledData?.date && (
+                  <p className="text-sm text-blue-600">Data selecionada a partir da busca "Ache uma data" - não pode ser alterada</p>
+                )}
                 <FormMessage />
               </FormItem>
             )}
@@ -348,8 +352,12 @@ export default function AppointmentForm({
                           }
                           field.onChange(value);
                         }}
+                        disabled={!!prefilledData?.cep}
                       />
                     </FormControl>
+                    {prefilledData?.cep && (
+                      <p className="text-sm text-blue-600">CEP selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -369,8 +377,12 @@ export default function AppointmentForm({
                           const value = e.target.value.replace(/\D/g, '');
                           field.onChange(value);
                         }}
+                        disabled={!!prefilledData?.numero}
                       />
                     </FormControl>
+                    {prefilledData?.numero && (
+                      <p className="text-sm text-blue-600">Número selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
