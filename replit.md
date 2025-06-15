@@ -105,7 +105,12 @@ RotaFácil is a comprehensive service route management application designed to h
 ## Changelog
 ```
 Changelog:
-- June 14, 2025. Initial setup
+- June 15, 2025: Criado site institucional moderno com página Home completa
+  * Implementada página Home com carrossel hero, seções de funcionalidades e preços
+  * Navegação responsiva com menu mobile 
+  * Design seguindo visual das imagens de referência fornecidas
+  * Integração com sistema de login existente
+- June 14, 2025: Initial setup
 ```
 
 ## User Preferences

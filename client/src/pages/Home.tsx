@@ -110,13 +110,15 @@ export default function Home() {
               <a href="#precos" className="text-gray-700 hover:text-yellow-500 block px-3 py-2 text-base font-medium">
                 Preços
               </a>
-              <Link href="/" className="text-gray-700 hover:text-yellow-500 block px-3 py-2 text-base font-medium">
+              <Link href="/login" className="text-gray-700 hover:text-yellow-500 block px-3 py-2 text-base font-medium">
                 Login
               </Link>
               <div className="px-3 py-2">
-                <Button className="w-full bg-gray-900 text-white hover:bg-gray-800">
-                  Acessar Sistema
-                </Button>
+                <Link href="/login">
+                  <Button className="w-full bg-gray-900 text-white hover:bg-gray-800">
+                    Acessar Sistema
+                  </Button>
+                </Link>
               </div>
             </div>
           </div>
@@ -145,7 +147,7 @@ export default function Home() {
                 <p className="text-lg md:text-xl mb-8 max-w-2xl mx-auto">
                   {slide.subtitle}
                 </p>
-                <Link href="/">
+                <Link href="/login">
                   <Button size="lg" className="bg-yellow-500 text-gray-900 hover:bg-yellow-400 font-semibold px-8 py-3">
                     {slide.buttonText}
                   </Button>
@@ -672,7 +674,7 @@ export default function Home() {
             </p>
             
             <div className="flex justify-center space-x-6 mb-8">
-              <Link href="/" className="text-gray-400 hover:text-yellow-500 transition-colors">
+              <Link href="/login" className="text-gray-400 hover:text-yellow-500 transition-colors">
                 Acessar Sistema
               </Link>
               <a href="#funcionalidades" className="text-gray-400 hover:text-yellow-500 transition-colors">
