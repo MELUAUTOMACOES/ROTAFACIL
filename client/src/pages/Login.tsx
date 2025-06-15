@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -109,9 +110,11 @@ export default function Login() {
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
         <div className="max-w-md w-full space-y-8">
           <div className="text-center lg:hidden mb-8">
-            <h1 className="text-3xl font-bold">
-              Rota<span className="text-burnt-yellow">Fácil</span>
-            </h1>
+            <Link href="/">
+              <h1 className="text-3xl font-bold cursor-pointer hover:opacity-80 transition-opacity">
+                Rota<span className="text-burnt-yellow">Fácil</span>
+              </h1>
+            </Link>
           </div>
           
           <Card>
