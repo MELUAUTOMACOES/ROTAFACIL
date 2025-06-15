@@ -255,11 +255,19 @@ export default function Home() {
             </p>
           </div>
 
+          {/* Botões com scroll para seções específicas conforme solicitado */}
           <div className="flex justify-center gap-4 mb-12">
-            <Button variant="default" className="bg-gray-900 text-white">
+            <Button 
+              variant="default" 
+              className="bg-gray-900 text-white"
+              onClick={() => document.getElementById('compare-planos')?.scrollIntoView({ behavior: 'smooth' })}
+            >
               Ver Planos
             </Button>
-            <Button variant="outline">
+            <Button 
+              variant="outline"
+              onClick={() => document.getElementById('precos')?.scrollIntoView({ behavior: 'smooth' })}
+            >
               Começar Agora
             </Button>
           </div>
@@ -392,7 +400,7 @@ export default function Home() {
       </section>
 
       {/* Pricing Comparison */}
-      <section className="py-16 bg-gray-50">
+      <section id="compare-planos" className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
@@ -533,8 +541,9 @@ export default function Home() {
               </div>
               <CardContent className="p-8">
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">Profissional</h3>
+                {/* Preço atualizado para R$ 249 conforme solicitado */}
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-gray-900">R$ 199</span>
+                  <span className="text-4xl font-bold text-gray-900">R$ 249</span>
                   <span className="text-gray-600">/mês</span>
                 </div>
                 <p className="text-gray-600 mb-6">
@@ -578,8 +587,9 @@ export default function Home() {
             <Card className="relative">
               <CardContent className="p-8">
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">Empresarial</h3>
+                {/* Preço atualizado para R$ 649 conforme solicitado */}
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-gray-900">R$ 399</span>
+                  <span className="text-4xl font-bold text-gray-900">R$ 649</span>
                   <span className="text-gray-600">/mês</span>
                 </div>
                 <p className="text-gray-600 mb-6">

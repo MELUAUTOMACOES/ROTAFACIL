@@ -12,13 +12,16 @@ import {
   Calendar, 
   Users, 
   Eye, 
-  EyeOff 
+  EyeOff,
+  Menu,
+  X
 } from "lucide-react";
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     username: "",
