@@ -1,0 +1,97 @@
+Crie um site institucional moderno para o RotaFácil, seguindo exatamente o visual das imagens anexadas como referência.
+Inclua apenas funcionalidades e textos que já existem no MVP, sem mencionar recursos que ainda não estão prontos.
+
+1. Página Home
+Topo (navbar):
+
+Logotipo RotaFácil
+
+Menus: Home, Funcionalidades, Preços, Login, Acessar Sistema
+
+Carrossel de imagens de logística:
+
+Slide 1:
+
+Título: Economia de Recursos
+
+Texto: Com RotaFácil, você reduz custos operacionais com rotas inteligentes e otimização de percursos.
+
+Botão: Comece Agora
+
+Slide 2:
+
+Título: Planejamento de Rota Simplificado
+
+Texto: Otimize suas rotas de forma simples e eficiente, economizando tempo e combustível, com um processo de roteirização rápido e fácil.
+
+Botão: Comece Agora
+
+Slide 3:
+
+Título: Roteirização Eficiente
+
+Texto: Planeje suas rotas de forma prática e eficiente, otimizando o tempo e a distância para suas entregas.
+
+Botão: Comece Agora
+
+Abaixo do carrossel:
+
+Título: Simplifique sua operação com o RotaFácil
+
+Texto: Nossa plataforma foi projetada para tornar sua operação logística mais eficiente, economizando tempo e recursos enquanto melhora a satisfação do cliente.
+
+Quatro cards/resumos:
+
+Otimize Entregas: Reduza o tempo de entrega com rotas inteligentes e eficientes para sua frota.
+
+Gerencie sua frota num só lugar: Pensado para gestores e operadores, tudo em um único lugar!
+
+Agendamento Simples: Planeje suas entregas com antecedência e organize seus recursos de forma eficiente.
+
+Redução de Custos: Economize combustível e tempo com rotas otimizadas e melhor gerenciamento.
+
+Rodapé:
+
+Seções institucionais conforme o exemplo, como Sobre, Blog, Contato, Suporte, Políticas.
+
+2. Página de Funcionalidades
+Recursos Principais (cards):
+
+Roteirização Inteligente: Sistema inteligente de criação de rotas que otimiza percursos, economizando tempo e combustível.
+
+Agendamento de Serviços: Agende entregas e serviços com facilidade e garanta o planejamento eficiente da sua operação.
+
+Histórico de Rotas: Acesse e analise o histórico completo das rotas realizadas para otimizar futuras operações.
+
+Recursos Avançados:
+
+Inclusão de Rota: Adicione rotas manualmente quando necessário, com total flexibilidade para sua operação.
+
+Configurações Personalizadas: Adapte o sistema às necessidades específicas da sua operação com diversas opções de personalização.
+
+3. Página de Preços
+Tabela de comparação de planos (apenas recursos do MVP):
+
+Plano Básico: até 150 requisições/mês, até 5 veículos, roteirização básica, agendamento de serviços, histórico de rotas (30 dias), suporte por e-mail.
+
+Plano Profissional: até 800 requisições/mês, até 15 veículos, roteirização avançada, agendamento de serviços, histórico de rotas (90 dias), suporte prioritário, exportação de relatórios.
+
+Plano Empresarial: requisições ilimitadas, veículos ilimitados, roteirização avançada, agendamento e gerenciamento completo, histórico de rotas completo, suporte 24/7, API para integração com sistemas, relatórios personalizados.
+
+Botões para cada plano: Comece grátis, Escolher plano, Contatar vendas
+
+4. Design e UX/UI
+Use as imagens anexadas como referência visual para cores, disposição dos elementos, proporção dos cards e tabelas, tipografia e espaçamento.
+
+Utilize fontes modernas, layouts responsivos, ícones e sombras suaves.
+
+Os textos e nomes dos planos devem estar em português, exatamente conforme solicitado.
+
+Não altere nenhuma funcionalidade nem insira recursos não implementados no MVP.
+
+Se precisar criar componentes, explique nomes e locais dos arquivos. Deixe comentários no código para fácil manutenção futura.
+
+Importante:
+Não mexa em nada além do escopo acima.
+Respeite exatamente a estrutura e funcionalidades do MVP atual.
+Apenas adapte visualmente ao layout de referência das imagens.

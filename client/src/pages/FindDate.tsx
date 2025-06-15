@@ -247,7 +247,7 @@ export default function FindDate() {
                     <SelectValue placeholder="Qualquer técnico" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Qualquer técnico</SelectItem>
+                    <SelectItem value="0">Qualquer técnico</SelectItem>
                     {technicians.map((technician) => (
                       <SelectItem key={technician.id} value={technician.id.toString()}>
                         {technician.name}
