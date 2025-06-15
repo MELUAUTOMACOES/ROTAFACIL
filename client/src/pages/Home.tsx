@@ -30,7 +30,7 @@ export default function Home() {
       title: "Economia de Recursos",
       subtitle: "Com RotaFácil, você reduz custos operacionais com rotas inteligentes e planejamento eficiente.",
       buttonText: "Ver Benefícios",
-      image: "https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?w=1200&h=600&fit=crop"
+      image: "https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=1200&h=600&fit=crop"
     },
     {
       title: "Gestão Completa",
@@ -61,7 +61,7 @@ export default function Home() {
               </h1>
             </div>
 
-            {/* Desktop Menu */}
+            {/* Desktop Menu - Removido botão "Login", mantido apenas "Acessar Sistema" */}
             <div className="hidden md:block">
               <div className="ml-10 flex items-baseline space-x-8">
                 <a href="#home" className="text-gray-900 hover:text-yellow-500 px-3 py-2 text-sm font-medium">
@@ -73,9 +73,6 @@ export default function Home() {
                 <a href="#precos" className="text-gray-700 hover:text-yellow-500 px-3 py-2 text-sm font-medium">
                   Preços
                 </a>
-                <Link href="/login" className="text-gray-700 hover:text-yellow-500 px-3 py-2 text-sm font-medium">
-                  Login
-                </Link>
                 <Link href="/login">
                   <Button className="bg-gray-900 text-white hover:bg-gray-800">
                     Acessar Sistema
@@ -97,7 +94,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Mobile Menu */}
+        {/* Mobile Menu - Removido botão "Login", mantido apenas "Acessar Sistema" */}
         {isMenuOpen && (
           <div className="md:hidden">
             <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-200">
@@ -110,9 +107,6 @@ export default function Home() {
               <a href="#precos" className="text-gray-700 hover:text-yellow-500 block px-3 py-2 text-base font-medium">
                 Preços
               </a>
-              <Link href="/login" className="text-gray-700 hover:text-yellow-500 block px-3 py-2 text-base font-medium">
-                Login
-              </Link>
               <div className="px-3 py-2">
                 <Link href="/login">
                   <Button className="w-full bg-gray-900 text-white hover:bg-gray-800">
@@ -209,7 +203,7 @@ export default function Home() {
                   Gerencie sua frota num só lugar
                 </h3>
                 <p className="text-gray-600">
-                  Pensado para gestores e operadores lucro em um
+                  Pensado para gestores e operadores, tudo em um
                   único lugar!
                 </p>
               </CardContent>
@@ -335,15 +329,14 @@ export default function Home() {
                 <CardContent className="pt-0">
                   <div className="flex items-center mb-4">
                     <div className="w-12 h-12 bg-yellow-500 rounded-lg flex items-center justify-center mr-4">
-                      <Truck className="h-6 w-6 text-white" />
+                      <Calendar className="h-6 w-6 text-white" />
                     </div>
                     <h3 className="text-xl font-semibold text-gray-900">
-                      Manutenção de Veículos
+                      Encontre uma data
                     </h3>
                   </div>
                   <p className="text-gray-700">
-                    Gerencie a manutenção da sua frota, com alertas e histórico
-                    completo de serviços realizados.
+                    Procure por uma data, com a menor distância de acordo com seus serviços já agendados.
                   </p>
                 </CardContent>
               </Card>
@@ -373,23 +366,6 @@ export default function Home() {
                   <p className="text-gray-700">
                     Adicione rotas manualmente quando necessário, com total
                     flexibilidade para sua operação.
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="p-6 border-2 border-yellow-200 bg-yellow-50">
-                <CardContent className="pt-0">
-                  <div className="flex items-center mb-4">
-                    <div className="w-8 h-8 bg-yellow-500 rounded flex items-center justify-center mr-4">
-                      <Settings className="h-4 w-4 text-white" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      Gerenciamento de Funcionários e Veículos
-                    </h3>
-                  </div>
-                  <p className="text-gray-700">
-                    Controle completo sobre sua equipe e frota em uma interface
-                    intuitiva.
                   </p>
                 </CardContent>
               </Card>
@@ -427,6 +403,7 @@ export default function Home() {
             </p>
           </div>
 
+          {/* Tabela alterada para 4 colunas com novos dados conforme solicitado */}
           <div className="overflow-x-auto">
             <table className="w-full bg-white rounded-lg shadow-sm">
               <thead>
@@ -435,59 +412,54 @@ export default function Home() {
                   <th className="text-center py-4 px-6 font-semibold text-gray-900">Básico</th>
                   <th className="text-center py-4 px-6 font-semibold text-gray-900 bg-yellow-50">Profissional</th>
                   <th className="text-center py-4 px-6 font-semibold text-gray-900">Empresarial</th>
+                  <th className="text-center py-4 px-6 font-semibold text-gray-900">Personalizado</th>
                 </tr>
               </thead>
               <tbody>
                 <tr className="border-b border-gray-100">
-                  <td className="py-4 px-6 text-gray-700">Roteirização</td>
-                  <td className="text-center py-4 px-6 text-gray-600">Básica</td>
-                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">Avançada</td>
-                  <td className="text-center py-4 px-6 text-gray-900">IA Avançada</td>
+                  <td className="py-4 px-6 text-gray-700">Nº de Roteirização</td>
+                  <td className="text-center py-4 px-6 text-gray-600">até 150 requisições/mês</td>
+                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">até 800 requisições/mês</td>
+                  <td className="text-center py-4 px-6 text-gray-900">até 5000 requisições/mês</td>
+                  <td className="text-center py-4 px-6 text-gray-900">Sob consulta</td>
                 </tr>
                 <tr className="border-b border-gray-100">
                   <td className="py-4 px-6 text-gray-700">Número de veículos</td>
-                  <td className="text-center py-4 px-6 text-gray-600">5</td>
-                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">15</td>
-                  <td className="text-center py-4 px-6 text-gray-900">Ilimitado</td>
+                  <td className="text-center py-4 px-6 text-gray-600">até 5 veículos</td>
+                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">até 12 veículos</td>
+                  <td className="text-center py-4 px-6 text-gray-900">até 30 veículos</td>
+                  <td className="text-center py-4 px-6 text-gray-900">Sob consulta</td>
+                </tr>
+                <tr className="border-b border-gray-100">
+                  <td className="py-4 px-6 text-gray-700">Número de técnicos</td>
+                  <td className="text-center py-4 px-6 text-gray-600">até 5 técnicos</td>
+                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">até 12 técnicos</td>
+                  <td className="text-center py-4 px-6 text-gray-900">até 30 técnicos</td>
+                  <td className="text-center py-4 px-6 text-gray-900">Sob consulta</td>
                 </tr>
                 <tr className="border-b border-gray-100">
                   <td className="py-4 px-6 text-gray-700">Histórico de rotas</td>
                   <td className="text-center py-4 px-6 text-gray-600">30 dias</td>
-                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">90 dias</td>
-                  <td className="text-center py-4 px-6 text-gray-900">Completo</td>
+                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">120 dias</td>
+                  <td className="text-center py-4 px-6 text-gray-900">360 dias</td>
+                  <td className="text-center py-4 px-6 text-gray-900">Sob consulta</td>
                 </tr>
                 <tr className="border-b border-gray-100">
-                  <td className="py-4 px-6 text-gray-700">Manutenção de veículos</td>
-                  <td className="text-center py-4 px-6 text-gray-600">—</td>
-                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">Básico</td>
-                  <td className="text-center py-4 px-6 text-gray-900">Avançado</td>
-                </tr>
-                <tr className="border-b border-gray-100">
-                  <td className="py-4 px-6 text-gray-700">Gerenciamento de funcionários</td>
-                  <td className="text-center py-4 px-6 text-gray-600">—</td>
-                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">Básico</td>
-                  <td className="text-center py-4 px-6 text-gray-900">Completo</td>
-                </tr>
-                <tr className="border-b border-gray-100">
-                  <td className="py-4 px-6 text-gray-700">Exportação de dados</td>
-                  <td className="text-center py-4 px-6 text-gray-600">—</td>
-                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">Relatórios básicos</td>
-                  <td className="text-center py-4 px-6 text-gray-900">Relatórios personalizados</td>
+                  <td className="py-4 px-6 text-gray-700">Agendamento de serviços</td>
+                  <td className="text-center py-4 px-6 text-gray-600">✓</td>
+                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">✓</td>
+                  <td className="text-center py-4 px-6 text-gray-900">✓</td>
+                  <td className="text-center py-4 px-6 text-gray-900">Sob consulta</td>
                 </tr>
                 <tr>
-                  <td className="py-4 px-6 text-gray-700">Suporte</td>
-                  <td className="text-center py-4 px-6 text-gray-600">Email</td>
-                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">Prioritário</td>
-                  <td className="text-center py-4 px-6 text-gray-900">24/7</td>
+                  <td className="py-4 px-6 text-gray-700">Ache uma data</td>
+                  <td className="text-center py-4 px-6 text-gray-600">✓</td>
+                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">✓</td>
+                  <td className="text-center py-4 px-6 text-gray-900">✓</td>
+                  <td className="text-center py-4 px-6 text-gray-900">Sob consulta</td>
                 </tr>
               </tbody>
             </table>
-          </div>
-
-          <div className="text-center mt-8">
-            <Button className="bg-gray-900 text-white hover:bg-gray-800">
-              Ver detalhes dos planos
-            </Button>
           </div>
         </div>
       </section>
@@ -505,7 +477,8 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          {/* Seção de planos ajustada para refletir os dados da tabela "Compare os Planos" */}
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             {/* Basic Plan */}
             <Card className="relative">
               <CardContent className="p-8">
@@ -521,15 +494,15 @@ export default function Home() {
                 <ul className="space-y-3 mb-8">
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                    Até 150 requisições/mês
+                  </li>
+                  <li className="flex items-center text-gray-700">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
                     Até 5 veículos
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Roteirização básica
-                  </li>
-                  <li className="flex items-center text-gray-700">
-                    <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Agendamento de serviços
+                    Até 5 técnicos
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
@@ -537,7 +510,11 @@ export default function Home() {
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Suporte por e-mail
+                    Agendamento de serviços
+                  </li>
+                  <li className="flex items-center text-gray-700">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                    Ache uma data
                   </li>
                 </ul>
 
@@ -567,11 +544,19 @@ export default function Home() {
                 <ul className="space-y-3 mb-8">
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Até 15 veículos
+                    Até 800 requisições/mês
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Roteirização avançada
+                    Até 12 veículos
+                  </li>
+                  <li className="flex items-center text-gray-700">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                    Até 12 técnicos
+                  </li>
+                  <li className="flex items-center text-gray-700">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                    Histórico de rotas (120 dias)
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
@@ -579,19 +564,7 @@ export default function Home() {
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Manutenção de veículos
-                  </li>
-                  <li className="flex items-center text-gray-700">
-                    <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Histórico de rotas (90 dias)
-                  </li>
-                  <li className="flex items-center text-gray-700">
-                    <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Suporte prioritário
-                  </li>
-                  <li className="flex items-center text-gray-700">
-                    <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Exportação de relatórios
+                    Ache uma data
                   </li>
                 </ul>
 
@@ -616,39 +589,67 @@ export default function Home() {
                 <ul className="space-y-3 mb-8">
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Veículos ilimitados
+                    Até 5000 requisições/mês
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Roteirização avançada com IA
+                    Até 30 veículos
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Agendamento e gerenciamento completo
+                    Até 30 técnicos
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Manutenção preventiva de veículos
+                    Histórico de rotas (360 dias)
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Histórico de rotas completo
+                    Agendamento de serviços
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Suporte 24/7
+                    Ache uma data
+                  </li>
+                </ul>
+
+                <Button variant="outline" className="w-full">
+                  Contatar Vendas
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Personalizado Plan */}
+            <Card className="relative">
+              <CardContent className="p-8">
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Personalizado</h3>
+                <div className="mb-6">
+                  <span className="text-2xl font-bold text-gray-900">Sob consulta</span>
+                </div>
+                <p className="text-gray-600 mb-6">
+                  Soluções personalizadas para suas necessidades específicas
+                </p>
+                
+                <ul className="space-y-3 mb-8">
+                  <li className="flex items-center text-gray-700">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                    Roteirização sob consulta
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    API para integração com sistemas
+                    Veículos sob consulta
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Relatórios personalizados
+                    Técnicos sob consulta
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Controle de funcionários
+                    Histórico sob consulta
+                  </li>
+                  <li className="flex items-center text-gray-700">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                    Recursos sob consulta
                   </li>
                 </ul>
 

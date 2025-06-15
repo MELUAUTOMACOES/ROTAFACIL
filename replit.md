@@ -105,6 +105,15 @@ RotaFácil is a comprehensive service route management application designed to h
 ## Changelog
 ```
 Changelog:
+- June 15, 2025: Ajustes no site institucional conforme especificações
+  * Removido botão "Login" dos menus, mantido apenas "Acessar Sistema"
+  * Alterada imagem do slide "Economia de Recursos" para logística
+  * Ajustado texto do card "Gerencie sua frota" para "tudo em um único lugar"
+  * Substituído card "Manutenção de Veículos" por "Encontre uma data"
+  * Removido card "Gerenciamento de Funcionários e Veículos"
+  * Tabela "Compare os Planos" expandida para 4 colunas (Básico, Profissional, Empresarial, Personalizado)
+  * Atualizados dados dos planos com novas especificações de requisições, veículos e técnicos
+  * Seção "Planos e Preços" sincronizada com tabela comparativa
 - June 15, 2025: Criado site institucional moderno com página Home completa
   * Implementada página Home com carrossel hero, seções de funcionalidades e preços
   * Navegação responsiva com menu mobile 
