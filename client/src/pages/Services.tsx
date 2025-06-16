@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import ServiceForm from "@/components/forms/ServiceForm";
-import { Plus, Wrench, Clock, DollarSign, Edit, Trash2, FileText } from "lucide-react";
+import { Plus, Wrench, Clock, DollarSign, Edit, Trash2, FileText, Award } from "lucide-react";
 import type { Service } from "@shared/schema";
 
 export default function Services() {
@@ -183,6 +183,14 @@ export default function Services() {
                     <DollarSign className="h-4 w-4" />
                     <span>Preço: {formatPrice(service.price)}</span>
                   </div>
+                  
+                  {/* Mostra pontos/remuneração quando disponível */}
+                  {service.points && (
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <Award className="h-4 w-4" />
+                      <span>Pontos: {service.points}</span>
+                    </div>
+                  )}
                 </div>
                 
                 <div className="mt-4 pt-4 border-t border-gray-100">
