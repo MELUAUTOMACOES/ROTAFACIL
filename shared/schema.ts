@@ -121,6 +121,24 @@ export const businessRules = pgTable("business_rules", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Teams table - Nova tabela para equipes conforme solicitado
+export const teams = pgTable("teams", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(), // Nome da equipe
+  serviceIds: text("service_ids").array(), // IDs dos serviços que a equipe atende
+  userId: integer("user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Team members table - Tabela para vincular técnicos às equipes
+export const teamMembers = pgTable("team_members", {
+  id: serial("id").primaryKey(),
+  teamId: integer("team_id").notNull().references(() => teams.id),
+  technicianId: integer("technician_id").notNull().references(() => technicians.id),
+  userId: integer("user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -158,6 +176,18 @@ export const insertAppointmentSchema = createInsertSchema(appointments).omit({
 });
 
 export const insertChecklistSchema = createInsertSchema(checklists).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+});
+
+export const insertTeamSchema = createInsertSchema(teams).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+});
+
+export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({
   id: true,
   userId: true,
   createdAt: true,
@@ -221,4 +251,8 @@ export type Checklist = typeof checklists.$inferSelect;
 export type InsertChecklist = z.infer<typeof insertChecklistSchema>;
 export type BusinessRules = typeof businessRules.$inferSelect;
 export type InsertBusinessRules = z.infer<typeof insertBusinessRulesSchema>;
+export type Team = typeof teams.$inferSelect;
+export type InsertTeam = z.infer<typeof insertTeamSchema>;
+export type TeamMember = typeof teamMembers.$inferSelect;
+export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
 export type LoginData = z.infer<typeof loginSchema>;

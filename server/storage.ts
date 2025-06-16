@@ -68,6 +68,16 @@ export interface IStorage {
   createBusinessRules(businessRules: InsertBusinessRules, userId: number): Promise<BusinessRules>;
   updateBusinessRules(id: number, businessRules: Partial<InsertBusinessRules>, userId: number): Promise<BusinessRules>;
 
+  // Teams - Operações para equipes conforme solicitado
+  getTeams(userId: number): Promise<Team[]>;
+  getTeam(id: number, userId: number): Promise<Team | undefined>;
+  createTeam(team: InsertTeam, userId: number): Promise<Team>;
+  updateTeam(id: number, team: Partial<InsertTeam>, userId: number): Promise<Team>;
+  deleteTeam(id: number, userId: number): Promise<boolean>;
+  getTeamMembers(teamId: number, userId: number): Promise<TeamMember[]>;
+  addTeamMember(teamMember: InsertTeamMember, userId: number): Promise<TeamMember>;
+  removeTeamMember(id: number, userId: number): Promise<boolean>;
+
   // Route optimization
   optimizeRoute(appointmentIds: number[], userId: number): Promise<{ optimizedOrder: Appointment[], totalDistance: number, estimatedTime: number }>;
 }
@@ -343,6 +353,51 @@ export class DatabaseStorage implements IStorage {
       totalDistance: appointmentsList.length * 5, // Mock calculation
       estimatedTime: appointmentsList.length * 30 // Mock calculation
     };
+  }
+
+  // Teams - Implementação das operações de equipes conforme solicitado
+  async getTeams(userId: number): Promise<Team[]> {
+    return await db.select().from(teams).where(eq(teams.userId, userId));
+  }
+
+  async getTeam(id: number, userId: number): Promise<Team | undefined> {
+    const [team] = await db.select().from(teams).where(and(eq(teams.id, id), eq(teams.userId, userId)));
+    return team || undefined;
+  }
+
+  async createTeam(insertTeam: InsertTeam, userId: number): Promise<Team> {
+    const [team] = await db.insert(teams).values({ ...insertTeam, userId }).returning();
+    return team;
+  }
+
+  async updateTeam(id: number, teamData: Partial<InsertTeam>, userId: number): Promise<Team> {
+    const [team] = await db.update(teams)
+      .set(teamData)
+      .where(and(eq(teams.id, id), eq(teams.userId, userId)))
+      .returning();
+    return team;
+  }
+
+  async deleteTeam(id: number, userId: number): Promise<boolean> {
+    // Remove membros da equipe primeiro
+    await db.delete(teamMembers).where(and(eq(teamMembers.teamId, id), eq(teamMembers.userId, userId)));
+    
+    const result = await db.delete(teams).where(and(eq(teams.id, id), eq(teams.userId, userId)));
+    return result.rowCount > 0;
+  }
+
+  async getTeamMembers(teamId: number, userId: number): Promise<TeamMember[]> {
+    return await db.select().from(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+  }
+
+  async addTeamMember(insertTeamMember: InsertTeamMember, userId: number): Promise<TeamMember> {
+    const [teamMember] = await db.insert(teamMembers).values({ ...insertTeamMember, userId }).returning();
+    return teamMember;
+  }
+
+  async removeTeamMember(id: number, userId: number): Promise<boolean> {
+    const result = await db.delete(teamMembers).where(and(eq(teamMembers.id, id), eq(teamMembers.userId, userId)));
+    return result.rowCount > 0;
   }
 }
 
