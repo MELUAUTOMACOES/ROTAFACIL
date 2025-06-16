@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Wrench, Clock, DollarSign, FileText } from "lucide-react";
+import { Wrench, Clock, DollarSign, FileText, Award } from "lucide-react";
 
 interface ServiceFormProps {
   service?: Service | null;
@@ -28,12 +28,14 @@ export default function ServiceForm({ service, onClose }: ServiceFormProps) {
       duration: service.duration,
       price: service.price || "",
       cost: service.cost || "",
+      points: service.points || undefined,
     } : {
       name: "",
       description: "",
       duration: 60,
       price: "",
       cost: "",
+      points: undefined,
     },
   });
 
@@ -138,12 +140,31 @@ export default function ServiceForm({ service, onClose }: ServiceFormProps) {
             {...form.register("duration", { valueAsNumber: true })}
             type="number"
             min="1"
-            step="15"
+            step="1"
             placeholder="60"
             className="mt-1"
           />
           {form.formState.errors.duration && (
             <p className="text-sm text-red-600 mt-1">{form.formState.errors.duration.message}</p>
+          )}
+        </div>
+
+        {/* Campo adicionado para pontos/remuneração conforme solicitado */}
+        <div>
+          <Label htmlFor="points" className="flex items-center">
+            <Award className="h-4 w-4 mr-1" />
+            Pontos/remuneração
+          </Label>
+          <Input
+            {...form.register("points", { valueAsNumber: true })}
+            type="number"
+            min="0"
+            step="1"
+            placeholder="100"
+            className="mt-1"
+          />
+          {form.formState.errors.points && (
+            <p className="text-sm text-red-600 mt-1">{form.formState.errors.points.message}</p>
           )}
         </div>
 

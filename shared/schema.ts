@@ -37,6 +37,8 @@ export const services = pgTable("services", {
   duration: integer("duration").notNull(), // in minutes
   price: decimal("price", { precision: 10, scale: 2 }),
   cost: decimal("cost", { precision: 10, scale: 2 }),
+  // Campo adicionado para pontos/remuneração conforme solicitado
+  points: integer("points"), // Pontos/remuneração aceita apenas números
   userId: integer("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
