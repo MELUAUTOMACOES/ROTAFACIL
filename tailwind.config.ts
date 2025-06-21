@@ -51,6 +51,8 @@ export default {
           "4": "hsl(var(--chart-4))",
           "5": "hsl(var(--chart-5))",
         },
+        "burnt-yellow": "hsl(var(--burnt-yellow))",
+        "burnt-yellow-dark": "hsl(var(--burnt-yellow-dark))",
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
