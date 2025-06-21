@@ -150,7 +150,13 @@ export default function Technicians() {
 
   const handleTeamFormClose = () => {
     setIsTeamFormOpen(false);
-    setSelectedTeam(null);
+    setSelectedTeam(null); // Limpar equipe selecionada ao fechar o formulário
+  };
+
+  // Função para abrir formulário de nova equipe - garante que sempre abre limpo
+  const handleNewTeam = () => {
+    setSelectedTeam(null); // Garantir que não há equipe selecionada
+    setIsTeamFormOpen(true);
   };
 
   const isLoading = techniciansLoading || teamsLoading;
@@ -319,7 +325,10 @@ export default function Technicians() {
             
             <Dialog open={isTeamFormOpen} onOpenChange={setIsTeamFormOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
+                <Button 
+                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                  onClick={handleNewTeam} // Usar função específica que limpa o estado
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Cadastrar Equipe
                 </Button>
@@ -346,7 +355,10 @@ export default function Technicians() {
                 </p>
                 <Dialog open={isTeamFormOpen} onOpenChange={setIsTeamFormOpen}>
                   <DialogTrigger asChild>
-                    <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
+                    <Button 
+                      className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                      onClick={handleNewTeam} // Usar função específica que limpa o estado
+                    >
                       <Plus className="h-4 w-4 mr-2" />
                       Criar Primeira Equipe
                     </Button>

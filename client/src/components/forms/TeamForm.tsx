@@ -62,6 +62,39 @@ export default function TeamForm({
     enabled: !!team,
   });
 
+  const form = useForm<ExtendedTeamForm>({
+    resolver: zodResolver(extendedTeamSchema),
+    defaultValues: {
+      name: "",
+      technicianIds: [],
+      serviceIds: [],
+    },
+  });
+
+  // Resetar o formulário quando a equipe muda ou quando abre para nova equipe
+  useEffect(() => {
+    if (team) {
+      // Edição: carregar dados da equipe existente
+      form.reset({
+        name: team.name || "",
+        technicianIds: selectedTechnicians,
+        serviceIds: team.serviceIds ? team.serviceIds.map(id => parseInt(id)) : [],
+      });
+      if (team.serviceIds) {
+        setSelectedServices(team.serviceIds.map(id => parseInt(id)));
+      }
+    } else {
+      // Nova equipe: limpar formulário
+      form.reset({
+        name: "",
+        technicianIds: [],
+        serviceIds: [],
+      });
+      setSelectedTechnicians([]);
+      setSelectedServices([]);
+    }
+  }, [team, form]);
+
   // Atualizar técnicos selecionados quando os membros da equipe são carregados
   useEffect(() => {
     if (team && teamMembers.length > 0) {
@@ -69,25 +102,7 @@ export default function TeamForm({
       setSelectedTechnicians(technicianIds);
       form.setValue('technicianIds', technicianIds);
     }
-  }, [team, teamMembers]);
-
-  // Atualizar serviços selecionados quando a equipe muda
-  useEffect(() => {
-    if (team?.serviceIds) {
-      const serviceIds = team.serviceIds.map(id => parseInt(id));
-      setSelectedServices(serviceIds);
-      form.setValue('serviceIds', serviceIds);
-    }
-  }, [team]);
-
-  const form = useForm<ExtendedTeamForm>({
-    resolver: zodResolver(extendedTeamSchema),
-    defaultValues: {
-      name: team?.name || "",
-      technicianIds: selectedTechnicians,
-      serviceIds: selectedServices,
-    },
-  });
+  }, [teamMembers, form]);
 
   const createTeamMutation = useMutation({
     mutationFn: async (data: ExtendedTeamForm) => {
@@ -135,51 +150,79 @@ export default function TeamForm({
 
   const updateTeamMutation = useMutation({
     mutationFn: async (data: ExtendedTeamForm) => {
+      console.log('🔄 Iniciando atualização da equipe:', team?.id, data);
+      
       if (!team) throw new Error("Equipe não encontrada");
       
-      const teamData = {
-        name: data.name,
-        serviceIds: data.serviceIds?.map(id => id.toString()) || [],
-      };
-      
-      // Atualizar dados da equipe
-      const response = await apiRequest("PATCH", `/api/teams/${team.id}`, teamData);
-      const updatedTeam = await response.json();
-      
-      // Remover todos os membros existentes da equipe
-      const currentMembers = await fetch(`/api/team-members/${team.id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
+      try {
+        const teamData = {
+          name: data.name,
+          serviceIds: data.serviceIds?.map(id => id.toString()) || [],
+        };
+        
+        console.log('📝 Dados da equipe para atualizar:', teamData);
+        
+        // Atualizar dados da equipe
+        const response = await apiRequest("PATCH", `/api/teams/${team.id}`, teamData);
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Erro ao atualizar equipe');
         }
-      });
-      
-      if (currentMembers.ok) {
-        const members = await currentMembers.json();
-        await Promise.all(
-          members.map((member: any) =>
-            apiRequest("DELETE", `/api/team-members/${member.id}`)
-          )
-        );
-      }
-      
-      // Adicionar os novos membros selecionados
-      if (data.technicianIds && data.technicianIds.length > 0) {
-        await Promise.all(
-          data.technicianIds.map(technicianId =>
-            apiRequest("POST", "/api/team-members", {
-              teamId: team.id,
-              technicianId,
+        
+        const updatedTeam = await response.json();
+        console.log('✅ Equipe atualizada:', updatedTeam);
+        
+        // Remover todos os membros existentes da equipe
+        console.log('🗑️ Removendo membros existentes...');
+        const currentMembers = await fetch(`/api/team-members/${team.id}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (currentMembers.ok) {
+          const members = await currentMembers.json();
+          console.log('👥 Membros atuais:', members);
+          
+          if (members.length > 0) {
+            await Promise.all(
+              members.map((member: any) => {
+                console.log('❌ Removendo membro:', member.id);
+                return apiRequest("DELETE", `/api/team-members/${member.id}`);
+              })
+            );
+          }
+        }
+        
+        // Adicionar os novos membros selecionados
+        if (data.technicianIds && data.technicianIds.length > 0) {
+          console.log('➕ Adicionando novos membros:', data.technicianIds);
+          await Promise.all(
+            data.technicianIds.map(technicianId => {
+              console.log('✅ Adicionando técnico:', technicianId);
+              return apiRequest("POST", "/api/team-members", {
+                teamId: team.id,
+                technicianId,
+              });
             })
-          )
-        );
+          );
+        }
+        
+        console.log('🎉 Atualização concluída com sucesso');
+        return updatedTeam;
+        
+      } catch (error) {
+        console.error('❌ Erro na atualização:', error);
+        throw error;
       }
-      
-      return updatedTeam;
     },
     onSuccess: () => {
+      // Invalidar todas as queries relacionadas a equipes para atualizar a interface
       queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
       queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/all-team-members"] });
       toast({
         title: "Sucesso!",
         description: "Equipe atualizada com sucesso.",
@@ -196,7 +239,11 @@ export default function TeamForm({
   });
 
   const onSubmit = (data: ExtendedTeamForm) => {
-    console.log('Técnicos selecionados no submit:', selectedTechnicians);
+    // Log para debug - verificar se os dados estão corretos
+    console.log('Dados do formulário:', data);
+    console.log('Técnicos selecionados:', selectedTechnicians);
+    console.log('Serviços selecionados:', selectedServices);
+    
     const formData = {
       ...data,
       technicianIds: selectedTechnicians,
@@ -204,8 +251,10 @@ export default function TeamForm({
     };
     
     if (team) {
+      console.log('Atualizando equipe:', team.id, formData);
       updateTeamMutation.mutate(formData);
     } else {
+      console.log('Criando nova equipe:', formData);
       createTeamMutation.mutate(formData);
     }
   };
