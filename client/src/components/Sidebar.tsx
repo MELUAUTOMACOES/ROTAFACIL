@@ -27,7 +27,7 @@ const navigation = [
   { name: "Ache uma data", href: "/find-date", icon: Search },
   { name: "Roteirização", href: "/routes", icon: MapPin },
   { name: "Clientes", href: "/clients", icon: Users },
-  { name: "Técnicos", href: "/technicians", icon: UserCog },
+  { name: "Técnicos/Equipes", href: "/technicians", icon: UserCog },
   { name: "Veículos", href: "/vehicles", icon: Car },
   { name: "Serviços", href: "/services", icon: Wrench },
   { name: "Regras de Negócio", href: "/business-rules", icon: FileText },

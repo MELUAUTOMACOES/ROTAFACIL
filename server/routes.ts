@@ -5,7 +5,8 @@ import { storage } from "./storage";
 import { 
   insertUserSchema, loginSchema, insertClientSchema, insertServiceSchema,
   insertTechnicianSchema, insertVehicleSchema, insertAppointmentSchema,
-  insertChecklistSchema, insertBusinessRulesSchema, extendedInsertAppointmentSchema
+  insertChecklistSchema, insertBusinessRulesSchema, insertTeamSchema,
+  insertTeamMemberSchema, extendedInsertAppointmentSchema
 } from "@shared/schema";
 
 // 🔐 CONFIGURAÇÃO OBRIGATÓRIA: JWT_SECRET deve estar definido nas variáveis de ambiente
@@ -518,6 +519,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(businessRules);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Teams routes - Nova funcionalidade conforme solicitado
+  app.get("/api/teams", authenticateToken, async (req: any, res) => {
+    try {
+      const teams = await storage.getTeams(req.user.userId);
+      res.json(teams);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/teams/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const team = await storage.getTeam(id, req.user.userId);
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+      res.json(team);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/teams", authenticateToken, async (req: any, res) => {
+    try {
+      const teamData = insertTeamSchema.parse(req.body);
+      const team = await storage.createTeam(teamData, req.user.userId);
+      res.json(team);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/teams/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const teamData = insertTeamSchema.partial().parse(req.body);
+      const team = await storage.updateTeam(id, teamData, req.user.userId);
+      res.json(team);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/teams/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteTeam(id, req.user.userId);
+      if (!success) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+      res.json({ message: "Team deleted successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Team members routes - Para gerenciar membros das equipes
+  app.get("/api/team-members/:teamId", authenticateToken, async (req: any, res) => {
+    try {
+      const teamId = parseInt(req.params.teamId);
+      const members = await storage.getTeamMembers(teamId, req.user.userId);
+      res.json(members);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/team-members", authenticateToken, async (req: any, res) => {
+    try {
+      const memberData = insertTeamMemberSchema.parse(req.body);
+      const member = await storage.addTeamMember(memberData, req.user.userId);
+      res.json(member);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/team-members/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.removeTeamMember(id, req.user.userId);
+      if (!success) {
+        return res.status(404).json({ message: "Team member not found" });
+      }
+      res.json({ message: "Team member removed successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 
