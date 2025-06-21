@@ -39,7 +39,11 @@ export default function Technicians() {
       const response = await fetch("/api/teams", {
         headers: getAuthHeaders(),
       });
-      return response.json();
+      if (!response.ok) {
+        throw new Error('Erro ao carregar equipes');
+      }
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
     },
   });
 

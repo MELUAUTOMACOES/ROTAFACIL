@@ -7,7 +7,9 @@ import {
   type Appointment, type InsertAppointment,
   type Checklist, type InsertChecklist,
   type BusinessRules, type InsertBusinessRules,
-  users, clients, services, technicians, vehicles, appointments, checklists, businessRules
+  type Team, type InsertTeam,
+  type TeamMember, type InsertTeamMember,
+  users, clients, services, technicians, vehicles, appointments, checklists, businessRules, teams, teamMembers
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or } from "drizzle-orm";
@@ -383,7 +385,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(teamMembers).where(and(eq(teamMembers.teamId, id), eq(teamMembers.userId, userId)));
     
     const result = await db.delete(teams).where(and(eq(teams.id, id), eq(teams.userId, userId)));
-    return result.rowCount > 0;
+    return (result.rowCount || 0) > 0;
   }
 
   async getTeamMembers(teamId: number, userId: number): Promise<TeamMember[]> {
@@ -397,7 +399,7 @@ export class DatabaseStorage implements IStorage {
 
   async removeTeamMember(id: number, userId: number): Promise<boolean> {
     const result = await db.delete(teamMembers).where(and(eq(teamMembers.id, id), eq(teamMembers.userId, userId)));
-    return result.rowCount > 0;
+    return (result.rowCount || 0) > 0;
   }
 }
 
