@@ -58,6 +58,27 @@ export default function Technicians() {
     },
   });
 
+  // Query para buscar membros de todas as equipes
+  const { data: allTeamMembers = [] } = useQuery({
+    queryKey: ["/api/all-team-members"],
+    queryFn: async () => {
+      if (teams.length === 0) return [];
+      
+      const memberPromises = teams.map(async (team: Team) => {
+        const response = await fetch(`/api/team-members/${team.id}`, {
+          headers: getAuthHeaders(),
+        });
+        if (!response.ok) return [];
+        const members = await response.json();
+        return members.map((member: any) => ({ ...member, teamId: team.id }));
+      });
+      
+      const allMembers = await Promise.all(memberPromises);
+      return allMembers.flat();
+    },
+    enabled: teams.length > 0,
+  });
+
   const deleteTechnicianMutation = useMutation({
     mutationFn: async (id: number) => {
       await apiRequest("DELETE", `/api/technicians/${id}`, undefined);
@@ -370,10 +391,27 @@ export default function Technicians() {
                       {/* Membros da equipe */}
                       <div>
                         <h4 className="text-sm font-medium text-gray-700 mb-2">Membros</h4>
-                        <p className="text-sm text-gray-500">
-                          {/* TODO: Mostrar técnicos da equipe quando implementar query de membros */}
-                          Membros da equipe serão exibidos aqui
-                        </p>
+                        {(() => {
+                          const teamMembersForThisTeam = allTeamMembers.filter((member: any) => member.teamId === team.id);
+                          if (teamMembersForThisTeam.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-1">
+                                {teamMembersForThisTeam.map((member: any) => {
+                                  const technician = technicians.find((t: any) => t.id === member.technicianId);
+                                  return technician ? (
+                                    <Badge key={member.id} variant="outline" className="text-xs">
+                                      {technician.name}
+                                    </Badge>
+                                  ) : null;
+                                })}
+                              </div>
+                            );
+                          } else {
+                            return (
+                              <p className="text-sm text-gray-500">Nenhum técnico vinculado</p>
+                            );
+                          }
+                        })()}
                       </div>
                     </div>
                     

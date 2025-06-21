@@ -168,6 +168,7 @@ export default function TeamForm({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
       toast({
         title: "Sucesso!",
         description: "Equipe atualizada com sucesso.",
