@@ -99,6 +99,28 @@ export default function Technicians() {
     },
   });
 
+  const deleteTeamMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/teams/${id}`, undefined);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/all-team-members"] });
+      toast({
+        title: "Sucesso",
+        description: "Equipe excluída com sucesso",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao excluir equipe",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleEditTechnician = (technician: Technician) => {
     setSelectedTechnician(technician);
     setIsTechnicianFormOpen(true);
@@ -112,6 +134,12 @@ export default function Technicians() {
   const handleDeleteTechnician = async (technician: Technician) => {
     if (confirm(`Tem certeza que deseja excluir o técnico "${technician.name}"?`)) {
       deleteTechnicianMutation.mutate(technician.id);
+    }
+  };
+
+  const handleDeleteTeam = async (team: Team) => {
+    if (confirm(`Tem certeza que deseja excluir a equipe "${team.name}"?`)) {
+      deleteTeamMutation.mutate(team.id);
     }
   };
 
@@ -355,11 +383,7 @@ export default function Technicians() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => {
-                            if (confirm(`Tem certeza que deseja excluir a equipe "${team.name}"?`)) {
-                              // TODO: Implementar delete de equipe
-                            }
-                          }}
+                          onClick={() => handleDeleteTeam(team)}
                           className="text-red-600 hover:text-red-700"
                         >
                           <Trash2 className="h-4 w-4" />

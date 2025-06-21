@@ -65,9 +65,20 @@ export default function TeamForm({
   // Atualizar técnicos selecionados quando os membros da equipe são carregados
   useEffect(() => {
     if (team && teamMembers.length > 0) {
-      setSelectedTechnicians(teamMembers.map((member: any) => member.technicianId));
+      const technicianIds = teamMembers.map((member: any) => member.technicianId);
+      setSelectedTechnicians(technicianIds);
+      form.setValue('technicianIds', technicianIds);
     }
   }, [team, teamMembers]);
+
+  // Atualizar serviços selecionados quando a equipe muda
+  useEffect(() => {
+    if (team?.serviceIds) {
+      const serviceIds = team.serviceIds.map(id => parseInt(id));
+      setSelectedServices(serviceIds);
+      form.setValue('serviceIds', serviceIds);
+    }
+  }, [team]);
 
   const form = useForm<ExtendedTeamForm>({
     resolver: zodResolver(extendedTeamSchema),
