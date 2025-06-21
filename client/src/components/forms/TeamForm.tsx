@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { insertTeamSchema, type InsertTeam, type Team, type Technician, type Service } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,15 +37,37 @@ export default function TeamForm({
   services, 
   onClose 
 }: TeamFormProps) {
-  const [selectedTechnicians, setSelectedTechnicians] = useState<number[]>(
-    team ? [] : [] // TODO: buscar membros da equipe quando editando
-  );
+  const [selectedTechnicians, setSelectedTechnicians] = useState<number[]>([]);
   const [selectedServices, setSelectedServices] = useState<number[]>(
     team?.serviceIds ? team.serviceIds.map(id => parseInt(id)) : []
   );
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Buscar membros da equipe quando editando uma equipe existente
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ["/api/team-members", team?.id],
+    queryFn: async () => {
+      if (!team) return [];
+      const response = await fetch(`/api/team-members/${team.id}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!team,
+  });
+
+  // Atualizar técnicos selecionados quando os membros da equipe são carregados
+  useEffect(() => {
+    if (team && teamMembers.length > 0) {
+      setSelectedTechnicians(teamMembers.map((member: any) => member.technicianId));
+    }
+  }, [team, teamMembers]);
 
   const form = useForm<ExtendedTeamForm>({
     resolver: zodResolver(extendedTeamSchema),
@@ -109,9 +131,40 @@ export default function TeamForm({
         serviceIds: data.serviceIds?.map(id => id.toString()) || [],
       };
       
+      // Atualizar dados da equipe
       const response = await apiRequest("PATCH", `/api/teams/${team.id}`, teamData);
+      const updatedTeam = await response.json();
       
-      return response.json();
+      // Remover todos os membros existentes da equipe
+      const currentMembers = await fetch(`/api/team-members/${team.id}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (currentMembers.ok) {
+        const members = await currentMembers.json();
+        await Promise.all(
+          members.map((member: any) =>
+            apiRequest("DELETE", `/api/team-members/${member.id}`)
+          )
+        );
+      }
+      
+      // Adicionar os novos membros selecionados
+      if (data.technicianIds && data.technicianIds.length > 0) {
+        await Promise.all(
+          data.technicianIds.map(technicianId =>
+            apiRequest("POST", "/api/team-members", {
+              teamId: team.id,
+              technicianId,
+            })
+          )
+        );
+      }
+      
+      return updatedTeam;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
@@ -131,6 +184,7 @@ export default function TeamForm({
   });
 
   const onSubmit = (data: ExtendedTeamForm) => {
+    console.log('Técnicos selecionados no submit:', selectedTechnicians);
     const formData = {
       ...data,
       technicianIds: selectedTechnicians,
