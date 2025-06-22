@@ -127,8 +127,10 @@ export default function Technicians() {
   };
 
   const handleEditTeam = (team: Team) => {
+    console.log('🖊️ EDITANDO EQUIPE - handleEditTeam chamado:', team);
     setSelectedTeam(team);
     setIsTeamFormOpen(true);
+    console.log('✅ Estado atualizado - selectedTeam definido e dialog aberto');
   };
 
   const handleDeleteTechnician = async (technician: Technician) => {
@@ -388,7 +390,7 @@ export default function Technicians() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleEditTeam(team)}
+                          onClick={() => handleEditTeam(team)} // Corrigido: usar função que abre o diálogo principal
                         >
                           <Edit className="h-4 w-4" />
                         </Button>

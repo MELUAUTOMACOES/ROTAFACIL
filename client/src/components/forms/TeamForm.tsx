@@ -73,17 +73,25 @@ export default function TeamForm({
 
   // Resetar o formulário quando a equipe muda ou quando abre para nova equipe
   useEffect(() => {
-    if (team) {
+    console.log('🔄 useEffect - team mudou:', team);
+    if (team && team.id) {
+      console.log('📝 Carregando dados da equipe para edição:', team);
       // Edição: carregar dados da equipe existente
+      const serviceIds = team.serviceIds ? team.serviceIds.map(id => parseInt(id)) : [];
+      
       form.reset({
         name: team.name || "",
         technicianIds: selectedTechnicians,
-        serviceIds: team.serviceIds ? team.serviceIds.map(id => parseInt(id)) : [],
+        serviceIds: serviceIds,
       });
-      if (team.serviceIds) {
-        setSelectedServices(team.serviceIds.map(id => parseInt(id)));
-      }
+      
+      setSelectedServices(serviceIds);
+      console.log('✅ Formulário resetado para edição com dados:', {
+        name: team.name,
+        serviceIds: serviceIds
+      });
     } else {
+      console.log('➕ Limpando formulário para nova equipe');
       // Nova equipe: limpar formulário
       form.reset({
         name: "",
@@ -92,6 +100,7 @@ export default function TeamForm({
       });
       setSelectedTechnicians([]);
       setSelectedServices([]);
+      console.log('✅ Formulário limpo para nova equipe');
     }
   }, [team, form]);
 
