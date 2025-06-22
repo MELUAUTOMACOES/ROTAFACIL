@@ -240,9 +240,12 @@ export default function TeamForm({
 
   const onSubmit = (data: ExtendedTeamForm) => {
     // Log para debug - verificar se os dados estão corretos
-    console.log('Dados do formulário:', data);
-    console.log('Técnicos selecionados:', selectedTechnicians);
-    console.log('Serviços selecionados:', selectedServices);
+    console.log('🔍 DEBUG - onSubmit chamado');
+    console.log('📋 Dados do formulário:', data);
+    console.log('👥 Técnicos selecionados:', selectedTechnicians);
+    console.log('🔧 Serviços selecionados:', selectedServices);
+    console.log('🏢 Equipe (team prop):', team);
+    console.log('🆔 ID da equipe:', team?.id);
     
     const formData = {
       ...data,
@@ -250,11 +253,13 @@ export default function TeamForm({
       serviceIds: selectedServices,
     };
     
-    if (team) {
-      console.log('Atualizando equipe:', team.id, formData);
+    if (team && team.id) {
+      console.log('🔄 MODO ATUALIZAÇÃO - Equipe ID:', team.id);
+      console.log('📤 Dados para atualizar:', formData);
       updateTeamMutation.mutate(formData);
     } else {
-      console.log('Criando nova equipe:', formData);
+      console.log('➕ MODO CRIAÇÃO - Nova equipe');
+      console.log('📤 Dados para criar:', formData);
       createTeamMutation.mutate(formData);
     }
   };
