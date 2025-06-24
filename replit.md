@@ -105,6 +105,15 @@ RotaFácil is a comprehensive service route management application designed to h
 ## Changelog
 ```
 Changelog:
+- June 24, 2025: Correção completa do formulário de equipes (TeamForm)
+  * Refatorado TeamForm para seguir padrão do TechnicianForm
+  * Corrigido botão de atualização que estava criando equipes em vez de atualizar
+  * Implementado pré-preenchimento correto dos dados da equipe
+  * Adicionadas validações de email (@) e telefone formatado automaticamente
+  * Melhorado layout com scroll controlado e diálogos responsivos
+  * Corrigida vinculação de técnicos às equipes
+  * Bloqueio de submissões vazias em modo criação
+  * Documentação criada em README-EQUIPES-FIX.md
 - June 15, 2025: Ajustes no site institucional conforme especificações
   * Removido botão "Login" dos menus, mantido apenas "Acessar Sistema"
   * Alterada imagem do slide "Economia de Recursos" para logística

@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import TechnicianForm from "@/components/forms/TechnicianForm";
-import TeamForm from "@/components/forms/TeamForm";
+import TempTeamForm from "@/components/forms/TempTeamForm";
 import { Plus, UserCog, Mail, Phone, Wrench, Edit, Trash2, CheckCircle, XCircle, Users } from "lucide-react";
 import type { Technician, Team, Service } from "@shared/schema";
 
@@ -353,10 +353,15 @@ export default function Technicians() {
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden">
-                <TeamForm
+                <TempTeamForm
                   team={selectedTeam}
                   technicians={technicians}
                   services={services}
+                  existingTechIds={
+                    allTeamMembers
+                      .filter(m => m.teamId === selectedTeam?.id)
+                      .map(m => m.technicianId)
+                  }
                   onClose={handleTeamFormClose}
                 />
               </DialogContent>
