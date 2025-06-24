@@ -159,73 +159,49 @@ export default function TeamForm({
 
   const updateTeamMutation = useMutation({
     mutationFn: async (data: ExtendedTeamForm) => {
-      console.log('🔄 Iniciando atualização da equipe:', team?.id, data);
-      
       if (!team) throw new Error("Equipe não encontrada");
       
-      try {
-        const teamData = {
-          name: data.name,
-          serviceIds: data.serviceIds?.map(id => id.toString()) || [],
-        };
-        
-        console.log('📝 Dados da equipe para atualizar:', teamData);
-        
-        // Atualizar dados da equipe
-        const response = await apiRequest("PATCH", `/api/teams/${team.id}`, teamData);
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Erro ao atualizar equipe');
+      const teamData = {
+        name: data.name,
+        serviceIds: data.serviceIds?.map(id => id.toString()) || [],
+      };
+      
+      // Atualizar dados da equipe
+      const updatedTeam = await apiRequest("PATCH", `/api/teams/${team.id}`, teamData);
+      
+      // Remover todos os membros existentes da equipe
+      const currentMembers = await fetch(`/api/team-members/${team.id}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
         }
+      });
+      
+      if (currentMembers.ok) {
+        const members = await currentMembers.json();
         
-        const updatedTeam = await response.json();
-        console.log('✅ Equipe atualizada:', updatedTeam);
-        
-        // Remover todos os membros existentes da equipe
-        console.log('🗑️ Removendo membros existentes...');
-        const currentMembers = await fetch(`/api/team-members/${team.id}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (currentMembers.ok) {
-          const members = await currentMembers.json();
-          console.log('👥 Membros atuais:', members);
-          
-          if (members.length > 0) {
-            await Promise.all(
-              members.map((member: any) => {
-                console.log('❌ Removendo membro:', member.id);
-                return apiRequest("DELETE", `/api/team-members/${member.id}`);
-              })
-            );
-          }
-        }
-        
-        // Adicionar os novos membros selecionados
-        if (data.technicianIds && data.technicianIds.length > 0) {
-          console.log('➕ Adicionando novos membros:', data.technicianIds);
+        if (members.length > 0) {
           await Promise.all(
-            data.technicianIds.map(technicianId => {
-              console.log('✅ Adicionando técnico:', technicianId);
-              return apiRequest("POST", "/api/team-members", {
-                teamId: team.id,
-                technicianId,
-              });
-            })
+            members.map((member: any) => 
+              apiRequest("DELETE", `/api/team-members/${member.id}`)
+            )
           );
         }
-        
-        console.log('🎉 Atualização concluída com sucesso');
-        return updatedTeam;
-        
-      } catch (error) {
-        console.error('❌ Erro na atualização:', error);
-        throw error;
       }
+      
+      // Adicionar os novos membros selecionados
+      if (data.technicianIds && data.technicianIds.length > 0) {
+        await Promise.all(
+          data.technicianIds.map(technicianId =>
+            apiRequest("POST", "/api/team-members", {
+              teamId: team.id,
+              technicianId,
+            })
+          )
+        );
+      }
+      
+      return updatedTeam;
     },
     onSuccess: () => {
       // Invalidar todas as queries relacionadas a equipes para atualizar a interface
