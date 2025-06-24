@@ -91,3 +91,36 @@ Após as correções implementadas:
 ## Data da Implementação
 
 Junho 2025 - Correções implementadas e testadas com sucesso.
+
+## Projeto - Gerenciamento de Técnicos e Equipes
+
+Este projeto tem como objetivo o gerenciamento de técnicos, equipes e veículos, permitindo a criação, edição e vinculação de técnicos a diferentes equipes e serviços, além de gerenciar veículos com responsabilidade atribuída a técnicos ou equipes.
+
+O que foi feito
+Modificação na Tela de Veículos
+Campo de Responsável (Técnico ou Equipe) Obrigatório:
+Agora, para cadastrar um veículo, é obrigatório selecionar um responsável. Este responsável pode ser:
+
+Técnico individual ou
+
+Equipe completa.
+
+A seleção pode ser feita através de radio buttons que permitem ao usuário escolher entre atribuir um técnico ou uma equipe.
+
+Vinculação Automática de Técnicos:
+
+Caso seja escolhida uma equipe como responsável, todos os técnicos dessa equipe serão automaticamente atribuídos ao veículo.
+
+Isso garante que, ao vincular uma equipe a um veículo, todos os técnicos associados à equipe também sejam vinculados ao veículo sem a necessidade de selecioná-los manualmente.
+
+Alteração no Banco de Dados:
+
+Foi adicionado o campo teamId ao schema de veículos no banco de dados, para armazenar qual equipe (caso selecionada) está associada ao veículo.
+
+As migrações foram executadas para garantir que o banco de dados refletisse essas mudanças.
+
+Interface de Usuário Atualizada:
+
+Foi atualizada a interface para mostrar tanto técnicos quanto equipes nos cards.
+
+Um badge foi implementado para indicar se o veículo está atribuído (verde) ou sem responsável (vermelho), facilitando a visualização do status.
