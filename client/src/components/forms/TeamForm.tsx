@@ -232,6 +232,12 @@ export default function TeamForm({
   });
 
   const onSubmit = (data: ExtendedTeamForm) => {
+    // Bloqueio para impedir submissão de formulário vazio em modo criação
+    if (!team && !data.name && data.serviceIds?.length === 0 && selectedTechnicians.length === 0) {
+      console.log("❌ Bloqueado: form vazio em modo criação.");
+      return;
+    }
+
     console.log('🔔 Form submitted!');
     console.log('IS EDIT MODE?', !!team?.id);
     console.log('📋 Dados do formulário:', data);

@@ -157,8 +157,13 @@ export default function Technicians() {
   };
 
   const handleTeamFormClose = () => {
+    // CORREÇÃO: Apenas fechar o dialog sem alterar state team
+    // Isso evita duplicações ao cancelar enquanto o form ainda está montado
     setIsTeamFormOpen(false);
-    setSelectedTeam(null); // Limpar equipe selecionada ao fechar o formulário
+    // Nota: setSelectedTeam(null) será chamado quando o dialog for totalmente desmontado
+    setTimeout(() => {
+      setSelectedTeam(null);
+    }, 100); // Pequeno delay para garantir que o form seja desmontado primeiro
   };
 
   // Função para abrir formulário de nova equipe - garante que sempre abre limpo
