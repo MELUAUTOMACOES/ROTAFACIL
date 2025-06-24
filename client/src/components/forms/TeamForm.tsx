@@ -232,8 +232,8 @@ export default function TeamForm({
   });
 
   const onSubmit = (data: ExtendedTeamForm) => {
-    // CORREÇÃO: Adicionado log inicial para confirmar execução
     console.log('🔔 Form submitted!');
+    console.log('IS EDIT MODE?', !!team?.id);
     console.log('📋 Dados do formulário:', data);
     console.log('👥 Técnicos selecionados:', selectedTechnicians);
     console.log('🔧 Serviços selecionados:', selectedServices);
@@ -246,7 +246,6 @@ export default function TeamForm({
       serviceIds: selectedServices,
     };
     
-    // CORREÇÃO: Verificação mais rigorosa do team prop para garantir que a atualização seja chamada
     if (team && team.id) {
       console.log('🔄 MODO ATUALIZAÇÃO - Equipe ID:', team.id);
       console.log('📤 Dados para atualizar:', formData);
@@ -385,7 +384,7 @@ export default function TeamForm({
             </Button>
             <Button 
               type="submit"
-              disabled={createTeamMutation.isPending || updateTeamMutation.isPending}
+              disabled={updateTeamMutation.isPending}
               className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
             >
               {createTeamMutation.isPending || updateTeamMutation.isPending ? (
