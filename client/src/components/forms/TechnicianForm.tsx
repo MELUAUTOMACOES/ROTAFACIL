@@ -106,7 +106,7 @@ export default function TechnicianForm({ technician, onClose }: TechnicianFormPr
   const isLoading = createTechnicianMutation.isPending || updateTechnicianMutation.isPending;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-h-[80vh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle className="flex items-center">
           <UserCog className="h-5 w-5 mr-2 text-burnt-yellow" />
@@ -168,7 +168,25 @@ export default function TechnicianForm({ technician, onClose }: TechnicianFormPr
                     Email
                   </FormLabel>
                   <FormControl>
-                    <Input type="email" placeholder="email@exemplo.com" {...field} value={field.value || ""} />
+                    <Input 
+                      type="email" 
+                      placeholder="email@exemplo.com" 
+                      {...field} 
+                      value={field.value || ""} 
+                      onChange={(e) => {
+                        // Validação de email: deve conter @ para ser válido
+                        const value = e.target.value;
+                        field.onChange(value);
+                        if (value && !value.includes('@')) {
+                          form.setError('email', { 
+                            type: 'manual', 
+                            message: 'Email deve conter o caractere @' 
+                          });
+                        } else {
+                          form.clearErrors('email');
+                        }
+                      }}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -185,7 +203,24 @@ export default function TechnicianForm({ technician, onClose }: TechnicianFormPr
                     Telefone *
                   </FormLabel>
                   <FormControl>
-                    <Input placeholder="(11) 99999-9999" {...field} />
+                    <Input 
+                      placeholder="(11) 99999-9999" 
+                      {...field} 
+                      onChange={(e) => {
+                        // Formatação automática do telefone: aceitar apenas números e formatar
+                        let value = e.target.value.replace(/\D/g, '');
+                        if (value.length <= 10) {
+                          // Formato: (XX)XXXX-XXXX
+                          if (value.length > 2) value = `(${value.slice(0, 2)})${value.slice(2)}`;
+                          if (value.length > 8) value = value.slice(0, 8) + '-' + value.slice(8);
+                        } else {
+                          // Formato: (XX)XXXXX-XXXX
+                          if (value.length > 2) value = `(${value.slice(0, 2)})${value.slice(2)}`;
+                          if (value.length > 9) value = value.slice(0, 9) + '-' + value.slice(9, 13);
+                        }
+                        field.onChange(value);
+                      }}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

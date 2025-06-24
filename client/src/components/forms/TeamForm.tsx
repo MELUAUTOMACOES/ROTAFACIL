@@ -266,7 +266,7 @@ export default function TeamForm({
   };
 
   return (
-    <>
+    <div className="max-h-[80vh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Users className="h-5 w-5" />
@@ -394,6 +394,6 @@ export default function TeamForm({
           </div>
         </form>
       </Form>
-    </>
+    </div>
   );
 }

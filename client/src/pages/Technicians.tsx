@@ -126,6 +126,12 @@ export default function Technicians() {
     setIsTechnicianFormOpen(true);
   };
 
+  // Função para garantir que o formulário de novo técnico sempre abra em branco
+  const handleNewTechnician = () => {
+    setSelectedTechnician(null); // Limpar técnico selecionado
+    setIsTechnicianFormOpen(true);
+  };
+
   const handleEditTeam = (team: Team) => {
     console.log('🖊️ EDITANDO EQUIPE - handleEditTeam chamado:', team);
     setSelectedTeam(team);
@@ -202,12 +208,15 @@ export default function Technicians() {
             
             <Dialog open={isTechnicianFormOpen} onOpenChange={setIsTechnicianFormOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
+                <Button 
+                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                  onClick={handleNewTechnician} // Função que garante formulário em branco
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Novo Técnico
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
                 <TechnicianForm
                   technician={selectedTechnician}
                   onClose={handleTechnicianFormClose}
@@ -227,12 +236,15 @@ export default function Technicians() {
                 </p>
                 <Dialog open={isTechnicianFormOpen} onOpenChange={setIsTechnicianFormOpen}>
                   <DialogTrigger asChild>
-                    <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
+                    <Button 
+                      className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                      onClick={handleNewTechnician} // Função que garante formulário em branco
+                    >
                       <Plus className="h-4 w-4 mr-2" />
                       Adicionar Primeiro Técnico
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
                     <TechnicianForm
                       technician={selectedTechnician}
                       onClose={handleTechnicianFormClose}
@@ -335,7 +347,7 @@ export default function Technicians() {
                   Cadastrar Equipe
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden">
                 <TeamForm
                   team={selectedTeam}
                   technicians={technicians}
