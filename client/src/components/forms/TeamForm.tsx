@@ -283,7 +283,14 @@ export default function TeamForm({
       </DialogHeader>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form
+            onSubmit={form.handleSubmit((data) => {
+              console.log("🛎️ onSubmit disparado COM CERTEZA!", { team, data });
+              onSubmit(data);
+            })}
+            className="space-y-6"
+          >
+
           {/* Nome da Equipe */}
           <FormField
             control={form.control}
@@ -379,7 +386,7 @@ export default function TeamForm({
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">
-            <Button variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancelar
             </Button>
             <Button 
@@ -387,7 +394,7 @@ export default function TeamForm({
               // CORREÇÃO: Disabled dividido para modos criação/edição
               // Em modo edição (team existe): usar somente updateTeamMutation.isPending
               // Em modo criação (team não existe): usar somente createTeamMutation.isPending
-              disabled={team ? updateTeamMutation.isPending : createTeamMutation.isPending}
+              // disabled={ team ? updateTeamMutation.isPending : createTeamMutation.isPending }
               className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
             >
               {(team ? updateTeamMutation.isPending : createTeamMutation.isPending) ? (
