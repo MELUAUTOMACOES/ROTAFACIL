@@ -211,12 +211,12 @@ export default function TechnicianForm({ technician, onClose }: TechnicianFormPr
                         let value = e.target.value.replace(/\D/g, '');
                         if (value.length <= 10) {
                           // Formato: (XX)XXXX-XXXX
-                          if (value.length > 2) value = `(${value.slice(0, 2)})${value.slice(2)}`;
-                          if (value.length > 8) value = value.slice(0, 8) + '-' + value.slice(8);
+                          if (value.length > 2) value = `(${value.slice(0, 2)}) ${value.slice(2)}`;
+                          if (value.length > 9) value = value.slice(0, 9) + '-' + value.slice(9);
                         } else {
                           // Formato: (XX)XXXXX-XXXX
-                          if (value.length > 2) value = `(${value.slice(0, 2)})${value.slice(2)}`;
-                          if (value.length > 9) value = value.slice(0, 9) + '-' + value.slice(9, 13);
+                          if (value.length > 2) value = `(${value.slice(0, 2)}) ${value.slice(2)}`;
+                          if (value.length > 10) value = value.slice(0, 10) + '-' + value.slice(10, 14);
                         }
                         field.onChange(value);
                       }}

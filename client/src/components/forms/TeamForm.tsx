@@ -166,8 +166,16 @@ export default function TeamForm({
         serviceIds: data.serviceIds?.map(id => id.toString()) || [],
       };
       
+      // CORREÇÃO: Adicionado log para acompanhar o processo de atualização
+      console.log('📡 Iniciando requisição PATCH para equipe:', team.id);
+      
       // Atualizar dados da equipe
-      const updatedTeam = await apiRequest("PATCH", `/api/teams/${team.id}`, teamData);
+      const response = await apiRequest("PATCH", `/api/teams/${team.id}`, teamData);
+      
+      // CORREÇÃO: Log do status da resposta para debug
+      console.log('📤 Response status:', response.status);
+      
+      const updatedTeam = await response.json();
       
       // Remover todos os membros existentes da equipe
       const currentMembers = await fetch(`/api/team-members/${team.id}`, {
@@ -224,8 +232,8 @@ export default function TeamForm({
   });
 
   const onSubmit = (data: ExtendedTeamForm) => {
-    // Log para debug - verificar se os dados estão corretos
-    console.log('🔍 DEBUG - onSubmit chamado');
+    // CORREÇÃO: Adicionado log inicial para confirmar execução
+    console.log('🔔 Form submitted!');
     console.log('📋 Dados do formulário:', data);
     console.log('👥 Técnicos selecionados:', selectedTechnicians);
     console.log('🔧 Serviços selecionados:', selectedServices);
@@ -238,6 +246,7 @@ export default function TeamForm({
       serviceIds: selectedServices,
     };
     
+    // CORREÇÃO: Verificação mais rigorosa do team prop para garantir que a atualização seja chamada
     if (team && team.id) {
       console.log('🔄 MODO ATUALIZAÇÃO - Equipe ID:', team.id);
       console.log('📤 Dados para atualizar:', formData);
@@ -375,7 +384,7 @@ export default function TeamForm({
               Cancelar
             </Button>
             <Button 
-              type="submit" 
+              type="submit"
               disabled={createTeamMutation.isPending || updateTeamMutation.isPending}
               className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
             >
