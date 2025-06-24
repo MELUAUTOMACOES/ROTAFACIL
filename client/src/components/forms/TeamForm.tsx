@@ -122,7 +122,6 @@ export default function TeamForm({
       };
       
       const response = await apiRequest("POST", "/api/teams", teamData);
-      
       const newTeam = await response.json();
       
       // Depois adicionar os membros da equipe
@@ -143,15 +142,15 @@ export default function TeamForm({
       queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
       queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
       toast({
-        title: "Sucesso!",
-        description: `Equipe ${team ? "atualizada" : "criada"} com sucesso.`,
+        title: "Sucesso",
+        description: "Equipe criada com sucesso",
       });
       onClose();
     },
     onError: (error: Error) => {
       toast({
         title: "Erro",
-        description: `Erro ao ${team ? "atualizar" : "criar"} equipe: ${error.message}`,
+        description: error.message || "Erro ao criar equipe",
         variant: "destructive",
       });
     },
@@ -159,26 +158,17 @@ export default function TeamForm({
 
   const updateTeamMutation = useMutation({
     mutationFn: async (data: ExtendedTeamForm) => {
-      if (!team) throw new Error("Equipe não encontrada");
-      
+      // Primeiro atualizar dados da equipe
       const teamData = {
         name: data.name,
         serviceIds: data.serviceIds?.map(id => id.toString()) || [],
       };
       
-      // CORREÇÃO: Adicionado log para acompanhar o processo de atualização
-      console.log('📡 Iniciando requisição PATCH para equipe:', team.id);
-      
-      // Atualizar dados da equipe
-      const response = await apiRequest("PATCH", `/api/teams/${team.id}`, teamData);
-      
-      // CORREÇÃO: Log do status da resposta para debug
-      console.log('📤 Response status:', response.status);
-      
+      const response = await apiRequest("PUT", `/api/teams/${team?.id}`, teamData);
       const updatedTeam = await response.json();
       
       // Remover todos os membros existentes da equipe
-      const currentMembers = await fetch(`/api/team-members/${team.id}`, {
+      const currentMembers = await fetch(`/api/team-members/${team?.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -202,7 +192,7 @@ export default function TeamForm({
         await Promise.all(
           data.technicianIds.map(technicianId =>
             apiRequest("POST", "/api/team-members", {
-              teamId: team.id,
+              teamId: team?.id,
               technicianId,
             })
           )
@@ -212,56 +202,38 @@ export default function TeamForm({
       return updatedTeam;
     },
     onSuccess: () => {
-      // Invalidar todas as queries relacionadas a equipes para atualizar a interface
       queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
       queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/all-team-members"] });
       toast({
-        title: "Sucesso!",
-        description: "Equipe atualizada com sucesso.",
+        title: "Sucesso",
+        description: "Equipe atualizada com sucesso",
       });
       onClose();
     },
     onError: (error: Error) => {
       toast({
         title: "Erro",
-        description: `Erro ao atualizar equipe: ${error.message}`,
+        description: error.message || "Erro ao atualizar equipe",
         variant: "destructive",
       });
     },
   });
 
   const onSubmit = (data: ExtendedTeamForm) => {
-    // Bloqueio para impedir submissão de formulário vazio em modo criação
-    if (!team && !data.name && data.serviceIds?.length === 0 && selectedTechnicians.length === 0) {
-      console.log("❌ Bloqueado: form vazio em modo criação.");
-      return;
-    }
-
-    console.log('🔔 Form submitted!');
-    console.log('IS EDIT MODE?', !!team?.id);
-    console.log('📋 Dados do formulário:', data);
-    console.log('👥 Técnicos selecionados:', selectedTechnicians);
-    console.log('🔧 Serviços selecionados:', selectedServices);
-    console.log('🏢 Equipe (team prop):', team);
-    console.log('🆔 ID da equipe:', team?.id);
-    
     const formData = {
       ...data,
       technicianIds: selectedTechnicians,
       serviceIds: selectedServices,
     };
     
-    if (team && team.id) {
-      console.log('🔄 MODO ATUALIZAÇÃO - Equipe ID:', team.id);
-      console.log('📤 Dados para atualizar:', formData);
+    if (team) {
       updateTeamMutation.mutate(formData);
     } else {
-      console.log('➕ MODO CRIAÇÃO - Nova equipe');
-      console.log('📤 Dados para criar:', formData);
       createTeamMutation.mutate(formData);
     }
   };
+
+  const isLoading = createTeamMutation.isPending || updateTeamMutation.isPending;
 
   const handleTechnicianToggle = (technicianId: number, checked: boolean) => {
     if (checked) {
