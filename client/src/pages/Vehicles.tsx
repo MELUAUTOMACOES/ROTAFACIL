@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import VehicleForm from "@/components/forms/VehicleForm";
-import { Plus, Car, Calendar, User, Edit, Trash2 } from "lucide-react";
-import type { Vehicle, Technician } from "@shared/schema";
+import { Plus, Car, Calendar, User, Users, Edit, Trash2 } from "lucide-react";
+import type { Vehicle, Technician, Team } from "@shared/schema";
 
 export default function Vehicles() {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
@@ -31,6 +31,16 @@ export default function Vehicles() {
     queryKey: ["/api/technicians"],
     queryFn: async () => {
       const response = await fetch("/api/technicians", {
+        headers: getAuthHeaders(),
+      });
+      return response.json();
+    },
+  });
+
+  const { data: teams = [] } = useQuery({
+    queryKey: ["/api/teams"],
+    queryFn: async () => {
+      const response = await fetch("/api/teams", {
         headers: getAuthHeaders(),
       });
       return response.json();
@@ -78,6 +88,11 @@ export default function Vehicles() {
     return technicians.find((t: Technician) => t.id === technicianId);
   };
 
+  const getTeam = (teamId: number | null) => {
+    if (!teamId) return null;
+    return teams.find((t: Team) => t.id === teamId);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -106,6 +121,7 @@ export default function Vehicles() {
             <VehicleForm
               vehicle={selectedVehicle}
               technicians={technicians}
+              teams={teams}
               onClose={handleFormClose}
             />
           </DialogContent>
@@ -132,6 +148,7 @@ export default function Vehicles() {
                 <VehicleForm
                   vehicle={selectedVehicle}
                   technicians={technicians}
+                  teams={teams}
                   onClose={handleFormClose}
                 />
               </DialogContent>
@@ -142,6 +159,8 @@ export default function Vehicles() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {vehicles.map((vehicle: Vehicle) => {
             const assignedTechnician = getTechnician(vehicle.technicianId);
+            const assignedTeam = getTeam(vehicle.teamId);
+            const hasAssignment = assignedTechnician || assignedTeam;
             
             return (
               <Card key={vehicle.id} className="hover:shadow-md transition-shadow">
@@ -166,8 +185,8 @@ export default function Vehicles() {
                       </Button>
                     </div>
                   </div>
-                  <Badge className={assignedTechnician ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}>
-                    {assignedTechnician ? "Atribuído" : "Disponível"}
+                  <Badge className={hasAssignment ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}>
+                    {hasAssignment ? "Atribuído" : "Sem Responsável"}
                   </Badge>
                 </CardHeader>
                 <CardContent className="p-6">
@@ -185,6 +204,20 @@ export default function Vehicles() {
                       <div className="flex items-center space-x-2 text-sm text-gray-600">
                         <User className="h-4 w-4" />
                         <span>Técnico: {assignedTechnician.name}</span>
+                      </div>
+                    )}
+                    
+                    {assignedTeam && (
+                      <div className="flex items-center space-x-2 text-sm text-gray-600">
+                        <Users className="h-4 w-4" />
+                        <span>Equipe: {assignedTeam.name}</span>
+                      </div>
+                    )}
+                    
+                    {!hasAssignment && (
+                      <div className="flex items-center space-x-2 text-sm text-red-600">
+                        <User className="h-4 w-4" />
+                        <span>Nenhum responsável atribuído</span>
                       </div>
                     )}
                   </div>

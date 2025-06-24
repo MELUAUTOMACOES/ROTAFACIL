@@ -69,6 +69,7 @@ export const vehicles = pgTable("vehicles", {
   brand: text("brand").notNull(),
   year: integer("year").notNull(),
   technicianId: integer("technician_id").references(() => technicians.id),
+  teamId: integer("team_id").references(() => teams.id),
   userId: integer("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -167,6 +168,12 @@ export const insertVehicleSchema = createInsertSchema(vehicles).omit({
   id: true,
   userId: true,
   createdAt: true,
+}).refine((data) => {
+  // Pelo menos um responsável deve ser selecionado (técnico ou equipe)
+  return data.technicianId || data.teamId;
+}, {
+  message: "Selecione um técnico ou equipe responsável pelo veículo",
+  path: ["technicianId"],
 });
 
 export const insertAppointmentSchema = createInsertSchema(appointments).omit({

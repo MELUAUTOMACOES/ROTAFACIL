@@ -1,25 +1,31 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { insertVehicleSchema, type InsertVehicle, type Vehicle, type Technician } from "@shared/schema";
+import { insertVehicleSchema, type InsertVehicle, type Vehicle, type Technician, type Team } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Car, Calendar, User } from "lucide-react";
+import { Car, Calendar, User, Users } from "lucide-react";
 
 interface VehicleFormProps {
   vehicle?: Vehicle | null;
   technicians: Technician[];
+  teams: Team[];
   onClose: () => void;
 }
 
-export default function VehicleForm({ vehicle, technicians, onClose }: VehicleFormProps) {
+export default function VehicleForm({ vehicle, technicians, teams, onClose }: VehicleFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [assignmentType, setAssignmentType] = useState<"technician" | "team">(
+    vehicle?.technicianId ? "technician" : vehicle?.teamId ? "team" : "technician"
+  );
   
   const form = useForm<InsertVehicle>({
     resolver: zodResolver(insertVehicleSchema),
@@ -29,12 +35,14 @@ export default function VehicleForm({ vehicle, technicians, onClose }: VehicleFo
       brand: vehicle.brand,
       year: vehicle.year,
       technicianId: vehicle.technicianId || undefined,
+      teamId: vehicle.teamId || undefined,
     } : {
       plate: "",
       model: "",
       brand: "",
       year: new Date().getFullYear(),
       technicianId: undefined,
+      teamId: undefined,
     },
   });
 
@@ -159,29 +167,95 @@ export default function VehicleForm({ vehicle, technicians, onClose }: VehicleFo
           )}
         </div>
 
-        <div>
-          <Label htmlFor="technicianId" className="flex items-center">
-            <User className="h-4 w-4 mr-1" />
-            Técnico Responsável
-          </Label>
-          <Select 
-            value={form.watch("technicianId")?.toString() || "none"} 
-            onValueChange={(value) => 
-              form.setValue("technicianId", value === "none" ? null : parseInt(value))
-            }
+        <div className="space-y-4">
+          <div>
+            <Label className="text-base font-medium">Responsável pelo Veículo *</Label>
+            <p className="text-sm text-gray-600">Selecione um técnico individual ou uma equipe</p>
+          </div>
+          
+          <RadioGroup 
+            value={assignmentType} 
+            onValueChange={(value: "technician" | "team") => {
+              setAssignmentType(value);
+              // Limpar campos opostos quando trocar tipo
+              if (value === "technician") {
+                form.setValue("teamId", undefined);
+              } else {
+                form.setValue("technicianId", undefined);
+              }
+            }}
+            className="flex gap-6"
           >
-            <SelectTrigger className="mt-1">
-              <SelectValue placeholder="Selecione um técnico (opcional)" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Nenhum técnico atribuído</SelectItem>
-              {technicians.filter(t => t.isActive).map((technician) => (
-                <SelectItem key={technician.id} value={technician.id.toString()}>
-                  {technician.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="technician" id="technician" />
+              <Label htmlFor="technician" className="flex items-center cursor-pointer">
+                <User className="h-4 w-4 mr-2" />
+                Técnico Individual
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="team" id="team" />
+              <Label htmlFor="team" className="flex items-center cursor-pointer">
+                <Users className="h-4 w-4 mr-2" />
+                Equipe
+              </Label>
+            </div>
+          </RadioGroup>
+
+          {assignmentType === "technician" ? (
+            <div>
+              <Label htmlFor="technicianId">Técnico Responsável *</Label>
+              <Select 
+                value={form.watch("technicianId")?.toString() || ""} 
+                onValueChange={(value) => 
+                  form.setValue("technicianId", value ? parseInt(value) : undefined)
+                }
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Selecione um técnico" />
+                </SelectTrigger>
+                <SelectContent>
+                  {technicians.filter(t => t.isActive).map((technician) => (
+                    <SelectItem key={technician.id} value={technician.id.toString()}>
+                      {technician.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.technicianId && (
+                <p className="text-sm text-red-600 mt-1">{form.formState.errors.technicianId.message}</p>
+              )}
+            </div>
+          ) : (
+            <div>
+              <Label htmlFor="teamId">Equipe Responsável *</Label>
+              <Select 
+                value={form.watch("teamId")?.toString() || ""} 
+                onValueChange={(value) => 
+                  form.setValue("teamId", value ? parseInt(value) : undefined)
+                }
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Selecione uma equipe" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teams.map((team) => (
+                    <SelectItem key={team.id} value={team.id.toString()}>
+                      {team.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.teamId && (
+                <p className="text-sm text-red-600 mt-1">{form.formState.errors.teamId.message}</p>
+              )}
+              {assignmentType === "team" && form.watch("teamId") && (
+                <p className="text-xs text-blue-600 mt-1">
+                  ℹ️ Todos os técnicos desta equipe terão acesso a este veículo
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
