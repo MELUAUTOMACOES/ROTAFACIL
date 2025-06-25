@@ -256,7 +256,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/vehicles/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const vehicleData = insertVehicleSchema.partial().parse(req.body);
+      const vehicleData = insertVehicleSchema.parse(req.body);
       const vehicle = await storage.updateVehicle(id, vehicleData, req.user.userId);
       res.json(vehicle);
     } catch (error: any) {
