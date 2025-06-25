@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import logoImg from "@assets/SEM FUNDO_1750819798590.png";
 import { 
   Truck, 
   MapPin, 
@@ -57,7 +58,7 @@ export default function Home() {
             {/* Logo */}
             <div className="flex-shrink-0">
               <div className="flex items-center space-x-2">
-                <img src="/attached_assets/SEM FUNDO_1750819798590.png" alt="RotaFácil Logo" className="h-8 w-8" />
+                <img src={logoImg} alt="RotaFácil Logo" className="h-8 w-8" />
                 <h1 className="text-2xl font-bold text-gray-900">
                   Rota<span className="text-yellow-500">Fácil</span>
                 </h1>
@@ -708,7 +709,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <div className="flex items-center justify-center space-x-2 mb-4">
-              <img src="/attached_assets/SEM FUNDO_1750819798590.png" alt="RotaFácil Logo" className="h-8 w-8" />
+              <img src={logoImg} alt="RotaFácil Logo" className="h-8 w-8" />
               <h3 className="text-2xl font-bold">
                 Rota<span className="text-yellow-500">Fácil</span>
               </h3>

@@ -91,7 +91,7 @@ export default function Login() {
             <div className="flex-shrink-0">
               <Link href="/">
                 <div className="flex items-center space-x-2 cursor-pointer hover:opacity-80 transition-opacity">
-                  <img src="/attached_assets/SEM FUNDO_1750819798590.png" alt="RotaFácil Logo" className="h-8 w-8" />
+                  <img src={logoImg} alt="RotaFácil Logo" className="h-8 w-8" />
                   <h1 className="text-2xl font-bold text-gray-900">
                     Rota<span className="text-yellow-500">Fácil</span>
                   </h1>
@@ -150,7 +150,7 @@ export default function Login() {
         <div className="hidden lg:flex lg:w-1/2 bg-black text-white flex-col justify-center items-center p-12">
           <div className="max-w-md text-center">
             <div className="flex items-center justify-center space-x-3 mb-6">
-              <img src="/attached_assets/SEM FUNDO_1750819798590.png" alt="RotaFácil Logo" className="h-12 w-12" />
+              <img src={logoImg} alt="RotaFácil Logo" className="h-12 w-12" />
               <h1 className="text-5xl font-bold">
                 Rota<span className="text-burnt-yellow">Fácil</span>
               </h1>
