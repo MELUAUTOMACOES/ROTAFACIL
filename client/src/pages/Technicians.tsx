@@ -47,8 +47,8 @@ export default function Technicians() {
     },
   });
 
-  // Query para serviços (necessário para formulário de equipes)
-  const { data: services = [] } = useQuery({
+  // Query para serviços (necessário para formulários)
+  const { data: services = [], isLoading: servicesLoading } = useQuery({
     queryKey: ["/api/services"],
     queryFn: async () => {
       const response = await fetch("/api/services", {
@@ -224,6 +224,7 @@ export default function Technicians() {
               <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
                 <TechnicianForm
                   technician={selectedTechnician}
+                  services={services}
                   onClose={handleTechnicianFormClose}
                 />
               </DialogContent>

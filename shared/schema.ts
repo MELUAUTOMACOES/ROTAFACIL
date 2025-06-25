@@ -56,6 +56,7 @@ export const technicians = pgTable("technicians", {
   complemento: text("complemento"),
   specialization: text("specialization"),
   observacoes: text("observacoes"),
+  serviceIds: text("service_ids").array(),
   isActive: boolean("is_active").default(true).notNull(),
   userId: integer("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -231,6 +232,7 @@ export const extendedInsertClientSchema = insertClientSchema.extend({
 export const extendedInsertTechnicianSchema = insertTechnicianSchema.extend({
   cep: cepSchema,
   numero: z.string().regex(/^\d+$/, "Número deve conter apenas dígitos"),
+  serviceIds: z.array(z.string()).optional(),
 });
 
 // Appointment schema with extended validation

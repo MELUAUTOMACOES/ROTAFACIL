@@ -2,12 +2,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { extendedInsertTechnicianSchema, type InsertTechnician, type Technician } from "@shared/schema";
+import { extendedInsertTechnicianSchema, type InsertTechnician, type Technician, type Service } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,10 +16,11 @@ import { UserCog, Mail, Phone, Wrench, MapPin, FileText } from "lucide-react";
 
 interface TechnicianFormProps {
   technician?: Technician | null;
+  services: Service[];
   onClose: () => void;
 }
 
-export default function TechnicianForm({ technician, onClose }: TechnicianFormProps) {
+export default function TechnicianForm({ technician, services, onClose }: TechnicianFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -35,6 +37,7 @@ export default function TechnicianForm({ technician, onClose }: TechnicianFormPr
       complemento: technician.complemento || "",
       specialization: technician.specialization || "",
       observacoes: technician.observacoes || "",
+      serviceIds: technician.serviceIds || [],
       isActive: technician.isActive,
     } : {
       name: "",
@@ -47,6 +50,7 @@ export default function TechnicianForm({ technician, onClose }: TechnicianFormPr
       complemento: "",
       specialization: "",
       observacoes: "",
+      serviceIds: [],
       isActive: true,
     },
   });
@@ -349,6 +353,63 @@ export default function TechnicianForm({ technician, onClose }: TechnicianFormPr
               </FormItem>
             )}
           />
+
+          {/* Seleção de Serviços */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Wrench className="h-5 w-5 text-gray-500" />
+              <h3 className="text-lg font-medium">Tipos de Serviços</h3>
+            </div>
+            
+            <FormField
+              control={form.control}
+              name="serviceIds"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Serviços que o Técnico Atende</FormLabel>
+                  <div className="border rounded-lg p-4 max-h-48 overflow-y-auto">
+                    {services.length === 0 ? (
+                      <p className="text-sm text-gray-500 text-center py-4">
+                        Nenhum serviço cadastrado. Cadastre serviços primeiro para vincular aos técnicos.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {services.map((service) => (
+                          <div key={service.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`service-${service.id}`}
+                              checked={field.value?.includes(service.id.toString()) || false}
+                              onCheckedChange={(checked) => {
+                                const currentIds = field.value || [];
+                                const serviceIdStr = service.id.toString();
+                                if (checked) {
+                                  field.onChange([...currentIds, serviceIdStr]);
+                                } else {
+                                  field.onChange(currentIds.filter(id => id !== serviceIdStr));
+                                }
+                              }}
+                            />
+                            <label
+                              htmlFor={`service-${service.id}`}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                            >
+                              {service.name}
+                              {service.price && (
+                                <span className="text-xs text-gray-500 ml-2">
+                                  (R$ {Number(service.price).toFixed(2)})
+                                </span>
+                              )}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
           <div className="flex items-center space-x-2">
             <Switch
