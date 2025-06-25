@@ -90,9 +90,12 @@ export default function Login() {
             {/* Logo */}
             <div className="flex-shrink-0">
               <Link href="/">
-                <h1 className="text-2xl font-bold text-gray-900 cursor-pointer hover:opacity-80 transition-opacity">
-                  Rota<span className="text-yellow-500">Fácil</span>
-                </h1>
+                <div className="flex items-center space-x-2 cursor-pointer hover:opacity-80 transition-opacity">
+                  <img src="/attached_assets/SEM FUNDO_1750819798590.png" alt="RotaFácil Logo" className="h-8 w-8" />
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    Rota<span className="text-yellow-500">Fácil</span>
+                  </h1>
+                </div>
               </Link>
             </div>
 
@@ -146,9 +149,12 @@ export default function Login() {
         {/* Left Side - Branding */}
         <div className="hidden lg:flex lg:w-1/2 bg-black text-white flex-col justify-center items-center p-12">
           <div className="max-w-md text-center">
-            <h1 className="text-5xl font-bold mb-6">
-              Rota<span className="text-burnt-yellow">Fácil</span>
-            </h1>
+            <div className="flex items-center justify-center space-x-3 mb-6">
+              <img src="/attached_assets/SEM FUNDO_1750819798590.png" alt="RotaFácil Logo" className="h-12 w-12" />
+              <h1 className="text-5xl font-bold">
+                Rota<span className="text-burnt-yellow">Fácil</span>
+              </h1>
+            </div>
             <p className="text-xl text-gray-300 mb-8">
               Simplifique o agendamento e roteirização dos seus atendimentos técnicos
             </p>

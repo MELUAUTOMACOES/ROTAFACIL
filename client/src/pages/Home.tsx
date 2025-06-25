@@ -56,9 +56,12 @@ export default function Home() {
           <div className="flex justify-between items-center h-16">
             {/* Logo */}
             <div className="flex-shrink-0">
-              <h1 className="text-2xl font-bold text-gray-900">
-                Rota<span className="text-yellow-500">Fácil</span>
-              </h1>
+              <div className="flex items-center space-x-2">
+                <img src="/attached_assets/SEM FUNDO_1750819798590.png" alt="RotaFácil Logo" className="h-8 w-8" />
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Rota<span className="text-yellow-500">Fácil</span>
+                </h1>
+              </div>
             </div>
 
             {/* Desktop Menu - Removido botão "Login", mantido apenas "Acessar Sistema" */}
@@ -704,9 +707,12 @@ export default function Home() {
       <footer className="bg-gray-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <h3 className="text-2xl font-bold mb-4">
-              Rota<span className="text-yellow-500">Fácil</span>
-            </h3>
+            <div className="flex items-center justify-center space-x-2 mb-4">
+              <img src="/attached_assets/SEM FUNDO_1750819798590.png" alt="RotaFácil Logo" className="h-8 w-8" />
+              <h3 className="text-2xl font-bold">
+                Rota<span className="text-yellow-500">Fácil</span>
+              </h3>
+            </div>
             <p className="text-gray-400 mb-8 max-w-2xl mx-auto">
               Otimize suas rotas, economize recursos e melhore a eficiência da sua operação
               com nossa plataforma completa de gestão logística.

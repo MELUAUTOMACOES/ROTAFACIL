@@ -62,9 +62,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* Header */}
         <div className="flex items-center justify-between h-16 bg-black px-6">
           <Link href="/dashboard">
-            <h1 className="text-xl font-bold text-white cursor-pointer hover:opacity-80 transition-opacity">
-              Rota<span className="text-burnt-yellow">Fácil</span>
-            </h1>
+            <div className="flex items-center space-x-2 cursor-pointer hover:opacity-80 transition-opacity">
+              <img src="/attached_assets/SEM FUNDO_1750819798590.png" alt="RotaFácil Logo" className="h-8 w-8" />
+              <h1 className="text-xl font-bold text-white">
+                Rota<span className="text-burnt-yellow">Fácil</span>
+              </h1>
+            </div>
           </Link>
           <Button
             variant="ghost"
