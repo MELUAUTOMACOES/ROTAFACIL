@@ -236,9 +236,9 @@ export default function VehicleForm({
               setAssignmentType(value);
               // Limpar campos opostos quando trocar tipo
               if (value === "technician") {
-                form.setValue("teamId", undefined);
+                form.setValue("teamId", undefined, { shouldValidate: false });
               } else {
-                form.setValue("technicianId", undefined);
+                form.setValue("technicianId", undefined, { shouldValidate: false });
               }
             }}
             className="flex gap-6"
@@ -274,6 +274,7 @@ export default function VehicleForm({
                   form.setValue(
                     "technicianId",
                     value ? parseInt(value) : undefined,
+                    { shouldValidate: true }
                   )
                 }
               >
@@ -305,7 +306,7 @@ export default function VehicleForm({
               <Select
                 value={form.watch("teamId")?.toString() || ""}
                 onValueChange={(value) =>
-                  form.setValue("teamId", value ? parseInt(value) : undefined)
+                  form.setValue("teamId", value ? parseInt(value) : undefined, { shouldValidate: true })
                 }
               >
                 <SelectTrigger className="mt-1">
