@@ -388,10 +388,15 @@ export default function Technicians() {
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-2xl">
-                    <TeamForm
+                    <TempTeamForm
                       team={selectedTeam}
                       technicians={technicians}
                       services={services}
+                      existingTechIds={
+                        allTeamMembers
+                          .filter(m => m.teamId === selectedTeam?.id)
+                          .map(m => m.technicianId)
+                      }
                       onClose={handleTeamFormClose}
                     />
                   </DialogContent>

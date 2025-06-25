@@ -168,6 +168,10 @@ export const insertVehicleSchema = createInsertSchema(vehicles).omit({
   id: true,
   userId: true,
   createdAt: true,
+}).extend({
+  brand: z.string().min(1, "Marca é obrigatória"),
+  model: z.string().min(1, "Modelo é obrigatório"),
+  year: z.number().min(1900, "Ano deve ser válido").max(new Date().getFullYear() + 1, "Ano não pode ser no futuro"),
 }).refine((data) => {
   // Pelo menos um responsável deve ser selecionado (técnico ou equipe)
   return data.technicianId || data.teamId;

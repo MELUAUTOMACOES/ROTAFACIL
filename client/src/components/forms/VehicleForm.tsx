@@ -3,11 +3,23 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { insertVehicleSchema, type InsertVehicle, type Vehicle, type Technician, type Team } from "@shared/schema";
+import {
+  insertVehicleSchema,
+  type InsertVehicle,
+  type Vehicle,
+  type Technician,
+  type Team,
+} from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -20,30 +32,41 @@ interface VehicleFormProps {
   onClose: () => void;
 }
 
-export default function VehicleForm({ vehicle, technicians, teams, onClose }: VehicleFormProps) {
+export default function VehicleForm({
+  vehicle,
+  technicians,
+  teams,
+  onClose,
+}: VehicleFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [assignmentType, setAssignmentType] = useState<"technician" | "team">(
-    vehicle?.technicianId ? "technician" : vehicle?.teamId ? "team" : "technician"
+    vehicle?.technicianId
+      ? "technician"
+      : vehicle?.teamId
+        ? "team"
+        : "technician",
   );
-  
+
   const form = useForm<InsertVehicle>({
     resolver: zodResolver(insertVehicleSchema),
-    defaultValues: vehicle ? {
-      plate: vehicle.plate,
-      model: vehicle.model,
-      brand: vehicle.brand,
-      year: vehicle.year,
-      technicianId: vehicle.technicianId || undefined,
-      teamId: vehicle.teamId || undefined,
-    } : {
-      plate: "",
-      model: "",
-      brand: "",
-      year: new Date().getFullYear(),
-      technicianId: undefined,
-      teamId: undefined,
-    },
+    defaultValues: vehicle
+      ? {
+          plate: vehicle.plate,
+          model: vehicle.model,
+          brand: vehicle.brand,
+          year: vehicle.year,
+          technicianId: vehicle.technicianId || undefined,
+          teamId: vehicle.teamId || undefined,
+        }
+      : {
+          plate: "",
+          model: "",
+          brand: "",
+          year: new Date().getFullYear(),
+          technicianId: undefined,
+          teamId: undefined,
+        },
   });
 
   const createVehicleMutation = useMutation({
@@ -70,7 +93,11 @@ export default function VehicleForm({ vehicle, technicians, teams, onClose }: Ve
 
   const updateVehicleMutation = useMutation({
     mutationFn: async (data: InsertVehicle) => {
-      const response = await apiRequest("PUT", `/api/vehicles/${vehicle!.id}`, data);
+      const response = await apiRequest(
+        "PUT",
+        `/api/vehicles/${vehicle!.id}`,
+        data,
+      );
       return response.json();
     },
     onSuccess: () => {
@@ -98,7 +125,8 @@ export default function VehicleForm({ vehicle, technicians, teams, onClose }: Ve
     }
   };
 
-  const isLoading = createVehicleMutation.isPending || updateVehicleMutation.isPending;
+  const isLoading =
+    createVehicleMutation.isPending || updateVehicleMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -113,13 +141,32 @@ export default function VehicleForm({ vehicle, technicians, teams, onClose }: Ve
         <div>
           <Label htmlFor="plate">Placa *</Label>
           <Input
-            {...form.register("plate")}
-            placeholder="ABC-1234"
+            placeholder="AAA-1234 ou AAA1A23"
             className="mt-1"
-            style={{ textTransform: 'uppercase' }}
+            style={{ textTransform: "uppercase" }}
+            value={form.watch("plate") || ""}
+            onChange={(e) => {
+              let v = e.target.value
+                .toUpperCase()
+                // remove qualquer caracter que não seja letra ou número
+                .replace(/[^A-Z0-9]/g, "");
+
+              // corta sempre para 7 chars (AAA1234 ou AAA1A23 têm 7 caracteres)
+              v = v.slice(0, 7);
+
+              // Se for EXATAMENTE 3 letras + 4 números, insere hífen: AAA-1234
+              if (/^[A-Z]{3}[0-9]{4}$/.test(v)) {
+                v = `${v.slice(0, 3)}-${v.slice(3)}`;
+              }
+
+              // atualiza o valor no RHF, disparando validação
+              form.setValue("plate", v, { shouldValidate: true });
+            }}
           />
           {form.formState.errors.plate && (
-            <p className="text-sm text-red-600 mt-1">{form.formState.errors.plate.message}</p>
+            <p className="text-sm text-red-600 mt-1">
+              {form.formState.errors.plate.message}
+            </p>
           )}
         </div>
 
@@ -132,7 +179,9 @@ export default function VehicleForm({ vehicle, technicians, teams, onClose }: Ve
               className="mt-1"
             />
             {form.formState.errors.brand && (
-              <p className="text-sm text-red-600 mt-1">{form.formState.errors.brand.message}</p>
+              <p className="text-sm text-red-600 mt-1">
+                {form.formState.errors.brand.message}
+              </p>
             )}
           </div>
 
@@ -144,7 +193,9 @@ export default function VehicleForm({ vehicle, technicians, teams, onClose }: Ve
               className="mt-1"
             />
             {form.formState.errors.model && (
-              <p className="text-sm text-red-600 mt-1">{form.formState.errors.model.message}</p>
+              <p className="text-sm text-red-600 mt-1">
+                {form.formState.errors.model.message}
+              </p>
             )}
           </div>
         </div>
@@ -163,18 +214,24 @@ export default function VehicleForm({ vehicle, technicians, teams, onClose }: Ve
             className="mt-1"
           />
           {form.formState.errors.year && (
-            <p className="text-sm text-red-600 mt-1">{form.formState.errors.year.message}</p>
+            <p className="text-sm text-red-600 mt-1">
+              {form.formState.errors.year.message}
+            </p>
           )}
         </div>
 
         <div className="space-y-4">
           <div>
-            <Label className="text-base font-medium">Responsável pelo Veículo *</Label>
-            <p className="text-sm text-gray-600">Selecione um técnico individual ou uma equipe</p>
+            <Label className="text-base font-medium">
+              Responsável pelo Veículo *
+            </Label>
+            <p className="text-sm text-gray-600">
+              Selecione um técnico individual ou uma equipe
+            </p>
           </div>
-          
-          <RadioGroup 
-            value={assignmentType} 
+
+          <RadioGroup
+            value={assignmentType}
             onValueChange={(value: "technician" | "team") => {
               setAssignmentType(value);
               // Limpar campos opostos quando trocar tipo
@@ -188,14 +245,20 @@ export default function VehicleForm({ vehicle, technicians, teams, onClose }: Ve
           >
             <div className="flex items-center space-x-2">
               <RadioGroupItem value="technician" id="technician" />
-              <Label htmlFor="technician" className="flex items-center cursor-pointer">
+              <Label
+                htmlFor="technician"
+                className="flex items-center cursor-pointer"
+              >
                 <User className="h-4 w-4 mr-2" />
                 Técnico Individual
               </Label>
             </div>
             <div className="flex items-center space-x-2">
               <RadioGroupItem value="team" id="team" />
-              <Label htmlFor="team" className="flex items-center cursor-pointer">
+              <Label
+                htmlFor="team"
+                className="flex items-center cursor-pointer"
+              >
                 <Users className="h-4 w-4 mr-2" />
                 Equipe
               </Label>
@@ -205,33 +268,43 @@ export default function VehicleForm({ vehicle, technicians, teams, onClose }: Ve
           {assignmentType === "technician" ? (
             <div>
               <Label htmlFor="technicianId">Técnico Responsável *</Label>
-              <Select 
-                value={form.watch("technicianId")?.toString() || ""} 
-                onValueChange={(value) => 
-                  form.setValue("technicianId", value ? parseInt(value) : undefined)
+              <Select
+                value={form.watch("technicianId")?.toString() || ""}
+                onValueChange={(value) =>
+                  form.setValue(
+                    "technicianId",
+                    value ? parseInt(value) : undefined,
+                  )
                 }
               >
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Selecione um técnico" />
                 </SelectTrigger>
                 <SelectContent>
-                  {technicians.filter(t => t.isActive).map((technician) => (
-                    <SelectItem key={technician.id} value={technician.id.toString()}>
-                      {technician.name}
-                    </SelectItem>
-                  ))}
+                  {technicians
+                    .filter((t) => t.isActive)
+                    .map((technician) => (
+                      <SelectItem
+                        key={technician.id}
+                        value={technician.id.toString()}
+                      >
+                        {technician.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               {form.formState.errors.technicianId && (
-                <p className="text-sm text-red-600 mt-1">{form.formState.errors.technicianId.message}</p>
+                <p className="text-sm text-red-600 mt-1">
+                  {form.formState.errors.technicianId.message}
+                </p>
               )}
             </div>
           ) : (
             <div>
               <Label htmlFor="teamId">Equipe Responsável *</Label>
-              <Select 
-                value={form.watch("teamId")?.toString() || ""} 
-                onValueChange={(value) => 
+              <Select
+                value={form.watch("teamId")?.toString() || ""}
+                onValueChange={(value) =>
                   form.setValue("teamId", value ? parseInt(value) : undefined)
                 }
               >
@@ -247,7 +320,9 @@ export default function VehicleForm({ vehicle, technicians, teams, onClose }: Ve
                 </SelectContent>
               </Select>
               {form.formState.errors.teamId && (
-                <p className="text-sm text-red-600 mt-1">{form.formState.errors.teamId.message}</p>
+                <p className="text-sm text-red-600 mt-1">
+                  {form.formState.errors.teamId.message}
+                </p>
               )}
               {assignmentType === "team" && form.watch("teamId") && (
                 <p className="text-xs text-blue-600 mt-1">
@@ -259,15 +334,11 @@ export default function VehicleForm({ vehicle, technicians, teams, onClose }: Ve
         </div>
 
         <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
-          <Button 
-            type="button" 
-            variant="outline"
-            onClick={onClose}
-          >
+          <Button type="button" variant="outline" onClick={onClose}>
             Cancelar
           </Button>
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             disabled={isLoading}
             className="bg-black text-white hover:bg-gray-800"
           >
