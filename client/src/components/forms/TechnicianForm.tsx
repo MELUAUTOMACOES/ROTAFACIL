@@ -368,7 +368,7 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                 <FormItem>
                   <FormLabel>Serviços que o Técnico Atende</FormLabel>
                   <div className="border rounded-lg p-4 max-h-48 overflow-y-auto">
-                    {services.length === 0 ? (
+                    {!services || services.length === 0 ? (
                       <p className="text-sm text-gray-500 text-center py-4">
                         Nenhum serviço cadastrado. Cadastre serviços primeiro para vincular aos técnicos.
                       </p>
