@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { extendedInsertAppointmentSchema, type InsertAppointment, type Appointment, type Client, type Service, type Technician } from "@shared/schema";
+import { extendedInsertAppointmentSchema, type InsertAppointment, type Appointment, type Client, type Service, type Technician, type Team } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +18,7 @@ interface AppointmentFormProps {
   clients: Client[];
   services: Service[];
   technicians: Technician[];
+  teams: Team[];
   onClose: () => void;
   prefilledData?: {
     date?: string;
@@ -33,6 +34,7 @@ export default function AppointmentForm({
   clients, 
   services, 
   technicians, 
+  teams,
   onClose,
   prefilledData 
 }: AppointmentFormProps) {
@@ -281,17 +283,26 @@ export default function AppointmentForm({
               name="technicianId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Técnico *</FormLabel>
-                  <Select onValueChange={(value) => field.onChange(parseInt(value))} value={field.value?.toString()}>
+                  <FormLabel>Técnico/Equipe *</FormLabel>
+                  <Select onValueChange={(value) => {
+                    // Extrair apenas o ID numérico do valor selecionado
+                    const id = value.includes('-') ? parseInt(value.split('-')[1]) : parseInt(value);
+                    field.onChange(id);
+                  }} value={field.value ? `tech-${field.value}` : ""}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione um técnico" />
+                        <SelectValue placeholder="Selecione um técnico ou equipe" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       {technicians.map((technician) => (
-                        <SelectItem key={technician.id} value={technician.id.toString()}>
-                          {technician.name}
+                        <SelectItem key={`technician-${technician.id}`} value={`tech-${technician.id}`}>
+                          👤 {technician.name}
+                        </SelectItem>
+                      ))}
+                      {teams && teams.map((team) => (
+                        <SelectItem key={`team-${team.id}`} value={`team-${team.id}`}>
+                          👥 {team.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

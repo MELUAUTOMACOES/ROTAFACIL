@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import ClientForm from "@/components/forms/ClientForm";
-import { Plus, Users, Mail, Phone, MapPin, Edit, Trash2 } from "lucide-react";
-import type { Client } from "@shared/schema";
+import { Plus, Users, Mail, Phone, MapPin, Edit, Trash2, Upload, Download } from "lucide-react";
+import type { Client, InsertClient } from "@shared/schema";
 
 export default function Clients() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -46,6 +46,284 @@ export default function Clients() {
     },
   });
 
+  const importClientsMutation = useMutation({
+    mutationFn: async (clients: any[]) => {
+      const response = await apiRequest("POST", "/api/clients/import", { clients });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      
+      if (data.errors > 0) {
+        const errorMessage = data.detailedErrors ? 
+          data.detailedErrors.slice(0, 2).join('\n') + 
+          (data.detailedErrors.length > 2 ? `\n... e mais ${data.detailedErrors.length - 2} erros` : '') : 
+          `${data.errors} erros encontrados`;
+          
+        toast({
+          title: `Importação parcial: ${data.success} sucessos, ${data.errors} erros`,
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Sucesso",
+          description: `${data.success} clientes importados com sucesso!`,
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao importar clientes",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleImportCSV = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const csv = event.target?.result as string;
+            const lines = csv.split('\n').filter(line => line.trim());
+            
+            if (lines.length < 2) {
+              toast({
+                title: "Erro",
+                description: "Arquivo CSV deve conter pelo menos uma linha de dados",
+                variant: "destructive",
+              });
+              return;
+            }
+
+            const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+            const clientsToImport = [];
+            const errors = [];
+
+            for (let i = 1; i < lines.length; i++) {
+              const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
+              
+              if (values.length < headers.length) continue;
+
+              const nome = values[0];
+              const telefone1 = values[2];
+              const cep = values[3];
+              const numero = values[5];
+              const logradouro = values[4];
+
+              // Validar campos obrigatórios
+              const validationErrors = [];
+              
+              if (!nome) validationErrors.push("Nome (coluna 1) está vazio");
+              if (!telefone1) validationErrors.push("Telefone 1 (coluna 3) está vazio");
+              if (!cep) validationErrors.push("CEP (coluna 4) está vazio");
+              if (!numero) validationErrors.push("Número (coluna 6) está vazio");
+              if (!logradouro) validationErrors.push("Logradouro (coluna 5) está vazio");
+              
+              // Validar formato do CEP
+              if (cep && !/^\d{5}-?\d{3}$/.test(cep)) {
+                validationErrors.push(`CEP "${cep}" inválido (formato esperado: XXXXX-XXX)`);
+              }
+              
+              // Validar se o número é numérico
+              if (numero && isNaN(Number(numero))) {
+                validationErrors.push(`Número "${numero}" deve ser numérico`);
+              }
+              
+              if (validationErrors.length > 0) {
+                errors.push(`Linha ${i + 1}: ${validationErrors.join("; ")}`);
+                continue;
+              }
+
+              clientsToImport.push({
+                name: nome,
+                email: values[1] || "",
+                phone1: telefone1,
+                phone2: values[6] || "",
+                cep: cep,
+                logradouro: logradouro,
+                numero: numero,
+                complemento: values[7] || "",
+                observacoes: values[8] || `Cliente importado via CSV em ${new Date().toLocaleString('pt-BR')}`
+              });
+            }
+
+            if (errors.length > 0) {
+              const errorReport = [
+                "RELATÓRIO DE ERROS - IMPORTAÇÃO DE CLIENTES",
+                "=" + "=".repeat(50),
+                "",
+                `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
+                `Arquivo: ${file.name}`,
+                "",
+                "RESUMO:",
+                "-".repeat(20),
+                `Total de linhas processadas: ${lines.length - 1}`,
+                `Clientes válidos: ${clientsToImport.length}`,
+                `Erros encontrados: ${errors.length}`,
+                `Taxa de sucesso: ${((clientsToImport.length / (lines.length - 1)) * 100).toFixed(1)}%`,
+                "",
+                "CAMPOS OBRIGATÓRIOS:",
+                "-".repeat(30),
+                "• Nome (coluna 1)",
+                "• Telefone 1 (coluna 3)", 
+                "• CEP (coluna 4)",
+                "• Logradouro (coluna 5)",
+                "• Número (coluna 6)",
+                "",
+                "ERROS ENCONTRADOS:",
+                "-".repeat(30),
+                ...errors,
+                "",
+                "OBSERVAÇÃO: Use o botão 'Baixar CSV Modelo' para obter um arquivo com a estrutura correta."
+              ].join('\n');
+
+              const logBlob = new Blob([errorReport], { type: "text/plain;charset=utf-8;" });
+              const logLink = document.createElement("a");
+              const logUrl = URL.createObjectURL(logBlob);
+              logLink.setAttribute("href", logUrl);
+              logLink.setAttribute("download", `relatorio_erros_clientes_${new Date().toISOString().split('T')[0]}_${new Date().toTimeString().split(' ')[0].replace(/:/g, '')}.txt`);
+              logLink.style.visibility = "hidden";
+              document.body.appendChild(logLink);
+              
+              setTimeout(() => {
+                if (confirm("Deseja baixar um relatório detalhado dos erros encontrados?")) {
+                  logLink.click();
+                }
+                document.body.removeChild(logLink);
+              }, 1000);
+            }
+
+            if (clientsToImport.length > 0) {
+              importClientsMutation.mutate(clientsToImport);
+            } else {
+              toast({
+                title: "Erro",
+                description: "Nenhum cliente válido encontrado no arquivo",
+                variant: "destructive",
+              });
+            }
+
+          } catch (error) {
+            toast({
+              title: "Erro",
+              description: "Erro ao processar arquivo CSV",
+              variant: "destructive",
+            });
+          }
+        };
+        reader.readAsText(file);
+      }
+    };
+    input.click();
+  };
+
+  const downloadCSVTemplate = () => {
+    const templateHeaders = [
+      "Nome",
+      "Email", 
+      "Telefone 1",
+      "CEP",
+      "Logradouro",
+      "Número",
+      "Telefone 2",
+      "Complemento",
+      "Observações"
+    ];
+
+    const exampleRow = [
+      "João Silva",
+      "joao@email.com",
+      "(11) 99999-9999",
+      "01234-567",
+      "Rua das Flores",
+      "123",
+      "(11) 88888-8888",
+      "Apto 45",
+      "Cliente preferencial"
+    ];
+
+    const csvContent = [templateHeaders, exampleRow]
+      .map(row => row.map(field => `"${field}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "modelo_importacao_clientes.csv");
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "Modelo baixado",
+      description: "Use este arquivo como base para importar seus clientes",
+    });
+  };
+
+  const exportToCSV = () => {
+    if (clients.length === 0) {
+      toast({
+        title: "Aviso",
+        description: "Não há clientes para exportar",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const csvHeaders = [
+      "Nome",
+      "Email",
+      "Telefone 1",
+      "CEP",
+      "Logradouro",
+      "Número",
+      "Telefone 2",
+      "Complemento",
+      "Observações"
+    ];
+
+    const csvData = clients.map((client: Client) => [
+      client.name,
+      client.email || "",
+      client.phone1,
+      client.cep,
+      client.logradouro,
+      client.numero,
+      client.phone2 || "",
+      client.complemento || "",
+      client.observacoes || ""
+    ]);
+
+    const csvContent = [csvHeaders, ...csvData]
+      .map((row: any[]) => row.map((field: any) => `"${field}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `clientes_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "Exportação concluída",
+      description: `${clients.length} clientes exportados com sucesso`,
+    });
+  };
+
   const handleEdit = (client: Client) => {
     setSelectedClient(client);
     setIsFormOpen(true);
@@ -79,20 +357,49 @@ export default function Clients() {
           <p className="text-gray-600">Gerencie sua base de clientes</p>
         </div>
         
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Cliente
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <ClientForm
-              client={selectedClient}
-              onClose={handleFormClose}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={downloadCSVTemplate}
+            disabled={importClientsMutation.isPending}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Baixar CSV Modelo
+          </Button>
+          
+          <Button
+            variant="outline"
+            onClick={handleImportCSV}
+            disabled={importClientsMutation.isPending}
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Importar CSV
+          </Button>
+          
+          <Button
+            variant="outline"
+            onClick={exportToCSV}
+            disabled={clients.length === 0}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Exportar CSV
+          </Button>
+          
+          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Cliente
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <ClientForm
+                client={selectedClient}
+                onClose={handleFormClose}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Clients List */}

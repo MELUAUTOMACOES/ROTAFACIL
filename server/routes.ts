@@ -132,6 +132,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/clients/import", authenticateToken, async (req: any, res) => {
+    try {
+      const { clients } = req.body;
+      if (!Array.isArray(clients)) {
+        return res.status(400).json({ message: "Clients array is required" });
+      }
+
+      let successCount = 0;
+      const detailedErrors: string[] = [];
+      const processedItems: any[] = [];
+
+      for (let i = 0; i < clients.length; i++) {
+        const clientData = clients[i];
+        try {
+          console.log(`📝 Criando cliente: ${clientData.name}`);
+          const validatedData = insertClientSchema.parse(clientData);
+          const createdClient = await storage.createClient(validatedData, req.user.userId);
+          
+          successCount++;
+          processedItems.push({
+            index: i + 1,
+            status: 'success',
+            data: createdClient
+          });
+          
+          console.log(`✅ Cliente criado: ${createdClient.name} (ID: ${createdClient.id})`);
+        } catch (error: any) {
+          detailedErrors.push(`Item ${i + 1}: Erro ao criar cliente "${clientData.name}" - ${error.message}`);
+          processedItems.push({
+            index: i + 1,
+            status: 'error',
+            error: error.message,
+            data: clientData
+          });
+          console.log(`❌ Erro no cliente ${i + 1}: ${error.message}`);
+        }
+      }
+
+      console.log(`📊 Importação de clientes concluída para usuário ${req.user.userId}:`);
+      console.log(`   • Total de itens: ${clients.length}`);
+      console.log(`   • Sucessos: ${successCount}`);
+      console.log(`   • Erros: ${detailedErrors.length}`);
+      
+      if (detailedErrors.length > 0) {
+        console.log(`📋 Erros detalhados:`);
+        detailedErrors.forEach(error => console.log(`   • ${error}`));
+      }
+
+      res.json({ 
+        success: successCount, 
+        errors: detailedErrors.length,
+        detailedErrors,
+        processedItems
+      });
+    } catch (error: any) {
+      console.error(`❌ Erro fatal na importação de clientes:`, error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.delete("/api/clients/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);

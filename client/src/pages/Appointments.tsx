@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import AppointmentForm from "@/components/forms/AppointmentForm";
 import { Plus, Calendar, MapPin, Clock, User, Edit, Trash2, Download, Upload } from "lucide-react";
-import type { Appointment, Client, Service, Technician } from "@shared/schema";
+import type { Appointment, Client, Service, Technician, Team } from "@shared/schema";
 
 export default function Appointments() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
@@ -76,6 +76,16 @@ export default function Appointments() {
     queryKey: ["/api/technicians"],
     queryFn: async () => {
       const response = await fetch("/api/technicians", {
+        headers: getAuthHeaders(),
+      });
+      return response.json();
+    },
+  });
+
+  const { data: teams = [] } = useQuery({
+    queryKey: ["/api/teams"],
+    queryFn: async () => {
+      const response = await fetch("/api/teams", {
         headers: getAuthHeaders(),
       });
       return response.json();
@@ -756,6 +766,7 @@ export default function Appointments() {
                 clients={clients}
                 services={services}
                 technicians={technicians}
+                teams={teams}
                 prefilledData={prefilledData}
               />
             </DialogContent>
@@ -786,6 +797,7 @@ export default function Appointments() {
                   clients={clients}
                   services={services}
                   technicians={technicians}
+                  teams={teams}
                   prefilledData={prefilledData}
                 />
               </DialogContent>
