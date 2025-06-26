@@ -12,7 +12,7 @@ import {
   users, clients, services, technicians, vehicles, appointments, checklists, businessRules, teams, teamMembers
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or } from "drizzle-orm";
+import { eq, and, or, ilike } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export interface IStorage {
@@ -28,6 +28,7 @@ export interface IStorage {
   createClient(client: InsertClient, userId: number): Promise<Client>;
   updateClient(id: number, client: Partial<InsertClient>, userId: number): Promise<Client>;
   deleteClient(id: number, userId: number): Promise<boolean>;
+  searchClients(query: string, userId: number): Promise<Client[]>;
 
   // Services
   getServices(userId: number): Promise<Service[]>;
@@ -145,6 +146,28 @@ export class DatabaseStorage implements IStorage {
       .delete(clients)
       .where(and(eq(clients.id, id), eq(clients.userId, userId)));
     return (result.rowCount || 0) > 0;
+  }
+
+  async searchClients(query: string, userId: number): Promise<Client[]> {
+    const searchTerm = `%${query}%`;
+    
+    const results = await db
+      .select()
+      .from(clients)
+      .where(
+        and(
+          eq(clients.userId, userId),
+          or(
+            ilike(clients.name, searchTerm),
+            ilike(clients.email, searchTerm),
+            ilike(clients.phone1, searchTerm),
+            ilike(clients.phone2, searchTerm)
+          )
+        )
+      )
+      .limit(5);
+    
+    return results;
   }
 
   // Services

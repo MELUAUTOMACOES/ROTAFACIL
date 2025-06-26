@@ -111,6 +111,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/clients/search", authenticateToken, async (req: any, res) => {
+    try {
+      const { q } = req.query;
+      if (!q || typeof q !== 'string') {
+        return res.json([]);
+      }
+      
+      const clients = await storage.searchClients(q.trim(), req.user.userId);
+      res.json(clients);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/clients", authenticateToken, async (req: any, res) => {
     try {
       const clientData = insertClientSchema.parse(req.body);

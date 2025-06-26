@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { ClientSearch } from "@/components/ui/client-search";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Calendar, Clock, MapPin, UserPlus } from "lucide-react";
@@ -226,26 +227,18 @@ export default function AppointmentForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Cliente *</FormLabel>
-                <Select 
-                  onValueChange={(value) => {
-                    field.onChange(parseInt(value));
-                    handleClientChange(value);
-                  }} 
-                  value={field.value?.toString()}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um cliente" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id.toString()}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <ClientSearch
+                    value={field.value}
+                    onValueChange={(value) => {
+                      field.onChange(value ?? undefined);
+                      if (value) {
+                        handleClientChange(value.toString());
+                      }
+                    }}
+                    placeholder="Buscar por nome ou telefone..."
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -285,8 +278,8 @@ export default function AppointmentForm({
                 <FormItem>
                   <FormLabel>Técnico/Equipe *</FormLabel>
                   <Select onValueChange={(value) => {
-                    // Extrair apenas o ID numérico do valor selecionado
-                    const id = value.includes('-') ? parseInt(value.split('-')[1]) : parseInt(value);
+                    // Extrair o ID numérico do valor selecionado
+                    const id = parseInt(value.split('-')[1]);
                     field.onChange(id);
                   }} value={field.value ? `tech-${field.value}` : ""}>
                     <FormControl>
