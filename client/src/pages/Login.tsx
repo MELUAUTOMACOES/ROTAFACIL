@@ -16,6 +16,7 @@ import {
   Menu,
   X
 } from "lucide-react";
+import logoImg from "@assets/SEM FUNDO_1750819798590.png";
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
