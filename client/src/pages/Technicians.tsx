@@ -253,6 +253,7 @@ export default function Technicians() {
                   <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
                     <TechnicianForm
                       technician={selectedTechnician}
+                      services={services}
                       onClose={handleTechnicianFormClose}
                     />
                   </DialogContent>
