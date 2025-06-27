@@ -297,11 +297,37 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateAppointment(id: number, appointmentData: Partial<InsertAppointment>, userId: number): Promise<Appointment> {
+    console.log(`🔧 [STORAGE] Dados recebidos para atualização:`, appointmentData);
+    
+    // Processar scheduledDate se presente
+    const processedData = { ...appointmentData };
+    if (processedData.scheduledDate) {
+      console.log(`📅 [STORAGE] Processando scheduledDate:`, processedData.scheduledDate);
+      
+      // Garantir que scheduledDate seja uma string ISO válida ou Date
+      if (typeof processedData.scheduledDate === 'string') {
+        // Verificar se é uma string ISO válida
+        const dateTest = new Date(processedData.scheduledDate);
+        if (isNaN(dateTest.getTime())) {
+          throw new Error(`Data inválida no storage: ${processedData.scheduledDate}`);
+        }
+        // Converter para Date object para o Drizzle
+        processedData.scheduledDate = dateTest;
+        console.log(`✅ [STORAGE] String convertida para Date object`);
+      } else if (!(processedData.scheduledDate instanceof Date)) {
+        throw new Error(`Tipo de data inválido no storage: ${typeof processedData.scheduledDate}`);
+      }
+    }
+    
+    console.log(`🔄 [STORAGE] Dados processados:`, processedData);
+    
     const [appointment] = await db
       .update(appointments)
-      .set(appointmentData)
+      .set(processedData)
       .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
       .returning();
+      
+    console.log(`✅ [STORAGE] Agendamento atualizado no banco: ${appointment.id}`);
     return appointment;
   }
 
