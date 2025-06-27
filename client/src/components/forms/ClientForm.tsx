@@ -147,13 +147,18 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
               {...form.register("phone1")}
               placeholder="(11) 99999-9999"
               className="mt-1"
+              maxLength={15}
               onChange={(e) => {
                 let value = e.target.value.replace(/\D/g, '');
+                if (value.length > 11) {
+                  value = value.slice(0, 11);
+                }
                 if (value.length <= 10) {
                   value = value.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
                 } else {
                   value = value.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
                 }
+                e.target.value = value;
                 form.setValue("phone1", value);
               }}
             />
@@ -171,13 +176,18 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
               {...form.register("phone2")}
               placeholder="(11) 99999-9999"
               className="mt-1"
+              maxLength={15}
               onChange={(e) => {
                 let value = e.target.value.replace(/\D/g, '');
+                if (value.length > 11) {
+                  value = value.slice(0, 11);
+                }
                 if (value.length <= 10) {
                   value = value.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
                 } else {
                   value = value.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
                 }
+                e.target.value = value;
                 form.setValue("phone2", value);
               }}
             />
