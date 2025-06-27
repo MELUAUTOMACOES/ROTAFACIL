@@ -82,6 +82,7 @@ export const appointments = pgTable("appointments", {
   clientId: integer("client_id").references(() => clients.id),
   serviceId: integer("service_id").notNull().references(() => services.id),
   technicianId: integer("technician_id").references(() => technicians.id),
+  teamId: integer("team_id").references(() => teams.id),
   scheduledDate: timestamp("scheduled_date").notNull(),
   status: text("status").notNull().default("scheduled"), // scheduled, in_progress, completed, cancelled
   priority: text("priority").notNull().default("normal"), // normal, high, urgent
@@ -249,6 +250,12 @@ export const extendedInsertAppointmentSchema = insertAppointmentSchema.extend({
     }
     return val;
   }),
+}).refine((data) => {
+  // Pelo menos um responsável deve ser selecionado (técnico ou equipe)
+  return data.technicianId || data.teamId;
+}, {
+  message: "Selecione um técnico ou equipe responsável",
+  path: ["technicianId"],
 });
 
 // Types

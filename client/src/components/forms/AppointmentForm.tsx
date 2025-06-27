@@ -51,6 +51,7 @@ export default function AppointmentForm({
       clientId: appointment.clientId,
       serviceId: appointment.serviceId,
       technicianId: appointment.technicianId,
+      teamId: appointment.teamId,
       scheduledDate: new Date(appointment.scheduledDate),
       status: appointment.status,
       priority: appointment.priority,
@@ -63,6 +64,7 @@ export default function AppointmentForm({
       clientId: 0,
       serviceId: prefilledData.serviceId ? parseInt(prefilledData.serviceId) : 0,
       technicianId: prefilledData.technicianId ? parseInt(prefilledData.technicianId) : 0,
+      teamId: undefined,
       scheduledDate: prefilledData.date ? new Date(prefilledData.date) : new Date(),
       status: "scheduled",
       priority: "normal",
@@ -75,6 +77,7 @@ export default function AppointmentForm({
       clientId: 0,
       serviceId: 0,
       technicianId: 0,
+      teamId: undefined,
       scheduledDate: new Date(),
       status: "scheduled",
       priority: "normal",
@@ -278,10 +281,27 @@ export default function AppointmentForm({
                 <FormItem>
                   <FormLabel>Técnico/Equipe *</FormLabel>
                   <Select onValueChange={(value) => {
-                    // Extrair o ID numérico do valor selecionado
-                    const id = parseInt(value.split('-')[1]);
-                    field.onChange(id);
-                  }} value={field.value ? `tech-${field.value}` : ""}>
+                    console.log("Seleção alterada para:", value);
+                    
+                    if (value.startsWith('tech-')) {
+                      // É um técnico
+                      const technicianId = parseInt(value.split('-')[1]);
+                      console.log("Técnico selecionado ID:", technicianId);
+                      field.onChange(technicianId);
+                      // Limpar teamId no formulário
+                      form.setValue("teamId", undefined);
+                    } else if (value.startsWith('team-')) {
+                      // É uma equipe
+                      const teamId = parseInt(value.split('-')[1]);
+                      console.log("Equipe selecionada ID:", teamId);
+                      field.onChange(undefined); // Limpar technicianId
+                      // Definir teamId no formulário
+                      form.setValue("teamId", teamId);
+                    }
+                  }} value={
+                    field.value ? `tech-${field.value}` : 
+                    form.getValues("teamId") ? `team-${form.getValues("teamId")}` : ""
+                  }>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione um técnico ou equipe" />
