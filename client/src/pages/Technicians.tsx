@@ -122,6 +122,7 @@ export default function Technicians() {
   });
 
   const handleEditTechnician = (technician: Technician) => {
+    console.log('✏️ Technicians - Editando técnico:', technician);
     setSelectedTechnician(technician);
     setIsTechnicianFormOpen(true);
   };
@@ -152,8 +153,14 @@ export default function Technicians() {
   };
 
   const handleTechnicianFormClose = () => {
+    console.log('🚪 Technicians - Fechando formulário de técnico');
+    // Primeiro fechar o diálogo
     setIsTechnicianFormOpen(false);
-    setSelectedTechnician(null);
+    // Limpar seleção após pequeno delay para evitar conflito DOM
+    setTimeout(() => {
+      setSelectedTechnician(null);
+      console.log('🧹 Technicians - Estado de técnico selecionado limpo');
+    }, 200);
   };
 
   const handleTeamFormClose = () => {
@@ -211,11 +218,13 @@ export default function Technicians() {
               <p className="text-sm text-gray-600">Gerencie os técnicos da sua empresa</p>
             </div>
             
-            <Dialog open={isTechnicianFormOpen} onOpenChange={setIsTechnicianFormOpen}>
+            <Dialog open={isTechnicianFormOpen && !selectedTechnician} onOpenChange={(open) => {
+              if (!open) handleTechnicianFormClose();
+            }}>
               <DialogTrigger asChild>
                 <Button 
                   className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                  onClick={handleNewTechnician} // Função que garante formulário em branco
+                  onClick={handleNewTechnician}
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Novo Técnico
@@ -223,7 +232,7 @@ export default function Technicians() {
               </DialogTrigger>
               <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
                 <TechnicianForm
-                  technician={selectedTechnician}
+                  technician={null}
                   services={services}
                   onClose={handleTechnicianFormClose}
                 />
@@ -240,24 +249,13 @@ export default function Technicians() {
                 <p className="text-gray-600 text-center mb-6">
                   Comece adicionando técnicos à sua equipe para realizar os atendimentos.
                 </p>
-                <Dialog open={isTechnicianFormOpen} onOpenChange={setIsTechnicianFormOpen}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                      onClick={handleNewTechnician} // Função que garante formulário em branco
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Adicionar Primeiro Técnico
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
-                    <TechnicianForm
-                      technician={selectedTechnician}
-                      services={services}
-                      onClose={handleTechnicianFormClose}
-                    />
-                  </DialogContent>
-                </Dialog>
+                <Button 
+                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                  onClick={handleNewTechnician}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar Primeiro Técnico
+                </Button>
               </CardContent>
             </Card>
           ) : (
@@ -275,13 +273,26 @@ export default function Technicians() {
                         )}
                       </CardTitle>
                       <div className="flex space-x-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditTechnician(technician)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
+                        <Dialog open={isTechnicianFormOpen && selectedTechnician?.id === technician.id} onOpenChange={(open) => {
+                          if (!open) handleTechnicianFormClose();
+                        }}>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditTechnician(technician)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+                            <TechnicianForm
+                              technician={selectedTechnician}
+                              services={services}
+                              onClose={handleTechnicianFormClose}
+                            />
+                          </DialogContent>
+                        </Dialog>
                         <Button
                           variant="ghost"
                           size="sm"
