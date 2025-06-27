@@ -113,19 +113,21 @@ export default function Clients() {
               if (values.length < headers.length) continue;
 
               const nome = values[0];
-              const telefone1 = values[2];
-              const cep = values[3];
-              const numero = values[5];
-              const logradouro = values[4];
+              const cpf = values[1];
+              const telefone1 = values[3];
+              const cep = values[4];
+              const logradouro = values[5];
+              const numero = values[6];
 
               // Validar campos obrigatórios
               const validationErrors = [];
               
               if (!nome) validationErrors.push("Nome (coluna 1) está vazio");
-              if (!telefone1) validationErrors.push("Telefone 1 (coluna 3) está vazio");
-              if (!cep) validationErrors.push("CEP (coluna 4) está vazio");
-              if (!numero) validationErrors.push("Número (coluna 6) está vazio");
-              if (!logradouro) validationErrors.push("Logradouro (coluna 5) está vazio");
+              if (!cpf) validationErrors.push("CPF (coluna 2) está vazio");
+              if (!telefone1) validationErrors.push("Telefone 1 (coluna 4) está vazio");
+              if (!cep) validationErrors.push("CEP (coluna 5) está vazio");
+              if (!logradouro) validationErrors.push("Logradouro (coluna 6) está vazio");
+              if (!numero) validationErrors.push("Número (coluna 7) está vazio");
               
               // Validar formato do CEP
               if (cep && !/^\d{5}-?\d{3}$/.test(cep)) {
@@ -144,14 +146,15 @@ export default function Clients() {
 
               clientsToImport.push({
                 name: nome,
-                email: values[1] || "",
+                cpf: cpf,
+                email: values[2] || "",
                 phone1: telefone1,
-                phone2: values[6] || "",
+                phone2: values[7] || "",
                 cep: cep,
                 logradouro: logradouro,
                 numero: numero,
-                complemento: values[7] || "",
-                observacoes: values[8] || `Cliente importado via CSV em ${new Date().toLocaleString('pt-BR')}`
+                complemento: values[8] || "",
+                observacoes: values[9] || `Cliente importado via CSV em ${new Date().toLocaleString('pt-BR')}`
               });
             }
 
@@ -173,10 +176,11 @@ export default function Clients() {
                 "CAMPOS OBRIGATÓRIOS:",
                 "-".repeat(30),
                 "• Nome (coluna 1)",
-                "• Telefone 1 (coluna 3)", 
-                "• CEP (coluna 4)",
-                "• Logradouro (coluna 5)",
-                "• Número (coluna 6)",
+                "• CPF (coluna 2)",
+                "• Telefone 1 (coluna 4)", 
+                "• CEP (coluna 5)",
+                "• Logradouro (coluna 6)",
+                "• Número (coluna 7)",
                 "",
                 "ERROS ENCONTRADOS:",
                 "-".repeat(30),
@@ -228,6 +232,7 @@ export default function Clients() {
   const downloadCSVTemplate = () => {
     const templateHeaders = [
       "Nome",
+      "CPF",
       "Email", 
       "Telefone 1",
       "CEP",
@@ -240,6 +245,7 @@ export default function Clients() {
 
     const exampleRow = [
       "João Silva",
+      "123.456.789-01",
       "joao@email.com",
       "(11) 99999-9999",
       "01234-567",
@@ -282,6 +288,7 @@ export default function Clients() {
 
     const csvHeaders = [
       "Nome",
+      "CPF",
       "Email",
       "Telefone 1",
       "CEP",
@@ -294,6 +301,7 @@ export default function Clients() {
 
     const csvData = clients.map((client: Client) => [
       client.name,
+      client.cpf,
       client.email || "",
       client.phone1,
       client.cep,
