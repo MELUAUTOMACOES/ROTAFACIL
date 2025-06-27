@@ -20,7 +20,7 @@ export const clients = pgTable("clients", {
   email: text("email"),
   phone1: text("phone1"),
   phone2: text("phone2"),
-  cpf: text("cpf"),
+  cpf: text("cpf").notNull().unique(),
   cep: text("cep").notNull(),
   logradouro: text("logradouro").notNull(),
   numero: text("numero").notNull(),

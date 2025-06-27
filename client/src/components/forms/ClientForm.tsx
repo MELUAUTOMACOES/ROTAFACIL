@@ -1,6 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { extendedInsertClientSchema, type InsertClient, type Client } from "@shared/schema";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,10 @@ interface ClientFormProps {
 export default function ClientForm({ client, onClose }: ClientFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // Estados para validação de CPF
+  const [cpfInput, setCpfInput] = useState(client?.cpf || "");
+  const [cpfError, setCpfError] = useState<string | null>(null);
   
   const form = useForm<InsertClient>({
     resolver: zodResolver(extendedInsertClientSchema),
@@ -46,6 +51,57 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
       observacoes: "",
     },
   });
+
+  // Query para validação de CPF
+  const { data: cpfValidation, refetch: validateCpf } = useQuery({
+    queryKey: ['/api/clients/validate-cpf', cpfInput],
+    queryFn: async () => {
+      if (!cpfInput || cpfInput.length < 11) return { exists: false };
+      console.log("Validação de CPF:", cpfInput);
+      
+      const response = await fetch(`/api/clients/validate-cpf?cpf=${encodeURIComponent(cpfInput)}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Erro na validação de CPF');
+      }
+      
+      return response.json();
+    },
+    enabled: false, // Só executa quando chamado manualmente
+  });
+
+  // Effect para validar CPF em tempo real com debounce
+  useEffect(() => {
+    if (cpfInput && cpfInput.length >= 11) {
+      // Se estamos editando o mesmo cliente, não validar
+      if (client && client.cpf === cpfInput) {
+        setCpfError(null);
+        return;
+      }
+      
+      const timer = setTimeout(() => {
+        validateCpf();
+      }, 500); // Debounce de 500ms
+      
+      return () => clearTimeout(timer);
+    } else {
+      setCpfError(null);
+    }
+  }, [cpfInput, client, validateCpf]);
+
+  // Effect para mostrar erro quando CPF já existe
+  useEffect(() => {
+    if (cpfValidation?.exists) {
+      console.log("CPF já cadastrado:", cpfInput, "Nome:", cpfValidation.clientName);
+      setCpfError(`Já existe um cliente cadastrado com este CPF: ${cpfValidation.clientName}`);
+    } else {
+      setCpfError(null);
+    }
+  }, [cpfValidation, cpfInput]);
 
   const createClientMutation = useMutation({
     mutationFn: async (data: InsertClient) => {
@@ -92,6 +148,16 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
   });
 
   const onSubmit = (data: InsertClient) => {
+    // Impedir envio se CPF já está cadastrado
+    if (cpfError) {
+      toast({
+        title: "Erro",
+        description: "Corrija os erros antes de salvar",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     if (client) {
       updateClientMutation.mutate(data);
     } else {
@@ -140,24 +206,30 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
         </div>
 
         <div>
-          <Label htmlFor="cpf">CPF</Label>
+          <Label htmlFor="cpf">CPF *</Label>
           <Input
-            {...form.register("cpf")}
             placeholder="000.000.000-00"
-            className="mt-1"
+            className={`mt-1 ${cpfError ? 'border-red-500' : ''}`}
             maxLength={14}
+            value={cpfInput}
             onChange={(e) => {
               let value = e.target.value.replace(/\D/g, '');
+              console.log("Validação de CPF:", value);
+              
               if (value.length > 11) {
                 value = value.slice(0, 11);
               }
-              value = value.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, '$1.$2.$3-$4');
-              e.target.value = value;
-              form.setValue("cpf", value);
+              const formattedValue = value.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, '$1.$2.$3-$4');
+              
+              setCpfInput(formattedValue);
+              form.setValue("cpf", formattedValue);
             }}
           />
           {form.formState.errors.cpf && (
             <p className="text-sm text-red-600 mt-1">{form.formState.errors.cpf.message}</p>
+          )}
+          {cpfError && (
+            <p className="text-sm text-red-600 mt-1">{cpfError}</p>
           )}
         </div>
 

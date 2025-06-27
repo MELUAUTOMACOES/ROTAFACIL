@@ -125,6 +125,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/clients/validate-cpf", authenticateToken, async (req: any, res) => {
+    try {
+      const cpf = req.query.cpf as string;
+      console.log("Validação de CPF:", cpf);
+      
+      if (!cpf) {
+        return res.json({ exists: false });
+      }
+
+      const existingClient = await storage.getClientByCpf(cpf, req.user.userId);
+      
+      if (existingClient) {
+        console.log("CPF já cadastrado:", cpf, "Nome:", existingClient.name);
+        res.json({ 
+          exists: true, 
+          clientName: existingClient.name,
+          clientId: existingClient.id 
+        });
+      } else {
+        res.json({ exists: false });
+      }
+    } catch (error: any) {
+      console.error("Erro na validação de CPF:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/clients", authenticateToken, async (req: any, res) => {
     try {
       const clientData = insertClientSchema.parse(req.body);
