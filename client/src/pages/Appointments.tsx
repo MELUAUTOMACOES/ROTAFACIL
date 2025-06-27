@@ -48,7 +48,11 @@ export default function Appointments() {
       const response = await fetch("/api/appointments", {
         headers: getAuthHeaders(),
       });
-      return response.json();
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
     },
   });
 
