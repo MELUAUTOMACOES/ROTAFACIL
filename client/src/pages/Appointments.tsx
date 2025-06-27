@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
@@ -8,15 +8,36 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import AppointmentForm from "@/components/forms/AppointmentForm";
-import { Plus, Calendar, MapPin, Clock, User, Edit, Trash2, Download, Upload } from "lucide-react";
+import { Plus, Calendar, MapPin, Clock, User, Edit, Trash2, Download, Upload, Filter, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Appointment, Client, Service, Technician, Team } from "@shared/schema";
 
 export default function Appointments() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [prefilledData, setPrefilledData] = useState<any>(null);
+  
+  // Estados para filtros
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedService, setSelectedService] = useState<string>("all");
+  const [selectedTechnician, setSelectedTechnician] = useState<string>("all");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Logs para monitorar uso dos filtros
+  useEffect(() => {
+    console.log("🔍 [FILTER] Filtros aplicados:", {
+      selectedDate,
+      searchTerm,
+      selectedService,
+      selectedTechnician,
+      selectedStatus
+    });
+  }, [selectedDate, searchTerm, selectedService, selectedTechnician, selectedStatus]);
 
   // Verificar parâmetros da URL ao carregar a página
   useEffect(() => {
@@ -258,6 +279,81 @@ export default function Appointments() {
       displayName: "❌ Responsável não atribuído"
     };
   };
+
+  // Lógica de filtragem dos agendamentos
+  const filteredAppointments = useMemo(() => {
+    if (!appointments || appointments.length === 0) return [];
+    
+    console.log("🔍 [FILTER] Aplicando filtros nos agendamentos...");
+    console.log("🔍 [FILTER] Total de agendamentos:", appointments.length);
+    
+    const filtered = appointments.filter((apt: Appointment) => {
+      // Filter by date
+      if (selectedDate) {
+        const aptDate = new Date(apt.scheduledDate).toLocaleDateString('en-CA'); // YYYY-MM-DD format
+        console.log(`🔍 [FILTER] Comparando datas - selectedDate: ${selectedDate}, aptDate: ${aptDate}`);
+        if (aptDate !== selectedDate) {
+          console.log(`🔍 [FILTER] Agendamento ${apt.id} filtrado por data`);
+          return false;
+        }
+      }
+
+      // Filter by client name (search term)
+      if (searchTerm) {
+        const client = getClient(apt.clientId);
+        const clientName = client?.name?.toLowerCase() || '';
+        const searchLower = searchTerm.toLowerCase();
+        console.log(`🔍 [FILTER] Pesquisando "${searchTerm}" em "${clientName}"`);
+        if (!clientName.includes(searchLower)) {
+          console.log(`🔍 [FILTER] Agendamento ${apt.id} filtrado por busca de cliente`);
+          return false;
+        }
+      }
+
+      // Filter by service
+      if (selectedService && selectedService !== "all") {
+        console.log(`🔍 [FILTER] Filtro de serviço aplicado - selectedService: ${selectedService}, apt.serviceId: ${apt.serviceId}`);
+        if (apt.serviceId.toString() !== selectedService) {
+          console.log(`🔍 [FILTER] Agendamento ${apt.id} filtrado por serviço`);
+          return false;
+        }
+      }
+
+      // Filter by technician/team
+      if (selectedTechnician && selectedTechnician !== "all") {
+        console.log(`🔍 [FILTER] Filtro de técnico/equipe aplicado - selectedTechnician: ${selectedTechnician}`);
+        
+        // Verificar se é um técnico individual
+        const technician = getTechnician(apt.technicianId);
+        const isMatchingTechnician = technician?.id.toString() === selectedTechnician;
+        
+        // Verificar se é uma equipe (o valor vem como "team-{id}")
+        const team = teams.find((t: any) => t.id === apt.teamId);
+        const isMatchingTeam = team && selectedTechnician === `team-${team.id}`;
+        
+        console.log(`🔍 [FILTER] isMatchingTechnician: ${isMatchingTechnician}, isMatchingTeam: ${isMatchingTeam}, team:`, team?.name);
+        
+        if (!isMatchingTechnician && !isMatchingTeam) {
+          console.log(`🔍 [FILTER] Agendamento ${apt.id} filtrado por técnico/equipe`);
+          return false;
+        }
+      }
+
+      // Filter by status
+      if (selectedStatus && selectedStatus !== "all") {
+        console.log(`🔍 [FILTER] Filtro de status aplicado - selectedStatus: ${selectedStatus}, apt.status: ${apt.status}`);
+        if (apt.status !== selectedStatus) {
+          console.log(`🔍 [FILTER] Agendamento ${apt.id} filtrado por status`);
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    console.log(`🔍 [FILTER] Resultado da filtragem: ${filtered.length} de ${appointments.length} agendamentos`);
+    return filtered;
+  }, [appointments, selectedDate, searchTerm, selectedService, selectedTechnician, selectedStatus, clients, services, technicians, teams]);
 
   const importCSVMutation = useMutation({
     mutationFn: async (appointments: any[]) => {
@@ -961,14 +1057,144 @@ export default function Appointments() {
         </div>
       </div>
 
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Filter className="h-5 w-5 mr-2" />
+            Filtros
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Data</label>
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => {
+                  console.log("🔍 [FILTER] Data alterada:", e.target.value);
+                  setSelectedDate(e.target.value);
+                }}
+                className="w-full"
+              />
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Buscar Cliente</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  placeholder="Nome do cliente..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    console.log("🔍 [FILTER] Busca alterada:", e.target.value);
+                    setSearchTerm(e.target.value);
+                  }}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Serviço</label>
+              <Select value={selectedService} onValueChange={(value) => {
+                console.log("🔍 [FILTER] Serviço alterado:", value);
+                setSelectedService(value);
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os serviços" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os serviços</SelectItem>
+                  {services.map((service: Service) => (
+                    <SelectItem key={service.id} value={service.id.toString()}>
+                      {service.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Técnicos/Equipes</label>
+              <Select value={selectedTechnician} onValueChange={(value) => {
+                console.log("🔍 [FILTER] Técnico/Equipe alterado:", value);
+                setSelectedTechnician(value);
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os técnicos e equipes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os técnicos e equipes</SelectItem>
+                  {technicians.map((technician: Technician) => (
+                    <SelectItem key={`tech-${technician.id}`} value={technician.id.toString()}>
+                      👤 {technician.name}
+                    </SelectItem>
+                  ))}
+                  {teams.map((team: any) => (
+                    <SelectItem key={`team-${team.id}`} value={`team-${team.id}`}>
+                      👥 {team.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Status</label>
+              <Select value={selectedStatus} onValueChange={(value) => {
+                console.log("🔍 [FILTER] Status alterado:", value);
+                setSelectedStatus(value);
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os status</SelectItem>
+                  <SelectItem value="scheduled">Agendado</SelectItem>
+                  <SelectItem value="in_progress">Em Andamento</SelectItem>
+                  <SelectItem value="completed">Concluído</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Botão para limpar filtros */}
+            <div className="col-span-full pt-4 border-t border-gray-100">
+              <Button 
+                onClick={() => {
+                  console.log("🔍 [FILTER] Limpando todos os filtros");
+                  setSelectedDate("");
+                  setSearchTerm("");
+                  setSelectedService("all");
+                  setSelectedTechnician("all");
+                  setSelectedStatus("all");
+                }}
+                variant="outline"
+                className="flex-1 sm:flex-none"
+                type="button"
+              >
+                Limpar Filtros
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Appointments List */}
-      {appointments.length === 0 ? (
+      {filteredAppointments.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Calendar className="h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum agendamento encontrado</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {appointments.length === 0 ? "Nenhum agendamento encontrado" : "Nenhum agendamento encontrado com os filtros aplicados"}
+            </h3>
             <p className="text-gray-600 text-center mb-6">
-              Comece criando seu primeiro agendamento para organizar seus atendimentos técnicos.
+              {appointments.length === 0 
+                ? "Comece criando seu primeiro agendamento para organizar seus atendimentos técnicos."
+                : "Tente ajustar os filtros ou limpar todos os filtros para ver mais agendamentos."
+              }
             </p>
             <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
               <DialogTrigger asChild>
@@ -996,7 +1222,7 @@ export default function Appointments() {
         </Card>
       ) : (
         <div className="grid gap-4">
-          {appointments.map((appointment: Appointment) => {
+          {filteredAppointments.map((appointment: Appointment) => {
             const client = getClient(appointment.clientId);
             const service = getService(appointment.serviceId);
             const responsible = getResponsibleInfo(appointment);
