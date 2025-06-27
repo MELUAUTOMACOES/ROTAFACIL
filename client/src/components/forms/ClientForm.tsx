@@ -141,12 +141,21 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
           <div>
             <Label htmlFor="phone1" className="flex items-center">
               <Phone className="h-4 w-4 mr-1" />
-              Telefone 1
+              Telefone 1 *
             </Label>
             <Input
               {...form.register("phone1")}
               placeholder="(11) 99999-9999"
               className="mt-1"
+              onChange={(e) => {
+                let value = e.target.value.replace(/\D/g, '');
+                if (value.length <= 10) {
+                  value = value.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
+                } else {
+                  value = value.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
+                }
+                form.setValue("phone1", value);
+              }}
             />
             {form.formState.errors.phone1 && (
               <p className="text-sm text-red-600 mt-1">{form.formState.errors.phone1.message}</p>
@@ -162,6 +171,15 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
               {...form.register("phone2")}
               placeholder="(11) 99999-9999"
               className="mt-1"
+              onChange={(e) => {
+                let value = e.target.value.replace(/\D/g, '');
+                if (value.length <= 10) {
+                  value = value.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
+                } else {
+                  value = value.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
+                }
+                form.setValue("phone2", value);
+              }}
             />
             {form.formState.errors.phone2 && (
               <p className="text-sm text-red-600 mt-1">{form.formState.errors.phone2.message}</p>

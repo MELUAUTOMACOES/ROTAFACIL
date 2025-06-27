@@ -226,6 +226,9 @@ export const cepSchema = z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no f
 export const extendedInsertClientSchema = insertClientSchema.extend({
   cep: cepSchema,
   numero: z.string().regex(/^\d+$/, "Número deve conter apenas dígitos"),
+  phone1: z.string().min(1, "Telefone 1 é obrigatório").regex(/^\(\d{2}\) \d{4,5}-\d{4}$/, "Telefone deve estar no formato (XX) XXXXX-XXXX ou (XX) XXXX-XXXX"),
+  phone2: z.string().regex(/^\(\d{2}\) \d{4,5}-\d{4}$/, "Telefone deve estar no formato (XX) XXXXX-XXXX ou (XX) XXXX-XXXX").optional().or(z.literal("")),
+  email: z.string().regex(/^[^@]*@[^@]*$/, "Email deve conter @").optional().or(z.literal("")),
 });
 
 // Technician schema with extended validation  
