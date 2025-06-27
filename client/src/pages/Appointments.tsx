@@ -362,35 +362,13 @@ export default function Appointments() {
 
               console.log(`📋 [CSV IMPORT] Linha ${i + 1}: Cliente=${clientName}, CPF=${cpfCliente}`);
 
-              // Validar campos obrigatórios e formatos
-              const validationErrors = [];
-              const phone1 = values[3];
-              
-              // Validar campos obrigatórios
-              if (!clientName) validationErrors.push("Cliente (coluna 1) está vazio");
-              if (!serviceName) validationErrors.push("Serviço (coluna 6) está vazio");
-              if (!dateTime) validationErrors.push("Data/Hora (coluna 8) está vazia");
-              if (!cep) validationErrors.push("CEP (coluna 11) está vazio");
-              if (!numero) validationErrors.push("Número (coluna 13) está vazio");
-              
-              // Validar formato do CEP
-              if (cep && !/^\d{5}-?\d{3}$/.test(cep)) {
-                validationErrors.push(`CEP "${cep}" inválido (formato esperado: XXXXX-XXX)`);
-              }
-              
-              // Validar se o número é numérico
-              if (numero && isNaN(Number(numero))) {
-                validationErrors.push(`Número "${numero}" deve ser numérico`);
-              }
-              
-              if (validationErrors.length > 0) {
-                errors.push(`Linha ${i + 1}: ${validationErrors.join("; ")}`);
-                continue;
-              }
-
-              // Encontrar cliente pelo CPF (prioritário) ou nome (fallback)
+              // Encontrar cliente pelo CPF (prioritário) ou nome (fallback) ANTES da validação
               let client = null;
               let clientData = null;
+              let finalClientName = clientName;
+              let finalCep = cep;
+              let finalLogradouro = logradouro;
+              let finalNumero = numero;
               
               if (cpfCliente) {
                 // Buscar cliente pelo CPF primeiro
@@ -399,35 +377,72 @@ export default function Appointments() {
                 if (client) {
                   console.log(`✅ [CSV IMPORT] Cliente encontrado pelo CPF ${cpfCliente}: ${client.name}`);
                   console.log(`📋 [CSV IMPORT] Usando dados do cliente cadastrado, ignorando dados do CSV`);
+                  
+                  // Usar dados do cliente cadastrado
+                  finalClientName = client.name;
+                  finalCep = client.cep;
+                  finalLogradouro = client.logradouro;
+                  finalNumero = client.numero;
                 } else {
                   console.log(`🔍 [CSV IMPORT] CPF ${cpfCliente} não encontrado, criando novo cliente`);
                 }
               }
               
-              if (!client) {
+              if (!client && clientName) {
                 // Se não encontrou pelo CPF, tentar por nome como fallback
                 client = clients.find((c: Client) => c.name.toLowerCase() === clientName.toLowerCase());
                 
                 if (client) {
                   console.log(`⚠️ [CSV IMPORT] Cliente encontrado pelo nome: ${client.name} (sem CPF fornecido)`);
+                  // Usar dados do cliente cadastrado
+                  finalClientName = client.name;
+                  finalCep = client.cep;
+                  finalLogradouro = client.logradouro;
+                  finalNumero = client.numero;
                 }
+              }
+
+              // Validar campos obrigatórios APÓS puxar dados do cliente
+              const validationErrors = [];
+              const phone1 = values[3];
+              
+              // Validar campos obrigatórios (agora usando dados finais)
+              if (!finalClientName) validationErrors.push("Cliente não identificado (forneça nome ou CPF válido)");
+              if (!serviceName) validationErrors.push("Serviço (coluna 6) está vazio");
+              if (!dateTime) validationErrors.push("Data/Hora (coluna 8) está vazia");
+              if (!finalCep) validationErrors.push("CEP não disponível (cliente não cadastrado)");
+              if (!finalNumero) validationErrors.push("Número não disponível (cliente não cadastrado)");
+              
+              // Validar formato do CEP
+              if (finalCep && !/^\d{5}-?\d{3}$/.test(finalCep)) {
+                validationErrors.push(`CEP "${finalCep}" inválido (formato esperado: XXXXX-XXX)`);
+              }
+              
+              // Validar se o número é numérico
+              if (finalNumero && isNaN(Number(finalNumero))) {
+                validationErrors.push(`Número "${finalNumero}" deve ser numérico`);
+              }
+              
+              if (validationErrors.length > 0) {
+                errors.push(`Linha ${i + 1}: ${validationErrors.join("; ")}`);
+                continue;
               }
               
               if (!client) {
                 // Preparar dados do cliente para criação automática
                 clientData = {
-                  name: clientName,
+                  name: finalClientName,
                   cpf: cpfCliente || "",
                   email: values[2] || "",
                   phone1: phone1 || "",
                   phone2: values[4] || "",
-                  cep: cep,
-                  logradouro: logradouro,
-                  numero: numero,
+                  cep: finalCep,
+                  logradouro: finalLogradouro,
+                  numero: finalNumero,
                   complemento: values[13] || "",
                   observacoes: `Cliente criado automaticamente via importação CSV em ${new Date().toLocaleString('pt-BR')}`
                 };
-                console.log(`🆕 [CSV IMPORT] Preparando criação de novo cliente: ${clientName}`);
+                console.log(`🆕 [CSV IMPORT] Preparando criação de novo cliente: ${finalClientName}`);
               }
 
               // Encontrar serviço
@@ -506,9 +521,9 @@ export default function Appointments() {
                 scheduledDate,
                 status: values[8] || "scheduled",
                 priority: normalizedPriority,
-                cep,
-                logradouro,
-                numero,
+                cep: finalCep,
+                logradouro: finalLogradouro,
+                numero: finalNumero,
                 complemento: values[13] || "",
                 notes: values[14] || ""
               });
