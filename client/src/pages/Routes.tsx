@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Route, MapPin, Clock, Navigation, TrendingUp, Filter, Search, Calendar, CheckSquare, Edit } from "lucide-react";
-import type { Appointment, Client, Service, Technician, User } from "@shared/schema";
+import type { Appointment, Client, Service, Technician, Team, User } from "@shared/schema";
 import { getPlanLimits } from "@shared/plan-limits";
 import AppointmentForm from "@/components/forms/AppointmentForm";
 
@@ -196,6 +196,7 @@ export default function Routes() {
     console.log("📋 [DEBUG] Total de agendamentos filtrados:", availableAppointmentIds.length);
     console.log("📋 [DEBUG] Plano do usuário:", user.plan);
     console.log("📋 [DEBUG] Limite máximo do plano:", planLimits.maxRouteAddresses);
+    console.log("📋 [DEBUG] Agendamentos atualmente selecionados:", selectedAppointments);
     
     if (availableAppointmentIds.length === 0) {
       toast({
@@ -206,29 +207,42 @@ export default function Routes() {
       return;
     }
 
-    // Select up to the plan limit
+    // Verificar se todos os agendamentos disponíveis já estão selecionados
     const maxToSelect = Math.min(availableAppointmentIds.length, planLimits.maxRouteAddresses);
     const appointmentsToSelect = availableAppointmentIds.slice(0, maxToSelect);
+    const allSelected = appointmentsToSelect.every(id => selectedAppointments.includes(id));
     
-    console.log("📋 [DEBUG] Agendamentos selecionados:", appointmentsToSelect.length);
-    console.log("📋 [DEBUG] IDs selecionados:", appointmentsToSelect);
-    
-    setSelectedAppointments(appointmentsToSelect);
-
-    // Show message if limit was reached
-    if (availableAppointmentIds.length > planLimits.maxRouteAddresses) {
+    if (allSelected && selectedAppointments.length > 0) {
+      // Desmarcar todos
+      console.log("📋 [DEBUG] Desmarcando todos os agendamentos");
+      setSelectedAppointments([]);
       toast({
-        title: "Limite do Plano Atingido",
-        description: `Foram selecionados apenas ${maxToSelect} agendamentos devido ao limite do seu plano. Para aumentar seu limite, faça upgrade do plano.`,
+        title: "Agendamentos Desmarcados",
+        description: "Todos os agendamentos foram desmarcados",
         variant: "default",
       });
-      console.log("⚠️ [DEBUG] Limite do plano atingido, mostrando mensagem para o usuário");
     } else {
-      toast({
-        title: "Agendamentos Selecionados",
-        description: `${appointmentsToSelect.length} agendamentos foram selecionados`,
-        variant: "default",
-      });
+      // Selecionar todos (até o limite do plano)
+      console.log("📋 [DEBUG] Selecionando agendamentos:", appointmentsToSelect.length);
+      console.log("📋 [DEBUG] IDs selecionados:", appointmentsToSelect);
+      
+      setSelectedAppointments(appointmentsToSelect);
+
+      // Show message if limit was reached
+      if (availableAppointmentIds.length > planLimits.maxRouteAddresses) {
+        toast({
+          title: "Limite do Plano Atingido",
+          description: `Foram selecionados apenas ${maxToSelect} agendamentos devido ao limite do seu plano. Para aumentar seu limite, faça upgrade do plano.`,
+          variant: "default",
+        });
+        console.log("⚠️ [DEBUG] Limite do plano atingido, mostrando mensagem para o usuário");
+      } else {
+        toast({
+          title: "Agendamentos Selecionados",
+          description: `${appointmentsToSelect.length} agendamentos foram selecionados`,
+          variant: "default",
+        });
+      }
     }
   };
 
@@ -330,15 +344,30 @@ export default function Routes() {
         if (service?.id.toString() !== selectedService) return false;
       }
 
-      // Filter by technician
+      // Filter by technician/team
       if (selectedTechnician && selectedTechnician !== "all") {
+        console.log(`🔍 [DEBUG] Filtro aplicado - selectedTechnician: ${selectedTechnician}, apt.technicianId: ${apt.technicianId}, apt.teamId: ${apt.teamId}`);
+        
+        // Verificar se é um técnico individual
         const technician = getTechnician(apt.technicianId);
-        if (technician?.id.toString() !== selectedTechnician) return false;
+        const isMatchingTechnician = technician?.id.toString() === selectedTechnician;
+        
+        // Verificar se é uma equipe (o valor vem como "team-{id}")
+        const team = teams.find((t: any) => t.id === apt.teamId);
+        const isMatchingTeam = team && selectedTechnician === `team-${team.id}`;
+        
+        console.log(`🔍 [DEBUG] isMatchingTechnician: ${isMatchingTechnician}, isMatchingTeam: ${isMatchingTeam}, team:`, team?.name);
+        
+        if (!isMatchingTechnician && !isMatchingTeam) return false;
       }
 
       // Filter by status
       if (selectedStatus && selectedStatus !== "all") {
-        if (apt.status !== selectedStatus) return false;
+        console.log(`🔍 [DEBUG] Filtro de status aplicado - selectedStatus: ${selectedStatus}, apt.status: ${apt.status}`);
+        if (apt.status !== selectedStatus) {
+          console.log(`🔍 [DEBUG] Agendamento ${apt.id} filtrado por status`);
+          return false;
+        }
       }
 
       return true;
@@ -371,33 +400,6 @@ export default function Routes() {
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">Roteirização</h1>
           <p className="text-gray-600">Otimize as rotas dos seus atendimentos técnicos</p>
-        </div>
-        
-        <div className="flex-shrink-0 flex gap-2">
-          <Button 
-            onClick={handleSelectAllAppointments}
-            disabled={!user || Object.keys(filteredAndGroupedAppointments).length === 0}
-            variant="outline"
-            className="w-full sm:w-auto"
-            type="button"
-          >
-            <CheckSquare className="h-4 w-4 mr-2" />
-            Selecionar Todos
-          </Button>
-          
-          <Button 
-            onClick={handleOptimizeRoute}
-            disabled={selectedAppointments.length === 0 || optimizeRouteMutation.isPending}
-            className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white w-full sm:w-auto"
-            type="button"
-          >
-            {optimizeRouteMutation.isPending ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-            ) : (
-              <Route className="h-4 w-4 mr-2" />
-            )}
-            Otimizar Rota
-          </Button>
         </div>
       </div>
 
@@ -488,6 +490,36 @@ export default function Routes() {
                 </SelectContent>
               </Select>
             </div>
+            
+            {/* Botões de ação dentro dos filtros */}
+            <div className="col-span-full pt-4 border-t border-gray-100">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button 
+                  onClick={handleSelectAllAppointments}
+                  disabled={!user || Object.keys(filteredAndGroupedAppointments).length === 0}
+                  variant="outline"
+                  className="flex-1 sm:flex-none"
+                  type="button"
+                >
+                  <CheckSquare className="h-4 w-4 mr-2" />
+                  Selecionar Todos
+                </Button>
+                
+                <Button 
+                  onClick={handleOptimizeRoute}
+                  disabled={selectedAppointments.length === 0 || optimizeRouteMutation.isPending}
+                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white flex-1 sm:flex-none"
+                  type="button"
+                >
+                  {optimizeRouteMutation.isPending ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                  ) : (
+                    <Route className="h-4 w-4 mr-2" />
+                  )}
+                  Otimizar Rota
+                </Button>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -526,7 +558,26 @@ export default function Routes() {
                       {(dayAppointments as Appointment[]).map((appointment: Appointment) => {
                         const client = getClient(appointment.clientId);
                         const service = getService(appointment.serviceId);
-                        const technician = getTechnician(appointment.technicianId);
+                        
+                        // Corrigir busca de técnico/equipe responsável
+                        let responsibleInfo = { name: "Responsável não atribuído", type: "none" };
+                        
+                        if (appointment.technicianId) {
+                          const technician = getTechnician(appointment.technicianId);
+                          responsibleInfo = {
+                            name: technician?.name || "Técnico não encontrado",
+                            type: "technician"
+                          };
+                          console.log(`👤 [DEBUG] Card ${appointment.id} - Técnico:`, technician?.name, "ID:", appointment.technicianId);
+                        } else if (appointment.teamId) {
+                          const team = teams.find((t: any) => t.id === appointment.teamId);
+                          responsibleInfo = {
+                            name: team?.name || "Equipe não encontrada",
+                            type: "team"
+                          };
+                          console.log(`👥 [DEBUG] Card ${appointment.id} - Equipe:`, team?.name, "ID:", appointment.teamId);
+                        }
+                        
                         const { time } = formatDateTime(appointment.scheduledDate.toString());
                         const isSelected = selectedAppointments.includes(appointment.id);
 
@@ -559,15 +610,17 @@ export default function Routes() {
                                 <p className="text-xs text-gray-500">
                                   {appointment.logradouro}, {appointment.numero} - {appointment.cep}
                                 </p>
-                                <div className="flex items-center justify-between mt-1">
+                                <div className="flex items-center justify-between mt-1 pr-10">
                                   <div className="flex items-center">
-                                    <span className="text-xs text-gray-500">Técnico: </span>
+                                    <span className="text-xs text-gray-500">
+                                      {responsibleInfo.type === 'team' ? 'Equipe:' : 'Técnico:'}
+                                    </span>
                                     <span className="text-xs font-medium text-gray-700 ml-1">
-                                      {technician?.name || "Técnico"}
+                                      {responsibleInfo.type === 'team' ? '👥' : '👤'} {responsibleInfo.name}
                                     </span>
                                   </div>
                                   <Badge 
-                                    className={`text-xs px-2 py-1 ${
+                                    className={`text-xs px-2 py-1 mr-2 ${
                                       appointment.status === 'completed' ? 'bg-green-100 text-green-800' :
                                       appointment.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
                                       appointment.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
@@ -585,13 +638,14 @@ export default function Routes() {
                               </div>
                             </div>
                             
-                            {/* Edit Button */}
+                            {/* Edit Button - Posicionado para não sobrepor o status */}
                             <Button
                               size="sm"
                               variant="ghost"
                               className="absolute bottom-2 right-2 h-6 w-6 p-0 hover:bg-burnt-yellow hover:text-white"
                               onClick={(e) => {
                                 e.stopPropagation();
+                                console.log("✏️ [DEBUG] Botão de edição clicado - Reposicionamento aplicado para não sobrepor status");
                                 handleEditAppointment(appointment);
                               }}
                             >
