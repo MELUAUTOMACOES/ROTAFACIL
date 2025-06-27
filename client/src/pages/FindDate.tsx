@@ -89,15 +89,22 @@ export default function FindDate() {
 
   // Função para lidar com seleção de cliente
   const handleClientChange = (clientId: number | undefined) => {
+    console.log("Cliente selecionado ID:", clientId);
     form.setValue("clientId", clientId);
     
     if (clientId) {
       const selectedClient = clients.find(c => c.id === clientId);
+      console.log("Cliente encontrado:", selectedClient);
       if (selectedClient) {
         // Preencher automaticamente CEP e número
+        console.log("Preenchendo CEP:", selectedClient.cep, "Número:", selectedClient.numero);
         form.setValue("cep", selectedClient.cep);
         form.setValue("numero", selectedClient.numero);
       }
+    } else {
+      // Limpar campos quando nenhum cliente selecionado
+      form.setValue("cep", "");
+      form.setValue("numero", "");
     }
   };
 
@@ -225,6 +232,7 @@ export default function FindDate() {
                   value={form.watch("cep")}
                   onChange={handleCepChange}
                   maxLength={9}
+                  disabled={!!form.watch("clientId")}
                   className={form.formState.errors.cep ? "border-red-500" : ""}
                 />
                 {form.formState.errors.cep && (
@@ -239,6 +247,7 @@ export default function FindDate() {
                   placeholder="123"
                   value={form.watch("numero")}
                   onChange={handleNumeroChange}
+                  disabled={!!form.watch("clientId")}
                   className={form.formState.errors.numero ? "border-red-500" : ""}
                 />
                 {form.formState.errors.numero && (

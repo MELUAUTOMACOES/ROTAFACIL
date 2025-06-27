@@ -356,7 +356,7 @@ export default function Technicians() {
               </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden">
                 <TempTeamForm
-                  team={selectedTeam}
+                  team={selectedTeam || undefined}
                   technicians={technicians}
                   services={services}
                   existingTechIds={
@@ -391,7 +391,7 @@ export default function Technicians() {
                   </DialogTrigger>
                   <DialogContent className="max-w-2xl">
                     <TempTeamForm
-                      team={selectedTeam}
+                      team={selectedTeam || undefined}
                       technicians={technicians}
                       services={services}
                       existingTechIds={
