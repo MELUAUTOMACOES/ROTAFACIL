@@ -153,14 +153,21 @@ export default function Technicians() {
   };
 
   const handleTechnicianFormClose = () => {
-    console.log('🚪 Technicians - Fechando formulário de técnico');
-    // Primeiro fechar o diálogo
+    console.log('🚪 Technicians - Iniciando fechamento do formulário de técnico');
+    console.log('🔍 Technicians - Estado atual:', { 
+      isTechnicianFormOpen, 
+      selectedTechnician: selectedTechnician?.id || 'null' 
+    });
+    
+    // Fechar o diálogo imediatamente para evitar conflitos DOM
     setIsTechnicianFormOpen(false);
-    // Limpar seleção após pequeno delay para evitar conflito DOM
-    setTimeout(() => {
+    
+    // Usar requestAnimationFrame para garantir que o DOM seja atualizado
+    requestAnimationFrame(() => {
+      console.log('🧹 Technicians - Limpando estado após DOM render');
       setSelectedTechnician(null);
-      console.log('🧹 Technicians - Estado de técnico selecionado limpo');
-    }, 200);
+      console.log('✅ Technicians - Formulário fechado e estado limpo com sucesso');
+    });
   };
 
   const handleTeamFormClose = () => {
@@ -218,26 +225,13 @@ export default function Technicians() {
               <p className="text-sm text-gray-600">Gerencie os técnicos da sua empresa</p>
             </div>
             
-            <Dialog open={isTechnicianFormOpen && !selectedTechnician} onOpenChange={(open) => {
-              if (!open) handleTechnicianFormClose();
-            }}>
-              <DialogTrigger asChild>
-                <Button 
-                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                  onClick={handleNewTechnician}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Novo Técnico
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
-                <TechnicianForm
-                  technician={null}
-                  services={services}
-                  onClose={handleTechnicianFormClose}
-                />
-              </DialogContent>
-            </Dialog>
+            <Button 
+              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+              onClick={handleNewTechnician}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Técnico
+            </Button>
           </div>
 
           {/* Lista de Técnicos */}
@@ -273,26 +267,13 @@ export default function Technicians() {
                         )}
                       </CardTitle>
                       <div className="flex space-x-1">
-                        <Dialog open={isTechnicianFormOpen && selectedTechnician?.id === technician.id} onOpenChange={(open) => {
-                          if (!open) handleTechnicianFormClose();
-                        }}>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEditTechnician(technician)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
-                            <TechnicianForm
-                              technician={selectedTechnician}
-                              services={services}
-                              onClose={handleTechnicianFormClose}
-                            />
-                          </DialogContent>
-                        </Dialog>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditTechnician(technician)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -345,6 +326,23 @@ export default function Technicians() {
               ))}
             </div>
           )}
+
+          {/* Diálogo Centralizado Único para Técnicos - Solução para erro DOM */}
+          <Dialog open={isTechnicianFormOpen} onOpenChange={(open) => {
+            console.log('🔄 Dialog Centralizado - onOpenChange chamado:', { open, selectedTechnician });
+            if (!open) {
+              console.log('🚪 Dialog Centralizado - Fechando diálogo');
+              handleTechnicianFormClose();
+            }
+          }}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+              <TechnicianForm
+                technician={selectedTechnician}
+                services={services}
+                onClose={handleTechnicianFormClose}
+              />
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* Aba de Equipes - Nova funcionalidade */}

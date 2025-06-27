@@ -59,26 +59,29 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
     mutationFn: async (data: InsertTechnician) => {
       console.log('🔄 TechnicianForm - Iniciando criação de técnico:', data);
       const response = await apiRequest("POST", "/api/technicians", data);
-      return response.json();
+      const result = await response.json();
+      console.log('📦 TechnicianForm - Resposta recebida:', result);
+      return result;
     },
     onSuccess: (result) => {
       console.log('✅ TechnicianForm - Técnico criado com sucesso:', result);
-      // Usar setTimeout para evitar conflitos DOM na invalidação
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ["/api/technicians"] });
-        console.log('🔃 TechnicianForm - Cache invalidado após criação');
-      }, 100);
       
+      // Mostrar toast de sucesso imediatamente
       toast({
         title: "Sucesso",
         description: "Técnico criado com sucesso",
       });
       
-      // Fechar com delay para evitar conflito DOM
-      setTimeout(() => {
-        onClose();
-        console.log('🚪 TechnicianForm - Formulário fechado após criação');
-      }, 150);
+      // Fechar modal primeiro para evitar conflitos DOM
+      console.log('🚪 TechnicianForm - Fechando modal antes de invalidar cache');
+      onClose();
+      
+      // Invalidar cache após o modal ser fechado
+      requestAnimationFrame(() => {
+        console.log('🔃 TechnicianForm - Invalidando cache após fechamento do modal');
+        queryClient.invalidateQueries({ queryKey: ["/api/technicians"] });
+        console.log('✨ TechnicianForm - Processo de criação finalizado');
+      });
     },
     onError: (error: Error) => {
       console.error('❌ TechnicianForm - Erro ao criar técnico:', error);
@@ -94,26 +97,29 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
     mutationFn: async (data: InsertTechnician) => {
       console.log('🔄 TechnicianForm - Iniciando atualização de técnico:', { id: technician?.id, data });
       const response = await apiRequest("PUT", `/api/technicians/${technician?.id}`, data);
-      return response.json();
+      const result = await response.json();
+      console.log('📦 TechnicianForm - Resposta da atualização recebida:', result);
+      return result;
     },
     onSuccess: (result) => {
       console.log('✅ TechnicianForm - Técnico atualizado com sucesso:', result);
-      // Usar setTimeout para evitar conflitos DOM na invalidação
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ["/api/technicians"] });
-        console.log('🔃 TechnicianForm - Cache invalidado após atualização');
-      }, 100);
       
+      // Mostrar toast de sucesso imediatamente
       toast({
         title: "Sucesso",
         description: "Técnico atualizado com sucesso",
       });
       
-      // Fechar com delay para evitar conflito DOM
-      setTimeout(() => {
-        onClose();
-        console.log('🚪 TechnicianForm - Formulário fechado após atualização');
-      }, 150);
+      // Fechar modal primeiro para evitar conflitos DOM
+      console.log('🚪 TechnicianForm - Fechando modal antes de invalidar cache (atualização)');
+      onClose();
+      
+      // Invalidar cache após o modal ser fechado
+      requestAnimationFrame(() => {
+        console.log('🔃 TechnicianForm - Invalidando cache após fechamento do modal (atualização)');
+        queryClient.invalidateQueries({ queryKey: ["/api/technicians"] });
+        console.log('✨ TechnicianForm - Processo de atualização finalizado');
+      });
     },
     onError: (error: Error) => {
       console.error('❌ TechnicianForm - Erro ao atualizar técnico:', error);
