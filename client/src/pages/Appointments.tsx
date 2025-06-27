@@ -151,6 +151,7 @@ export default function Appointments() {
   const handleFormClose = () => {
     setIsFormOpen(false);
     setSelectedAppointment(null);
+    setPrefilledData(null); // Limpar dados pré-preenchidos
   };
 
   const getStatusColor = (status: string) => {
@@ -779,7 +780,10 @@ export default function Appointments() {
           
           <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
+              <Button 
+                className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                onClick={() => setPrefilledData(null)} // Limpar dados pré-preenchidos ao clicar diretamente
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Agendamento
               </Button>
@@ -810,7 +814,10 @@ export default function Appointments() {
             </p>
             <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
+                <Button 
+                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                  onClick={() => setPrefilledData(null)} // Limpar dados pré-preenchidos ao clicar diretamente
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Criar Primeiro Agendamento
                 </Button>
