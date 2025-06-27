@@ -105,6 +105,14 @@ RotaFácil is a comprehensive service route management application designed to h
 ## Changelog
 ```
 Changelog:
+- June 27, 2025: Ajustes completos no fluxo "Ache uma Data" → "Novo Agendamento"
+  * Campo "Técnico" renomeado para "Técnico/Equipe" na tela FindDate
+  * Técnicos e equipes agora aparecem juntos no campo de seleção de filtros
+  * Implementado pré-preenchimento de todos os campos do cliente quando selecionado
+  * Campos Cliente, Serviço, Técnico/Equipe, Data, CEP, Número, Logradouro e Complemento desabilitados no formulário quando vindos do fluxo FindDate
+  * Apenas Status, Prioridade e Observações podem ser editados no cenário de busca
+  * Adicionados logs de debug em todas as etapas do fluxo para facilitar manutenção
+  * Correção de validação de parâmetros URL com suporte a teamId e clientId
 - June 24, 2025: Correção completa do formulário de equipes (TeamForm)
   * Refatorado TeamForm para seguir padrão do TechnicianForm
   * Corrigido botão de atualização que estava criando equipes em vez de atualizar

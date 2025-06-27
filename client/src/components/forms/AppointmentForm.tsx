@@ -79,9 +79,11 @@ export default function AppointmentForm({
       priority: "normal",
       notes: "",
       cep: prefilledData.cep || "",
-      logradouro: "",
+      logradouro: prefilledData.clientId ? 
+        (clients.find(c => c.id === parseInt(prefilledData.clientId!))?.logradouro || "") : "",
       numero: prefilledData.numero || "",
-      complemento: "",
+      complemento: prefilledData.clientId ? 
+        (clients.find(c => c.id === parseInt(prefilledData.clientId!))?.complemento || "") : "",
     } : {
       clientId: 0,
       serviceId: 0,
@@ -454,8 +456,15 @@ export default function AppointmentForm({
                   <FormItem>
                     <FormLabel>Logradouro *</FormLabel>
                     <FormControl>
-                      <Input placeholder="Rua das Flores" {...field} />
+                      <Input 
+                        placeholder="Rua das Flores" 
+                        {...field} 
+                        disabled={isFromFindDate}
+                      />
                     </FormControl>
+                    {isFromFindDate && (
+                      <p className="text-sm text-blue-600">Logradouro do cliente selecionado - não pode ser alterado</p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -468,8 +477,16 @@ export default function AppointmentForm({
                   <FormItem>
                     <FormLabel>Complemento</FormLabel>
                     <FormControl>
-                      <Input placeholder="Apto 123" {...field} value={field.value || ""} />
+                      <Input 
+                        placeholder="Apto 123" 
+                        {...field} 
+                        value={field.value || ""} 
+                        disabled={isFromFindDate}
+                      />
                     </FormControl>
+                    {isFromFindDate && (
+                      <p className="text-sm text-blue-600">Complemento do cliente selecionado - não pode ser alterado</p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
