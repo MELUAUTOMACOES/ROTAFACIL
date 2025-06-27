@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
@@ -26,7 +26,37 @@ export default function Routes() {
   const [selectedService, setSelectedService] = useState<string>("");
   const [selectedTechnician, setSelectedTechnician] = useState<string>("");
   const [selectedStatus, setSelectedStatus] = useState<string>("");
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const { toast } = useToast();
+
+  // Monitor fullscreen changes and DOM state
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const fullscreenElement = document.fullscreenElement || (document as any).webkitFullscreenElement;
+      const isNowFullscreen = !!fullscreenElement;
+      console.log("🖼️ [DEBUG] Fullscreen changed:", isNowFullscreen);
+      setIsFullscreen(isNowFullscreen);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    // Check initial fullscreen state
+    handleFullscreenChange();
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  // Log component mount and render state
+  useEffect(() => {
+    console.log("🔄 [DEBUG] Routes component mounted/updated");
+    console.log("🔄 [DEBUG] Selected appointments:", selectedAppointments.length);
+    console.log("🔄 [DEBUG] Optimized route:", !!optimizedRoute);
+    console.log("🔄 [DEBUG] Is fullscreen:", isFullscreen);
+  });
 
   const { data: appointments = [] } = useQuery({
     queryKey: ["/api/appointments"],
@@ -69,12 +99,31 @@ export default function Routes() {
   });
 
   const optimizeRouteMutation = useMutation({
-    mutationFn: async (appointmentIds: number[]) => {
+    mutationFn: async (appointmentIds: number[]): Promise<OptimizedRoute> => {
       if (appointmentIds.length === 0) {
         throw new Error("Selecione pelo menos um agendamento para otimizar a rota");
       }
-      const response = await apiRequest("POST", "/api/gerar-rota", { appointmentIds });
-      return response;
+      
+      try {
+        const response = await fetch("/api/gerar-rota", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({ appointmentIds }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        return data as OptimizedRoute;
+      } catch (error) {
+        console.error("Erro ao otimizar rota:", error);
+        throw error;
+      }
     },
     onSuccess: (data: OptimizedRoute) => {
       setOptimizedRoute(data);
@@ -101,7 +150,13 @@ export default function Routes() {
   };
 
   const handleOptimizeRoute = () => {
+    console.log("🚀 [DEBUG] handleOptimizeRoute chamado");
+    console.log("🚀 [DEBUG] Selected appointments:", selectedAppointments);
+    console.log("🚀 [DEBUG] DOM ready state:", document.readyState);
+    console.log("🚀 [DEBUG] Is fullscreen:", isFullscreen);
+    
     if (selectedAppointments.length === 0) {
+      console.log("❌ [DEBUG] Nenhum agendamento selecionado");
       toast({
         title: "Atenção",
         description: "Selecione pelo menos um agendamento para otimizar a rota",
@@ -110,7 +165,24 @@ export default function Routes() {
       return;
     }
 
-    optimizeRouteMutation.mutate(selectedAppointments);
+    // Verificar se o DOM está pronto e os elementos necessários existem
+    if (document.readyState !== 'complete') {
+      console.log("⏳ [DEBUG] DOM ainda não está completamente carregado, aguardando...");
+      setTimeout(() => handleOptimizeRoute(), 100);
+      return;
+    }
+
+    console.log("✅ [DEBUG] Iniciando otimização de rota");
+    try {
+      optimizeRouteMutation.mutate(selectedAppointments);
+    } catch (error) {
+      console.error("❌ [DEBUG] Erro ao executar mutação:", error);
+      toast({
+        title: "Erro",
+        description: "Erro interno ao otimizar rota. Tente novamente.",
+        variant: "destructive",
+      });
+    }
   };
 
   const getClient = (clientId: number | null) => clientId ? clients.find((c: Client) => c.id === clientId) : null;
@@ -180,26 +252,29 @@ export default function Routes() {
   }, [appointments, selectedDate, searchTerm, selectedService, selectedTechnician, selectedStatus, clients, services, technicians]);
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${isFullscreen ? 'min-h-screen p-4' : ''}`}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">Roteirização</h1>
           <p className="text-gray-600">Otimize as rotas dos seus atendimentos técnicos</p>
         </div>
         
-        <Button 
-          onClick={handleOptimizeRoute}
-          disabled={selectedAppointments.length === 0 || optimizeRouteMutation.isPending}
-          className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-        >
-          {optimizeRouteMutation.isPending ? (
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-          ) : (
-            <Route className="h-4 w-4 mr-2" />
-          )}
-          Otimizar Rota
-        </Button>
+        <div className="flex-shrink-0">
+          <Button 
+            onClick={handleOptimizeRoute}
+            disabled={selectedAppointments.length === 0 || optimizeRouteMutation.isPending}
+            className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white w-full sm:w-auto"
+            type="button"
+          >
+            {optimizeRouteMutation.isPending ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+            ) : (
+              <Route className="h-4 w-4 mr-2" />
+            )}
+            Otimizar Rota
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -288,7 +363,7 @@ export default function Routes() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={`grid gap-6 ${isFullscreen ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1 lg:grid-cols-2'}`}>
         {/* Appointments Selection */}
         <Card>
           <CardHeader className="border-b border-gray-100">
@@ -338,7 +413,7 @@ export default function Routes() {
                           >
                             <Checkbox 
                               checked={isSelected}
-                              onChange={() => handleAppointmentToggle(appointment.id)}
+                              onCheckedChange={() => handleAppointmentToggle(appointment.id)}
                               className="text-burnt-yellow"
                             />
                             <div className="flex-1">
