@@ -149,9 +149,15 @@ export default function Appointments() {
   };
 
   const handleFormClose = () => {
+    console.log("🧹 [DEBUG] handleFormClose - Limpando formulário");
+    console.log("🧹 [DEBUG] handleFormClose - selectedAppointment antes:", selectedAppointment);
+    console.log("🧹 [DEBUG] handleFormClose - prefilledData antes:", prefilledData);
+    
     setIsFormOpen(false);
     setSelectedAppointment(null);
-    setPrefilledData(null); // Limpar dados pré-preenchidos
+    setPrefilledData(null);
+    
+    console.log("🧹 [DEBUG] handleFormClose - Estado limpo - formulário deve abrir vazio na próxima vez");
   };
 
   const getStatusColor = (status: string) => {
@@ -221,6 +227,37 @@ export default function Appointments() {
   const getClient = (clientId: number | null) => clientId ? clients.find((c: Client) => c.id === clientId) : null;
   const getService = (serviceId: number) => services.find((s: Service) => s.id === serviceId);
   const getTechnician = (technicianId: number | null) => technicianId ? technicians.find((t: Technician) => t.id === technicianId) : null;
+  const getTeam = (teamId: number | null) => teamId ? teams.find((t: Team) => t.id === teamId) : null;
+
+  // Função para obter informações do responsável (técnico ou equipe) com logs detalhados
+  const getResponsibleInfo = (appointment: Appointment) => {
+    if (appointment.technicianId) {
+      const technician = getTechnician(appointment.technicianId);
+      console.log(`👤 [DEBUG] Agendamento ${appointment.id} - Técnico individual:`, technician?.name, "ID:", appointment.technicianId);
+      return {
+        type: 'technician' as const,
+        name: technician?.name || "Técnico não encontrado",
+        id: appointment.technicianId,
+        displayName: `👤 ${technician?.name || "Técnico não encontrado"}`
+      };
+    } else if (appointment.teamId) {
+      const team = getTeam(appointment.teamId);
+      console.log(`👥 [DEBUG] Agendamento ${appointment.id} - Equipe:`, team?.name, "ID:", appointment.teamId);
+      return {
+        type: 'team' as const,
+        name: team?.name || "Equipe não encontrada",
+        id: appointment.teamId,
+        displayName: `👥 ${team?.name || "Equipe não encontrada"}`
+      };
+    }
+    console.log(`❌ [DEBUG] Agendamento ${appointment.id} - Nenhum responsável atribuído`);
+    return {
+      type: 'none' as const,
+      name: "Responsável não atribuído",
+      id: null,
+      displayName: "❌ Responsável não atribuído"
+    };
+  };
 
   const importCSVMutation = useMutation({
     mutationFn: async (appointments: any[]) => {
@@ -862,7 +899,12 @@ export default function Appointments() {
             <DialogTrigger asChild>
               <Button 
                 className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                onClick={() => setPrefilledData(null)} // Limpar dados pré-preenchidos ao clicar diretamente
+                onClick={() => {
+                  console.log("🆕 [DEBUG] Novo Agendamento - Botão clicado");
+                  console.log("🆕 [DEBUG] Novo Agendamento - Limpando selectedAppointment e prefilledData");
+                  setSelectedAppointment(null);
+                  setPrefilledData(null);
+                }}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Agendamento
@@ -921,7 +963,7 @@ export default function Appointments() {
           {appointments.map((appointment: Appointment) => {
             const client = getClient(appointment.clientId);
             const service = getService(appointment.serviceId);
-            const technician = getTechnician(appointment.technicianId);
+            const responsible = getResponsibleInfo(appointment);
             const { date, time } = formatDateTime(appointment.scheduledDate.toString());
 
             return (
@@ -949,7 +991,7 @@ export default function Appointments() {
                         
                         <div className="flex items-center space-x-2">
                           <User className="h-4 w-4" />
-                          <span>{technician?.name || "Técnico não encontrado"}</span>
+                          <span>{responsible.displayName}</span>
                         </div>
                         
                         <div className="flex items-center space-x-2">

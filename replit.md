@@ -105,6 +105,11 @@ RotaFácil is a comprehensive service route management application designed to h
 ## Changelog
 ```
 Changelog:
+- June 27, 2025: Correções na tela de agendamentos
+  * Corrigido erro "toISOString is not a function" com logs detalhados para identificar dados problemáticos
+  * Implementada limpeza completa do formulário ao clicar "Novo Agendamento"
+  * Adicionada vinculação de técnicos via equipe nos cards de agendamentos
+  * Logs de debug implementados em todos os fluxos de correção
 - June 27, 2025: Atualização completa do modelo CSV de agendamentos
   * Removido campo "ID" do modelo CSV de agendamentos
   * Adicionado campo "CPF Cliente" como segunda coluna no modelo

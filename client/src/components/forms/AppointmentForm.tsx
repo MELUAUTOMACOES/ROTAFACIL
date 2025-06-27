@@ -175,26 +175,57 @@ export default function AppointmentForm({
   });
 
   const onSubmit = (data: InsertAppointment) => {
+    console.log("📝 [DEBUG] onSubmit - Dados recebidos do form:", data);
+    console.log("📝 [DEBUG] onSubmit - Tipo de scheduledDate:", typeof data.scheduledDate, data.scheduledDate);
+    
     // Convert scheduledDate to Date object for the mutations
+    let processedDate;
+    try {
+      if (data.scheduledDate instanceof Date) {
+        processedDate = data.scheduledDate;
+        console.log("📝 [DEBUG] onSubmit - scheduledDate já é Date:", processedDate);
+      } else {
+        processedDate = new Date(data.scheduledDate);
+        console.log("📝 [DEBUG] onSubmit - scheduledDate convertido para Date:", processedDate);
+      }
+      
+      // Verificar se a data é válida
+      if (isNaN(processedDate.getTime())) {
+        throw new Error(`Data inválida: ${data.scheduledDate}`);
+      }
+    } catch (error) {
+      console.error("❌ [DEBUG] onSubmit - Erro ao processar data:", error);
+      toast({
+        title: "Erro",
+        description: "Data inválida. Verifique o formato da data.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     const formData = {
       ...data,
-      scheduledDate: data.scheduledDate instanceof Date ? data.scheduledDate : new Date(data.scheduledDate)
+      scheduledDate: processedDate
     };
     
     // Ensure proper handling of technician vs team assignment
     if (formData.teamId) {
       // If teamId is set, clear technicianId to avoid foreign key conflicts
       formData.technicianId = null;
+      console.log("📝 [DEBUG] onSubmit - Usando equipe, technicianId limpo");
     } else if (formData.technicianId) {
       // If technicianId is set, clear teamId
       formData.teamId = undefined;
+      console.log("📝 [DEBUG] onSubmit - Usando técnico, teamId limpo");
     }
     
     console.log("📝 [DEBUG] onSubmit - Dados finais para envio:", formData);
     
     if (appointment) {
+      console.log("📝 [DEBUG] onSubmit - Atualizando agendamento ID:", appointment.id);
       updateMutation.mutate(formData);
     } else {
+      console.log("📝 [DEBUG] onSubmit - Criando novo agendamento");
       createMutation.mutate(formData);
     }
   };
