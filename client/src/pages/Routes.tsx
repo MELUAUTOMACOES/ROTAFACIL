@@ -74,7 +74,7 @@ export default function Routes() {
         throw new Error("Selecione pelo menos um agendamento para otimizar a rota");
       }
       const response = await apiRequest("POST", "/api/gerar-rota", { appointmentIds });
-      return response.json();
+      return response;
     },
     onSuccess: (data: OptimizedRoute) => {
       setOptimizedRoute(data);
