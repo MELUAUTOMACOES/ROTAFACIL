@@ -23,6 +23,17 @@ export default function Appointments() {
     const urlParams = new URLSearchParams(window.location.search);
     const preselected = urlParams.get('preselected');
     
+    console.log("📋 [DEBUG] Appointments - Verificando parâmetros URL:", {
+      preselected,
+      date: urlParams.get('date'),
+      cep: urlParams.get('cep'),
+      numero: urlParams.get('numero'),
+      serviceId: urlParams.get('serviceId'),
+      technicianId: urlParams.get('technicianId'),
+      teamId: urlParams.get('teamId'),
+      clientId: urlParams.get('clientId')
+    });
+    
     if (preselected === 'true') {
       const data = {
         date: urlParams.get('date'),
@@ -30,9 +41,19 @@ export default function Appointments() {
         numero: urlParams.get('numero'),
         serviceId: urlParams.get('serviceId'),
         technicianId: urlParams.get('technicianId'),
+        teamId: urlParams.get('teamId'),
+        clientId: urlParams.get('clientId'),
       };
       
-      if (data.date && data.cep && data.numero && data.serviceId && data.technicianId) {
+      console.log("📋 [DEBUG] Appointments - Dados processados:", data);
+      
+      // Verificar se todos os campos obrigatórios estão presentes
+      const hasRequiredFields = data.date && data.cep && data.numero && data.serviceId && 
+                               (data.technicianId || data.teamId);
+      
+      console.log("📋 [DEBUG] Appointments - Campos obrigatórios presentes:", hasRequiredFields);
+      
+      if (hasRequiredFields) {
         setPrefilledData(data);
         setIsFormOpen(true);
         

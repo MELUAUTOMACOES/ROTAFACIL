@@ -10,9 +10,10 @@ interface ClientSearchProps {
   value?: number | null;
   onValueChange: (value: number | undefined) => void;
   placeholder?: string;
+  disabled?: boolean;
 }
 
-export function ClientSearch({ value, onValueChange, placeholder = "Pesquisar por nome ou CPF" }: ClientSearchProps) {
+export function ClientSearch({ value, onValueChange, placeholder = "Pesquisar por nome ou CPF", disabled = false }: ClientSearchProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [showResults, setShowResults] = useState(false);
@@ -82,6 +83,8 @@ export function ClientSearch({ value, onValueChange, placeholder = "Pesquisar po
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
+    
     const query = e.target.value;
     console.log("Input alterado para:", query);
     setSearchQuery(query);
@@ -93,6 +96,8 @@ export function ClientSearch({ value, onValueChange, placeholder = "Pesquisar po
   };
 
   const handleInputFocus = () => {
+    if (disabled) return;
+    
     console.log("Input focado");
     setInputFocused(true);
     // Limpar o input para permitir nova busca
@@ -131,6 +136,7 @@ export function ClientSearch({ value, onValueChange, placeholder = "Pesquisar po
           onChange={handleInputChange}
           onFocus={handleInputFocus}
           className="w-full pr-8"
+          disabled={disabled}
         />
         {selectedClient && (
           <Button

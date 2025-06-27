@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Search, Calendar } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import { Service, Technician, BusinessRules, Client } from "@shared/schema";
+import { Service, Technician, BusinessRules, Client, Team } from "@shared/schema";
 import { useLocation } from "wouter";
 import { ClientSearch } from "@/components/ui/client-search";
 
@@ -22,6 +22,7 @@ const findDateSchema = z.object({
   numero: z.string().min(1, "Número é obrigatório").regex(/^\d+$/, "Digite apenas números"),
   serviceId: z.number({ required_error: "Selecione um serviço" }),
   technicianId: z.number().optional(),
+  teamId: z.number().optional(),
 });
 
 type FindDateFormData = z.infer<typeof findDateSchema>;
@@ -29,7 +30,8 @@ type FindDateFormData = z.infer<typeof findDateSchema>;
 interface AvailableDate {
   date: string;
   technician: string;
-  technicianId: number;
+  technicianId?: number;
+  teamId?: number;
   routeIncrease: number;
   totalDistance: number;
 }
@@ -54,6 +56,11 @@ export default function FindDate() {
     queryKey: ["/api/technicians"],
   });
 
+  // Buscar equipes
+  const { data: teams = [] } = useQuery<Team[]>({
+    queryKey: ["/api/teams"],
+  });
+
   // Buscar regras de negócio
   const { data: businessRules } = useQuery<BusinessRules>({
     queryKey: ["/api/business-rules"],
@@ -65,6 +72,8 @@ export default function FindDate() {
       clientId: undefined,
       cep: "",
       numero: "",
+      technicianId: undefined,
+      teamId: undefined,
     },
   });
 
@@ -117,10 +126,14 @@ export default function FindDate() {
       // Em um cenário real, isso seria um endpoint da API
       const mockResults: AvailableDate[] = [];
       
-      // Filtrar técnicos com base na seleção
+      // Filtrar técnicos e equipes com base na seleção
       const availableTechnicians = data.technicianId 
         ? technicians.filter(t => t.id === data.technicianId)
         : technicians;
+      
+      const availableTeams = data.teamId 
+        ? teams.filter(t => t.id === data.teamId)
+        : teams;
 
       // Gerar datas disponíveis para os próximos 30 dias
       const today = new Date();
@@ -131,6 +144,7 @@ export default function FindDate() {
         // Pular fins de semana
         if (date.getDay() === 0 || date.getDay() === 6) continue;
         
+        // Adicionar técnicos
         availableTechnicians.forEach(technician => {
           // Simular distâncias baseadas no CEP
           const baseDistance = Math.random() * 50 + 5; // 5-55 km
@@ -141,8 +155,27 @@ export default function FindDate() {
           if (baseDistance <= maxDistance) {
             mockResults.push({
               date: date.toISOString().split('T')[0],
-              technician: technician.name,
+              technician: `👤 ${technician.name}`,
               technicianId: technician.id,
+              routeIncrease: routeIncrease,
+              totalDistance: baseDistance + routeIncrease,
+            });
+          }
+        });
+
+        // Adicionar equipes
+        availableTeams.forEach(team => {
+          // Simular distâncias baseadas no CEP
+          const baseDistance = Math.random() * 50 + 5; // 5-55 km
+          const routeIncrease = Math.random() * 15 + 2; // 2-17 km
+          
+          // Filtrar por distância máxima se definida nas regras de negócio
+          const maxDistance = businessRules?.distanciaMaximaEntrePontos ? parseFloat(businessRules.distanciaMaximaEntrePontos) : 50;
+          if (baseDistance <= maxDistance) {
+            mockResults.push({
+              date: date.toISOString().split('T')[0],
+              technician: `👥 ${team.name}`,
+              teamId: team.id,
               routeIncrease: routeIncrease,
               totalDistance: baseDistance + routeIncrease,
             });
@@ -173,15 +206,33 @@ export default function FindDate() {
   };
 
   const handleSchedule = (result: AvailableDate, formData: FindDateFormData) => {
+    console.log("🔄 [DEBUG] handleSchedule - result:", result);
+    console.log("🔄 [DEBUG] handleSchedule - formData:", formData);
+    
     // Navegar para a tela de agendamentos com dados pré-preenchidos
     const params = new URLSearchParams({
       date: result.date,
       cep: formData.cep,
       numero: formData.numero,
       serviceId: formData.serviceId.toString(),
-      technicianId: result.technicianId.toString(),
       preselected: "true"
     });
+
+    // Adicionar clientId se selecionado
+    if (formData.clientId) {
+      params.append("clientId", formData.clientId.toString());
+    }
+
+    // Adicionar technicianId ou teamId dependendo do tipo
+    if (result.technicianId) {
+      params.append("technicianId", result.technicianId.toString());
+      console.log("🔄 [DEBUG] Adicionando technicianId:", result.technicianId);
+    } else if (result.teamId) {
+      params.append("teamId", result.teamId.toString());
+      console.log("🔄 [DEBUG] Adicionando teamId:", result.teamId);
+    }
+    
+    console.log("🔄 [DEBUG] Parâmetros finais:", params.toString());
     setLocation(`/appointments?${params.toString()}`);
   };
 
@@ -278,19 +329,48 @@ export default function FindDate() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="technician">Técnico (opcional)</Label>
+                <Label htmlFor="technician">Técnico/Equipe (opcional)</Label>
                 <Select
-                  value={form.watch("technicianId")?.toString() || ""}
-                  onValueChange={(value) => value ? form.setValue("technicianId", parseInt(value)) : form.setValue("technicianId", undefined)}
+                  value={
+                    form.watch("technicianId") ? `tech-${form.watch("technicianId")}` :
+                    form.watch("teamId") ? `team-${form.watch("teamId")}` : ""
+                  }
+                  onValueChange={(value) => {
+                    console.log("🔄 [DEBUG] FindDate - Seleção alterada para:", value);
+                    
+                    if (value === "0" || value === "") {
+                      // Limpar seleções
+                      form.setValue("technicianId", undefined);
+                      form.setValue("teamId", undefined);
+                      console.log("🔄 [DEBUG] FindDate - Limpando seleções");
+                    } else if (value.startsWith('tech-')) {
+                      // É um técnico
+                      const technicianId = parseInt(value.split('-')[1]);
+                      console.log("🔄 [DEBUG] FindDate - Técnico selecionado ID:", technicianId);
+                      form.setValue("technicianId", technicianId);
+                      form.setValue("teamId", undefined);
+                    } else if (value.startsWith('team-')) {
+                      // É uma equipe
+                      const teamId = parseInt(value.split('-')[1]);
+                      console.log("🔄 [DEBUG] FindDate - Equipe selecionada ID:", teamId);
+                      form.setValue("teamId", teamId);
+                      form.setValue("technicianId", undefined);
+                    }
+                  }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Qualquer técnico" />
+                    <SelectValue placeholder="Qualquer técnico/equipe" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="0">Qualquer técnico</SelectItem>
+                    <SelectItem value="0">Qualquer técnico/equipe</SelectItem>
                     {technicians.map((technician) => (
-                      <SelectItem key={technician.id} value={technician.id.toString()}>
-                        {technician.name}
+                      <SelectItem key={`tech-${technician.id}`} value={`tech-${technician.id}`}>
+                        👤 {technician.name}
+                      </SelectItem>
+                    ))}
+                    {teams.map((team) => (
+                      <SelectItem key={`team-${team.id}`} value={`team-${team.id}`}>
+                        👥 {team.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

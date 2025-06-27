@@ -27,6 +27,8 @@ interface AppointmentFormProps {
     numero?: string;
     serviceId?: string;
     technicianId?: string;
+    teamId?: string;
+    clientId?: string;
   } | null;
 }
 
@@ -39,11 +41,18 @@ export default function AppointmentForm({
   onClose,
   prefilledData 
 }: AppointmentFormProps) {
+  console.log("📝 [DEBUG] AppointmentForm - prefilledData:", prefilledData);
+  console.log("📝 [DEBUG] AppointmentForm - appointment:", appointment);
+  
   const [selectedClient, setSelectedClient] = useState<number | null>(
-    appointment?.clientId || null
+    appointment?.clientId || (prefilledData?.clientId ? parseInt(prefilledData.clientId) : null)
   );
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // Verificar se o formulário foi aberto a partir do fluxo "Ache uma Data"
+  const isFromFindDate = !!prefilledData && !appointment;
+  console.log("📝 [DEBUG] AppointmentForm - isFromFindDate:", isFromFindDate);
   
   const form = useForm<InsertAppointment>({
     resolver: zodResolver(extendedInsertAppointmentSchema),
@@ -61,10 +70,10 @@ export default function AppointmentForm({
       numero: appointment.numero,
       complemento: appointment.complemento || "",
     } : prefilledData ? {
-      clientId: 0,
+      clientId: prefilledData.clientId ? parseInt(prefilledData.clientId) : 0,
       serviceId: prefilledData.serviceId ? parseInt(prefilledData.serviceId) : 0,
       technicianId: prefilledData.technicianId ? parseInt(prefilledData.technicianId) : 0,
-      teamId: undefined,
+      teamId: prefilledData.teamId ? parseInt(prefilledData.teamId) : undefined,
       scheduledDate: prefilledData.date ? new Date(prefilledData.date) : new Date(),
       status: "scheduled",
       priority: "normal",
@@ -234,14 +243,20 @@ export default function AppointmentForm({
                   <ClientSearch
                     value={field.value}
                     onValueChange={(value) => {
-                      field.onChange(value ?? undefined);
-                      if (value) {
-                        handleClientChange(value.toString());
+                      if (!isFromFindDate) {
+                        field.onChange(value ?? undefined);
+                        if (value) {
+                          handleClientChange(value.toString());
+                        }
                       }
                     }}
                     placeholder="Pesquisar por nome ou CPF"
+                    disabled={isFromFindDate}
                   />
                 </FormControl>
+                {isFromFindDate && (
+                  <p className="text-sm text-blue-600">Cliente selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
+                )}
                 <FormMessage />
               </FormItem>
             )}
@@ -255,7 +270,15 @@ export default function AppointmentForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Serviço *</FormLabel>
-                  <Select onValueChange={(value) => field.onChange(parseInt(value))} value={field.value?.toString()}>
+                  <Select 
+                    onValueChange={(value) => {
+                      if (!isFromFindDate) {
+                        field.onChange(parseInt(value));
+                      }
+                    }} 
+                    value={field.value?.toString()}
+                    disabled={isFromFindDate}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione um serviço" />
@@ -269,6 +292,9 @@ export default function AppointmentForm({
                       ))}
                     </SelectContent>
                   </Select>
+                  {isFromFindDate && (
+                    <p className="text-sm text-blue-600">Serviço selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -280,28 +306,34 @@ export default function AppointmentForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Técnico/Equipe *</FormLabel>
-                  <Select onValueChange={(value) => {
-                    console.log("Seleção alterada para:", value);
-                    
-                    if (value.startsWith('tech-')) {
-                      // É um técnico
-                      const technicianId = parseInt(value.split('-')[1]);
-                      console.log("Técnico selecionado ID:", technicianId);
-                      field.onChange(technicianId);
-                      // Limpar teamId no formulário
-                      form.setValue("teamId", undefined);
-                    } else if (value.startsWith('team-')) {
-                      // É uma equipe
-                      const teamId = parseInt(value.split('-')[1]);
-                      console.log("Equipe selecionada ID:", teamId);
-                      field.onChange(undefined); // Limpar technicianId
-                      // Definir teamId no formulário
-                      form.setValue("teamId", teamId);
+                  <Select 
+                    onValueChange={(value) => {
+                      if (!isFromFindDate) {
+                        console.log("Seleção alterada para:", value);
+                        
+                        if (value.startsWith('tech-')) {
+                          // É um técnico
+                          const technicianId = parseInt(value.split('-')[1]);
+                          console.log("Técnico selecionado ID:", technicianId);
+                          field.onChange(technicianId);
+                          // Limpar teamId no formulário
+                          form.setValue("teamId", undefined);
+                        } else if (value.startsWith('team-')) {
+                          // É uma equipe
+                          const teamId = parseInt(value.split('-')[1]);
+                          console.log("Equipe selecionada ID:", teamId);
+                          field.onChange(undefined); // Limpar technicianId
+                          // Definir teamId no formulário
+                          form.setValue("teamId", teamId);
+                        }
+                      }
+                    }} 
+                    value={
+                      field.value ? `tech-${field.value}` : 
+                      form.getValues("teamId") ? `team-${form.getValues("teamId")}` : ""
                     }
-                  }} value={
-                    field.value ? `tech-${field.value}` : 
-                    form.getValues("teamId") ? `team-${form.getValues("teamId")}` : ""
-                  }>
+                    disabled={isFromFindDate}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione um técnico ou equipe" />
@@ -320,6 +352,9 @@ export default function AppointmentForm({
                       ))}
                     </SelectContent>
                   </Select>
+                  {isFromFindDate && (
+                    <p className="text-sm text-blue-600">Técnico/Equipe selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
