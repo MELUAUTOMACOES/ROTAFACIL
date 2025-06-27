@@ -571,6 +571,42 @@ export default function Appointments() {
                 continue;
               }
 
+              // Mapear status em português para valores do sistema
+              let finalStatus = "scheduled"; // padrão
+              const statusInput = (values[8] || "").trim();
+              
+              console.log(`🔄 [CSV IMPORT] Status recebido da linha ${i + 1}: "${statusInput}"`);
+              
+              if (statusInput) {
+                const statusLower = statusInput.toLowerCase()
+                  .normalize('NFD')
+                  .replace(/[\u0300-\u036f]/g, ''); // remove acentos
+                
+                const statusMap: { [key: string]: string } = {
+                  'agendado': 'scheduled',
+                  'em andamento': 'in_progress', 
+                  'em-andamento': 'in_progress',
+                  'emandamento': 'in_progress',
+                  'concluido': 'completed',
+                  'concluído': 'completed',
+                  'cancelado': 'cancelled',
+                  // Manter compatibilidade com inglês
+                  'scheduled': 'scheduled',
+                  'in_progress': 'in_progress',
+                  'completed': 'completed',
+                  'cancelled': 'cancelled'
+                };
+                
+                if (statusMap[statusLower]) {
+                  finalStatus = statusMap[statusLower];
+                  console.log(`✅ [CSV IMPORT] Status "${statusInput}" mapeado para: ${finalStatus}`);
+                } else {
+                  errors.push(`Linha ${i + 1}: Status "${statusInput}" inválido. Valores aceitos: Agendado, Em Andamento, Concluído, Cancelado`);
+                  console.log(`❌ [CSV IMPORT] Status inválido na linha ${i + 1}: "${statusInput}"`);
+                  continue;
+                }
+              }
+
               const appointmentData = {
                 clientId: client?.id || null,
                 clientData: clientData, // Dados para criar cliente se necessário
@@ -578,7 +614,7 @@ export default function Appointments() {
                 technicianId: technician?.id || null,
                 teamId: team?.id || null,
                 scheduledDate,
-                status: values[8] || "scheduled",
+                status: finalStatus,
                 priority: normalizedPriority,
                 cep: finalCep,
                 logradouro: finalLogradouro,
@@ -749,7 +785,7 @@ export default function Appointments() {
       "Instalação",
       "Carlos Técnico",
       "2024-12-25 14:30",
-      "scheduled",
+      "Agendado",
       "normal", 
       "01234-567",
       "Rua das Flores",

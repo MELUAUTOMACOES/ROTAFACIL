@@ -523,11 +523,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/appointments/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      // Para atualização, aceitamos apenas campos básicos sem validações complexas
       const appointmentData = req.body;
+      
+      console.log(`🔧 [UPDATE] Atualizando agendamento ${id}:`, appointmentData);
+      
+      // Corrigir campo scheduledDate se presente
+      if (appointmentData.scheduledDate) {
+        console.log(`📅 [UPDATE] Data recebida (tipo: ${typeof appointmentData.scheduledDate}):`, appointmentData.scheduledDate);
+        
+        // Se já é uma string ISO, manter como está
+        if (typeof appointmentData.scheduledDate === 'string') {
+          console.log(`✅ [UPDATE] Data já é string, mantendo: ${appointmentData.scheduledDate}`);
+        } 
+        // Se é um objeto Date, converter para ISO string
+        else if (appointmentData.scheduledDate instanceof Date) {
+          appointmentData.scheduledDate = appointmentData.scheduledDate.toISOString();
+          console.log(`🔄 [UPDATE] Data convertida para ISO: ${appointmentData.scheduledDate}`);
+        }
+        // Se é outro tipo, tentar criar Date primeiro
+        else {
+          try {
+            const dateObj = new Date(appointmentData.scheduledDate);
+            if (isNaN(dateObj.getTime())) {
+              throw new Error(`Data inválida: ${appointmentData.scheduledDate}`);
+            }
+            appointmentData.scheduledDate = dateObj.toISOString();
+            console.log(`🔄 [UPDATE] Data parseada e convertida: ${appointmentData.scheduledDate}`);
+          } catch (dateError) {
+            console.log(`❌ [UPDATE] Erro ao processar data:`, dateError);
+            return res.status(400).json({ message: `Data inválida: ${appointmentData.scheduledDate}` });
+          }
+        }
+      }
+      
       const appointment = await storage.updateAppointment(id, appointmentData, req.user.userId);
+      console.log(`✅ [UPDATE] Agendamento atualizado com sucesso: ${appointment.id}`);
       res.json(appointment);
     } catch (error: any) {
+      console.log(`❌ [UPDATE] Erro ao atualizar agendamento:`, error.message);
       res.status(400).json({ message: error.message });
     }
   });
