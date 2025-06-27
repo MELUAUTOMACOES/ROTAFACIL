@@ -336,8 +336,17 @@ export default function Clients() {
   };
 
   const handleFormClose = () => {
+    console.log("Dialog de cliente fechado - resetando cliente selecionado!");
     setIsFormOpen(false);
     setSelectedClient(null);
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    if (!open) {
+      console.log("Resetando formulário ao fechar Dialog por fora");
+      setSelectedClient(null);
+    }
+    setIsFormOpen(open);
   };
 
   if (isLoading) {
@@ -385,7 +394,7 @@ export default function Clients() {
             Exportar CSV
           </Button>
           
-          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+          <Dialog open={isFormOpen} onOpenChange={handleDialogOpenChange}>
             <DialogTrigger asChild>
               <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
                 <Plus className="h-4 w-4 mr-2" />
@@ -411,7 +420,7 @@ export default function Clients() {
             <p className="text-gray-600 text-center mb-6">
               Comece adicionando seus primeiros clientes para organizar seus atendimentos.
             </p>
-            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+            <Dialog open={isFormOpen} onOpenChange={handleDialogOpenChange}>
               <DialogTrigger asChild>
                 <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
                   <Plus className="h-4 w-4 mr-2" />
