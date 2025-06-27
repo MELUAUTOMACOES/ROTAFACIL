@@ -157,12 +157,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(clients.userId, userId),
-          or(
-            ilike(clients.name, searchTerm),
-            ilike(clients.email, searchTerm),
-            ilike(clients.phone1, searchTerm),
-            ilike(clients.phone2, searchTerm)
-          )
+          ilike(clients.name, searchTerm)
         )
       )
       .limit(5);

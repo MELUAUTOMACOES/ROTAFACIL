@@ -236,7 +236,7 @@ export default function AppointmentForm({
                         handleClientChange(value.toString());
                       }
                     }}
-                    placeholder="Buscar por nome ou telefone..."
+                    placeholder="Buscar por nome ou CPF"
                   />
                 </FormControl>
                 <FormMessage />

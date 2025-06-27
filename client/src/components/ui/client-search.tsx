@@ -65,7 +65,6 @@ export function ClientSearch({ value, onValueChange, placeholder = "Buscar clien
           {selectedClient ? (
             <span className="truncate">
               {selectedClient.name}
-              {selectedClient.phone1 && ` • ${selectedClient.phone1}`}
             </span>
           ) : (
             <span className="text-muted-foreground">{placeholder}</span>
@@ -78,7 +77,7 @@ export function ClientSearch({ value, onValueChange, placeholder = "Buscar clien
           <div className="flex items-center border-b px-3">
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
             <Input
-              placeholder="Digite nome ou telefone..."
+              placeholder="Buscar por nome ou CPF"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="border-0 focus-visible:ring-0"
@@ -107,7 +106,6 @@ export function ClientSearch({ value, onValueChange, placeholder = "Buscar clien
                       <div className="flex-1">
                         <div className="font-medium">{client.name}</div>
                         <div className="text-sm text-muted-foreground">
-                          {client.phone1 && `${client.phone1} • `}
                           {client.logradouro}, {client.numero}
                         </div>
                       </div>
