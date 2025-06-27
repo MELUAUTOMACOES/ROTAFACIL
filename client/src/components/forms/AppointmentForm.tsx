@@ -181,6 +181,17 @@ export default function AppointmentForm({
       scheduledDate: data.scheduledDate instanceof Date ? data.scheduledDate : new Date(data.scheduledDate)
     };
     
+    // Ensure proper handling of technician vs team assignment
+    if (formData.teamId) {
+      // If teamId is set, clear technicianId to avoid foreign key conflicts
+      formData.technicianId = null;
+    } else if (formData.technicianId) {
+      // If technicianId is set, clear teamId
+      formData.teamId = undefined;
+    }
+    
+    console.log("📝 [DEBUG] onSubmit - Dados finais para envio:", formData);
+    
     if (appointment) {
       updateMutation.mutate(formData);
     } else {
