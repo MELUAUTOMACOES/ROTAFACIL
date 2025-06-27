@@ -345,6 +345,8 @@ export default function Appointments() {
 
             console.log("📋 [CSV IMPORT] Iniciando importação de agendamentos...");
             console.log("📋 [CSV IMPORT] Campos reconhecidos:", headers);
+            console.log("📋 [CSV IMPORT] Técnicos disponíveis:", technicians.map((t: Technician) => t.name));
+            console.log("📋 [CSV IMPORT] Equipes disponíveis:", teams.map((t: Team) => t.name));
 
             for (let i = 1; i < lines.length; i++) {
               const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
@@ -452,8 +454,27 @@ export default function Appointments() {
                 continue;
               }
 
-              // Encontrar técnico (opcional)
-              const technician = technicians.find((t: Technician) => t.name.toLowerCase() === technicianName.toLowerCase());
+              // Encontrar técnico ou equipe
+              let technician = null;
+              let team = null;
+              
+              if (technicianName) {
+                // Primeiro, procurar por técnico individual
+                technician = technicians.find((t: Technician) => t.name.toLowerCase() === technicianName.toLowerCase());
+                
+                if (technician) {
+                  console.log(`👤 [CSV IMPORT] Técnico encontrado: ${technician.name}`);
+                } else {
+                  // Se não encontrou técnico, procurar por equipe
+                  team = teams.find((team: Team) => team.name.toLowerCase() === technicianName.toLowerCase());
+                  
+                  if (team) {
+                    console.log(`👥 [CSV IMPORT] Equipe encontrada: ${team.name}`);
+                  } else {
+                    console.log(`⚠️ [CSV IMPORT] Técnico/Equipe "${technicianName}" não encontrado`);
+                  }
+                }
+              }
 
               // Validar e normalizar prioridade
               let normalizedPriority = "normal";
@@ -513,11 +534,12 @@ export default function Appointments() {
                 continue;
               }
 
-              appointmentsToImport.push({
+              const appointmentData = {
                 clientId: client?.id || null,
                 clientData: clientData, // Dados para criar cliente se necessário
                 serviceId: service.id,
                 technicianId: technician?.id || null,
+                teamId: team?.id || null,
                 scheduledDate,
                 status: values[8] || "scheduled",
                 priority: normalizedPriority,
@@ -526,7 +548,16 @@ export default function Appointments() {
                 numero: finalNumero,
                 complemento: values[13] || "",
                 notes: values[14] || ""
+              };
+              
+              console.log(`📋 [CSV IMPORT] Agendamento preparado - Linha ${i + 1}:`, {
+                technicianId: appointmentData.technicianId,
+                teamId: appointmentData.teamId,
+                serviceId: appointmentData.serviceId,
+                clientId: appointmentData.clientId
               });
+              
+              appointmentsToImport.push(appointmentData);
             }
 
             if (errors.length > 0) {
