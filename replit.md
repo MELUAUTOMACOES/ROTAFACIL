@@ -105,6 +105,13 @@ RotaFácil is a comprehensive service route management application designed to h
 ## Changelog
 ```
 Changelog:
+- June 27, 2025: Atualização completa do modelo CSV de agendamentos
+  * Removido campo "ID" do modelo CSV de agendamentos
+  * Adicionado campo "CPF Cliente" como segunda coluna no modelo
+  * Implementado comportamento inteligente: se CPF já existe, puxa dados do cliente cadastrado
+  * Adicionados logs detalhados para importação CSV indicando campos reconhecidos
+  * Documentação atualizada com nova ordem de campos e comportamento de CPF
+  * Campos obrigatórios: Cliente, Serviço, Data/Hora, CEP, Logradouro, Número
 - June 27, 2025: Ajustes completos no fluxo "Ache uma Data" → "Novo Agendamento"
   * Campo "Técnico" renomeado para "Técnico/Equipe" na tela FindDate
   * Técnicos e equipes agora aparecem juntos no campo de seleção de filtros

@@ -343,12 +343,16 @@ export default function Appointments() {
             const appointmentsToImport = [];
             const errors = [];
 
+            console.log("📋 [CSV IMPORT] Iniciando importação de agendamentos...");
+            console.log("📋 [CSV IMPORT] Campos reconhecidos:", headers);
+
             for (let i = 1; i < lines.length; i++) {
               const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
               
               if (values.length < headers.length) continue;
 
-              const clientName = values[1];
+              const clientName = values[0];
+              const cpfCliente = values[1];
               const serviceName = values[5];
               const technicianName = values[6];
               const dateTime = values[7];
@@ -356,13 +360,14 @@ export default function Appointments() {
               const logradouro = values[11];
               const numero = values[12];
 
+              console.log(`📋 [CSV IMPORT] Linha ${i + 1}: Cliente=${clientName}, CPF=${cpfCliente}`);
+
               // Validar campos obrigatórios e formatos
               const validationErrors = [];
               const phone1 = values[3];
               
               // Validar campos obrigatórios
-              if (!clientName) validationErrors.push("Cliente (coluna 2) está vazio");
-              if (!phone1) validationErrors.push("Telefone 1 (coluna 4) está vazio");
+              if (!clientName) validationErrors.push("Cliente (coluna 1) está vazio");
               if (!serviceName) validationErrors.push("Serviço (coluna 6) está vazio");
               if (!dateTime) validationErrors.push("Data/Hora (coluna 8) está vazia");
               if (!cep) validationErrors.push("CEP (coluna 11) está vazio");
@@ -383,23 +388,46 @@ export default function Appointments() {
                 continue;
               }
 
-              // Encontrar cliente ou preparar dados para criação automática
-              let client = clients.find((c: Client) => c.name.toLowerCase() === clientName.toLowerCase());
+              // Encontrar cliente pelo CPF (prioritário) ou nome (fallback)
+              let client = null;
               let clientData = null;
+              
+              if (cpfCliente) {
+                // Buscar cliente pelo CPF primeiro
+                client = clients.find((c: Client) => c.cpf === cpfCliente);
+                
+                if (client) {
+                  console.log(`✅ [CSV IMPORT] Cliente encontrado pelo CPF ${cpfCliente}: ${client.name}`);
+                  console.log(`📋 [CSV IMPORT] Usando dados do cliente cadastrado, ignorando dados do CSV`);
+                } else {
+                  console.log(`🔍 [CSV IMPORT] CPF ${cpfCliente} não encontrado, criando novo cliente`);
+                }
+              }
+              
+              if (!client) {
+                // Se não encontrou pelo CPF, tentar por nome como fallback
+                client = clients.find((c: Client) => c.name.toLowerCase() === clientName.toLowerCase());
+                
+                if (client) {
+                  console.log(`⚠️ [CSV IMPORT] Cliente encontrado pelo nome: ${client.name} (sem CPF fornecido)`);
+                }
+              }
               
               if (!client) {
                 // Preparar dados do cliente para criação automática
                 clientData = {
                   name: clientName,
+                  cpf: cpfCliente || "",
                   email: values[2] || "",
-                  phone1: phone1,
+                  phone1: phone1 || "",
                   phone2: values[4] || "",
                   cep: cep,
                   logradouro: logradouro,
                   numero: numero,
                   complemento: values[13] || "",
-                  notes: `Cliente criado automaticamente via importação CSV em ${new Date().toLocaleString('pt-BR')}`
+                  observacoes: `Cliente criado automaticamente via importação CSV em ${new Date().toLocaleString('pt-BR')}`
                 };
+                console.log(`🆕 [CSV IMPORT] Preparando criação de novo cliente: ${clientName}`);
               }
 
               // Encontrar serviço
@@ -522,7 +550,7 @@ export default function Appointments() {
               console.log("   • CEP deve estar no formato XXXXX-XXX");
               console.log("   • Campos obrigatórios não podem estar vazios");
               console.log("\n📋 ORDEM DOS CAMPOS NO CSV:");
-              console.log("   1. ID | 2. Cliente | 3. Email Cliente | 4. Telefone 1 | 5. Telefone 2");
+              console.log("   1. Cliente | 2. CPF Cliente | 3. Email Cliente | 4. Telefone 1 | 5. Telefone 2");
               console.log("   6. Serviço | 7. Técnico | 8. Data/Hora | 9. Status | 10. Prioridade");
               console.log("   11. CEP | 12. Logradouro | 13. Número | 14. Complemento | 15. Observações");
               console.groupEnd();
@@ -556,9 +584,15 @@ export default function Appointments() {
                 "",
                 "ORDEM DOS CAMPOS NO CSV:",
                 "-".repeat(40),
-                "1. ID | 2. Cliente | 3. Email Cliente | 4. Telefone 1 | 5. Telefone 2",
+                "1. Cliente | 2. CPF Cliente | 3. Email Cliente | 4. Telefone 1 | 5. Telefone 2",
                 "6. Serviço | 7. Técnico | 8. Data/Hora | 9. Status | 10. Prioridade", 
                 "11. CEP | 12. Logradouro | 13. Número | 14. Complemento | 15. Observações",
+                "",
+                "COMPORTAMENTO INTELIGENTE DE CPF:",
+                "-".repeat(40),
+                "• Se o CPF do cliente já estiver cadastrado, os dados do cliente serão puxados automaticamente",
+                "• Neste caso, os dados do CSV (nome, telefone, endereço) serão ignorados para esse cliente",
+                "• Isso garante consistência com os dados já cadastrados no sistema",
                 "",
                 "OBSERVAÇÃO: Use o botão 'Baixar CSV Modelo' para obter um arquivo com a estrutura correta."
               ].join('\n');
@@ -606,8 +640,8 @@ export default function Appointments() {
 
   const downloadCSVTemplate = () => {
     const templateHeaders = [
-      "ID",
-      "Cliente", 
+      "Cliente",
+      "CPF Cliente", 
       "Email Cliente",
       "Telefone 1",
       "Telefone 2", 
@@ -624,8 +658,8 @@ export default function Appointments() {
     ];
 
     const exampleRow = [
-      "1",
       "João Silva",
+      "123.456.789-01",
       "joao@email.com", 
       "(11) 99999-9999",
       "(11) 88888-8888",
