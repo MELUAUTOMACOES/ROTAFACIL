@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,9 +8,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Route, MapPin, Clock, Navigation, TrendingUp, Filter, Search, Calendar } from "lucide-react";
-import type { Appointment, Client, Service, Technician } from "@shared/schema";
+import { Route, MapPin, Clock, Navigation, TrendingUp, Filter, Search, Calendar, CheckSquare, Edit } from "lucide-react";
+import type { Appointment, Client, Service, Technician, User } from "@shared/schema";
+import { getPlanLimits } from "@shared/plan-limits";
+import AppointmentForm from "@/components/forms/AppointmentForm";
 
 interface OptimizedRoute {
   optimizedOrder: Appointment[];
@@ -27,6 +30,8 @@ export default function Routes() {
   const [selectedTechnician, setSelectedTechnician] = useState<string>("");
   const [selectedStatus, setSelectedStatus] = useState<string>("");
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false);
   const { toast } = useToast();
 
   // Monitor fullscreen changes and DOM state
@@ -56,6 +61,17 @@ export default function Routes() {
     console.log("🔄 [DEBUG] Selected appointments:", selectedAppointments.length);
     console.log("🔄 [DEBUG] Optimized route:", !!optimizedRoute);
     console.log("🔄 [DEBUG] Is fullscreen:", isFullscreen);
+  });
+
+  // Fetch user data to get plan information
+  const { data: user } = useQuery({
+    queryKey: ["/api/auth/me"],
+    queryFn: async () => {
+      const response = await fetch("/api/auth/me", {
+        headers: getAuthHeaders(),
+      });
+      return response.json();
+    },
   });
 
   const { data: appointments = [] } = useQuery({
@@ -92,6 +108,16 @@ export default function Routes() {
     queryKey: ["/api/technicians"],
     queryFn: async () => {
       const response = await fetch("/api/technicians", {
+        headers: getAuthHeaders(),
+      });
+      return response.json();
+    },
+  });
+
+  const { data: teams = [] } = useQuery({
+    queryKey: ["/api/teams"],
+    queryFn: async () => {
+      const response = await fetch("/api/teams", {
         headers: getAuthHeaders(),
       });
       return response.json();
@@ -147,6 +173,93 @@ export default function Routes() {
         ? prev.filter(id => id !== appointmentId)
         : [...prev, appointmentId]
     );
+  };
+
+  // Handle select all appointments with plan limits
+  const handleSelectAllAppointments = () => {
+    console.log("📋 [DEBUG] handleSelectAllAppointments chamado");
+    
+    if (!user) {
+      console.log("❌ [DEBUG] Dados do usuário não carregados");
+      return;
+    }
+
+    const planLimits = getPlanLimits(user.plan);
+    
+    // Get all filtered appointments as a flat array
+    const allFilteredAppointments: Appointment[] = [];
+    for (const dayAppointments of Object.values(filteredAndGroupedAppointments)) {
+      allFilteredAppointments.push(...(dayAppointments as Appointment[]));
+    }
+    const availableAppointmentIds = allFilteredAppointments.map((apt: Appointment) => apt.id);
+    
+    console.log("📋 [DEBUG] Total de agendamentos filtrados:", availableAppointmentIds.length);
+    console.log("📋 [DEBUG] Plano do usuário:", user.plan);
+    console.log("📋 [DEBUG] Limite máximo do plano:", planLimits.maxRouteAddresses);
+    
+    if (availableAppointmentIds.length === 0) {
+      toast({
+        title: "Atenção",
+        description: "Nenhum agendamento encontrado com os filtros aplicados",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Select up to the plan limit
+    const maxToSelect = Math.min(availableAppointmentIds.length, planLimits.maxRouteAddresses);
+    const appointmentsToSelect = availableAppointmentIds.slice(0, maxToSelect);
+    
+    console.log("📋 [DEBUG] Agendamentos selecionados:", appointmentsToSelect.length);
+    console.log("📋 [DEBUG] IDs selecionados:", appointmentsToSelect);
+    
+    setSelectedAppointments(appointmentsToSelect);
+
+    // Show message if limit was reached
+    if (availableAppointmentIds.length > planLimits.maxRouteAddresses) {
+      toast({
+        title: "Limite do Plano Atingido",
+        description: `Foram selecionados apenas ${maxToSelect} agendamentos devido ao limite do seu plano. Para aumentar seu limite, faça upgrade do plano.`,
+        variant: "default",
+      });
+      console.log("⚠️ [DEBUG] Limite do plano atingido, mostrando mensagem para o usuário");
+    } else {
+      toast({
+        title: "Agendamentos Selecionados",
+        description: `${appointmentsToSelect.length} agendamentos foram selecionados`,
+        variant: "default",
+      });
+    }
+  };
+
+  // Handle edit appointment
+  const handleEditAppointment = (appointment: Appointment) => {
+    console.log("✏️ [DEBUG] Abrindo edição para agendamento:", appointment.id);
+    console.log("✏️ [DEBUG] Dados do agendamento:", appointment);
+    setEditingAppointment(appointment);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleCloseEditDialog = () => {
+    console.log("✏️ [DEBUG] Fechando diálogo de edição");
+    setEditingAppointment(null);
+    setIsEditDialogOpen(false);
+  };
+
+  const queryClient = useQueryClient();
+
+  const handleAppointmentUpdated = () => {
+    console.log("✅ [DEBUG] Agendamento atualizado com sucesso");
+    handleCloseEditDialog();
+    
+    // Invalidate queries to refresh data
+    queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
+    
+    toast({
+      title: "Agendamento Atualizado",
+      description: "O agendamento foi atualizado com sucesso na tela de roteirização",
+      variant: "default",
+    });
   };
 
   const handleOptimizeRoute = () => {
@@ -260,7 +373,18 @@ export default function Routes() {
           <p className="text-gray-600">Otimize as rotas dos seus atendimentos técnicos</p>
         </div>
         
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 flex gap-2">
+          <Button 
+            onClick={handleSelectAllAppointments}
+            disabled={!user || Object.keys(filteredAndGroupedAppointments).length === 0}
+            variant="outline"
+            className="w-full sm:w-auto"
+            type="button"
+          >
+            <CheckSquare className="h-4 w-4 mr-2" />
+            Selecionar Todos
+          </Button>
+          
           <Button 
             onClick={handleOptimizeRoute}
             disabled={selectedAppointments.length === 0 || optimizeRouteMutation.isPending}
@@ -328,16 +452,21 @@ export default function Routes() {
             </div>
             
             <div>
-              <label className="text-sm font-medium mb-2 block">Técnico</label>
+              <label className="text-sm font-medium mb-2 block">Técnicos/Equipes</label>
               <Select value={selectedTechnician} onValueChange={setSelectedTechnician}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Todos os técnicos" />
+                  <SelectValue placeholder="Todos os técnicos e equipes" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos os técnicos</SelectItem>
+                  <SelectItem value="all">Todos os técnicos e equipes</SelectItem>
                   {technicians.map((technician: Technician) => (
-                    <SelectItem key={technician.id} value={technician.id.toString()}>
-                      {technician.name}
+                    <SelectItem key={`tech-${technician.id}`} value={technician.id.toString()}>
+                      👤 {technician.name}
+                    </SelectItem>
+                  ))}
+                  {teams.map((team: any) => (
+                    <SelectItem key={`team-${team.id}`} value={`team-${team.id}`}>
+                      👥 {team.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -404,53 +533,70 @@ export default function Routes() {
                         return (
                           <div 
                             key={appointment.id}
-                            className={`flex items-center space-x-4 p-3 border rounded-lg cursor-pointer transition-colors
+                            className={`relative flex items-center space-x-4 p-3 border rounded-lg transition-colors
                               ${isSelected 
                                 ? "border-burnt-yellow bg-burnt-yellow bg-opacity-5" 
                                 : "border-gray-200 hover:bg-gray-50"
                               }`}
-                            onClick={() => handleAppointmentToggle(appointment.id)}
                           >
-                            <Checkbox 
-                              checked={isSelected}
-                              onCheckedChange={() => handleAppointmentToggle(appointment.id)}
-                              className="text-burnt-yellow"
-                            />
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between mb-1">
-                                <h4 className="font-medium text-gray-900">
-                                  {client?.name || "Cliente"}
-                                </h4>
-                                <span className="text-sm text-gray-500">{time}</span>
-                              </div>
-                              <p className="text-sm text-gray-600">{service?.name || "Serviço"}</p>
-                              <p className="text-xs text-gray-500">
-                                {appointment.logradouro}, {appointment.numero} - {appointment.cep}
-                              </p>
-                              <div className="flex items-center justify-between mt-1">
-                                <div className="flex items-center">
-                                  <span className="text-xs text-gray-500">Técnico: </span>
-                                  <span className="text-xs font-medium text-gray-700 ml-1">
-                                    {technician?.name || "Técnico"}
-                                  </span>
+                            <div 
+                              className="flex items-center space-x-4 flex-1 cursor-pointer"
+                              onClick={() => handleAppointmentToggle(appointment.id)}
+                            >
+                              <Checkbox 
+                                checked={isSelected}
+                                onCheckedChange={() => handleAppointmentToggle(appointment.id)}
+                                className="text-burnt-yellow"
+                              />
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between mb-1">
+                                  <h4 className="font-medium text-gray-900">
+                                    {client?.name || "Cliente"}
+                                  </h4>
+                                  <span className="text-sm text-gray-500">{time}</span>
                                 </div>
-                                <Badge 
-                                  className={`text-xs px-2 py-1 ${
-                                    appointment.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                    appointment.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
-                                    appointment.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
-                                    appointment.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                                    'bg-gray-100 text-gray-800'
-                                  }`}
-                                >
-                                  {appointment.status === 'completed' ? 'Concluído' :
-                                   appointment.status === 'in_progress' ? 'Em Andamento' :
-                                   appointment.status === 'scheduled' ? 'Agendado' :
-                                   appointment.status === 'cancelled' ? 'Cancelado' :
-                                   appointment.status}
-                                </Badge>
+                                <p className="text-sm text-gray-600">{service?.name || "Serviço"}</p>
+                                <p className="text-xs text-gray-500">
+                                  {appointment.logradouro}, {appointment.numero} - {appointment.cep}
+                                </p>
+                                <div className="flex items-center justify-between mt-1">
+                                  <div className="flex items-center">
+                                    <span className="text-xs text-gray-500">Técnico: </span>
+                                    <span className="text-xs font-medium text-gray-700 ml-1">
+                                      {technician?.name || "Técnico"}
+                                    </span>
+                                  </div>
+                                  <Badge 
+                                    className={`text-xs px-2 py-1 ${
+                                      appointment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                      appointment.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                                      appointment.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
+                                      appointment.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}
+                                  >
+                                    {appointment.status === 'completed' ? 'Concluído' :
+                                     appointment.status === 'in_progress' ? 'Em Andamento' :
+                                     appointment.status === 'scheduled' ? 'Agendado' :
+                                     appointment.status === 'cancelled' ? 'Cancelado' :
+                                     appointment.status}
+                                  </Badge>
+                                </div>
                               </div>
                             </div>
+                            
+                            {/* Edit Button */}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="absolute bottom-2 right-2 h-6 w-6 p-0 hover:bg-burnt-yellow hover:text-white"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditAppointment(appointment);
+                              }}
+                            >
+                              <Edit className="h-3 w-3" />
+                            </Button>
                           </div>
                         );
                       })}
@@ -556,6 +702,25 @@ export default function Routes() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Appointment Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Agendamento</DialogTitle>
+          </DialogHeader>
+          {editingAppointment && (
+            <AppointmentForm
+              appointment={editingAppointment}
+              clients={clients}
+              services={services}
+              technicians={technicians}
+              teams={teams}
+              onClose={handleCloseEditDialog}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

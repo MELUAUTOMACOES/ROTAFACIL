@@ -1,0 +1,53 @@
+Prompt para melhorias e ajustes de usabilidade na tela de "Roteirização" e "Agendamentos":
+
+Usabilidade na tela de Roteirização — Selecionar Atendimentos:
+
+Botão “Selecionar todos agendamentos”:
+
+Implemente um botão que seleciona todos os agendamentos exibidos conforme o filtro aplicado.
+
+A seleção deve respeitar o limite máximo de endereços/roteirizações por rota definido pelo plano do usuário (exemplo: plano Basic = 15, Pro = 50, etc.).
+
+Se o filtro retornar mais agendamentos que o limite do plano, selecione apenas até o máximo permitido e mostre uma mensagem para o usuário:
+
+Mensagem exemplo: "Foram selecionados apenas X agendamentos devido ao limite do seu plano. Para aumentar seu limite, faça upgrade do plano."
+
+Se ainda não houver uma tabela/configuração para armazenar os limites de cada plano, crie uma estrutura para isso (pode ser em arquivo, tabela, ou variável global).
+
+Inclua logs no código mostrando quantos agendamentos existem, quantos foram selecionados e qual o limite do plano.
+
+Não altere nada além disso nesta etapa.
+
+Botão de editar em cada card de agendamento:
+
+Em cada card de agendamento, adicione um botão pequeno no canto inferior direito para editar o agendamento diretamente nesta tela.
+
+Ao clicar, abra o mesmo formulário de edição utilizado na tela de agendamentos, com todas as regras, campos obrigatórios e validações já existentes.
+
+Permita editar e salvar o agendamento sem sair da tela de roteirização.
+
+Adicione logs para registrar quando um card é aberto para edição e quando a atualização é concluída.
+
+Ajuste de lógica para equipes e técnicos:
+
+No resumo de agendamentos (na tela de agendamentos), ao selecionar uma equipe, o sistema deve reconhecer e vincular todos os técnicos dessa equipe no card de resumo do agendamento.
+
+Na tela de roteirização, ao usar o filtro “Técnicos/Equipes” e selecionar uma equipe, deve exibir todos os agendamentos vinculados a essa equipe e seus respectivos técnicos.
+
+Garanta que todas as telas e componentes que permitam selecionar técnicos permitam também selecionar equipes, com comportamento padronizado.
+
+Atualize o label do filtro de “Técnicos” para “Técnicos/Equipes” onde ainda não foi atualizado.
+
+Inclua logs indicando quando uma equipe é selecionada e quais técnicos estão vinculados.
+
+Não altere nada além do que foi descrito.
+
+Instruções obrigatórias para o desenvolvedor:
+
+Não modifique ou refatore funcionalidades ou lógicas que não estejam descritas neste prompt.
+
+Inclua logs de depuração para todas as ações implementadas.
+
+Garanta clareza no código comentando as áreas alteradas.
+
+Siga sempre o padrão de UX já adotado no sistema.
