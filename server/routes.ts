@@ -200,14 +200,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           console.log(`✅ Cliente criado: ${createdClient.name} (ID: ${createdClient.id})`);
         } catch (error: any) {
-          detailedErrors.push(`Item ${i + 1}: Erro ao criar cliente "${clientData.name}" - ${error.message}`);
+          console.log(`🔍 Analisando erro para cliente ${clientData.name}:`, error.message);
+          
+          // Melhorar mensagem de erro para CPFs duplicados
+          let friendlyErrorMessage = error.message;
+          
+          if (error.message && error.message.includes('clients_cpf_unique')) {
+            console.log(`🚫 CPF duplicado detectado: ${clientData.cpf || 'N/A'}`);
+            friendlyErrorMessage = `Erro na importação: CPF ${clientData.cpf} já está cadastrado.`;
+            console.log(`✏️ Mensagem de erro melhorada: ${friendlyErrorMessage}`);
+          }
+          
+          detailedErrors.push(`Item ${i + 1}: Erro ao criar cliente "${clientData.name}" - ${friendlyErrorMessage}`);
           processedItems.push({
             index: i + 1,
             status: 'error',
-            error: error.message,
+            error: friendlyErrorMessage,
             data: clientData
           });
-          console.log(`❌ Erro no cliente ${i + 1}: ${error.message}`);
+          console.log(`❌ Erro no cliente ${i + 1}: ${friendlyErrorMessage}`);
         }
       }
 
