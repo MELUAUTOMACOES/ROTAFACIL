@@ -11,11 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Search, Calendar } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import { Service, Technician, BusinessRules } from "@shared/schema";
+import { Service, Technician, BusinessRules, Client } from "@shared/schema";
 import { useLocation } from "wouter";
+import { ClientSearch } from "@/components/ui/client-search";
 
 // Schema para validação do formulário de busca
 const findDateSchema = z.object({
+  clientId: z.number().optional(),
   cep: z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no formato XXXXX-XXX"),
   numero: z.string().min(1, "Número é obrigatório").regex(/^\d+$/, "Digite apenas números"),
   serviceId: z.number({ required_error: "Selecione um serviço" }),
@@ -37,6 +39,11 @@ export default function FindDate() {
   const [searchResults, setSearchResults] = useState<AvailableDate[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
+  // Buscar clientes
+  const { data: clients = [] } = useQuery<Client[]>({
+    queryKey: ["/api/clients"],
+  });
+
   // Buscar serviços
   const { data: services = [] } = useQuery<Service[]>({
     queryKey: ["/api/services"],
@@ -55,6 +62,7 @@ export default function FindDate() {
   const form = useForm<FindDateFormData>({
     resolver: zodResolver(findDateSchema),
     defaultValues: {
+      clientId: undefined,
       cep: "",
       numero: "",
     },
@@ -77,6 +85,20 @@ export default function FindDate() {
   const handleNumeroChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const numbersOnly = e.target.value.replace(/\D/g, "");
     form.setValue("numero", numbersOnly);
+  };
+
+  // Função para lidar com seleção de cliente
+  const handleClientChange = (clientId: number | undefined) => {
+    form.setValue("clientId", clientId);
+    
+    if (clientId) {
+      const selectedClient = clients.find(c => c.id === clientId);
+      if (selectedClient) {
+        // Preencher automaticamente CEP e número
+        form.setValue("cep", selectedClient.cep);
+        form.setValue("numero", selectedClient.numero);
+      }
+    }
   };
 
   // Mutação para buscar datas disponíveis
@@ -185,6 +207,15 @@ export default function FindDate() {
         </CardHeader>
         <CardContent>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="cliente">Cliente (opcional)</Label>
+              <ClientSearch
+                value={form.watch("clientId")}
+                onValueChange={handleClientChange}
+                placeholder="Pesquisar por nome ou CPF"
+              />
+            </div>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="cep">CEP</Label>
