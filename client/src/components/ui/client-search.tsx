@@ -22,6 +22,20 @@ export function ClientSearch({ value, onValueChange, placeholder = "Buscar clien
   // Buscar clientes quando houver query
   const { data: searchResults = [], isLoading } = useQuery<Client[]>({
     queryKey: ['/api/clients/search', searchQuery],
+    queryFn: async () => {
+      console.log("Busca cliente - input:", searchQuery);
+      const response = await fetch(`/api/clients/search?q=${encodeURIComponent(searchQuery)}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Erro na busca');
+      }
+      const results = await response.json();
+      console.log("Resultados encontrados:", results);
+      return results;
+    },
     enabled: searchQuery.length >= 2,
     staleTime: 30000, // Cache por 30 segundos
   });

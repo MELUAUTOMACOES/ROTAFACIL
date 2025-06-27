@@ -27,6 +27,7 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
       email: client.email || "",
       phone1: client.phone1 || "",
       phone2: client.phone2 || "",
+      cpf: client.cpf || "",
       cep: client.cep,
       logradouro: client.logradouro,
       numero: client.numero,
@@ -37,6 +38,7 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
       email: "",
       phone1: "",
       phone2: "",
+      cpf: "",
       cep: "",
       logradouro: "",
       numero: "",
@@ -134,6 +136,28 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
           />
           {form.formState.errors.email && (
             <p className="text-sm text-red-600 mt-1">{form.formState.errors.email.message}</p>
+          )}
+        </div>
+
+        <div>
+          <Label htmlFor="cpf">CPF</Label>
+          <Input
+            {...form.register("cpf")}
+            placeholder="000.000.000-00"
+            className="mt-1"
+            maxLength={14}
+            onChange={(e) => {
+              let value = e.target.value.replace(/\D/g, '');
+              if (value.length > 11) {
+                value = value.slice(0, 11);
+              }
+              value = value.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, '$1.$2.$3-$4');
+              e.target.value = value;
+              form.setValue("cpf", value);
+            }}
+          />
+          {form.formState.errors.cpf && (
+            <p className="text-sm text-red-600 mt-1">{form.formState.errors.cpf.message}</p>
           )}
         </div>
 

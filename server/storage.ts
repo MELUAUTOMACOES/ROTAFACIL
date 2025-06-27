@@ -149,6 +149,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async searchClients(query: string, userId: number): Promise<Client[]> {
+    console.log("Busca cliente - input:", query);
     const searchTerm = `%${query}%`;
     
     const results = await db
@@ -157,11 +158,15 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(clients.userId, userId),
-          ilike(clients.name, searchTerm)
+          or(
+            ilike(clients.name, searchTerm),
+            ilike(clients.cpf, searchTerm)
+          )
         )
       )
       .limit(5);
     
+    console.log("Resultados encontrados:", results);
     return results;
   }
 
