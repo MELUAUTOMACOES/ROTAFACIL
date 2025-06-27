@@ -1,10 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
-import { Check, ChevronsUpDown, Search } from "lucide-react";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Client } from "@shared/schema";
 
@@ -14,10 +12,15 @@ interface ClientSearchProps {
   placeholder?: string;
 }
 
-export function ClientSearch({ value, onValueChange, placeholder = "Buscar cliente..." }: ClientSearchProps) {
-  const [open, setOpen] = useState(false);
+export function ClientSearch({ value, onValueChange, placeholder = "Pesquisar por nome ou CPF" }: ClientSearchProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [showResults, setShowResults] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  console.log("ClientSearch Debug - value:", value, "searchQuery:", searchQuery, "selectedClient:", selectedClient?.name);
 
   // Buscar clientes quando houver query
   const { data: searchResults = [], isLoading } = useQuery<Client[]>({
@@ -49,106 +52,134 @@ export function ClientSearch({ value, onValueChange, placeholder = "Buscar clien
     if (value && allClients.length > 0) {
       const client = allClients.find((c) => c.id === value);
       setSelectedClient(client || null);
+      console.log("Cliente selecionado encontrado:", client?.name);
     } else {
       setSelectedClient(null);
+      console.log("Nenhum cliente selecionado");
     }
   }, [value, allClients]);
 
+  // Mostrar resultados quando houver busca e o input estiver focado
+  useEffect(() => {
+    setShowResults(inputFocused && searchQuery.length >= 2);
+  }, [inputFocused, searchQuery]);
+
+  // Fechar resultados quando clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        resultsRef.current &&
+        !resultsRef.current.contains(event.target as Node) &&
+        !inputRef.current?.contains(event.target as Node)
+      ) {
+        setShowResults(false);
+        setInputFocused(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value;
+    console.log("Input alterado para:", query);
+    setSearchQuery(query);
+    
+    // Se o input foi limpo e há um cliente selecionado, manter o nome
+    if (query === "" && selectedClient) {
+      // Não faz nada, mantém o cliente selecionado
+    }
+  };
+
+  const handleInputFocus = () => {
+    console.log("Input focado");
+    setInputFocused(true);
+    // Limpar o input para permitir nova busca
+    if (selectedClient) {
+      setSearchQuery("");
+    }
+  };
+
   const handleSelect = (client: Client) => {
+    console.log("Cliente selecionado:", client.name);
     setSelectedClient(client);
     onValueChange(client.id);
-    setOpen(false);
-    setSearchQuery("");
+    setSearchQuery(client.name); // Mostrar o nome no input
+    setShowResults(false);
+    setInputFocused(false);
   };
 
   const handleClear = () => {
+    console.log("Limpando seleção de cliente");
     setSelectedClient(null);
     onValueChange(undefined);
     setSearchQuery("");
+    inputRef.current?.focus();
   };
 
+  // Valor do input: nome do cliente selecionado ou texto da busca
+  const inputValue = selectedClient && !inputFocused ? selectedClient.name : searchQuery;
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="w-full justify-between"
+    <div className="relative w-full">
+      <div className="relative">
+        <Input
+          ref={inputRef}
+          placeholder={placeholder}
+          value={inputValue}
+          onChange={handleInputChange}
+          onFocus={handleInputFocus}
+          className="w-full pr-8"
+        />
+        {selectedClient && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleClear}
+            className="absolute right-0 top-0 h-full px-2 hover:bg-transparent"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+
+      {/* Resultados da busca */}
+      {showResults && (
+        <div
+          ref={resultsRef}
+          className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto"
         >
-          {selectedClient ? (
-            <span className="truncate">
-              {selectedClient.name}
-            </span>
-          ) : (
-            <span className="text-muted-foreground">{placeholder}</span>
-          )}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-full p-0" align="start">
-        <Command>
-          <div className="flex items-center border-b px-3">
-            <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-            <Input
-              placeholder="Buscar por nome ou CPF"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="border-0 focus-visible:ring-0"
-            />
-          </div>
-          {searchQuery.length >= 2 ? (
-            <>
-              {isLoading ? (
-                <div className="p-4 text-sm text-muted-foreground">
-                  Buscando...
+          {isLoading ? (
+            <div className="p-4 text-sm text-muted-foreground">
+              Buscando...
+            </div>
+          ) : searchResults.length > 0 ? (
+            <div className="py-1">
+              {searchResults.slice(0, 5).map((client) => (
+                <div
+                  key={client.id}
+                  onClick={() => handleSelect(client)}
+                  className={cn(
+                    "px-4 py-2 cursor-pointer hover:bg-gray-100",
+                    "border-b border-gray-100 last:border-b-0"
+                  )}
+                >
+                  <div className="font-medium">{client.name}</div>
+                  <div className="text-sm text-muted-foreground">
+                    CPF: {client.cpf} • {client.logradouro}, {client.numero}
+                  </div>
                 </div>
-              ) : searchResults.length > 0 ? (
-                <CommandGroup>
-                  {searchResults.map((client) => (
-                    <CommandItem
-                      key={client.id}
-                      onSelect={() => handleSelect(client)}
-                      className="cursor-pointer"
-                    >
-                      <Check
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          selectedClient?.id === client.id ? "opacity-100" : "opacity-0"
-                        )}
-                      />
-                      <div className="flex-1">
-                        <div className="font-medium">{client.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {client.logradouro}, {client.numero}
-                        </div>
-                      </div>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ) : (
-                <CommandEmpty>Cliente não encontrado</CommandEmpty>
-              )}
-            </>
+              ))}
+            </div>
           ) : (
             <div className="p-4 text-sm text-muted-foreground">
-              Digite pelo menos 2 caracteres para buscar
+              Cliente não encontrado
             </div>
           )}
-          {selectedClient && (
-            <div className="border-t p-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClear}
-                className="w-full"
-              >
-                Limpar seleção
-              </Button>
-            </div>
-          )}
-        </Command>
-      </PopoverContent>
-    </Popover>
+        </div>
+      )}
+    </div>
   );
 }
