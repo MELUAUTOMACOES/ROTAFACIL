@@ -8,11 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ClientSearch } from "@/components/ui/client-search";
 import { useToast } from "@/hooks/use-toast";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar, Clock, MapPin, UserPlus } from "lucide-react";
+import { Calendar, Clock, MapPin, UserPlus, Edit3, AlertCircle } from "lucide-react";
 import NewClientDialog from "./NewClientDialog";
+import ClientForm from "./ClientForm";
 
 interface AppointmentFormProps {
   appointment?: Appointment | null;
@@ -47,6 +48,7 @@ export default function AppointmentForm({
   const [selectedClient, setSelectedClient] = useState<number | null>(
     appointment?.clientId || (prefilledData?.clientId ? parseInt(prefilledData.clientId) : null)
   );
+  const [isEditClientOpen, setIsEditClientOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -69,6 +71,8 @@ export default function AppointmentForm({
       logradouro: appointment.logradouro,
       numero: appointment.numero,
       complemento: appointment.complemento || "",
+      bairro: appointment.bairro || "Não informado",
+      cidade: appointment.cidade || "Não informado",
     } : prefilledData ? {
       clientId: prefilledData.clientId ? parseInt(prefilledData.clientId) : 0,
       serviceId: prefilledData.serviceId ? parseInt(prefilledData.serviceId) : 0,
@@ -84,6 +88,10 @@ export default function AppointmentForm({
       numero: prefilledData.numero || "",
       complemento: prefilledData.clientId ? 
         (clients.find(c => c.id === parseInt(prefilledData.clientId!))?.complemento || "") : "",
+      bairro: prefilledData.clientId ? 
+        (clients.find(c => c.id === parseInt(prefilledData.clientId!))?.bairro || "Não informado") : "Não informado",
+      cidade: prefilledData.clientId ? 
+        (clients.find(c => c.id === parseInt(prefilledData.clientId!))?.cidade || "Não informado") : "Não informado",
     } : {
       clientId: 0,
       serviceId: 0,
@@ -97,6 +105,8 @@ export default function AppointmentForm({
       logradouro: "",
       numero: "",
       complemento: "",
+      bairro: "Não informado",
+      cidade: "Não informado",
     },
   });
 
@@ -238,6 +248,8 @@ export default function AppointmentForm({
     form.setValue("logradouro", client.logradouro);
     form.setValue("numero", client.numero);
     form.setValue("complemento", client.complemento || "");
+    form.setValue("bairro", client.bairro || "Não informado");
+    form.setValue("cidade", client.cidade || "Não informado");
   };
 
   const handleClientChange = (clientId: string) => {
@@ -249,7 +261,43 @@ export default function AppointmentForm({
       form.setValue("logradouro", client.logradouro);
       form.setValue("numero", client.numero);
       form.setValue("complemento", client.complemento || "");
+      form.setValue("bairro", client.bairro || "Não informado");
+      form.setValue("cidade", client.cidade || "Não informado");
     }
+  };
+
+  const handleClientUpdated = () => {
+    // Invalidate clients query to get updated data
+    queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
+    
+    // Update address fields with the updated client data
+    if (selectedClient) {
+      setTimeout(() => {
+        const updatedClient = clients.find(c => c.id === selectedClient);
+        if (updatedClient) {
+          form.setValue("cep", updatedClient.cep);
+          form.setValue("logradouro", updatedClient.logradouro);
+          form.setValue("numero", updatedClient.numero);
+          form.setValue("complemento", updatedClient.complemento || "");
+          form.setValue("bairro", updatedClient.bairro || "Não informado");
+          form.setValue("cidade", updatedClient.cidade || "Não informado");
+        }
+      }, 100);
+    }
+    
+    setIsEditClientOpen(false);
+  };
+
+  const handleAddressFieldClick = () => {
+    toast({
+      title: "Endereço somente leitura",
+      description: "Para alterar o endereço do cliente, edite o cadastro do cliente.",
+      variant: "default",
+    });
+  };
+
+  const getCurrentClient = () => {
+    return clients.find(c => c.id === selectedClient);
   };
 
 
@@ -431,10 +479,33 @@ export default function AppointmentForm({
 
           {/* Address Fields */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <MapPin className="h-5 w-5 text-gray-500" />
-              <h3 className="text-lg font-medium">Endereço do Atendimento</h3>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-gray-500" />
+                <h3 className="text-lg font-medium">Endereço do Atendimento</h3>
+              </div>
+              {appointment && selectedClient && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditClientOpen(true)}
+                  className="text-blue-600 border-blue-600 hover:bg-blue-50"
+                >
+                  <Edit3 className="h-4 w-4 mr-2" />
+                  Editar cadastro do cliente
+                </Button>
+              )}
             </div>
+
+            {appointment && !selectedClient && (
+              <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <p className="text-sm text-amber-800">
+                  Selecione um cliente para ver o endereço do atendimento
+                </p>
+              </div>
+            )}
             
             <div className="grid gap-4 md:grid-cols-2">
               <FormField
@@ -449,17 +520,25 @@ export default function AppointmentForm({
                         maxLength={9}
                         {...field}
                         onChange={(e) => {
-                          let value = e.target.value.replace(/\D/g, '');
-                          if (value.length > 5) {
-                            value = value.slice(0, 5) + '-' + value.slice(5, 8);
+                          if (!appointment && !prefilledData?.cep) {
+                            let value = e.target.value.replace(/\D/g, '');
+                            if (value.length > 5) {
+                              value = value.slice(0, 5) + '-' + value.slice(5, 8);
+                            }
+                            field.onChange(value);
                           }
-                          field.onChange(value);
                         }}
-                        disabled={!!prefilledData?.cep}
+                        onClick={appointment ? handleAddressFieldClick : undefined}
+                        disabled={!!prefilledData?.cep || !!appointment}
+                        readOnly={!!appointment}
+                        className={appointment ? "bg-gray-50 cursor-not-allowed" : ""}
                       />
                     </FormControl>
                     {prefilledData?.cep && (
                       <p className="text-sm text-blue-600">CEP selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
+                    )}
+                    {appointment && (
+                      <p className="text-sm text-gray-600">Endereço puxado do cadastro do cliente - use o botão "Editar cadastro do cliente" para alterar</p>
                     )}
                     <FormMessage />
                   </FormItem>
@@ -477,14 +556,22 @@ export default function AppointmentForm({
                         placeholder="123"
                         {...field}
                         onChange={(e) => {
-                          const value = e.target.value.replace(/\D/g, '');
-                          field.onChange(value);
+                          if (!appointment && !prefilledData?.numero) {
+                            const value = e.target.value.replace(/\D/g, '');
+                            field.onChange(value);
+                          }
                         }}
-                        disabled={!!prefilledData?.numero}
+                        onClick={appointment ? handleAddressFieldClick : undefined}
+                        disabled={!!prefilledData?.numero || !!appointment}
+                        readOnly={!!appointment}
+                        className={appointment ? "bg-gray-50 cursor-not-allowed" : ""}
                       />
                     </FormControl>
                     {prefilledData?.numero && (
                       <p className="text-sm text-blue-600">Número selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
+                    )}
+                    {appointment && (
+                      <p className="text-sm text-gray-600">Endereço puxado do cadastro do cliente - use o botão "Editar cadastro do cliente" para alterar</p>
                     )}
                     <FormMessage />
                   </FormItem>
@@ -501,11 +588,17 @@ export default function AppointmentForm({
                       <Input 
                         placeholder="Rua das Flores" 
                         {...field} 
-                        disabled={isFromFindDate}
+                        onClick={appointment ? handleAddressFieldClick : undefined}
+                        disabled={isFromFindDate || !!appointment}
+                        readOnly={!!appointment}
+                        className={appointment ? "bg-gray-50 cursor-not-allowed" : ""}
                       />
                     </FormControl>
                     {isFromFindDate && (
                       <p className="text-sm text-blue-600">Logradouro do cliente selecionado - não pode ser alterado</p>
+                    )}
+                    {appointment && (
+                      <p className="text-sm text-gray-600">Endereço puxado do cadastro do cliente - use o botão "Editar cadastro do cliente" para alterar</p>
                     )}
                     <FormMessage />
                   </FormItem>
@@ -523,11 +616,73 @@ export default function AppointmentForm({
                         placeholder="Apto 123" 
                         {...field} 
                         value={field.value || ""} 
-                        disabled={isFromFindDate}
+                        onClick={appointment ? handleAddressFieldClick : undefined}
+                        disabled={isFromFindDate || !!appointment}
+                        readOnly={!!appointment}
+                        className={appointment ? "bg-gray-50 cursor-not-allowed" : ""}
                       />
                     </FormControl>
                     {isFromFindDate && (
                       <p className="text-sm text-blue-600">Complemento do cliente selecionado - não pode ser alterado</p>
+                    )}
+                    {appointment && (
+                      <p className="text-sm text-gray-600">Endereço puxado do cadastro do cliente - use o botão "Editar cadastro do cliente" para alterar</p>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="bairro"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bairro *</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="Centro" 
+                        {...field} 
+                        value={field.value || ""} 
+                        onClick={appointment ? handleAddressFieldClick : undefined}
+                        disabled={isFromFindDate || !!appointment}
+                        readOnly={!!appointment}
+                        className={appointment ? "bg-gray-50 cursor-not-allowed" : ""}
+                      />
+                    </FormControl>
+                    {isFromFindDate && (
+                      <p className="text-sm text-blue-600">Bairro do cliente selecionado - não pode ser alterado</p>
+                    )}
+                    {appointment && (
+                      <p className="text-sm text-gray-600">Endereço puxado do cadastro do cliente - use o botão "Editar cadastro do cliente" para alterar</p>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="cidade"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cidade *</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="São Paulo" 
+                        {...field} 
+                        value={field.value || ""} 
+                        onClick={appointment ? handleAddressFieldClick : undefined}
+                        disabled={isFromFindDate || !!appointment}
+                        readOnly={!!appointment}
+                        className={appointment ? "bg-gray-50 cursor-not-allowed" : ""}
+                      />
+                    </FormControl>
+                    {isFromFindDate && (
+                      <p className="text-sm text-blue-600">Cidade do cliente selecionado - não pode ser alterada</p>
+                    )}
+                    {appointment && (
+                      <p className="text-sm text-gray-600">Endereço puxado do cadastro do cliente - use o botão "Editar cadastro do cliente" para alterar</p>
                     )}
                     <FormMessage />
                   </FormItem>
@@ -622,6 +777,18 @@ export default function AppointmentForm({
           </div>
         </form>
       </Form>
+
+      {/* Modal de Edição do Cliente */}
+      <Dialog open={isEditClientOpen} onOpenChange={setIsEditClientOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+          {selectedClient && (
+            <ClientForm
+              client={getCurrentClient()}
+              onClose={handleClientUpdated}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
