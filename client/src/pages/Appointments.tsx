@@ -1276,7 +1276,21 @@ export default function Appointments() {
                         
                         <div className="flex items-center space-x-2">
                           <MapPin className="h-4 w-4" />
-                          <span>{appointment.logradouro}, {appointment.numero}{appointment.complemento && `, ${appointment.complemento}`}</span>
+                          <span>
+                            {client
+                              ? (
+                                  <>
+                                    {client.logradouro || "Logradouro não informado"}
+                                    {client.numero ? `, ${client.numero}` : ""}
+                                    {client.complemento ? `, ${client.complemento}` : ""}
+                                    {client.bairro ? `, ${client.bairro}` : ""}
+                                    {client.cidade ? `, ${client.cidade}` : ""}
+                                    {client.cep ? ` - ${client.cep}` : ""}
+                                  </>
+                                )
+                              : <span style={{ color: "red" }}>Cliente não encontrado</span>
+                            }
+                          </span>
                         </div>
                         
                         <div className="flex items-center space-x-2">

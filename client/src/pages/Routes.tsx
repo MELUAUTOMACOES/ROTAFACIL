@@ -38,10 +38,19 @@ async function geocodeEndereco(endereco: string) {
   throw new Error("Endereço não encontrado: " + endereco);
 }
 
+// Função para calcular rota usando OSRM
 async function calcularRotaOsrm(coordenadas: {lat: number, lon: number}[]) {
   const pontos = coordenadas.map(coord => `${coord.lon},${coord.lat}`).join(';');
-  const url = `https://3086b2276d11.ngrok-free.app/route/v1/driving/${pontos}?overview=full&geometries=geojson`;
+  const url = `/api/route?coords=${encodeURIComponent(pontos)}`;
+
+  console.log("Chamando PROXY OSRM:", url);
+
   const res = await fetch(url);
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Erro OSRM: Status ${res.status}. Resposta: ${text.substring(0, 100)}...`);
+  }
   return res.json();
 }
 
@@ -648,7 +657,10 @@ export default function Routes() {
                                 </div>
                                 <p className="text-sm text-gray-600">{service?.name || "Serviço"}</p>
                                 <p className="text-xs text-gray-500">
-                                  {appointment.logradouro}, {appointment.numero} - {appointment.cep}
+                                  {client
+                                    ? `${client.logradouro}, ${client.numero}, ${client.bairro}, ${client.cidade} - ${client.cep}`
+                                    : <span className="text-red-600">Endereço não encontrado</span>
+                                  }
                                 </p>
                                 <div className="flex items-center justify-between mt-1 pr-10">
                                   <div className="flex items-center">
@@ -760,7 +772,7 @@ export default function Routes() {
                         <div className="flex-1">
                           <h5 className="font-medium text-gray-900">{client?.name || "Cliente"}</h5>
                           <p className="text-sm text-gray-600">
-                            {appointment.logradouro}, {appointment.numero} - {appointment.cep}
+                            {client.logradouro}, {client.numero}, {client.bairro}, {client.cidade} - {client.cep}
                           </p>
                           <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
                             <span>{time}</span>

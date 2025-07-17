@@ -759,6 +759,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Proxy OSRM para front
+  app.get("/api/route", async (req, res) => {
+    try {
+      const coords = req.query.coords as string;
+      if (!coords) {
+        return res.status(400).json({ error: "Missing 'coords' parameter" });
+      }
+      const osrmUrl = `https://0ba05a7412e2.ngrok-free.app/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+      const osrmRes = await fetch(osrmUrl, {
+        headers: {
+          "ngrok-skip-browser-warning": "true"
+        }
+      });
+      if (!osrmRes.ok) {
+        const text = await osrmRes.text();
+        return res.status(500).json({ error: `OSRM error: ${text.substring(0, 300)}` });
+      }
+      const data = await osrmRes.json();
+      return res.json(data);
+    } catch (err) {
+      console.error("Erro no proxy OSRM:", err);
+      return res.status(500).json({ error: "Erro no proxy OSRM" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

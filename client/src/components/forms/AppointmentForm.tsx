@@ -56,22 +56,6 @@ export default function AppointmentForm({
   const isFromFindDate = !!prefilledData && !appointment;
   console.log("📝 [DEBUG] AppointmentForm - isFromFindDate:", isFromFindDate);
 
-  // Effect to update address fields whenever the selected client changes or clients data is updated
-  useEffect(() => {
-    if (selectedClient && appointment) {
-      const currentClient = clients.find(c => c.id === selectedClient);
-      if (currentClient) {
-        console.log("🔄 [DEBUG] Atualizando campos de endereço automaticamente:", currentClient);
-        form.setValue("cep", currentClient.cep);
-        form.setValue("logradouro", currentClient.logradouro);
-        form.setValue("numero", currentClient.numero);
-        form.setValue("complemento", currentClient.complemento || "");
-        form.setValue("bairro", currentClient.bairro || "Não informado");
-        form.setValue("cidade", currentClient.cidade || "Não informado");
-      }
-    }
-  }, [selectedClient, clients, form, appointment]);
-  
   const form = useForm<InsertAppointment>({
     resolver: zodResolver(extendedInsertAppointmentSchema),
     defaultValues: appointment ? {
@@ -125,6 +109,23 @@ export default function AppointmentForm({
       cidade: "Não informado",
     },
   });
+  
+  
+  // Effect to update address fields whenever the selected client changes or clients data is updated
+  useEffect(() => {
+    if (selectedClient && appointment) {
+      const currentClient = clients.find(c => c.id === selectedClient);
+      if (currentClient) {
+        console.log("🔄 [DEBUG] Atualizando campos de endereço automaticamente:", currentClient);
+        form.setValue("cep", currentClient.cep);
+        form.setValue("logradouro", currentClient.logradouro);
+        form.setValue("numero", currentClient.numero);
+        form.setValue("complemento", currentClient.complemento || "");
+        form.setValue("bairro", currentClient.bairro || "Não informado");
+        form.setValue("cidade", currentClient.cidade || "Não informado");
+      }
+    }
+  }, [selectedClient, clients, appointment]);
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertAppointment) => {
