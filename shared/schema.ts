@@ -22,6 +22,8 @@ export const clients = pgTable("clients", {
   phone2: text("phone2"),
   cpf: text("cpf").notNull().unique(),
   cep: text("cep").notNull(),
+  bairro: text("bairro").notNull(),      // <-- NOVO CAMPO
+  cidade: text("cidade").notNull(),      // <-- NOVO CAMPO
   logradouro: text("logradouro").notNull(),
   numero: text("numero").notNull(),
   complemento: text("complemento"),
@@ -29,6 +31,7 @@ export const clients = pgTable("clients", {
   userId: integer("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
 
 // Services table
 export const services = pgTable("services", {
@@ -91,6 +94,8 @@ export const appointments = pgTable("appointments", {
   logradouro: text("logradouro").notNull(),
   numero: text("numero").notNull(),
   complemento: text("complemento"),
+  bairro: text("bairro").notNull().default("Não informado"),
+  cidade: text("cidade").notNull().default("Não informado"),
   userId: integer("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -227,11 +232,14 @@ export const cepSchema = z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no f
 // Client schema with extended validation
 export const extendedInsertClientSchema = insertClientSchema.extend({
   cep: cepSchema,
+  bairro: z.string().min(1, "Bairro é obrigatório"),
+  cidade: z.string().min(1, "Cidade é obrigatória"),
   numero: z.string().regex(/^\d+$/, "Número deve conter apenas dígitos"),
   phone1: z.string().min(1, "Telefone 1 é obrigatório").regex(/^\(\d{2}\) \d{4,5}-\d{4}$/, "Telefone deve estar no formato (XX) XXXXX-XXXX ou (XX) XXXX-XXXX"),
   phone2: z.string().regex(/^\(\d{2}\) \d{4,5}-\d{4}$/, "Telefone deve estar no formato (XX) XXXXX-XXXX ou (XX) XXXX-XXXX").optional().or(z.literal("")),
   email: z.string().regex(/^[^@]*@[^@]*$/, "Email deve conter @").optional().or(z.literal("")),
 });
+
 
 // Technician schema with extended validation  
 export const extendedInsertTechnicianSchema = insertTechnicianSchema.extend({

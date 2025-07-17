@@ -53,13 +53,14 @@ export default function Clients() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
-      
       if (data.errors > 0) {
-        const errorMessage = data.detailedErrors ? 
-          data.detailedErrors.slice(0, 2).join('\n') + 
-          (data.detailedErrors.length > 2 ? `\n... e mais ${data.detailedErrors.length - 2} erros` : '') : 
-          `${data.errors} erros encontrados`;
-          
+        const errorMessage = data.detailedErrors
+          ? data.detailedErrors.slice(0, 2).join('\n') +
+            (data.detailedErrors.length > 2
+              ? `\n... e mais ${data.detailedErrors.length - 2} erros`
+              : '')
+          : `${data.errors} erros encontrados`;
+
         toast({
           title: `Importação parcial: ${data.success} sucessos, ${data.errors} erros`,
           description: errorMessage,
@@ -93,7 +94,7 @@ export default function Clients() {
           try {
             const csv = event.target?.result as string;
             const lines = csv.split('\n').filter(line => line.trim());
-            
+
             if (lines.length < 2) {
               toast({
                 title: "Erro",
@@ -109,36 +110,36 @@ export default function Clients() {
 
             for (let i = 1; i < lines.length; i++) {
               const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
-              
               if (values.length < headers.length) continue;
 
               const nome = values[0];
               const cpf = values[1];
+              const email = values[2];
               const telefone1 = values[3];
               const cep = values[4];
-              const logradouro = values[5];
-              const numero = values[6];
+              const bairro = values[5];
+              const cidade = values[6];
+              const logradouro = values[7];
+              const numero = values[8];
 
               // Validar campos obrigatórios
               const validationErrors = [];
-              
               if (!nome) validationErrors.push("Nome (coluna 1) está vazio");
               if (!cpf) validationErrors.push("CPF (coluna 2) está vazio");
               if (!telefone1) validationErrors.push("Telefone 1 (coluna 4) está vazio");
               if (!cep) validationErrors.push("CEP (coluna 5) está vazio");
-              if (!logradouro) validationErrors.push("Logradouro (coluna 6) está vazio");
-              if (!numero) validationErrors.push("Número (coluna 7) está vazio");
-              
+              if (!bairro) validationErrors.push("Bairro (coluna 6) está vazio");
+              if (!cidade) validationErrors.push("Cidade (coluna 7) está vazio");
+              if (!logradouro) validationErrors.push("Logradouro (coluna 8) está vazio");
+              if (!numero) validationErrors.push("Número (coluna 9) está vazio");
               // Validar formato do CEP
               if (cep && !/^\d{5}-?\d{3}$/.test(cep)) {
                 validationErrors.push(`CEP "${cep}" inválido (formato esperado: XXXXX-XXX)`);
               }
-              
               // Validar se o número é numérico
               if (numero && isNaN(Number(numero))) {
                 validationErrors.push(`Número "${numero}" deve ser numérico`);
               }
-              
               if (validationErrors.length > 0) {
                 errors.push(`Linha ${i + 1}: ${validationErrors.join("; ")}`);
                 continue;
@@ -147,16 +148,18 @@ export default function Clients() {
               clientsToImport.push({
                 name: nome,
                 cpf: cpf,
-                email: values[2] || "",
+                email: email || "",
                 phone1: telefone1,
-                phone2: values[7] || "",
                 cep: cep,
+                bairro: bairro || "",
+                cidade: cidade || "",
                 logradouro: logradouro,
                 numero: numero,
-                complemento: values[8] || "",
-                observacoes: values[9] || `Cliente importado via CSV em ${new Date().toLocaleString('pt-BR')}`
+                phone2: values[9] || "",
+                complemento: values[10] || "",
+                observacoes: values[11] || "",
               });
-            }
+            } // <-- FECHA O FOR AQUI
 
             if (errors.length > 0) {
               const errorReport = [
@@ -179,8 +182,10 @@ export default function Clients() {
                 "• CPF (coluna 2)",
                 "• Telefone 1 (coluna 4)", 
                 "• CEP (coluna 5)",
-                "• Logradouro (coluna 6)",
-                "• Número (coluna 7)",
+                "• Bairro (coluna 6)",
+                "• Cidade (coluna 7)",
+                "• Logradouro (coluna 8)",
+                "• Número (coluna 9)",
                 "",
                 "ERROS ENCONTRADOS:",
                 "-".repeat(30),
@@ -196,7 +201,7 @@ export default function Clients() {
               logLink.setAttribute("download", `relatorio_erros_clientes_${new Date().toISOString().split('T')[0]}_${new Date().toTimeString().split(' ')[0].replace(/:/g, '')}.txt`);
               logLink.style.visibility = "hidden";
               document.body.appendChild(logLink);
-              
+
               setTimeout(() => {
                 if (confirm("Deseja baixar um relatório detalhado dos erros encontrados?")) {
                   logLink.click();
@@ -214,7 +219,6 @@ export default function Clients() {
                 variant: "destructive",
               });
             }
-
           } catch (error) {
             toast({
               title: "Erro",
@@ -230,12 +234,14 @@ export default function Clients() {
   };
 
   const downloadCSVTemplate = () => {
-    const templateHeaders = [
+    const headers = [
       "Nome",
       "CPF",
-      "Email", 
+      "Email",
       "Telefone 1",
       "CEP",
+      "Bairro",
+      "Cidade",
       "Logradouro",
       "Número",
       "Telefone 2",
@@ -249,6 +255,8 @@ export default function Clients() {
       "joao@email.com",
       "(11) 99999-9999",
       "01234-567",
+      "Portão",
+      "Curitiba",
       "Rua das Flores",
       "123",
       "(11) 88888-8888",
@@ -256,7 +264,7 @@ export default function Clients() {
       "Cliente preferencial"
     ];
 
-    const csvContent = [templateHeaders, exampleRow]
+    const csvContent = [headers, exampleRow]
       .map(row => row.map(field => `"${field}"`).join(","))
       .join("\n");
 
@@ -292,6 +300,8 @@ export default function Clients() {
       "Email",
       "Telefone 1",
       "CEP",
+      "Bairro",
+      "Cidade",
       "Logradouro",
       "Número",
       "Telefone 2",
@@ -305,6 +315,8 @@ export default function Clients() {
       client.email || "",
       client.phone1,
       client.cep,
+      client.bairro || "",
+      client.cidade || "",
       client.logradouro,
       client.numero,
       client.phone2 || "",

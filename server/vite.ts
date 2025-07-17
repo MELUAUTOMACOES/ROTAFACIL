@@ -21,10 +21,11 @@ export function log(message: string, source = "express") {
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
-    middlewareMode: true,
-    hmr: { server },
-    allowedHosts: true,
+  middlewareMode: true,
+  hmr: { server },
+  allowedHosts: ["localhost", "127.0.0.1"],
   };
+
 
   const vite = await createViteServer({
     ...viteConfig,

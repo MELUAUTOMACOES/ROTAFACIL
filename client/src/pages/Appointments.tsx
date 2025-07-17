@@ -492,8 +492,13 @@ export default function Appointments() {
               const technicianName = values[6];
               const dateTime = values[7];
               const cep = values[10];
-              const logradouro = values[11];
-              const numero = values[12];
+              const bairro = values[11]; // NOVO
+              const cidade = values[12]; // NOVO
+              const logradouro = values[13];
+              const numero = values[14];
+              const complemento = values[15] || "";
+              const notes = values[16] || "";
+
 
               console.log(`📋 [CSV IMPORT] Linha ${i + 1}: Cliente=${clientName}, CPF=${cpfCliente}`);
 
@@ -565,16 +570,18 @@ export default function Appointments() {
               
               if (!client) {
                 // Preparar dados do cliente para criação automática
-                clientData = {
+                 clientData = {
                   name: finalClientName,
                   cpf: cpfCliente || "",
                   email: values[2] || "",
                   phone1: phone1 || "",
                   phone2: values[4] || "",
                   cep: finalCep,
+                  bairro: bairro || "",
+                  cidade: cidade || "",
                   logradouro: finalLogradouro,
                   numero: finalNumero,
-                  complemento: values[13] || "",
+                  complemento: complemento,
                   observacoes: `Cliente criado automaticamente via importação CSV em ${new Date().toLocaleString('pt-BR')}`
                 };
                 console.log(`🆕 [CSV IMPORT] Preparando criação de novo cliente: ${finalClientName}`);
@@ -705,7 +712,7 @@ export default function Appointments() {
 
               const appointmentData = {
                 clientId: client?.id || null,
-                clientData: clientData, // Dados para criar cliente se necessário
+                clientData: clientData,
                 serviceId: service.id,
                 technicianId: technician?.id || null,
                 teamId: team?.id || null,
@@ -713,10 +720,12 @@ export default function Appointments() {
                 status: finalStatus,
                 priority: normalizedPriority,
                 cep: finalCep,
+                bairro: client ? client.bairro : (bairro || ""),
+                cidade: client ? client.cidade : (cidade || ""),
                 logradouro: finalLogradouro,
                 numero: finalNumero,
-                complemento: values[13] || "",
-                notes: values[14] || ""
+                complemento,
+                notes
               };
               
               console.log(`📋 [CSV IMPORT] Agendamento preparado - Linha ${i + 1}:`, {
@@ -866,6 +875,8 @@ export default function Appointments() {
       "Status",
       "Prioridade",
       "CEP",
+      "Bairro",      // NOVO
+      "Cidade",      // NOVO
       "Logradouro", 
       "Número",
       "Complemento",
@@ -884,6 +895,8 @@ export default function Appointments() {
       "Agendado",
       "normal", 
       "01234-567",
+      "Portão",     // EXEMPLO
+      "Curitiba",   // EXEMPLO
       "Rua das Flores",
       "123",
       "Apto 45",
@@ -910,6 +923,7 @@ export default function Appointments() {
     });
   };
 
+
   const exportToCSV = () => {
     if (appointments.length === 0) {
       toast({
@@ -921,47 +935,51 @@ export default function Appointments() {
     }
 
     const csvHeaders = [
-      "ID",
-      "Cliente",
-      "Email Cliente",
-      "Telefone 1",
-      "Telefone 2",
-      "Serviço",
-      "Técnico",
-      "Data/Hora",
-      "Status",
-      "Prioridade",
-      "CEP",
-      "Logradouro",
-      "Número",
-      "Complemento",
-      "Observações"
+    "ID",
+    "Cliente",
+    "Email Cliente",
+    "Telefone 1",
+    "Telefone 2",
+    "Serviço",
+    "Técnico",
+    "Data/Hora",
+    "Status",
+    "Prioridade",
+    "CEP",
+    "Bairro",         // NOVO
+    "Cidade",         // NOVO
+    "Logradouro",
+    "Número",
+    "Complemento",
+    "Observações"
+  ];
+
+  const csvData = appointments.map((appointment: Appointment) => {
+    const client = getClient(appointment.clientId);
+    const service = getService(appointment.serviceId);
+    const technician = getTechnician(appointment.technicianId);
+    const { date, time } = formatDateTime(appointment.scheduledDate.toString());
+
+    return [
+      appointment.id,
+      client?.name || "Cliente não encontrado",
+      client?.email || "",
+      client?.phone1 || "",
+      client?.phone2 || "",
+      service?.name || "Serviço não encontrado",
+      technician?.name || "Técnico não encontrado",
+      `${date} ${time}`,
+      getStatusText(appointment.status),
+      getPriorityText(appointment.priority),
+      appointment.cep,
+      appointment.bairro || "",       // NOVO
+      appointment.cidade || "",       // NOVO
+      appointment.logradouro,
+      appointment.numero,
+      appointment.complemento || "",
+      appointment.notes || ""
     ];
-
-    const csvData = appointments.map((appointment: Appointment) => {
-      const client = getClient(appointment.clientId);
-      const service = getService(appointment.serviceId);
-      const technician = getTechnician(appointment.technicianId);
-      const { date, time } = formatDateTime(appointment.scheduledDate.toString());
-
-      return [
-        appointment.id,
-        client?.name || "Cliente não encontrado",
-        client?.email || "",
-        client?.phone1 || "",
-        client?.phone2 || "",
-        service?.name || "Serviço não encontrado",
-        technician?.name || "Técnico não encontrado",
-        `${date} ${time}`,
-        getStatusText(appointment.status),
-        getPriorityText(appointment.priority),
-        appointment.cep,
-        appointment.logradouro,
-        appointment.numero,
-        appointment.complemento || "",
-        appointment.notes || ""
-      ];
-    });
+  });
 
     const csvContent = [csvHeaders, ...csvData]
       .map((row: any[]) => row.map((field: any) => `"${field}"`).join(","))

@@ -21,6 +21,30 @@ interface OptimizedRoute {
   estimatedTime: number;
 }
 
+async function geocodeEndereco(endereco: string) {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(endereco)}&format=json&limit=1`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "RotaFacilDev/1.0 (seuemail@dominio.com)"
+    }
+  });
+  const data = await res.json();
+  if (data && data.length) {
+    return {
+      lat: parseFloat(data[0].lat),
+      lon: parseFloat(data[0].lon)
+    };
+  }
+  throw new Error("Endereço não encontrado: " + endereco);
+}
+
+async function calcularRotaOsrm(coordenadas: {lat: number, lon: number}[]) {
+  const pontos = coordenadas.map(coord => `${coord.lon},${coord.lat}`).join(';');
+  const url = `https://3086b2276d11.ngrok-free.app/route/v1/driving/${pontos}?overview=full&geometries=geojson`;
+  const res = await fetch(url);
+  return res.json();
+}
+
 export default function Routes() {
   const [selectedAppointments, setSelectedAppointments] = useState<number[]>([]);
   const [optimizedRoute, setOptimizedRoute] = useState<OptimizedRoute | null>(null);
@@ -276,14 +300,8 @@ export default function Routes() {
     });
   };
 
-  const handleOptimizeRoute = () => {
-    console.log("🚀 [DEBUG] handleOptimizeRoute chamado");
-    console.log("🚀 [DEBUG] Selected appointments:", selectedAppointments);
-    console.log("🚀 [DEBUG] DOM ready state:", document.readyState);
-    console.log("🚀 [DEBUG] Is fullscreen:", isFullscreen);
-    
+  const handleOptimizeRoute = async () => {
     if (selectedAppointments.length === 0) {
-      console.log("❌ [DEBUG] Nenhum agendamento selecionado");
       toast({
         title: "Atenção",
         description: "Selecione pelo menos um agendamento para otimizar a rota",
@@ -292,25 +310,47 @@ export default function Routes() {
       return;
     }
 
-    // Verificar se o DOM está pronto e os elementos necessários existem
-    if (document.readyState !== 'complete') {
-      console.log("⏳ [DEBUG] DOM ainda não está completamente carregado, aguardando...");
-      setTimeout(() => handleOptimizeRoute(), 100);
-      return;
-    }
-
-    console.log("✅ [DEBUG] Iniciando otimização de rota");
     try {
-      optimizeRouteMutation.mutate(selectedAppointments);
-    } catch (error) {
-      console.error("❌ [DEBUG] Erro ao executar mutação:", error);
+      // 1. Pegue os agendamentos selecionados completos
+      const selecionados = appointments.filter(apt => selectedAppointments.includes(apt.id));
+
+      // 2. Monte o endereço completo para cada um (adicione cidade/UF se quiser precisão)
+      const enderecos = selecionados.map((apt) => {
+        return `${apt.logradouro}, ${apt.numero}, ${apt.cep} Brasil`;
+      });
+
+      // 3. Geocode todos (um a um; pode melhorar depois com Promise.all)
+      const coordenadas = [];
+      for (const endereco of enderecos) {
+        const coord = await geocodeEndereco(endereco);
+        coordenadas.push(coord);
+      }
+
+      // 4. Chame o OSRM!
+      const rota = await calcularRotaOsrm(coordenadas);
+
+      // 5. Atualize a tela!
+      setOptimizedRoute({
+        optimizedOrder: selecionados, // Por enquanto, mantém a ordem original
+        totalDistance: rota.routes[0]?.distance ? (rota.routes[0].distance / 1000).toFixed(1) : 0,
+        estimatedTime: rota.routes[0]?.duration ? Math.round(rota.routes[0].duration / 60) : 0,
+        geojson: rota.routes[0]?.geometry,
+      });
+
+      toast({
+        title: "Rota otimizada com sucesso!",
+        description: "Verifique o resultado à direita.",
+      });
+    } catch (err) {
       toast({
         title: "Erro",
-        description: "Erro interno ao otimizar rota. Tente novamente.",
+        description: "Falha ao otimizar rota: " + (err.message || err),
         variant: "destructive",
       });
+      console.error(err);
     }
   };
+
 
   const getClient = (clientId: number | null) => clientId ? clients.find((c: Client) => c.id === clientId) : null;
   const getService = (serviceId: number) => services.find((s: Service) => s.id === serviceId);
