@@ -98,20 +98,16 @@ export default function Services() {
           <p className="text-gray-600">Gerencie o catálogo de serviços oferecidos</p>
         </div>
         
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Serviço
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <ServiceForm
-              service={selectedService}
-              onClose={handleFormClose}
-            />
-          </DialogContent>
-        </Dialog>
+        <Button 
+          className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+          onClick={() => {
+            setSelectedService(null);
+            setIsFormOpen(true);
+          }}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Novo Serviço
+        </Button>
       </div>
 
       {/* Services List */}
@@ -123,20 +119,16 @@ export default function Services() {
             <p className="text-gray-600 text-center mb-6">
               Crie seu catálogo de serviços para organizar os tipos de atendimento oferecidos.
             </p>
-            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Primeiro Serviço
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <ServiceForm
-                  service={selectedService}
-                  onClose={handleFormClose}
-                />
-              </DialogContent>
-            </Dialog>
+            <Button 
+              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+              onClick={() => {
+                setSelectedService(null);
+                setIsFormOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Adicionar Primeiro Serviço
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -203,6 +195,16 @@ export default function Services() {
           ))}
         </div>
       )}
+      
+      {/* Centralized Dialog for All Service Forms */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent>
+          <ServiceForm
+            service={selectedService}
+            onClose={handleFormClose}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -110,22 +110,16 @@ export default function Vehicles() {
           <p className="text-gray-600">Gerencie a frota de veículos da empresa</p>
         </div>
         
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Veículo
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <VehicleForm
-              vehicle={selectedVehicle}
-              technicians={technicians}
-              teams={teams}
-              onClose={handleFormClose}
-            />
-          </DialogContent>
-        </Dialog>
+        <Button 
+          className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+          onClick={() => {
+            setSelectedVehicle(null);
+            setIsFormOpen(true);
+          }}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Novo Veículo
+        </Button>
       </div>
 
       {/* Vehicles List */}
@@ -137,22 +131,16 @@ export default function Vehicles() {
             <p className="text-gray-600 text-center mb-6">
               Adicione veículos à sua frota para otimizar os atendimentos técnicos.
             </p>
-            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Primeiro Veículo
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <VehicleForm
-                  vehicle={selectedVehicle}
-                  technicians={technicians}
-                  teams={teams}
-                  onClose={handleFormClose}
-                />
-              </DialogContent>
-            </Dialog>
+            <Button 
+              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+              onClick={() => {
+                setSelectedVehicle(null);
+                setIsFormOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Adicionar Primeiro Veículo
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -233,6 +221,18 @@ export default function Vehicles() {
           })}
         </div>
       )}
+      
+      {/* Centralized Dialog for All Vehicle Forms */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent>
+          <VehicleForm
+            vehicle={selectedVehicle}
+            technicians={technicians}
+            teams={teams}
+            onClose={handleFormClose}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

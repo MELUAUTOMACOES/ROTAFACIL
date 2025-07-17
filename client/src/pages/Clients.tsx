@@ -414,20 +414,16 @@ export default function Clients() {
             Exportar CSV
           </Button>
           
-          <Dialog open={isFormOpen} onOpenChange={handleDialogOpenChange}>
-            <DialogTrigger asChild>
-              <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Cliente
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <ClientForm
-                client={selectedClient}
-                onClose={handleFormClose}
-              />
-            </DialogContent>
-          </Dialog>
+          <Button 
+            className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+            onClick={() => {
+              setSelectedClient(null);
+              setIsFormOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Cliente
+          </Button>
         </div>
       </div>
 
@@ -440,20 +436,16 @@ export default function Clients() {
             <p className="text-gray-600 text-center mb-6">
               Comece adicionando seus primeiros clientes para organizar seus atendimentos.
             </p>
-            <Dialog open={isFormOpen} onOpenChange={handleDialogOpenChange}>
-              <DialogTrigger asChild>
-                <Button className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Primeiro Cliente
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <ClientForm
-                  client={selectedClient}
-                  onClose={handleFormClose}
-                />
-              </DialogContent>
-            </Dialog>
+            <Button 
+              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+              onClick={() => {
+                setSelectedClient(null);
+                setIsFormOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Adicionar Primeiro Cliente
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -526,6 +518,16 @@ export default function Clients() {
           ))}
         </div>
       )}
+      
+      {/* Centralized Dialog for All Client Forms */}
+      <Dialog open={isFormOpen} onOpenChange={handleDialogOpenChange}>
+        <DialogContent>
+          <ClientForm
+            client={selectedClient}
+            onClose={handleFormClose}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

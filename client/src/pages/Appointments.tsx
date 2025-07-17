@@ -1045,33 +1045,19 @@ export default function Appointments() {
             Exportar CSV
           </Button>
           
-          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-            <DialogTrigger asChild>
-              <Button 
-                className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                onClick={() => {
-                  console.log("🆕 [DEBUG] Novo Agendamento - Botão clicado");
-                  console.log("🆕 [DEBUG] Novo Agendamento - Limpando selectedAppointment e prefilledData");
-                  setSelectedAppointment(null);
-                  setPrefilledData(null);
-                }}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Agendamento
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <AppointmentForm
-                appointment={selectedAppointment}
-                onClose={handleFormClose}
-                clients={clients}
-                services={services}
-                technicians={technicians}
-                teams={teams}
-                prefilledData={prefilledData}
-              />
-            </DialogContent>
-          </Dialog>
+          <Button 
+            className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+            onClick={() => {
+              console.log("🆕 [DEBUG] Novo Agendamento - Botão clicado");
+              console.log("🆕 [DEBUG] Novo Agendamento - Limpando selectedAppointment e prefilledData");
+              setSelectedAppointment(null);
+              setPrefilledData(null);
+              setIsFormOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Agendamento
+          </Button>
         </div>
       </div>
 
@@ -1214,28 +1200,17 @@ export default function Appointments() {
                 : "Tente ajustar os filtros ou limpar todos os filtros para ver mais agendamentos."
               }
             </p>
-            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-              <DialogTrigger asChild>
-                <Button 
-                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                  onClick={() => setPrefilledData(null)} // Limpar dados pré-preenchidos ao clicar diretamente
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Criar Primeiro Agendamento
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <AppointmentForm
-                  appointment={selectedAppointment}
-                  onClose={handleFormClose}
-                  clients={clients}
-                  services={services}
-                  technicians={technicians}
-                  teams={teams}
-                  prefilledData={prefilledData}
-                />
-              </DialogContent>
-            </Dialog>
+            <Button 
+              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+              onClick={() => {
+                setPrefilledData(null);
+                setSelectedAppointment(null);
+                setIsFormOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Criar Primeiro Agendamento
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -1330,6 +1305,21 @@ export default function Appointments() {
           })}
         </div>
       )}
+      
+      {/* Centralized Dialog for All Appointment Forms */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <AppointmentForm
+            appointment={selectedAppointment}
+            onClose={handleFormClose}
+            clients={clients}
+            services={services}
+            technicians={technicians}
+            teams={teams}
+            prefilledData={prefilledData}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

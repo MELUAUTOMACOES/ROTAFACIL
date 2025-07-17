@@ -353,30 +353,13 @@ export default function Technicians() {
               <p className="text-sm text-gray-600">Organize técnicos em equipes especializadas</p>
             </div>
             
-            <Dialog open={isTeamFormOpen} onOpenChange={setIsTeamFormOpen}>
-              <DialogTrigger asChild>
-                <Button 
-                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                  onClick={handleNewTeam} // Usar função específica que limpa o estado
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Cadastrar Equipe
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden">
-                <TempTeamForm
-                  team={selectedTeam || undefined}
-                  technicians={technicians}
-                  services={services}
-                  existingTechIds={
-                    allTeamMembers
-                      .filter(m => m.teamId === selectedTeam?.id)
-                      .map(m => m.technicianId)
-                  }
-                  onClose={handleTeamFormClose}
-                />
-              </DialogContent>
-            </Dialog>
+            <Button 
+              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+              onClick={handleNewTeam}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Cadastrar Equipe
+            </Button>
           </div>
 
           {/* Lista de Equipes */}
@@ -388,30 +371,13 @@ export default function Technicians() {
                 <p className="text-gray-600 text-center mb-6">
                   Crie equipes especializadas para organizar melhor seus técnicos e serviços.
                 </p>
-                <Dialog open={isTeamFormOpen} onOpenChange={setIsTeamFormOpen}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                      onClick={handleNewTeam} // Usar função específica que limpa o estado
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Criar Primeira Equipe
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-2xl">
-                    <TempTeamForm
-                      team={selectedTeam || undefined}
-                      technicians={technicians}
-                      services={services}
-                      existingTechIds={
-                        allTeamMembers
-                          .filter(m => m.teamId === selectedTeam?.id)
-                          .map(m => m.technicianId)
-                      }
-                      onClose={handleTeamFormClose}
-                    />
-                  </DialogContent>
-                </Dialog>
+                <Button 
+                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                  onClick={handleNewTeam}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Criar Primeira Equipe
+                </Button>
               </CardContent>
             </Card>
           ) : (
@@ -501,6 +467,23 @@ export default function Technicians() {
               ))}
             </div>
           )}
+          
+          {/* Centralized Dialog for All Team Forms */}
+          <Dialog open={isTeamFormOpen} onOpenChange={setIsTeamFormOpen}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden">
+              <TempTeamForm
+                team={selectedTeam || undefined}
+                technicians={technicians}
+                services={services}
+                existingTechIds={
+                  allTeamMembers
+                    .filter(m => m.teamId === selectedTeam?.id)
+                    .map(m => m.technicianId)
+                }
+                onClose={handleTeamFormClose}
+              />
+            </DialogContent>
+          </Dialog>
         </TabsContent>
       </Tabs>
     </div>
