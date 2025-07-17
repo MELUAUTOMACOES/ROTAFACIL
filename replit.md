@@ -105,6 +105,12 @@ RotaFácil is a comprehensive service route management application designed to h
 ## Changelog
 ```
 Changelog:
+- July 17, 2025: Migration from Replit Agent to Replit Environment
+  * Fixed port configuration from 5050 to 5000 for proper deployment
+  * Added automatic redirect to /dashboard after successful login
+  * Updated server binding to use 0.0.0.0 for accessibility
+  * Verified all dependencies and workflows are functioning correctly
+  * Completed full project migration with security best practices
 - June 27, 2025: Correções na tela de agendamentos
   * Corrigido erro "toISOString is not a function" com logs detalhados para identificar dados problemáticos
   * Implementada limpeza completa do formulário ao clicar "Novo Agendamento"

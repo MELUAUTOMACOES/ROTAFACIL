@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,7 @@ export default function Login() {
 
   const { login, register } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +47,8 @@ export default function Login() {
           title: "Login realizado com sucesso!",
           description: "Bem-vindo ao RotaFácil",
         });
+        // Redirect to dashboard after successful login
+        setLocation("/dashboard");
       } else {
         if (formData.password !== formData.confirmPassword) {
           throw new Error("As senhas não coincidem");
@@ -62,6 +65,8 @@ export default function Login() {
           title: "Conta criada com sucesso!",
           description: "Bem-vindo ao RotaFácil",
         });
+        // Redirect to dashboard after successful registration
+        setLocation("/dashboard");
       }
     } catch (error: any) {
       toast({
