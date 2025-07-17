@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -55,6 +55,22 @@ export default function AppointmentForm({
   // Verificar se o formulário foi aberto a partir do fluxo "Ache uma Data"
   const isFromFindDate = !!prefilledData && !appointment;
   console.log("📝 [DEBUG] AppointmentForm - isFromFindDate:", isFromFindDate);
+
+  // Effect to update address fields whenever the selected client changes or clients data is updated
+  useEffect(() => {
+    if (selectedClient && appointment) {
+      const currentClient = clients.find(c => c.id === selectedClient);
+      if (currentClient) {
+        console.log("🔄 [DEBUG] Atualizando campos de endereço automaticamente:", currentClient);
+        form.setValue("cep", currentClient.cep);
+        form.setValue("logradouro", currentClient.logradouro);
+        form.setValue("numero", currentClient.numero);
+        form.setValue("complemento", currentClient.complemento || "");
+        form.setValue("bairro", currentClient.bairro || "Não informado");
+        form.setValue("cidade", currentClient.cidade || "Não informado");
+      }
+    }
+  }, [selectedClient, clients, form, appointment]);
   
   const form = useForm<InsertAppointment>({
     resolver: zodResolver(extendedInsertAppointmentSchema),
@@ -266,15 +282,23 @@ export default function AppointmentForm({
     }
   };
 
-  const handleClientUpdated = () => {
+  const handleClientUpdated = async () => {
+    // Close the edit client dialog first
+    setIsEditClientOpen(false);
+    
     // Invalidate clients query to get updated data
-    queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
+    await queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
+    
+    // Force refetch of clients data to get the latest information
+    await queryClient.refetchQueries({ queryKey: ['/api/clients'] });
     
     // Update address fields with the updated client data
     if (selectedClient) {
+      // Wait a bit longer to ensure the query has completed
       setTimeout(() => {
         const updatedClient = clients.find(c => c.id === selectedClient);
         if (updatedClient) {
+          console.log("🔄 [DEBUG] Atualizando campos de endereço com dados do cliente:", updatedClient);
           form.setValue("cep", updatedClient.cep);
           form.setValue("logradouro", updatedClient.logradouro);
           form.setValue("numero", updatedClient.numero);
@@ -282,10 +306,8 @@ export default function AppointmentForm({
           form.setValue("bairro", updatedClient.bairro || "Não informado");
           form.setValue("cidade", updatedClient.cidade || "Não informado");
         }
-      }, 100);
+      }, 300);
     }
-    
-    setIsEditClientOpen(false);
   };
 
   const handleAddressFieldClick = () => {
@@ -537,9 +559,6 @@ export default function AppointmentForm({
                     {prefilledData?.cep && (
                       <p className="text-sm text-blue-600">CEP selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
                     )}
-                    {appointment && (
-                      <p className="text-sm text-gray-600">Endereço puxado do cadastro do cliente - use o botão "Editar cadastro do cliente" para alterar</p>
-                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -570,9 +589,6 @@ export default function AppointmentForm({
                     {prefilledData?.numero && (
                       <p className="text-sm text-blue-600">Número selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
                     )}
-                    {appointment && (
-                      <p className="text-sm text-gray-600">Endereço puxado do cadastro do cliente - use o botão "Editar cadastro do cliente" para alterar</p>
-                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -596,9 +612,6 @@ export default function AppointmentForm({
                     </FormControl>
                     {isFromFindDate && (
                       <p className="text-sm text-blue-600">Logradouro do cliente selecionado - não pode ser alterado</p>
-                    )}
-                    {appointment && (
-                      <p className="text-sm text-gray-600">Endereço puxado do cadastro do cliente - use o botão "Editar cadastro do cliente" para alterar</p>
                     )}
                     <FormMessage />
                   </FormItem>
@@ -625,9 +638,6 @@ export default function AppointmentForm({
                     {isFromFindDate && (
                       <p className="text-sm text-blue-600">Complemento do cliente selecionado - não pode ser alterado</p>
                     )}
-                    {appointment && (
-                      <p className="text-sm text-gray-600">Endereço puxado do cadastro do cliente - use o botão "Editar cadastro do cliente" para alterar</p>
-                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -653,9 +663,6 @@ export default function AppointmentForm({
                     {isFromFindDate && (
                       <p className="text-sm text-blue-600">Bairro do cliente selecionado - não pode ser alterado</p>
                     )}
-                    {appointment && (
-                      <p className="text-sm text-gray-600">Endereço puxado do cadastro do cliente - use o botão "Editar cadastro do cliente" para alterar</p>
-                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -680,9 +687,6 @@ export default function AppointmentForm({
                     </FormControl>
                     {isFromFindDate && (
                       <p className="text-sm text-blue-600">Cidade do cliente selecionado - não pode ser alterada</p>
-                    )}
-                    {appointment && (
-                      <p className="text-sm text-gray-600">Endereço puxado do cadastro do cliente - use o botão "Editar cadastro do cliente" para alterar</p>
                     )}
                     <FormMessage />
                   </FormItem>
