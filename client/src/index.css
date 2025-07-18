@@ -380,20 +380,88 @@
   border-color: #9ca3af;
 }
 
-/* CSS MÍNIMO para debug do calendário modo mês */
+/* CORREÇÃO: Month view - garante que os eventos apareçam corretamente */
 .rbc-month-view .rbc-row-content {
-  min-height: 64px !important;
+  height: auto !important;
+  min-height: 120px !important;
   overflow: visible !important;
 }
 
-.rbc-month-view .rbc-event {
+.rbc-month-view .rbc-row {
+  min-height: 120px !important;
+  overflow: visible !important;
+}
+
+.rbc-month-view .rbc-date-cell {
+  min-height: 120px !important;
+  padding: 2px !important;
   position: relative !important;
-  z-index: 2 !important;
+  overflow: visible !important;
+  vertical-align: top !important;
+}
+
+.rbc-month-view .rbc-event {
   margin: 1px 2px !important;
-  font-size: 12px !important;
+  font-size: 10px !important;
   padding: 2px 4px !important;
-  visibility: visible !important;
+  line-height: 1.2 !important;
+  position: relative !important;
+  z-index: 1 !important;
   display: block !important;
+  max-width: calc(100% - 4px) !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 14px !important;
+  box-sizing: border-box !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.rbc-month-view .rbc-event-content {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  visibility: visible !important;
+}
+
+/* CORREÇÃO ADICIONAL: Garante que o container dos eventos seja visível */
+.rbc-month-view .rbc-row-segment {
+  position: relative !important;
+  overflow: visible !important;
+}
+
+.rbc-month-view .rbc-event-container {
+  position: relative !important;
+  overflow: visible !important;
+  height: auto !important;
+}
+
+/* Remove qualquer clipping que possa esconder os eventos */
+.rbc-month-view .rbc-date-cell * {
+  overflow: visible !important;
+}
+
+.rbc-month-view .rbc-overlay {
+  z-index: 1000 !important;
+}
+
+/* Garante que eventos "allDay" apareçam corretamente */
+.rbc-month-view .rbc-allday-cell {
+  overflow: visible !important;
+  height: auto !important;
+}
+
+/* Força visibilidade dos eventos no mês */
+.rbc-month-view .rbc-event {
+  background-color: #3b82f6 !important;
+  color: white !important;
+  border-radius: 3px !important;
+  font-weight: 500 !important;
+  text-align: left !important;
+  cursor: pointer !important;
 }
 
 /* Ensure show more button is visible */
