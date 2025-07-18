@@ -1016,42 +1016,45 @@ export default function Appointments() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header - Mobile-First Responsive */}
+      <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Agendamentos</h1>
           <p className="text-gray-600">Gerencie todos os seus agendamentos</p>
         </div>
         
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            onClick={downloadCSVTemplate}
-            className="text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-          >
-            Baixar CSV Modelo
-          </Button>
-          
-          <Button
-            variant="outline"
-            onClick={handleImportCSV}
-            className="border-blue-600 text-blue-600 hover:bg-blue-50"
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Importar CSV
-          </Button>
-          
-          <Button
-            variant="outline"
-            onClick={exportToCSV}
-            className="border-burnt-yellow text-burnt-yellow hover:bg-burnt-yellow hover:text-white"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Exportar CSV
-          </Button>
+        {/* Action Buttons - Stack on mobile */}
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+            <Button
+              variant="ghost"
+              onClick={downloadCSVTemplate}
+              className="text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-50 w-full sm:w-auto"
+            >
+              Baixar CSV Modelo
+            </Button>
+            
+            <Button
+              variant="outline"
+              onClick={handleImportCSV}
+              className="border-blue-600 text-blue-600 hover:bg-blue-50 w-full sm:w-auto"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Importar CSV
+            </Button>
+            
+            <Button
+              variant="outline"
+              onClick={exportToCSV}
+              className="border-burnt-yellow text-burnt-yellow hover:bg-burnt-yellow hover:text-white w-full sm:w-auto"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Exportar CSV
+            </Button>
+          </div>
           
           <Button 
-            className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+            className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white w-full md:w-auto"
             onClick={() => {
               console.log("🆕 [DEBUG] Novo Agendamento - Botão clicado");
               console.log("🆕 [DEBUG] Novo Agendamento - Limpando selectedAppointment e prefilledData");
@@ -1193,25 +1196,25 @@ export default function Appointments() {
           </CardContent>
         </Card>
         
-        {/* View Mode Toggle - Mobile-First */}
+        {/* View Mode Toggle - Compact Desktop, Touch-Friendly Mobile */}
         <div className="flex flex-col items-center space-y-3 md:flex-row md:justify-center md:space-y-0">
           <span className="text-sm font-medium text-gray-700 mb-2 md:mb-0 md:mr-4">Modo de Visualização</span>
-          <div className="bg-white border-2 border-gray-200 rounded-lg p-1 shadow-sm w-full max-w-sm md:w-auto">
+          <div className="bg-white border border-gray-200 rounded p-0.5 shadow-sm w-full max-w-sm md:w-auto">
             <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as "list" | "calendar")} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 h-12 bg-gray-50">
+              <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2 h-auto sm:h-8 bg-gray-50 p-0 gap-1 sm:gap-0">
                 <TabsTrigger 
                   value="list" 
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow"
+                  className="flex items-center justify-center gap-2 py-3 px-4 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
                 >
-                  <List className="h-5 w-5" />
-                  <span className="hidden sm:inline">Lista</span>
+                  <List className="h-4 w-4" />
+                  <span className="text-sm sm:text-xs">Lista</span>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="calendar" 
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow"
+                  className="flex items-center justify-center gap-2 py-3 px-4 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
                 >
-                  <Calendar className="h-5 w-5" />
-                  <span className="hidden sm:inline">Calendário</span>
+                  <Calendar className="h-4 w-4" />
+                  <span className="text-sm sm:text-xs">Calendário</span>
                 </TabsTrigger>
               </TabsList>
             </Tabs>

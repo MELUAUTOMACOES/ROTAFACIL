@@ -297,6 +297,7 @@
   .rbc-toolbar {
     flex-direction: column;
     gap: 8px;
+    padding: 8px 12px;
   }
   
   .rbc-toolbar button {
@@ -313,8 +314,42 @@
   }
   
   .rbc-event {
-    font-size: 10px !important;
-    padding: 1px 4px !important;
+    font-size: 9px !important;
+    padding: 1px 3px !important;
+  }
+  
+  .rbc-month-view .rbc-date-cell {
+    min-height: 80px;
+  }
+  
+  .rbc-month-view .rbc-row-content {
+    min-height: 80px;
+  }
+  
+  .rbc-month-view .rbc-event {
+    font-size: 9px !important;
+    padding: 1px 2px !important;
+    margin: 1px !important;
+  }
+  
+  .rbc-month-view .rbc-show-more {
+    font-size: 8px !important;
+    padding: 1px !important;
+  }
+  
+  /* Mobile calendar adjustments */
+  .rbc-calendar {
+    padding: 8px;
+  }
+  
+  .rbc-month-view .rbc-header {
+    padding: 8px 4px;
+    font-size: 12px;
+  }
+  
+  .rbc-time-view .rbc-time-header-content {
+    font-size: 12px;
+    min-height: 32px;
   }
 }
 
@@ -347,16 +382,17 @@
 /* Month view - ensure events can show multiple per day */
 .rbc-month-view .rbc-row-content {
   height: auto;
-  min-height: 80px;
+  min-height: 120px;
 }
 
 .rbc-month-view .rbc-row {
-  min-height: 100px;
+  min-height: 120px;
 }
 
 .rbc-month-view .rbc-date-cell {
-  min-height: 100px;
+  min-height: 120px;
   padding: 2px;
+  position: relative;
 }
 
 .rbc-month-view .rbc-event {
@@ -364,12 +400,33 @@
   font-size: 10px;
   padding: 1px 4px;
   line-height: 1.2;
+  position: relative;
+  z-index: 1;
+  display: block;
+  max-width: calc(100% - 4px);
 }
 
 .rbc-month-view .rbc-event-content {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: block;
+}
+
+/* Ensure show more button is visible */
+.rbc-month-view .rbc-show-more {
+  position: relative;
+  z-index: 2;
+  display: block;
+  width: calc(100% - 4px);
+  margin: 1px 2px;
+  text-align: center;
+  background-color: #f3f4f6 !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 2px !important;
+  padding: 1px 2px !important;
+  font-size: 9px !important;
+  line-height: 1.2 !important;
 }
 
 /* Week and Day view improvements */

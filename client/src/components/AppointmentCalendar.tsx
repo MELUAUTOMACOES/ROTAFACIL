@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback } from "react";
-import { Calendar, momentLocalizer, Event, Views } from "react-big-calendar";
+import { Calendar, dateFnsLocalizer, Event, Views } from "react-big-calendar";
 import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
-import moment from "moment";
+import { format, parse, startOfWeek, getDay } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import "react-big-calendar/lib/addons/dragAndDrop/styles.css";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -14,9 +15,16 @@ import type { Appointment, Client, Service, Technician, Team } from "@shared/sch
 // Create DnD Calendar
 const DnDCalendar = withDragAndDrop(Calendar);
 
-// Configure moment for Portuguese locale
-moment.locale('pt-br');
-const localizer = momentLocalizer(moment);
+// Configure date-fns localizer for Portuguese Brazil with Monday as first day of week
+const localizer = dateFnsLocalizer({
+  format,
+  parse,
+  startOfWeek: (date) => startOfWeek(date, { weekStartsOn: 1 }),
+  getDay,
+  locales: {
+    'pt-BR': ptBR,
+  },
+});
 
 // Define color palette for teams/technicians
 const COLORS = [
@@ -391,6 +399,7 @@ export default function AppointmentCalendar({
             event: getEventComponent(view)
           }}
           views={[Views.MONTH, Views.WEEK, Views.DAY, Views.AGENDA]}
+          culture="pt-BR"
           messages={{
             next: "Próximo",
             previous: "Anterior",
@@ -404,28 +413,27 @@ export default function AppointmentCalendar({
             event: "Evento",
             allDay: "Dia inteiro",
             noEventsInRange: "Não há agendamentos neste período.",
-            showMore: (total) => `+${total}`
+            showMore: (total) => `+${total}`,
+            work_week: "Semana de trabalho",
+            yesterday: "Ontem",
+            tomorrow: "Amanhã"
           }}
           formats={{
-            dateFormat: 'DD',
-            dayFormat: (date, culture, localizer) => 
-              localizer?.format(date, 'dddd', culture) || '',
-            dayHeaderFormat: (date, culture, localizer) =>
-              localizer?.format(date, 'dddd DD/MM', culture) || '',
+            dateFormat: 'dd',
+            dayFormat: 'eeee',
+            dayHeaderFormat: 'eeee dd/MM',
             dayRangeHeaderFormat: ({ start, end }, culture, localizer) =>
-              `${localizer?.format(start, 'DD MMM', culture)} - ${localizer?.format(end, 'DD MMM YYYY', culture)}`,
-            monthHeaderFormat: (date, culture, localizer) =>
-              localizer?.format(date, 'MMMM YYYY', culture) || '',
+              `${localizer?.format(start, 'dd MMM', culture)} - ${localizer?.format(end, 'dd MMM yyyy', culture)}`,
+            monthHeaderFormat: 'MMMM yyyy',
             agendaHeaderFormat: ({ start, end }, culture, localizer) =>
-              `${localizer?.format(start, 'DD MMM', culture)} - ${localizer?.format(end, 'DD MMM YYYY', culture)}`,
-            agendaDateFormat: 'ddd DD/MM',
+              `${localizer?.format(start, 'dd MMM', culture)} - ${localizer?.format(end, 'dd MMM yyyy', culture)}`,
+            agendaDateFormat: 'eee dd/MM',
             agendaTimeFormat: 'HH:mm',
             agendaTimeRangeFormat: ({ start, end }, culture, localizer) =>
               `${localizer?.format(start, 'HH:mm', culture)} - ${localizer?.format(end, 'HH:mm', culture)}`,
-            weekdayFormat: (date, culture, localizer) =>
-              localizer?.format(date, 'dddd', culture) || '',
+            weekdayFormat: 'eeee',
             selectRangeFormat: ({ start, end }, culture, localizer) =>
-              `${localizer?.format(start, 'DD MMM', culture)} - ${localizer?.format(end, 'DD MMM YYYY', culture)}`
+              `${localizer?.format(start, 'dd MMM', culture)} - ${localizer?.format(end, 'dd MMM yyyy', culture)}`
           }}
           step={30}
           timeslots={2}
