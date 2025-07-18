@@ -380,12 +380,10 @@
   border-color: #9ca3af;
 }
 
-/* CSS CORRIGIDO para o calendário modo mês */
+/* CSS MÍNIMO para debug do calendário modo mês */
 .rbc-month-view .rbc-row-content {
-  height: auto !important;
   min-height: 64px !important;
   overflow: visible !important;
-  position: relative !important;
 }
 
 .rbc-month-view .rbc-event {
@@ -393,11 +391,9 @@
   z-index: 2 !important;
   margin: 1px 2px !important;
   font-size: 12px !important;
-  padding: 1px 4px !important;
-  background: #256029;
-  color: #fff;
-  border-radius: 4px;
-  cursor: pointer;
+  padding: 2px 4px !important;
+  visibility: visible !important;
+  display: block !important;
 }
 
 /* Ensure show more button is visible */

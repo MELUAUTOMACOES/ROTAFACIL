@@ -526,8 +526,30 @@ export default function AppointmentCalendar({
   console.log('calendarEvents:', calendarEvents);
   console.log('📊 [CALENDAR] Renderizando calendário com', calendarEvents.length, 'eventos no view:', view);
   
-  // Log dos eventos enviados para o calendário
-  console.log("Eventos enviados para o calendário", calendarEvents);
+  // TESTE DEBUG: Array de eventos simples para testar
+  const eventosDebug = [
+    { id: '1', title: 'Evento 1', start: new Date(2025, 6, 18, 10, 0), end: new Date(2025, 6, 18, 11, 0), allDay: false, responsible: { type: 'team', name: 'Equipe 1' } },
+    { id: '2', title: 'Evento 2', start: new Date(2025, 6, 18, 14, 0), end: new Date(2025, 6, 18, 15, 0), allDay: false, responsible: { type: 'technician', name: 'Técnico 1' } },
+    { id: '3', title: 'Evento 3', start: new Date(2025, 6, 19, 9, 0), end: new Date(2025, 6, 19, 10, 0), allDay: false, responsible: { type: 'team', name: 'Equipe 2' } }
+  ];
+  
+  console.log("=== DEBUG EVENTOS ===");
+  console.log("Eventos de debug:", eventosDebug);
+  eventosDebug.forEach((event, index) => {
+    console.log(`Evento ${index + 1}:`, {
+      id: event.id,
+      title: event.title,
+      start: event.start,
+      startType: typeof event.start,
+      startIsDate: event.start instanceof Date,
+      end: event.end,
+      endType: typeof event.end,
+      endIsDate: event.end instanceof Date,
+      allDay: event.allDay,
+      allDayType: typeof event.allDay,
+      responsible: event.responsible
+    });
+  });
   
   return (
     <div className="h-full">
@@ -536,7 +558,7 @@ export default function AppointmentCalendar({
       <div style={{ width: '100%' }}>
         <DnDCalendar
           localizer={localizer}
-          events={calendarEvents}
+          events={eventosDebug}
           startAccessor="start"
           endAccessor="end"
           style={{ height: '600px', width: '100%' }}
@@ -550,9 +572,12 @@ export default function AppointmentCalendar({
             console.log('📅 [CALENDAR] Navegando para nova data:', newDate.toISOString());
             setDate(newDate);
           }}
-          eventPropGetter={(event) => ({
-            style: { background: '#256029', color: '#fff', borderRadius: 4, fontSize: 12, padding: 4 }
-          })}
+          eventPropGetter={(event) => {
+            const responsible = event.responsible || { type: 'none', name: 'Não informado' };
+            return {
+              style: { background: '#256029', color: '#fff', borderRadius: 4, fontSize: 12, padding: 4 }
+            };
+          }}
           onEventDrop={handleEventDrop}
           onEventResize={handleEventResize}
           onSelectEvent={handleSelectEvent}
@@ -560,12 +585,7 @@ export default function AppointmentCalendar({
           resizable
           draggableAccessor={() => true}
           resizableAccessor={() => true}
-          components={{
-            month: { event: MonthEvent },
-            week: { event: TimeEvent },
-            day: { event: TimeEvent },
-            agenda: { event: TimeEvent },
-          }}
+          // Removido temporariamente componentes customizados
           views={[Views.MONTH, Views.WEEK, Views.DAY, Views.AGENDA]}
           culture="pt-BR"
           messages={{
