@@ -56,31 +56,26 @@ interface AppointmentCalendarProps {
   teams: Team[];
 }
 
-// Custom Month Event Component - SEGURO com verificação de responsible
-const MonthEvent = ({ event }: { event: CalendarEvent }) => {
-  console.log('🎨 [MONTH EVENT] Renderizando evento no mês:', event.title, 'ID:', event.id);
-  
-  const responsible = getSafeResponsible(event);
-  const responsibleIcon = responsible.type === 'team' ? '👥' : responsible.type === 'technician' ? '👤' : '❌';
+// Custom Month Event Component - PADRONIZADO e SEGURO
+const MonthEvent = ({ event }: { event: any }) => {
+  const responsible = event.responsible ?? { type: 'none', name: 'Não informado' };
   
   return (
     <div style={{ 
-      fontSize: '10px', 
+      fontSize: '11px', 
       padding: '2px 4px', 
       overflow: 'hidden', 
       textOverflow: 'ellipsis',
       whiteSpace: 'nowrap',
       width: '100%',
       height: '100%',
-      backgroundColor: 'inherit',
-      color: 'inherit',
       cursor: 'pointer'
     }}>
       <div style={{ fontWeight: 'bold', marginBottom: '1px' }}>
-        {event.title.split(' - ')[0]}
+        {event.title || 'Evento'}
       </div>
-      <div style={{ fontSize: '9px', opacity: 0.8 }}>
-        {responsibleIcon} {responsible.name}
+      <div style={{ fontSize: '10px', opacity: 0.8 }}>
+        {responsible.name || 'Sem responsável'}
       </div>
     </div>
   );
@@ -182,7 +177,6 @@ export default function AppointmentCalendar({
   // Convert appointments to calendar events
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     console.log('🔄 [CALENDAR] Processando agendamentos para o calendário:', appointments.length);
-    console.log('🔄 [CALENDAR] View atual durante processamento:', view);
     
     if (!appointments.length) {
       console.log('⚠️ [CALENDAR] Nenhum appointment encontrado!');
@@ -323,10 +317,19 @@ export default function AppointmentCalendar({
     // Adiciona evento simples que deveria aparecer no mês
     events.push(eventoSimples as any);
     
-    console.log('🎯 [CALENDAR] TOTAL FINAL de eventos:', events.length);
-    console.log('🎯 [CALENDAR] Primeiros 3 eventos:', events.slice(0, 3));
+    // VALIDAÇÃO FINAL: Garante que todos os eventos têm campos obrigatórios
+    const validatedEvents = events.map((event) => ({
+      ...event,
+      title: event.title || 'Evento sem título',
+      start: event.start instanceof Date ? event.start : new Date(event.start),
+      end: event.end instanceof Date ? event.end : new Date(event.end),
+      allDay: typeof event.allDay === 'boolean' ? event.allDay : false,
+      responsible: event.responsible || { type: 'none', id: null, name: 'Não informado' }
+    }));
     
-    return events;
+    console.log('🎯 [CALENDAR] TOTAL FINAL de eventos validados:', validatedEvents.length);
+    
+    return validatedEvents;
   }, [appointments, clients, services, technicians, teams, view]);
 
   // Update appointment mutation
@@ -523,20 +526,8 @@ export default function AppointmentCalendar({
   console.log('calendarEvents:', calendarEvents);
   console.log('📊 [CALENDAR] Renderizando calendário com', calendarEvents.length, 'eventos no view:', view);
   
-  // VALIDAÇÃO: Verificar se todos os eventos têm responsible correto
-  console.log('🔍 [VALIDATION] Verificando campo responsible em todos os eventos:');
-  calendarEvents.forEach((event, index) => {
-    const responsible = getSafeResponsible(event);
-    console.log(`   Evento ${index + 1}:`, {
-      id: event.id,
-      title: event.title,
-      start: event.start,
-      end: event.end,
-      allDay: event.allDay,
-      responsible: responsible,
-      hasResponsible: !!event.responsible
-    });
-  });
+  // Log dos eventos enviados para o calendário
+  console.log("Eventos enviados para o calendário", calendarEvents);
   
   return (
     <div className="h-full">
@@ -559,7 +550,9 @@ export default function AppointmentCalendar({
             console.log('📅 [CALENDAR] Navegando para nova data:', newDate.toISOString());
             setDate(newDate);
           }}
-          eventPropGetter={eventStyleGetter}
+          eventPropGetter={(event) => ({
+            style: { background: '#256029', color: '#fff', borderRadius: 4, fontSize: 12, padding: 4 }
+          })}
           onEventDrop={handleEventDrop}
           onEventResize={handleEventResize}
           onSelectEvent={handleSelectEvent}
