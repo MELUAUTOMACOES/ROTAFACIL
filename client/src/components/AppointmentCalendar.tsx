@@ -164,13 +164,26 @@ export default function AppointmentCalendar({
       const responsible = getResponsibleInfo(appointment);
       
       const startDate = new Date(appointment.scheduledDate);
-      const endDate = new Date(startDate.getTime() + (service?.duration || 60) * 60000); // Add duration in minutes
+      let endDate: Date;
+      let allDay = false;
+
+      // Se o agendamento é "dia todo"
+      if (appointment.allDay) {
+        // Para eventos "dia todo", definir início e fim no mesmo dia
+        endDate = new Date(startDate);
+        endDate.setHours(23, 59, 59, 999); // Fim do dia
+        allDay = true;
+      } else {
+        // Para eventos com horário específico, usar duração do serviço
+        endDate = new Date(startDate.getTime() + (service?.duration || 60) * 60000);
+      }
 
       return {
         id: appointment.id,
         title: `${client?.name || 'Cliente'} - ${service?.name || 'Serviço'}`,
         start: startDate,
         end: endDate,
+        allDay: allDay,
         appointment,
         responsible,
         resource: {
@@ -371,18 +384,19 @@ export default function AppointmentCalendar({
       </div>
     </div>
   );
-
+ 
+  console.log('calendarEvents:', calendarEvents);
   return (
     <div className="h-full">
       <ResponsibleLegend />
       
-      <div style={{ height: '600px' }}>
+      <div style={{ width: '100%' }}>
         <DnDCalendar
           localizer={localizer}
           events={calendarEvents}
           startAccessor="start"
           endAccessor="end"
-          style={{ height: '100%' }}
+          style={{ height: '600px', width: '100%' }}
           view={view}
           onView={setView}
           date={date}
@@ -396,7 +410,10 @@ export default function AppointmentCalendar({
           draggableAccessor={() => true}
           resizableAccessor={() => true}
           components={{
-            event: getEventComponent(view)
+            month: { event: MonthEvent },
+            week: { event: TimeEvent },
+            day: { event: TimeEvent },
+            agenda: { event: TimeEvent },
           }}
           views={[Views.MONTH, Views.WEEK, Views.DAY, Views.AGENDA]}
           culture="pt-BR"

@@ -87,6 +87,7 @@ export const appointments = pgTable("appointments", {
   technicianId: integer("technician_id").references(() => technicians.id),
   teamId: integer("team_id").references(() => teams.id),
   scheduledDate: timestamp("scheduled_date").notNull(),
+  allDay: boolean("all_day").default(false).notNull(), // Campo para eventos "dia todo"
   status: text("status").notNull().default("scheduled"), // scheduled, in_progress, completed, cancelled
   priority: text("priority").notNull().default("normal"), // normal, high, urgent
   notes: text("notes"),

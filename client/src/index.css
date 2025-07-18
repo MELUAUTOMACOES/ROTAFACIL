@@ -7,7 +7,8 @@
   background-color: white;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  padding: 16px;
+  /* padding: 16px; */ /* <- REMOVA ou comente esta linha! */
+  box-sizing: border-box;
 }
 
 .rbc-header {
@@ -594,4 +595,85 @@
 
 .animate-spin {
   animation: spin 1s linear infinite;
+}
+/* Faz o calendário ocupar toda a largura disponível */
+.rbc-calendar,
+.rbc-time-view,
+.rbc-time-content {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100vw !important;
+  overflow-x: auto !important;
+}
+
+.rbc-time-header {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100vw !important;
+}
+
+.rbc-time-header-content {
+  min-width: 0 !important;
+  width: 100% !important;
+  display: flex !important;
+}
+
+/* Garante que cada coluna/dia ocupa espaço igual */
+.rbc-time-header-cell,
+.rbc-header {
+  flex: 1 1 0 !important;
+  min-width: 120px !important;
+  max-width: 1fr !important;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.rbc-time-header-content {
+  min-width: 0 !important;
+  width: 100% !important;
+  display: flex !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  background: transparent !important;
+}
+
+.rbc-time-header-cell,
+.rbc-header {
+  flex: 1 1 0 !important;
+  min-width: 120px !important;
+  max-width: 1fr !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  white-space: nowrap;
+  text-align: center;
+  background: transparent !important;
+}
+
+.rbc-time-header, .rbc-time-header-content, .rbc-row.rbc-time-header-row {
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-spacing: 0 !important;
+}
+
+.rbc-time-header-content {
+  border-left: 1px solid #e5e7eb !important;
+}
+
+.rbc-header {
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 8px 0 !important; /* Ajuste se quiser mais/menos altura */
+  min-width: 120px !important;
+}
+
+.rbc-row.rbc-time-header-row {
+  height: 40px !important;
+}
+
+.rbc-allday-cell, .rbc-row.rbc-allday {
+  vertical-align: middle !important;
+  padding: 0 !important;
 }

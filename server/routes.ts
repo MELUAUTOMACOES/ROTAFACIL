@@ -565,6 +565,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/appointments/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const appointmentData = req.body;
+
+      // (repete o tratamento do campo scheduledDate, igual ao PUT)
+      if (appointmentData.scheduledDate) {
+        if (typeof appointmentData.scheduledDate === 'string') {
+          // ok
+        } else if (appointmentData.scheduledDate instanceof Date) {
+          appointmentData.scheduledDate = appointmentData.scheduledDate.toISOString();
+        } else {
+          try {
+            const dateObj = new Date(appointmentData.scheduledDate);
+            if (isNaN(dateObj.getTime())) {
+              throw new Error(`Data inválida: ${appointmentData.scheduledDate}`);
+            }
+            appointmentData.scheduledDate = dateObj.toISOString();
+          } catch (dateError) {
+            return res.status(400).json({ message: `Data inválida: ${appointmentData.scheduledDate}` });
+          }
+        }
+      }
+
+      const appointment = await storage.updateAppointment(id, appointmentData, req.user.userId);
+      res.json(appointment);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   app.delete("/api/appointments/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);

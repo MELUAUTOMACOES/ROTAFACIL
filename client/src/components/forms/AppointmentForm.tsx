@@ -49,6 +49,7 @@ export default function AppointmentForm({
     appointment?.clientId || (prefilledData?.clientId ? parseInt(prefilledData.clientId) : null)
   );
   const [isEditClientOpen, setIsEditClientOpen] = useState(false);
+  const [isAllDay, setIsAllDay] = useState(appointment?.allDay || false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -64,6 +65,7 @@ export default function AppointmentForm({
       technicianId: appointment.technicianId,
       teamId: appointment.teamId,
       scheduledDate: new Date(appointment.scheduledDate),
+      allDay: appointment.allDay || false,
       status: appointment.status,
       priority: appointment.priority,
       notes: appointment.notes || "",
@@ -79,6 +81,7 @@ export default function AppointmentForm({
       technicianId: prefilledData.technicianId ? parseInt(prefilledData.technicianId) : 0,
       teamId: prefilledData.teamId ? parseInt(prefilledData.teamId) : undefined,
       scheduledDate: prefilledData.date ? new Date(prefilledData.date) : new Date(),
+      allDay: false,
       status: "scheduled",
       priority: "normal",
       notes: "",
@@ -98,6 +101,7 @@ export default function AppointmentForm({
       technicianId: 0,
       teamId: undefined,
       scheduledDate: new Date(),
+      allDay: false,
       status: "scheduled",
       priority: "normal",
       notes: "",
@@ -477,28 +481,65 @@ export default function AppointmentForm({
           </div>
 
           {/* Date and Time */}
-          <FormField
-            control={form.control}
-            name="scheduledDate"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Data e Hora *</FormLabel>
-                <FormControl>
-                  <Input
-                    type="datetime-local"
-                    {...field}
-                    value={field.value ? new Date(field.value.getTime() - field.value.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""}
-                    onChange={(e) => field.onChange(new Date(e.target.value))}
-                    disabled={!!prefilledData?.date}
-                  />
-                </FormControl>
-                {prefilledData?.date && (
-                  <p className="text-sm text-blue-600">Data selecionada a partir da busca "Ache uma data" - não pode ser alterada</p>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div className="space-y-4">
+            <FormField
+              control={form.control}
+              name="scheduledDate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{isAllDay ? "Data *" : "Data e Hora *"}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type={isAllDay ? "date" : "datetime-local"}
+                      {...field}
+                      value={field.value ? 
+                        (isAllDay ? 
+                          new Date(field.value.getTime() - field.value.getTimezoneOffset() * 60000).toISOString().slice(0, 10) :
+                          new Date(field.value.getTime() - field.value.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+                        ) : ""}
+                      onChange={(e) => field.onChange(new Date(e.target.value))}
+                      disabled={!!prefilledData?.date}
+                    />
+                  </FormControl>
+                  {prefilledData?.date && (
+                    <p className="text-sm text-blue-600">Data selecionada a partir da busca "Ache uma data" - não pode ser alterada</p>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* All Day Checkbox */}
+            <FormField
+              control={form.control}
+              name="allDay"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                  <FormControl>
+                    <input
+                      type="checkbox"
+                      checked={field.value}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        field.onChange(checked);
+                        setIsAllDay(checked);
+                      }}
+                      className="mt-1"
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel className="text-sm font-normal">
+                      Dia todo
+                    </FormLabel>
+                    <p className="text-xs text-gray-500">
+                      Marque para agendamentos que duram o dia inteiro
+                    </p>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
           {/* Address Fields */}
           <div className="space-y-4">
