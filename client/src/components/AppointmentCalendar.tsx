@@ -158,14 +158,23 @@ export default function AppointmentCalendar({
 
   // Convert appointments to calendar events
   const calendarEvents: CalendarEvent[] = useMemo(() => {
-    return appointments.map((appointment) => {
+    console.log('🔄 [CALENDAR] Processando agendamentos para o calendário:', appointments.length);
+    
+    const events = appointments.map((appointment) => {
       const client = getClient(appointment.clientId);
       const service = getService(appointment.serviceId);
       const responsible = getResponsibleInfo(appointment);
       
+      // CORREÇÃO: Força conversão para objeto Date real
       const startDate = new Date(appointment.scheduledDate);
       let endDate: Date;
       let allDay = false;
+
+      // Verifica se a data é válida
+      if (isNaN(startDate.getTime())) {
+        console.error('❌ [CALENDAR] Data inválida para agendamento:', appointment.id, appointment.scheduledDate);
+        return null;
+      }
 
       // Se o agendamento é "dia todo"
       if (appointment.allDay) {
@@ -173,12 +182,14 @@ export default function AppointmentCalendar({
         endDate = new Date(startDate);
         endDate.setHours(23, 59, 59, 999); // Fim do dia
         allDay = true;
+        console.log('📅 [CALENDAR] Evento dia todo:', appointment.id, 'Start:', startDate, 'End:', endDate);
       } else {
         // Para eventos com horário específico, usar duração do serviço
         endDate = new Date(startDate.getTime() + (service?.duration || 60) * 60000);
+        console.log('⏰ [CALENDAR] Evento com horário:', appointment.id, 'Start:', startDate, 'End:', endDate);
       }
 
-      return {
+      const event = {
         id: appointment.id,
         title: `${client?.name || 'Cliente'} - ${service?.name || 'Serviço'}`,
         start: startDate,
@@ -194,7 +205,44 @@ export default function AppointmentCalendar({
           priority: appointment.priority
         }
       };
-    });
+      
+      console.log('✅ [CALENDAR] Evento criado:', {
+        id: event.id,
+        title: event.title,
+        start: event.start,
+        end: event.end,
+        allDay: event.allDay,
+        startType: typeof event.start,
+        endType: typeof event.end
+      });
+      
+      return event;
+    }).filter(Boolean) as CalendarEvent[];
+    
+    console.log('🎯 [CALENDAR] Total de eventos processados:', events.length);
+    
+    // TESTE: Adiciona evento mock para garantir que funciona
+    const mockEvent = {
+      id: -1,
+      title: 'TESTE - Evento Mock',
+      start: new Date(2025, 6, 18, 10, 0), // 18 de julho de 2025, 10:00
+      end: new Date(2025, 6, 18, 11, 0),   // 18 de julho de 2025, 11:00
+      allDay: false,
+      appointment: null as any,
+      responsible: { type: 'none' as const, id: null, name: 'Teste' },
+      resource: {
+        responsibleType: 'none' as const,
+        responsibleId: null,
+        responsibleName: 'Teste',
+        status: 'scheduled',
+        priority: 'normal'
+      }
+    };
+    
+    console.log('🧪 [CALENDAR] Adicionando evento mock para teste:', mockEvent);
+    events.push(mockEvent);
+    
+    return events;
   }, [appointments, clients, services, technicians, teams]);
 
   // Update appointment mutation

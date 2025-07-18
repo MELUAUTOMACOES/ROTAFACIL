@@ -380,38 +380,88 @@
   border-color: #9ca3af;
 }
 
-/* Month view - ensure events can show multiple per day */
+/* CORREÇÃO: Month view - garante que os eventos apareçam corretamente */
 .rbc-month-view .rbc-row-content {
-  height: auto;
-  min-height: 120px;
+  height: auto !important;
+  min-height: 120px !important;
+  overflow: visible !important;
 }
 
 .rbc-month-view .rbc-row {
-  min-height: 120px;
+  min-height: 120px !important;
+  overflow: visible !important;
 }
 
 .rbc-month-view .rbc-date-cell {
-  min-height: 120px;
-  padding: 2px;
-  position: relative;
+  min-height: 120px !important;
+  padding: 2px !important;
+  position: relative !important;
+  overflow: visible !important;
+  vertical-align: top !important;
 }
 
 .rbc-month-view .rbc-event {
-  margin: 1px 2px;
-  font-size: 10px;
-  padding: 1px 4px;
-  line-height: 1.2;
-  position: relative;
-  z-index: 1;
-  display: block;
-  max-width: calc(100% - 4px);
+  margin: 1px 2px !important;
+  font-size: 10px !important;
+  padding: 2px 4px !important;
+  line-height: 1.2 !important;
+  position: relative !important;
+  z-index: 1 !important;
+  display: block !important;
+  max-width: calc(100% - 4px) !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 14px !important;
+  box-sizing: border-box !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 .rbc-month-view .rbc-event-content {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: block;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  visibility: visible !important;
+}
+
+/* CORREÇÃO ADICIONAL: Garante que o container dos eventos seja visível */
+.rbc-month-view .rbc-row-segment {
+  position: relative !important;
+  overflow: visible !important;
+}
+
+.rbc-month-view .rbc-event-container {
+  position: relative !important;
+  overflow: visible !important;
+  height: auto !important;
+}
+
+/* Remove qualquer clipping que possa esconder os eventos */
+.rbc-month-view .rbc-date-cell * {
+  overflow: visible !important;
+}
+
+.rbc-month-view .rbc-overlay {
+  z-index: 1000 !important;
+}
+
+/* Garante que eventos "allDay" apareçam corretamente */
+.rbc-month-view .rbc-allday-cell {
+  overflow: visible !important;
+  height: auto !important;
+}
+
+/* Força visibilidade dos eventos no mês */
+.rbc-month-view .rbc-event {
+  background-color: #3b82f6 !important;
+  color: white !important;
+  border-radius: 3px !important;
+  font-weight: 500 !important;
+  text-align: left !important;
+  cursor: pointer !important;
 }
 
 /* Ensure show more button is visible */
@@ -745,4 +795,73 @@
   position: relative !important;
   z-index: 1 !important;
   margin-top: 0 !important;
+}
+
+/* CABEÇALHO DIAS DA SEMANA SEMPRE VISÍVEL E SOBRE O BLOCO ALL DAY */
+.rbc-time-header {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 20 !important;
+  background: #f9fafb !important;
+}
+
+.rbc-time-header .rbc-header,
+.rbc-time-header .rbc-time-header-cell {
+  z-index: 21 !important;
+  background: #f9fafb !important;
+  position: relative !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+.rbc-allday-cell,
+.rbc-row.rbc-allday-row {
+  z-index: 1 !important;
+  position: relative !important;
+  background: #fff !important;
+}
+
+.rbc-time-content {
+  overflow: visible !important;
+}
+
+.rbc-time-header {
+  border-bottom: 1.5px solid #e5e7eb !important;
+}
+/* === CORREÇÃO ROTA FÁCIL — CABEÇALHO DIAS SEMANA EM DESTAQUE (CALENDÁRIO SEMANA/DIA) === */
+
+/* Linha dos dias (segunda, terça...) sempre fixa, alta e com z-index maior */
+.rbc-time-header .rbc-row.rbc-time-header-cell {
+  min-height: 34px !important;  /* Altura suficiente p/ os nomes dos dias */
+  height: 38px !important;
+  background: #f9fafb !important;
+  z-index: 21 !important;
+  position: sticky !important;
+  top: 0 !important;
+  border-bottom: 1.5px solid #e5e7eb !important;
+}
+
+/* Header individual de cada dia */
+.rbc-header {
+  padding: 10px 0 !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  color: #374151 !important;
+  background: #f9fafb !important;
+  border-bottom: none !important;
+  z-index: 22 !important;
+  position: relative !important;
+}
+
+/* All Day vem abaixo do header e NÃO pode sobrepor */
+.rbc-allday-cell, .rbc-row.rbc-allday {
+  z-index: 1 !important;
+  background: #fff !important;
+  min-height: 46px !important; /* Maior altura pra eventos all day */
+  border-top: 1.5px solid #e5e7eb !important;
+  border-bottom: 1.5px solid #e5e7eb !important;
+}
+
+/* Remove sobreposição/overflow do conteúdo */
+.rbc-time-header, .rbc-time-header-content, .rbc-allday-cell, .rbc-row.rbc-allday {
+  overflow: visible !important;
 }
