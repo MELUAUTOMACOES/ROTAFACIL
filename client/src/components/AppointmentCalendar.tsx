@@ -51,18 +51,24 @@ interface AppointmentCalendarProps {
   teams: Team[];
 }
 
-// Custom Month Event Component for better appointment display
+// Custom Month Event Component - SIMPLIFICADO para evitar conflitos
 const MonthEvent = ({ event }: { event: CalendarEvent }) => {
-  const responsible = event.responsible;
-  const responsibleIcon = responsible.type === 'team' ? '👥' : responsible.type === 'technician' ? '👤' : '❌';
+  console.log('🎨 [MONTH EVENT] Renderizando evento no mês:', event.title, 'ID:', event.id);
   
   return (
-    <div className="text-xs leading-tight cursor-pointer hover:opacity-80 transition-opacity p-1 rounded w-full h-full">
-      <div className="font-semibold truncate">{event.title.split(' - ')[0]}</div>
-      <div className="flex items-center gap-1">
-        <span>{responsibleIcon}</span>
-        <span className="truncate text-xs opacity-90">{responsible.name}</span>
-      </div>
+    <div style={{ 
+      fontSize: '11px', 
+      padding: '2px 4px', 
+      overflow: 'hidden', 
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      width: '100%',
+      height: '100%',
+      backgroundColor: 'inherit',
+      color: 'inherit',
+      cursor: 'pointer'
+    }}>
+      <strong>{event.title}</strong>
     </div>
   );
 };
@@ -221,26 +227,60 @@ export default function AppointmentCalendar({
     
     console.log('🎯 [CALENDAR] Total de eventos processados:', events.length);
     
-    // TESTE: Adiciona evento mock para garantir que funciona
-    const mockEvent = {
-      id: -1,
-      title: 'TESTE - Evento Mock',
-      start: new Date(2025, 6, 18, 10, 0), // 18 de julho de 2025, 10:00
-      end: new Date(2025, 6, 18, 11, 0),   // 18 de julho de 2025, 11:00
-      allDay: false,
-      appointment: null as any,
-      responsible: { type: 'none' as const, id: null, name: 'Teste' },
-      resource: {
-        responsibleType: 'none' as const,
-        responsibleId: null,
-        responsibleName: 'Teste',
-        status: 'scheduled',
-        priority: 'normal'
+    // TESTE: Adiciona múltiplos eventos mock para garantir que funciona
+    const mockEvents = [
+      {
+        id: -1,
+        title: 'TESTE - Mock Hoje',
+        start: new Date(), // Data de hoje
+        end: new Date(Date.now() + 60 * 60 * 1000), // 1 hora depois
+        allDay: false,
+        appointment: null as any,
+        responsible: { type: 'none' as const, id: null, name: 'Teste Hoje' },
+        resource: {
+          responsibleType: 'none' as const,
+          responsibleId: null,
+          responsibleName: 'Teste Hoje',
+          status: 'scheduled',
+          priority: 'normal'
+        }
+      },
+      {
+        id: -2,
+        title: 'TESTE - Mock Dia Todo',
+        start: new Date(2025, 6, 18), // 18 de julho de 2025
+        end: new Date(2025, 6, 18, 23, 59), // Fim do dia
+        allDay: true,
+        appointment: null as any,
+        responsible: { type: 'none' as const, id: null, name: 'Teste Dia Todo' },
+        resource: {
+          responsibleType: 'none' as const,
+          responsibleId: null,
+          responsibleName: 'Teste Dia Todo',
+          status: 'scheduled',
+          priority: 'normal'
+        }
+      },
+      {
+        id: -3,
+        title: 'TESTE - Mock Amanhã',
+        start: new Date(Date.now() + 24 * 60 * 60 * 1000), // Amanhã
+        end: new Date(Date.now() + 24 * 60 * 60 * 1000 + 60 * 60 * 1000), // 1 hora depois
+        allDay: false,
+        appointment: null as any,
+        responsible: { type: 'none' as const, id: null, name: 'Teste Amanhã' },
+        resource: {
+          responsibleType: 'none' as const,
+          responsibleId: null,
+          responsibleName: 'Teste Amanhã',
+          status: 'scheduled',
+          priority: 'normal'
+        }
       }
-    };
+    ];
     
-    console.log('🧪 [CALENDAR] Adicionando evento mock para teste:', mockEvent);
-    events.push(mockEvent);
+    console.log('🧪 [CALENDAR] Adicionando eventos mock para teste:', mockEvents);
+    events.push(...mockEvents);
     
     return events;
   }, [appointments, clients, services, technicians, teams]);
@@ -458,7 +498,12 @@ export default function AppointmentCalendar({
           draggableAccessor={() => true}
           resizableAccessor={() => true}
           components={{
-            month: { event: MonthEvent },
+            month: { 
+              event: (props) => {
+                console.log('🎯 [MONTH COMPONENT] Renderizando:', props.event.title);
+                return <div style={{ fontSize: '10px', padding: '2px', backgroundColor: '#e11d48', color: 'white', borderRadius: '2px', overflow: 'hidden' }}>{props.event.title}</div>;
+              }
+            },
             week: { event: TimeEvent },
             day: { event: TimeEvent },
             agenda: { event: TimeEvent },
