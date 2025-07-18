@@ -36,12 +36,17 @@ const COLORS = [
 
 interface CalendarEvent extends Event {
   appointment: Appointment;
-  responsible: {
+  responsible?: {
     type: 'technician' | 'team' | 'none';
     id: number | null;
     name: string;
   };
 }
+
+// Utility function to safely get responsible information
+const getSafeResponsible = (event: CalendarEvent | any) => {
+  return event.responsible ?? { type: 'none' as const, id: null, name: 'Não informado' };
+};
 
 interface AppointmentCalendarProps {
   appointments: Appointment[];
@@ -51,13 +56,16 @@ interface AppointmentCalendarProps {
   teams: Team[];
 }
 
-// Custom Month Event Component - SIMPLIFICADO para evitar conflitos
+// Custom Month Event Component - SEGURO com verificação de responsible
 const MonthEvent = ({ event }: { event: CalendarEvent }) => {
   console.log('🎨 [MONTH EVENT] Renderizando evento no mês:', event.title, 'ID:', event.id);
   
+  const responsible = getSafeResponsible(event);
+  const responsibleIcon = responsible.type === 'team' ? '👥' : responsible.type === 'technician' ? '👤' : '❌';
+  
   return (
     <div style={{ 
-      fontSize: '11px', 
+      fontSize: '10px', 
       padding: '2px 4px', 
       overflow: 'hidden', 
       textOverflow: 'ellipsis',
@@ -68,14 +76,19 @@ const MonthEvent = ({ event }: { event: CalendarEvent }) => {
       color: 'inherit',
       cursor: 'pointer'
     }}>
-      <strong>{event.title}</strong>
+      <div style={{ fontWeight: 'bold', marginBottom: '1px' }}>
+        {event.title.split(' - ')[0]}
+      </div>
+      <div style={{ fontSize: '9px', opacity: 0.8 }}>
+        {responsibleIcon} {responsible.name}
+      </div>
     </div>
   );
 };
 
-// Custom Week/Day Event Component
+// Custom Week/Day Event Component - SEGURO com verificação de responsible
 const TimeEvent = ({ event }: { event: CalendarEvent }) => {
-  const responsible = event.responsible;
+  const responsible = getSafeResponsible(event);
   const responsibleIcon = responsible.type === 'team' ? '👥' : responsible.type === 'technician' ? '👤' : '❌';
   
   return (
@@ -246,11 +259,11 @@ export default function AppointmentCalendar({
         end: new Date(Date.now() + 60 * 60 * 1000), // 1 hora depois
         allDay: false,
         appointment: null as any,
-        responsible: { type: 'none' as const, id: null, name: 'Teste Hoje' },
+        responsible: { type: 'none' as const, id: null, name: 'Mock Hoje' },
         resource: {
           responsibleType: 'none' as const,
           responsibleId: null,
-          responsibleName: 'Teste Hoje',
+          responsibleName: 'Mock Hoje',
           status: 'scheduled',
           priority: 'normal'
         }
@@ -262,11 +275,11 @@ export default function AppointmentCalendar({
         end: new Date(2025, 6, 18, 23, 59), // Fim do dia
         allDay: true,
         appointment: null as any,
-        responsible: { type: 'none' as const, id: null, name: 'Teste Dia Todo' },
+        responsible: { type: 'team' as const, id: -1, name: 'Mock Equipe' },
         resource: {
-          responsibleType: 'none' as const,
-          responsibleId: null,
-          responsibleName: 'Teste Dia Todo',
+          responsibleType: 'team' as const,
+          responsibleId: -1,
+          responsibleName: 'Mock Equipe',
           status: 'scheduled',
           priority: 'normal'
         }
@@ -278,11 +291,11 @@ export default function AppointmentCalendar({
         end: new Date(Date.now() + 24 * 60 * 60 * 1000 + 60 * 60 * 1000), // 1 hora depois
         allDay: false,
         appointment: null as any,
-        responsible: { type: 'none' as const, id: null, name: 'Teste Amanhã' },
+        responsible: { type: 'technician' as const, id: -1, name: 'Mock Técnico' },
         resource: {
-          responsibleType: 'none' as const,
-          responsibleId: null,
-          responsibleName: 'Teste Amanhã',
+          responsibleType: 'technician' as const,
+          responsibleId: -1,
+          responsibleName: 'Mock Técnico',
           status: 'scheduled',
           priority: 'normal'
         }
@@ -298,7 +311,9 @@ export default function AppointmentCalendar({
       title: 'EVENTO SIMPLES TESTE',
       start: new Date(2025, 6, 18, 10, 0), // 18 de julho de 2025, 10:00
       end: new Date(2025, 6, 18, 11, 0),   // 18 de julho de 2025, 11:00
-      allDay: false
+      allDay: false,
+      appointment: null as any,
+      responsible: { type: 'none' as const, id: null, name: 'Evento Simples' }
     };
     
     console.log('🚨 [CALENDAR] Evento simples para teste:', eventoSimples);
@@ -340,8 +355,11 @@ export default function AppointmentCalendar({
     const responsible = event.responsible;
     let backgroundColor = '#6b7280'; // default gray
     
-    if (responsible.type !== 'none' && responsible.id) {
-      const colorKey = `${responsible.type}-${responsible.id}`;
+    const responsibleType = responsible?.type ?? 'none';
+    const responsibleId = responsible?.id ?? null;
+
+    if (responsibleType !== 'none' && responsibleId) {
+      const colorKey = `${responsibleType}-${responsibleId}`;
       backgroundColor = responsibleColors.get(colorKey) || '#6b7280';
     }
 
@@ -505,25 +523,20 @@ export default function AppointmentCalendar({
   console.log('calendarEvents:', calendarEvents);
   console.log('📊 [CALENDAR] Renderizando calendário com', calendarEvents.length, 'eventos no view:', view);
   
-  // TESTE: Verificar se o problema está no React Big Calendar
-  const eventosTeste = [
-    {
-      id: 1,
-      title: 'Evento Teste 1',
-      start: new Date(2025, 6, 18, 10, 0),
-      end: new Date(2025, 6, 18, 11, 0),
-      allDay: false
-    },
-    {
-      id: 2,
-      title: 'Evento Teste 2',
-      start: new Date(2025, 6, 19, 14, 0),
-      end: new Date(2025, 6, 19, 15, 0),
-      allDay: false
-    }
-  ];
-  
-  console.log('🧪 [CALENDAR] Eventos de teste para comparação:', eventosTeste);
+  // VALIDAÇÃO: Verificar se todos os eventos têm responsible correto
+  console.log('🔍 [VALIDATION] Verificando campo responsible em todos os eventos:');
+  calendarEvents.forEach((event, index) => {
+    const responsible = getSafeResponsible(event);
+    console.log(`   Evento ${index + 1}:`, {
+      id: event.id,
+      title: event.title,
+      start: event.start,
+      end: event.end,
+      allDay: event.allDay,
+      responsible: responsible,
+      hasResponsible: !!event.responsible
+    });
+  });
   
   return (
     <div className="h-full">
@@ -532,7 +545,7 @@ export default function AppointmentCalendar({
       <div style={{ width: '100%' }}>
         <DnDCalendar
           localizer={localizer}
-          events={eventosTeste}
+          events={calendarEvents}
           startAccessor="start"
           endAccessor="end"
           style={{ height: '600px', width: '100%' }}
@@ -555,12 +568,7 @@ export default function AppointmentCalendar({
           draggableAccessor={() => true}
           resizableAccessor={() => true}
           components={{
-            month: { 
-              event: (props) => {
-                console.log('🎯 [MONTH COMPONENT] Renderizando:', props.event.title);
-                return <div style={{ fontSize: '10px', padding: '2px', backgroundColor: '#e11d48', color: 'white', borderRadius: '2px', overflow: 'hidden' }}>{props.event.title}</div>;
-              }
-            },
+            month: { event: MonthEvent },
             week: { event: TimeEvent },
             day: { event: TimeEvent },
             agenda: { event: TimeEvent },
