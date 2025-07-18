@@ -1066,32 +1066,16 @@ export default function Appointments() {
         </div>
       </div>
 
-      {/* View Mode Toggle */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center">
+      {/* View Mode Toggle - More Prominent */}
+      <div className="flex items-center justify-between mb-6">
+        <Card className="flex-1 mr-4">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center">
               <Filter className="h-5 w-5 mr-2" />
               Filtros
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Visualização:</span>
-              <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as "list" | "calendar")}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="list" className="flex items-center gap-2">
-                    <List className="h-4 w-4" />
-                    Lista
-                  </TabsTrigger>
-                  <TabsTrigger value="calendar" className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    Calendário
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div>
               <label className="text-sm font-medium mb-2 block">Data</label>
@@ -1205,8 +1189,34 @@ export default function Appointments() {
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+        
+        {/* Prominent View Toggle */}
+        <div className="flex flex-col items-center">
+          <span className="text-sm font-medium text-gray-700 mb-3">Modo de Visualização</span>
+          <div className="bg-white border-2 border-gray-200 rounded-lg p-1 shadow-sm">
+            <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as "list" | "calendar")} className="w-auto">
+              <TabsList className="grid w-full grid-cols-2 h-12 bg-gray-50">
+                <TabsTrigger 
+                  value="list" 
+                  className="flex items-center gap-2 px-6 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow"
+                >
+                  <List className="h-5 w-5" />
+                  Lista
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="calendar" 
+                  className="flex items-center gap-2 px-6 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow"
+                >
+                  <Calendar className="h-5 w-5" />
+                  Calendário
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
+      </div>
 
       {/* Content Area - List or Calendar View */}
       {viewMode === "list" ? (

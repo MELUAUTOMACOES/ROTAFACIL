@@ -1,11 +1,18 @@
 import { useState, useMemo, useCallback } from "react";
 import { Calendar, momentLocalizer, Event, Views } from "react-big-calendar";
+import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
 import moment from "moment";
 import "react-big-calendar/lib/css/react-big-calendar.css";
+import "react-big-calendar/lib/addons/dragAndDrop/styles.css";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import AppointmentForm from "@/components/forms/AppointmentForm";
 import type { Appointment, Client, Service, Technician, Team } from "@shared/schema";
+
+// Create DnD Calendar
+const DnDCalendar = withDragAndDrop(Calendar);
 
 // Configure moment for Portuguese locale
 moment.locale('pt-br');
@@ -36,6 +43,39 @@ interface AppointmentCalendarProps {
   teams: Team[];
 }
 
+// Custom Month Event Component for better appointment display
+const MonthEvent = ({ event }: { event: CalendarEvent }) => {
+  const responsible = event.responsible;
+  const responsibleIcon = responsible.type === 'team' ? '👥' : responsible.type === 'technician' ? '👤' : '❌';
+  
+  return (
+    <div className="text-xs leading-tight">
+      <div className="font-semibold truncate">{event.title.split(' - ')[0]}</div>
+      <div className="flex items-center gap-1">
+        <span>{responsibleIcon}</span>
+        <span className="truncate text-xs opacity-90">{responsible.name}</span>
+      </div>
+    </div>
+  );
+};
+
+// Custom Week/Day Event Component
+const TimeEvent = ({ event }: { event: CalendarEvent }) => {
+  const responsible = event.responsible;
+  const responsibleIcon = responsible.type === 'team' ? '👥' : responsible.type === 'technician' ? '👤' : '❌';
+  
+  return (
+    <div className="text-xs p-1">
+      <div className="font-bold truncate mb-1">{event.title.split(' - ')[0]}</div>
+      <div className="text-xs opacity-90 truncate">{event.title.split(' - ')[1]}</div>
+      <div className="flex items-center gap-1 mt-1">
+        <span>{responsibleIcon}</span>
+        <span className="truncate">{responsible.name}</span>
+      </div>
+    </div>
+  );
+};
+
 export default function AppointmentCalendar({ 
   appointments, 
   clients, 
@@ -45,6 +85,8 @@ export default function AppointmentCalendar({
 }: AppointmentCalendarProps) {
   const [view, setView] = useState<keyof typeof Views>(Views.MONTH);
   const [date, setDate] = useState(new Date());
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -179,37 +221,55 @@ export default function AppointmentCalendar({
     };
   }, [responsibleColors]);
 
+  // Handle event click for editing
+  const handleSelectEvent = useCallback((event: CalendarEvent) => {
+    // Only open edit dialog in week/day view, not in month view
+    if (view === Views.WEEK || view === Views.DAY || view === Views.AGENDA) {
+      setSelectedAppointment(event.appointment);
+      setIsEditDialogOpen(true);
+    }
+  }, [view]);
+
   // Handle event movement (drag and drop)
   const handleEventDrop = useCallback(async ({ event, start, end }: { event: CalendarEvent; start: Date; end: Date }) => {
     const draggedEvent = event as CalendarEvent;
-    const targetSlot = { start, end };
+    
+    console.log(`🎯 [CALENDAR] Arrastando agendamento ${draggedEvent.appointment.id} para ${start.toISOString()}`);
 
-    // Find if there's any other event at the target time
+    // Check for conflicts with the same responsible
     const conflictingEvent = calendarEvents.find(e => 
       e.id !== draggedEvent.id && 
+      e.responsible.type === draggedEvent.responsible.type &&
+      e.responsible.id === draggedEvent.responsible.id &&
       ((start >= e.start && start < e.end) || (end > e.start && end <= e.end) ||
        (start <= e.start && end >= e.end))
     );
 
     if (conflictingEvent) {
-      const conflictingResponsible = conflictingEvent.responsible;
-      const draggedResponsible = draggedEvent.responsible;
-      
-      // Check if trying to move across different teams/technicians
-      if (conflictingResponsible.type !== draggedResponsible.type || 
-          conflictingResponsible.id !== draggedResponsible.id) {
-        toast({
-          title: "Operação não permitida",
-          description: `Não é possível mover agendamento de ${draggedResponsible.name} para o horário de ${conflictingResponsible.name}. Só é permitido arrastar dentro da mesma equipe/técnico.`,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Same team/technician but slot is occupied
       toast({
         title: "Horário ocupado",
-        description: `Este horário já está ocupado por outro agendamento de ${conflictingResponsible.name}.`,
+        description: `Este horário já está ocupado por outro agendamento de ${draggedEvent.responsible.name}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if trying to move to a slot with different responsible
+    const targetSlotEvents = calendarEvents.filter(e => 
+      e.id !== draggedEvent.id &&
+      ((start >= e.start && start < e.end) || (end > e.start && end <= e.end) ||
+       (start <= e.start && end >= e.end))
+    );
+
+    const conflictingResponsible = targetSlotEvents.find(e => 
+      e.responsible.type !== draggedEvent.responsible.type || 
+      e.responsible.id !== draggedEvent.responsible.id
+    );
+
+    if (conflictingResponsible) {
+      toast({
+        title: "Operação não permitida",
+        description: `Não é possível mover agendamento entre responsáveis diferentes. Este agendamento pertence a ${draggedEvent.responsible.name}.`,
         variant: "destructive",
       });
       return;
@@ -217,6 +277,7 @@ export default function AppointmentCalendar({
 
     // Update the appointment
     const newScheduledDate = start.toISOString();
+    console.log(`✅ [CALENDAR] Atualizando agendamento ${draggedEvent.appointment.id} para ${newScheduledDate}`);
     updateAppointmentMutation.mutate({
       appointmentId: draggedEvent.appointment.id,
       scheduledDate: newScheduledDate
@@ -225,6 +286,8 @@ export default function AppointmentCalendar({
 
   // Handle event resize (if needed)
   const handleEventResize = useCallback(async ({ event, start, end }: { event: CalendarEvent; start: Date; end: Date }) => {
+    console.log(`📏 [CALENDAR] Redimensionando agendamento ${event.appointment.id} para ${start.toISOString()}`);
+    
     // For now, just update the start time
     const newScheduledDate = start.toISOString();
     updateAppointmentMutation.mutate({
@@ -233,21 +296,24 @@ export default function AppointmentCalendar({
     });
   }, [updateAppointmentMutation]);
 
-  // Custom event component
-  const EventComponent = ({ event }: { event: CalendarEvent }) => {
-    const responsible = event.responsible;
-    const responsibleIcon = responsible.type === 'team' ? '👥' : responsible.type === 'technician' ? '👤' : '❌';
-    
-    return (
-      <div className="text-xs">
-        <div className="font-bold truncate">{event.title}</div>
-        <div className="flex items-center gap-1 mt-1">
-          <span>{responsibleIcon}</span>
-          <span className="truncate">{responsible.name}</span>
-        </div>
-      </div>
-    );
-  };
+  // Handle closing edit dialog
+  const handleCloseEditDialog = useCallback(() => {
+    setIsEditDialogOpen(false);
+    setSelectedAppointment(null);
+  }, []);
+
+  // Get appropriate event component based on view
+  const getEventComponent = useCallback((view: keyof typeof Views) => {
+    switch (view) {
+      case Views.MONTH:
+        return MonthEvent;
+      case Views.WEEK:
+      case Views.DAY:
+        return TimeEvent;
+      default:
+        return MonthEvent;
+    }
+  }, []);
 
   // Custom toolbar to show responsible colors legend
   const ResponsibleLegend = () => (
@@ -289,7 +355,7 @@ export default function AppointmentCalendar({
       <ResponsibleLegend />
       
       <div style={{ height: '600px' }}>
-        <Calendar
+        <DnDCalendar
           localizer={localizer}
           events={calendarEvents}
           startAccessor="start"
@@ -302,10 +368,13 @@ export default function AppointmentCalendar({
           eventPropGetter={eventStyleGetter}
           onEventDrop={handleEventDrop}
           onEventResize={handleEventResize}
+          onSelectEvent={handleSelectEvent}
+          selectable
           resizable
           draggableAccessor={() => true}
+          resizableAccessor={() => true}
           components={{
-            event: EventComponent
+            event: getEventComponent(view)
           }}
           views={[Views.MONTH, Views.WEEK, Views.DAY, Views.AGENDA]}
           messages={{
@@ -344,8 +413,26 @@ export default function AppointmentCalendar({
           timeslots={2}
           min={new Date(0, 0, 0, 7, 0, 0)} // 7:00 AM
           max={new Date(0, 0, 0, 19, 0, 0)} // 7:00 PM
+          popup
+          popupOffset={30}
         />
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {selectedAppointment && (
+            <AppointmentForm
+              appointment={selectedAppointment}
+              onClose={handleCloseEditDialog}
+              clients={clients}
+              services={services}
+              technicians={technicians}
+              teams={teams}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

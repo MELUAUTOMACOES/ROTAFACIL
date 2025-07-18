@@ -24,8 +24,10 @@
 }
 
 .rbc-date-cell {
-  padding: 8px;
+  padding: 4px;
   border-right: 1px solid #e5e7eb;
+  min-height: 100px;
+  vertical-align: top;
 }
 
 .rbc-date-cell button {
@@ -55,6 +57,13 @@
   font-size: 11px !important;
   font-weight: 600 !important;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.rbc-event:hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15) !important;
+  transform: translateY(-1px) !important;
 }
 
 .rbc-event.rbc-selected {
@@ -174,14 +183,90 @@
   background-color: #f3f4f6;
   border: 1px solid #d1d5db;
   border-radius: 4px;
-  padding: 2px 6px;
+  padding: 4px 8px;
   font-size: 11px;
+  font-weight: 600;
   color: #6b7280;
   cursor: pointer;
+  margin: 2px 0;
+  text-align: center;
+  transition: all 0.2s ease;
 }
 
 .rbc-show-more:hover {
   background-color: #e5e7eb;
+  color: #374151;
+  border-color: #9ca3af;
+}
+
+/* Month view - ensure events can show multiple per day */
+.rbc-month-view .rbc-row-content {
+  height: auto;
+  min-height: 80px;
+}
+
+.rbc-month-view .rbc-row {
+  min-height: 100px;
+}
+
+.rbc-month-view .rbc-date-cell {
+  min-height: 100px;
+  padding: 2px;
+}
+
+.rbc-month-view .rbc-event {
+  margin: 1px 2px;
+  font-size: 10px;
+  padding: 1px 4px;
+  line-height: 1.2;
+}
+
+.rbc-month-view .rbc-event-content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Week and Day view improvements */
+.rbc-time-view .rbc-event {
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.rbc-time-view .rbc-event-content {
+  overflow: visible;
+  white-space: normal;
+}
+
+/* Drag and drop improvements */
+.rbc-addons-dnd-drag-preview {
+  opacity: 0.8;
+  transform: rotate(5deg);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.rbc-addons-dnd-over {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+  border: 2px dashed #3b82f6 !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .rbc-month-view .rbc-event {
+    font-size: 9px;
+    padding: 1px 3px;
+  }
+  
+  .rbc-toolbar .rbc-toolbar-label {
+    font-size: 16px;
+  }
+  
+  .rbc-toolbar button {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
 }
 
 :root {
