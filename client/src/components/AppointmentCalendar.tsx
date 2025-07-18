@@ -49,7 +49,7 @@ const MonthEvent = ({ event }: { event: CalendarEvent }) => {
   const responsibleIcon = responsible.type === 'team' ? '👥' : responsible.type === 'technician' ? '👤' : '❌';
   
   return (
-    <div className="text-xs leading-tight">
+    <div className="text-xs leading-tight cursor-pointer hover:opacity-80 transition-opacity p-1 rounded w-full h-full">
       <div className="font-semibold truncate">{event.title.split(' - ')[0]}</div>
       <div className="flex items-center gap-1">
         <span>{responsibleIcon}</span>
@@ -65,7 +65,7 @@ const TimeEvent = ({ event }: { event: CalendarEvent }) => {
   const responsibleIcon = responsible.type === 'team' ? '👥' : responsible.type === 'technician' ? '👤' : '❌';
   
   return (
-    <div className="text-xs p-1">
+    <div className="text-xs p-1 cursor-pointer hover:opacity-80 transition-opacity w-full h-full">
       <div className="font-bold truncate mb-1">{event.title.split(' - ')[0]}</div>
       <div className="text-xs opacity-90 truncate">{event.title.split(' - ')[1]}</div>
       <div className="flex items-center gap-1 mt-1">
@@ -211,12 +211,14 @@ export default function AppointmentCalendar({
       style: {
         backgroundColor,
         borderRadius: '4px',
-        opacity: 0.8,
+        opacity: 0.9,
         color: 'white',
         border: '0px',
         display: 'block',
         fontSize: '12px',
-        fontWeight: 'bold'
+        fontWeight: 'bold',
+        cursor: 'pointer',
+        userSelect: 'none'
       }
     };
   }, [responsibleColors]);
@@ -278,10 +280,22 @@ export default function AppointmentCalendar({
     // Update the appointment
     const newScheduledDate = start.toISOString();
     console.log(`✅ [CALENDAR] Atualizando agendamento ${draggedEvent.appointment.id} para ${newScheduledDate}`);
-    updateAppointmentMutation.mutate({
-      appointmentId: draggedEvent.appointment.id,
-      scheduledDate: newScheduledDate
-    });
+    
+    try {
+      await updateAppointmentMutation.mutateAsync({
+        appointmentId: draggedEvent.appointment.id,
+        scheduledDate: newScheduledDate
+      });
+      
+      // Success is handled by the mutation's onSuccess callback
+    } catch (error) {
+      console.error('❌ [CALENDAR] Erro ao atualizar agendamento:', error);
+      toast({
+        title: "Erro ao mover agendamento",
+        description: "Não foi possível atualizar o agendamento. Tente novamente.",
+        variant: "destructive",
+      });
+    }
   }, [calendarEvents, toast, updateAppointmentMutation]);
 
   // Handle event resize (if needed)
@@ -390,7 +404,7 @@ export default function AppointmentCalendar({
             event: "Evento",
             allDay: "Dia inteiro",
             noEventsInRange: "Não há agendamentos neste período.",
-            showMore: (total) => `+ Ver mais (${total})`
+            showMore: (total) => `+${total}`
           }}
           formats={{
             dateFormat: 'DD',
@@ -407,7 +421,11 @@ export default function AppointmentCalendar({
             agendaDateFormat: 'ddd DD/MM',
             agendaTimeFormat: 'HH:mm',
             agendaTimeRangeFormat: ({ start, end }, culture, localizer) =>
-              `${localizer?.format(start, 'HH:mm', culture)} - ${localizer?.format(end, 'HH:mm', culture)}`
+              `${localizer?.format(start, 'HH:mm', culture)} - ${localizer?.format(end, 'HH:mm', culture)}`,
+            weekdayFormat: (date, culture, localizer) =>
+              localizer?.format(date, 'dddd', culture) || '',
+            selectRangeFormat: ({ start, end }, culture, localizer) =>
+              `${localizer?.format(start, 'DD MMM', culture)} - ${localizer?.format(end, 'DD MMM YYYY', culture)}`
           }}
           step={30}
           timeslots={2}

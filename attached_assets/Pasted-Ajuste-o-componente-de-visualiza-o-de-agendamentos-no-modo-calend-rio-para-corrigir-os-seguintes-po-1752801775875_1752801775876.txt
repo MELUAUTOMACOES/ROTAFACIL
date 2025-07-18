@@ -1,0 +1,29 @@
+Ajuste o componente de visualização de agendamentos no modo calendário para corrigir os seguintes pontos:
+
+**1. Calendário Mensal**
+- Os agendamentos não estão aparecendo no modo mês. Corrija para que todos os eventos do dia apareçam como no Google Calendar, mostrando até 3 agendamentos por dia e o botão "+x" para ver mais se houver mais de 3.
+- Garanta que os eventos não fiquem sobrepostos nem ocultos, e que o botão "+x" apareça de forma clara.
+
+**2. Calendário Semanal**
+- Corrija o layout do cabeçalho: o nome dos dias deve aparecer corretamente, centralizado, em português do Brasil (ex: "Segunda", "Terça", etc).
+- Remova o bloco/branco que aparece sobre o nome dos dias.
+- Todos os agendamentos devem estar visíveis, bem alinhados e ocupando o slot correto no grid de horários.
+
+**3. Drag-and-drop**
+- Ajuste o arrastar/agendar para funcionar em qualquer parte do bloco do agendamento (não apenas no meio), como um bloco sólido.
+- Quando um evento for arrastado e solto, o horário/data devem ser atualizados tanto no calendário quanto no banco, e o agendamento deve se mover visualmente imediatamente, sem precisar recarregar a página.
+- Se a atualização falhar, mostre um erro claro e retorne o evento ao lugar original.
+
+**4. Responsividade e Botões de Visualização**
+- No desktop, mantenha os botões de "Modo de Visualização" visíveis mas compactos.
+- No mobile, organize todos os elementos do topo (filtros, modo de visualização, botões de exportar, etc) **um embaixo do outro** (empilhados, layout em coluna), para melhor usabilidade em telas pequenas.
+- Os botões "Lista" e "Calendário" devem ficar um embaixo do outro no mobile, bem visíveis e grandes o suficiente para toque.
+
+**5. Localização**
+- Assegure que o calendário (dias da semana, meses, datas, textos do calendário) está em português do Brasil em todas as visualizações.
+
+**6. Não altere lógica de filtros, seleção, backend, nem o restante da tela.**
+- Foque só no componente do calendário e no topo da tela de agendamentos.
+
+Após corrigir, teste todos os modos (mês, semana, dia, agenda), drag-and-drop, responsividade e a alternância entre modos.
+
