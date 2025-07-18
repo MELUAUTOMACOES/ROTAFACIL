@@ -678,24 +678,71 @@
   padding: 0 !important;
 }
 
-/* Garante que o header dos dias da semana sempre fique visível acima do bloco all-day */
+/* CORREÇÃO: Garante que o header dos dias da semana sempre fique visível acima do bloco all-day */
 .rbc-time-header {
   position: sticky !important;
   top: 0;
-  z-index: 3;
-  background: #f9fafb;
+  z-index: 10 !important;
+  background: #f9fafb !important;
+  border-bottom: 1px solid #e5e7eb !important;
 }
 
+/* Garante que os nomes dos dias fiquem fixos no topo */
+.rbc-time-header-content {
+  position: relative !important;
+  z-index: 10 !important;
+  background: #f9fafb !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+/* Header individual de cada dia */
+.rbc-header {
+  position: relative !important;
+  z-index: 10 !important;
+  background: #f9fafb !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  padding: 12px 8px !important;
+  font-weight: 600 !important;
+  color: #374151 !important;
+  text-align: center !important;
+}
+
+/* Bloco all-day com z-index menor para ficar atrás do header */
 .rbc-allday-cell {
-  z-index: 1;
+  z-index: 2 !important;
   position: relative;
   background: #f9fafb;
-  min-height: 48px; /* Pode ajustar para a altura desejada */
+  min-height: 48px;
+  margin-top: 0 !important;
+  border-top: 1px solid #e5e7eb !important;
 }
 
-/* Remove overflow oculto do cabeçalho e do bloco all-day */
+/* Container da linha all-day */
+.rbc-row.rbc-allday {
+  z-index: 2 !important;
+  position: relative;
+  background: #f9fafb;
+}
+
+/* Garante que a tabela do header tenha layout estável */
+.rbc-time-header .rbc-row.rbc-time-header-row {
+  position: relative !important;
+  z-index: 10 !important;
+  background: #f9fafb !important;
+  height: auto !important;
+  min-height: 40px !important;
+}
+
+/* Remove overflow oculto que pode causar problemas de exibição */
 .rbc-time-header-content,
 .rbc-time-header,
 .rbc-allday-cell {
   overflow: visible !important;
+}
+
+/* Garante que o conteúdo do calendário não sobreponha o header fixo */
+.rbc-time-content {
+  position: relative !important;
+  z-index: 1 !important;
+  margin-top: 0 !important;
 }
