@@ -124,6 +124,8 @@
 .rbc-time-header {
   background-color: #f9fafb;
   border-bottom: 1px solid #e5e7eb;
+  position: relative;
+  z-index: 20;
 }
 
 .rbc-time-content {
@@ -148,6 +150,8 @@
   background-color: #f9fafb;
   border-bottom: 1px solid #e5e7eb;
   padding: 8px;
+  position: relative;
+  z-index: 10;
 }
 
 .rbc-day-bg + .rbc-day-bg {
@@ -174,17 +178,7 @@
   border-bottom: 1px solid #e5e7eb;
 }
 
-/* Week/Day View Improvements */
-.rbc-time-view {
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-}
-
-.rbc-time-header {
-  background-color: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
-}
-
+/* Week/Day View Improvements - Configuração do cabeçalho sempre visível */
 .rbc-time-header-content {
   border-left: 1px solid #e5e7eb;
   min-height: 40px;
@@ -193,6 +187,27 @@
   justify-content: center;
   font-weight: 600;
   color: #374151;
+  position: relative;
+  z-index: 30;
+  background-color: #f9fafb;
+}
+
+/* Garantir que o cabeçalho da semana fique sempre visível acima do all-day */
+.rbc-time-view .rbc-time-header {
+  position: sticky;
+  top: 0;
+  z-index: 100 !important;
+  background-color: #f9fafb;
+}
+
+.rbc-time-view .rbc-time-header .rbc-header {
+  z-index: 101 !important;
+  background-color: #f9fafb;
+  position: relative;
+}
+
+.rbc-time-view .rbc-allday-cell {
+  z-index: 5 !important;
 }
 
 .rbc-time-header-gutter {

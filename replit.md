@@ -105,6 +105,11 @@ RotaFácil is a comprehensive service route management application designed to h
 ## Changelog
 ```
 Changelog:
+- July 18, 2025: Correção CSS React Big Calendar - visualização semanal
+  * Corrigido problema do cabeçalho dos dias da semana ficando escondido atrás do bloco "all day"
+  * Implementado position: sticky e z-index específicos para garantir visibilidade do cabeçalho
+  * Adicionados estilos CSS para .rbc-time-view .rbc-time-header com z-index: 100
+  * Cabeçalho agora fica sempre visível acima do conteúdo all-day na vista semanal
 - July 17, 2025: Migration from Replit Agent to Replit Environment
   * Fixed port configuration from 5050 to 5000 for proper deployment
   * Added automatic redirect to /dashboard after successful login
