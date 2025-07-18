@@ -677,3 +677,25 @@
   vertical-align: middle !important;
   padding: 0 !important;
 }
+
+/* Garante que o header dos dias da semana sempre fique visível acima do bloco all-day */
+.rbc-time-header {
+  position: sticky !important;
+  top: 0;
+  z-index: 3;
+  background: #f9fafb;
+}
+
+.rbc-allday-cell {
+  z-index: 1;
+  position: relative;
+  background: #f9fafb;
+  min-height: 48px; /* Pode ajustar para a altura desejada */
+}
+
+/* Remove overflow oculto do cabeçalho e do bloco all-day */
+.rbc-time-header-content,
+.rbc-time-header,
+.rbc-allday-cell {
+  overflow: visible !important;
+}

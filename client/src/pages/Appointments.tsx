@@ -1071,111 +1071,140 @@ export default function Appointments() {
 
       {/* Mobile-First Responsive Layout */}
       <div className="space-y-4 md:space-y-6">
-        {/* Filters Card */}
+        {/* Filters Card with View Mode Toggle */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center">
               <Filter className="h-5 w-5 mr-2" />
-              Filtros
+              Filtros e Visualização
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-2 block">Data</label>
-                <Input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => {
-                    console.log("🔍 [FILTER] Data alterada:", e.target.value);
-                    setSelectedDate(e.target.value);
-                  }}
-                  className="w-full"
-                />
-              </div>
-              
-              <div>
-                <label className="text-sm font-medium mb-2 block">Buscar Cliente</label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <div className="space-y-6">
+              {/* Filter Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Data</label>
                   <Input
-                    placeholder="Nome do cliente..."
-                    value={searchTerm}
+                    type="date"
+                    value={selectedDate}
                     onChange={(e) => {
-                      console.log("🔍 [FILTER] Busca alterada:", e.target.value);
-                      setSearchTerm(e.target.value);
+                      console.log("🔍 [FILTER] Data alterada:", e.target.value);
+                      setSelectedDate(e.target.value);
                     }}
-                    className="pl-10"
+                    className="w-full"
                   />
                 </div>
+                
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Buscar Cliente</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                    <Input
+                      placeholder="Nome do cliente..."
+                      value={searchTerm}
+                      onChange={(e) => {
+                        console.log("🔍 [FILTER] Busca alterada:", e.target.value);
+                        setSearchTerm(e.target.value);
+                      }}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Serviço</label>
+                  <Select value={selectedService} onValueChange={(value) => {
+                    console.log("🔍 [FILTER] Serviço alterado:", value);
+                    setSelectedService(value);
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos os serviços" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os serviços</SelectItem>
+                      {services.map((service: Service) => (
+                        <SelectItem key={service.id} value={service.id.toString()}>
+                          {service.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Técnicos/Equipes</label>
+                  <Select value={selectedTechnician} onValueChange={(value) => {
+                    console.log("🔍 [FILTER] Técnico/Equipe alterado:", value);
+                    setSelectedTechnician(value);
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos os técnicos e equipes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os técnicos e equipes</SelectItem>
+                      {technicians.map((technician: Technician) => (
+                        <SelectItem key={`tech-${technician.id}`} value={technician.id.toString()}>
+                          👤 {technician.name}
+                        </SelectItem>
+                      ))}
+                      {teams.map((team: any) => (
+                        <SelectItem key={`team-${team.id}`} value={`team-${team.id}`}>
+                          👥 {team.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Status</label>
+                  <Select value={selectedStatus} onValueChange={(value) => {
+                    console.log("🔍 [FILTER] Status alterado:", value);
+                    setSelectedStatus(value);
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos os status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os status</SelectItem>
+                      <SelectItem value="scheduled">Agendado</SelectItem>
+                      <SelectItem value="in_progress">Em Andamento</SelectItem>
+                      <SelectItem value="completed">Concluído</SelectItem>
+                      <SelectItem value="cancelled">Cancelado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              
-              <div>
-                <label className="text-sm font-medium mb-2 block">Serviço</label>
-                <Select value={selectedService} onValueChange={(value) => {
-                  console.log("🔍 [FILTER] Serviço alterado:", value);
-                  setSelectedService(value);
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos os serviços" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os serviços</SelectItem>
-                    {services.map((service: Service) => (
-                      <SelectItem key={service.id} value={service.id.toString()}>
-                        {service.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div>
-                <label className="text-sm font-medium mb-2 block">Técnicos/Equipes</label>
-                <Select value={selectedTechnician} onValueChange={(value) => {
-                  console.log("🔍 [FILTER] Técnico/Equipe alterado:", value);
-                  setSelectedTechnician(value);
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos os técnicos e equipes" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os técnicos e equipes</SelectItem>
-                    {technicians.map((technician: Technician) => (
-                      <SelectItem key={`tech-${technician.id}`} value={technician.id.toString()}>
-                        👤 {technician.name}
-                      </SelectItem>
-                    ))}
-                    {teams.map((team: any) => (
-                      <SelectItem key={`team-${team.id}`} value={`team-${team.id}`}>
-                        👥 {team.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div>
-                <label className="text-sm font-medium mb-2 block">Status</label>
-                <Select value={selectedStatus} onValueChange={(value) => {
-                  console.log("🔍 [FILTER] Status alterado:", value);
-                  setSelectedStatus(value);
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos os status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os status</SelectItem>
-                    <SelectItem value="scheduled">Agendado</SelectItem>
-                    <SelectItem value="in_progress">Em Andamento</SelectItem>
-                    <SelectItem value="completed">Concluído</SelectItem>
-                    <SelectItem value="cancelled">Cancelado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              {/* Botão para limpar filtros */}
-              <div className="col-span-full pt-4 border-t border-gray-100">
+
+              {/* View Mode Toggle and Clear Filters */}
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pt-4 border-t border-gray-100">
+                {/* View Mode Toggle */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <span className="text-sm font-medium text-gray-700">Modo de Visualização:</span>
+                  <div className="bg-white border border-gray-200 rounded p-0.5 shadow-sm w-full max-w-sm sm:w-auto">
+                    <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as "list" | "calendar")} className="w-full">
+                      <TabsList className="grid w-full grid-cols-2 h-auto sm:h-8 bg-gray-50 p-0 gap-1 sm:gap-0">
+                        <TabsTrigger 
+                          value="list" 
+                          className="flex items-center justify-center gap-2 py-2 px-3 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
+                        >
+                          <List className="h-4 w-4" />
+                          <span className="text-sm sm:text-xs">Lista</span>
+                        </TabsTrigger>
+                        <TabsTrigger 
+                          value="calendar" 
+                          className="flex items-center justify-center gap-2 py-2 px-3 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
+                        >
+                          <Calendar className="h-4 w-4" />
+                          <span className="text-sm sm:text-xs">Calendário</span>
+                        </TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                  </div>
+                </div>
+                
+                {/* Clear Filters Button */}
                 <Button 
                   onClick={() => {
                     console.log("🔍 [FILTER] Limpando todos os filtros");
@@ -1186,7 +1215,7 @@ export default function Appointments() {
                     setSelectedStatus("all");
                   }}
                   variant="outline"
-                  className="flex-1 sm:flex-none"
+                  className="w-full sm:w-auto"
                   type="button"
                 >
                   Limpar Filtros
@@ -1195,31 +1224,6 @@ export default function Appointments() {
             </div>
           </CardContent>
         </Card>
-        
-        {/* View Mode Toggle - Compact Desktop, Touch-Friendly Mobile */}
-        <div className="flex flex-col items-center space-y-3 md:flex-row md:justify-center md:space-y-0">
-          <span className="text-sm font-medium text-gray-700 mb-2 md:mb-0 md:mr-4">Modo de Visualização</span>
-          <div className="bg-white border border-gray-200 rounded p-0.5 shadow-sm w-full max-w-sm md:w-auto">
-            <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as "list" | "calendar")} className="w-full">
-              <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2 h-auto sm:h-8 bg-gray-50 p-0 gap-1 sm:gap-0">
-                <TabsTrigger 
-                  value="list" 
-                  className="flex items-center justify-center gap-2 py-3 px-4 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
-                >
-                  <List className="h-4 w-4" />
-                  <span className="text-sm sm:text-xs">Lista</span>
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="calendar" 
-                  className="flex items-center justify-center gap-2 py-3 px-4 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
-                >
-                  <Calendar className="h-4 w-4" />
-                  <span className="text-sm sm:text-xs">Calendário</span>
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-        </div>
       </div>
 
       {/* Content Area - List or Calendar View */}
