@@ -13,6 +13,25 @@ import {
 // Esta chave é usada para assinar e verificar tokens de autenticação
 const JWT_SECRET = process.env.JWT_SECRET || "development_jwt_secret_key_32_characters_long_minimum_for_security_rotafacil_2025";
 
+// 🔐 CONFIGURAÇÃO: URL do OSRM (Open Source Routing Machine)
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function getOsrmUrl() {
+  const filePath = path.join(__dirname, 'osrm_url.txt');
+  console.log("Procurando arquivo em:", filePath);
+  try {
+    return fs.readFileSync(filePath, 'utf8').trim();
+  } catch (err) {
+    console.error('Arquivo osrm_url.txt não encontrado ou não lido!', err);
+    return null;
+  }
+}
+
 // Auth middleware
 function authenticateToken(req: any, res: any, next: any) {
   const authHeader = req.headers['authorization'];
@@ -790,18 +809,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Proxy OSRM para front
+  // Proxy OSRM para fronT
+  console.log("Procurando arquivo em:", path.join(__dirname, 'osrm_url.txt'));
   app.get("/api/route", async (req, res) => {
     try {
       const coords = req.query.coords as string;
       if (!coords) {
         return res.status(400).json({ error: "Missing 'coords' parameter" });
       }
-      const osrmUrl = `https://0ba05a7412e2.ngrok-free.app/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+      // Usa o endereço da variável de ambiente, SEM barra no final!
+      const OSRM_URL = getOsrmUrl();
+      if (!OSRM_URL) {
+        return res.status(500).json({ error: "Endereço OSRM não configurado. Crie/atualize o arquivo osrm_url.txt." });
+      }
+      const osrmUrl = `${OSRM_URL}/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+      console.log("🌐 Chamando OSRM:", osrmUrl);
       const osrmRes = await fetch(osrmUrl, {
-        headers: {
-          "ngrok-skip-browser-warning": "true"
-        }
+        headers: { "ngrok-skip-browser-warning": "true" }
       });
       if (!osrmRes.ok) {
         const text = await osrmRes.text();
