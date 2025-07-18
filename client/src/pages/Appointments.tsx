@@ -6,9 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import AppointmentForm from "@/components/forms/AppointmentForm";
-import { Plus, Calendar, MapPin, Clock, User, Edit, Trash2, Download, Upload, Filter, Search } from "lucide-react";
+import AppointmentCalendar from "@/components/AppointmentCalendar";
+import { Plus, Calendar, MapPin, Clock, User, Edit, Trash2, Download, Upload, Filter, Search, List } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Appointment, Client, Service, Technician, Team } from "@shared/schema";
@@ -24,6 +26,9 @@ export default function Appointments() {
   const [selectedService, setSelectedService] = useState<string>("all");
   const [selectedTechnician, setSelectedTechnician] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  
+  // Estado para controlar visualização (lista ou calendário)
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1061,12 +1066,29 @@ export default function Appointments() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* View Mode Toggle */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center">
-            <Filter className="h-5 w-5 mr-2" />
-            Filtros
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center">
+              <Filter className="h-5 w-5 mr-2" />
+              Filtros
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Visualização:</span>
+              <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as "list" | "calendar")}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="list" className="flex items-center gap-2">
+                    <List className="h-4 w-4" />
+                    Lista
+                  </TabsTrigger>
+                  <TabsTrigger value="calendar" className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Calendário
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -1186,124 +1208,166 @@ export default function Appointments() {
         </CardContent>
       </Card>
 
-      {/* Appointments List */}
-      {filteredAppointments.length === 0 ? (
+      {/* Content Area - List or Calendar View */}
+      {viewMode === "list" ? (
+        /* List View */
+        filteredAppointments.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <Calendar className="h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {appointments.length === 0 ? "Nenhum agendamento encontrado" : "Nenhum agendamento encontrado com os filtros aplicados"}
+              </h3>
+              <p className="text-gray-600 text-center mb-6">
+                {appointments.length === 0 
+                  ? "Comece criando seu primeiro agendamento para organizar seus atendimentos técnicos."
+                  : "Tente ajustar os filtros ou limpar todos os filtros para ver mais agendamentos."
+                }
+              </p>
+              <Button 
+                className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                onClick={() => {
+                  setPrefilledData(null);
+                  setSelectedAppointment(null);
+                  setIsFormOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Criar Primeiro Agendamento
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4">
+            {filteredAppointments.map((appointment: Appointment) => {
+              const client = getClient(appointment.clientId);
+              const service = getService(appointment.serviceId);
+              const responsible = getResponsibleInfo(appointment);
+              const { date, time } = formatDateTime(appointment.scheduledDate.toString());
+
+              return (
+                <Card key={appointment.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3 mb-3">
+                          <h3 className="text-lg font-semibold text-gray-900">
+                            {client?.name || "Cliente não encontrado"}
+                          </h3>
+                          <Badge className={getStatusColor(appointment.status)}>
+                            {getStatusText(appointment.status)}
+                          </Badge>
+                          <Badge className={getPriorityColor(appointment.priority)}>
+                            {getPriorityText(appointment.priority)}
+                          </Badge>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                          <div className="flex items-center space-x-2">
+                            <Calendar className="h-4 w-4" />
+                            <span>{date} às {time}</span>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2">
+                            <User className="h-4 w-4" />
+                            <span>{responsible.displayName}</span>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2">
+                            <MapPin className="h-4 w-4" />
+                            <span>
+                              {client
+                                ? (
+                                    <>
+                                      {client.logradouro || "Logradouro não informado"}
+                                      {client.numero ? `, ${client.numero}` : ""}
+                                      {client.complemento ? `, ${client.complemento}` : ""}
+                                      {client.bairro ? `, ${client.bairro}` : ""}
+                                      {client.cidade ? `, ${client.cidade}` : ""}
+                                      {client.cep ? ` - ${client.cep}` : ""}
+                                    </>
+                                  )
+                                : <span style={{ color: "red" }}>Cliente não encontrado</span>
+                              }
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2">
+                            <Clock className="h-4 w-4" />
+                            <span>{service?.name || "Serviço não encontrado"}</span>
+                          </div>
+                        </div>
+                        
+                        {appointment.notes && (
+                          <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                            <p className="text-sm text-gray-700">{appointment.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex space-x-2 ml-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEdit(appointment)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDelete(appointment)}
+                          className="text-red-600 hover:text-red-700 hover:border-red-300"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )
+      ) : (
+        /* Calendar View */
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Calendar className="h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              {appointments.length === 0 ? "Nenhum agendamento encontrado" : "Nenhum agendamento encontrado com os filtros aplicados"}
-            </h3>
-            <p className="text-gray-600 text-center mb-6">
-              {appointments.length === 0 
-                ? "Comece criando seu primeiro agendamento para organizar seus atendimentos técnicos."
-                : "Tente ajustar os filtros ou limpar todos os filtros para ver mais agendamentos."
-              }
-            </p>
-            <Button 
-              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-              onClick={() => {
-                setPrefilledData(null);
-                setSelectedAppointment(null);
-                setIsFormOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Criar Primeiro Agendamento
-            </Button>
+          <CardContent className="p-6">
+            {filteredAppointments.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <Calendar className="h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {appointments.length === 0 ? "Nenhum agendamento encontrado" : "Nenhum agendamento encontrado com os filtros aplicados"}
+                </h3>
+                <p className="text-gray-600 text-center mb-6">
+                  {appointments.length === 0 
+                    ? "Comece criando seu primeiro agendamento para organizar seus atendimentos técnicos."
+                    : "Tente ajustar os filtros ou limpar todos os filtros para ver mais agendamentos."
+                  }
+                </p>
+                <Button 
+                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                  onClick={() => {
+                    setPrefilledData(null);
+                    setSelectedAppointment(null);
+                    setIsFormOpen(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Criar Primeiro Agendamento
+                </Button>
+              </div>
+            ) : (
+              <AppointmentCalendar
+                appointments={filteredAppointments}
+                clients={clients}
+                services={services}
+                technicians={technicians}
+                teams={teams}
+              />
+            )}
           </CardContent>
         </Card>
-      ) : (
-        <div className="grid gap-4">
-          {filteredAppointments.map((appointment: Appointment) => {
-            const client = getClient(appointment.clientId);
-            const service = getService(appointment.serviceId);
-            const responsible = getResponsibleInfo(appointment);
-            const { date, time } = formatDateTime(appointment.scheduledDate.toString());
-
-            return (
-              <Card key={appointment.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-3">
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {client?.name || "Cliente não encontrado"}
-                        </h3>
-                        <Badge className={getStatusColor(appointment.status)}>
-                          {getStatusText(appointment.status)}
-                        </Badge>
-                        <Badge className={getPriorityColor(appointment.priority)}>
-                          {getPriorityText(appointment.priority)}
-                        </Badge>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                        <div className="flex items-center space-x-2">
-                          <Calendar className="h-4 w-4" />
-                          <span>{date} às {time}</span>
-                        </div>
-                        
-                        <div className="flex items-center space-x-2">
-                          <User className="h-4 w-4" />
-                          <span>{responsible.displayName}</span>
-                        </div>
-                        
-                        <div className="flex items-center space-x-2">
-                          <MapPin className="h-4 w-4" />
-                          <span>
-                            {client
-                              ? (
-                                  <>
-                                    {client.logradouro || "Logradouro não informado"}
-                                    {client.numero ? `, ${client.numero}` : ""}
-                                    {client.complemento ? `, ${client.complemento}` : ""}
-                                    {client.bairro ? `, ${client.bairro}` : ""}
-                                    {client.cidade ? `, ${client.cidade}` : ""}
-                                    {client.cep ? ` - ${client.cep}` : ""}
-                                  </>
-                                )
-                              : <span style={{ color: "red" }}>Cliente não encontrado</span>
-                            }
-                          </span>
-                        </div>
-                        
-                        <div className="flex items-center space-x-2">
-                          <Clock className="h-4 w-4" />
-                          <span>{service?.name || "Serviço não encontrado"}</span>
-                        </div>
-                      </div>
-                      
-                      {appointment.notes && (
-                        <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                          <p className="text-sm text-gray-700">{appointment.notes}</p>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex space-x-2 ml-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(appointment)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(appointment)}
-                        className="text-red-600 hover:text-red-700 hover:border-red-300"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
       )}
       
       {/* Centralized Dialog for All Appointment Forms */}
