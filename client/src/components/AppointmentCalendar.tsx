@@ -99,6 +99,10 @@ export default function AppointmentCalendar({
 }: AppointmentCalendarProps) {
   const [view, setView] = useState<keyof typeof Views>(Views.MONTH);
   const [date, setDate] = useState(new Date());
+  
+  console.log('📅 [CALENDAR] Modo atual:', view);
+  console.log('📅 [CALENDAR] Data atual:', date.toISOString());
+  console.log('📅 [CALENDAR] Total appointments recebidos:', appointments.length);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const { toast } = useToast();
@@ -165,6 +169,12 @@ export default function AppointmentCalendar({
   // Convert appointments to calendar events
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     console.log('🔄 [CALENDAR] Processando agendamentos para o calendário:', appointments.length);
+    console.log('🔄 [CALENDAR] View atual durante processamento:', view);
+    
+    if (!appointments.length) {
+      console.log('⚠️ [CALENDAR] Nenhum appointment encontrado!');
+      return [];
+    }
     
     const events = appointments.map((appointment) => {
       const client = getClient(appointment.clientId);
@@ -282,8 +292,27 @@ export default function AppointmentCalendar({
     console.log('🧪 [CALENDAR] Adicionando eventos mock para teste:', mockEvents);
     events.push(...mockEvents);
     
+    // TESTE EXTREMO: Evento simples para hoje
+    const eventoSimples = {
+      id: 999,
+      title: 'EVENTO SIMPLES TESTE',
+      start: new Date(2025, 6, 18, 10, 0), // 18 de julho de 2025, 10:00
+      end: new Date(2025, 6, 18, 11, 0),   // 18 de julho de 2025, 11:00
+      allDay: false
+    };
+    
+    console.log('🚨 [CALENDAR] Evento simples para teste:', eventoSimples);
+    console.log('🚨 [CALENDAR] Start é Date?', eventoSimples.start instanceof Date);
+    console.log('🚨 [CALENDAR] End é Date?', eventoSimples.end instanceof Date);
+    
+    // Adiciona evento simples que deveria aparecer no mês
+    events.push(eventoSimples as any);
+    
+    console.log('🎯 [CALENDAR] TOTAL FINAL de eventos:', events.length);
+    console.log('🎯 [CALENDAR] Primeiros 3 eventos:', events.slice(0, 3));
+    
     return events;
-  }, [appointments, clients, services, technicians, teams]);
+  }, [appointments, clients, services, technicians, teams, view]);
 
   // Update appointment mutation
   const updateAppointmentMutation = useMutation({
@@ -474,6 +503,28 @@ export default function AppointmentCalendar({
   );
  
   console.log('calendarEvents:', calendarEvents);
+  console.log('📊 [CALENDAR] Renderizando calendário com', calendarEvents.length, 'eventos no view:', view);
+  
+  // TESTE: Verificar se o problema está no React Big Calendar
+  const eventosTeste = [
+    {
+      id: 1,
+      title: 'Evento Teste 1',
+      start: new Date(2025, 6, 18, 10, 0),
+      end: new Date(2025, 6, 18, 11, 0),
+      allDay: false
+    },
+    {
+      id: 2,
+      title: 'Evento Teste 2',
+      start: new Date(2025, 6, 19, 14, 0),
+      end: new Date(2025, 6, 19, 15, 0),
+      allDay: false
+    }
+  ];
+  
+  console.log('🧪 [CALENDAR] Eventos de teste para comparação:', eventosTeste);
+  
   return (
     <div className="h-full">
       <ResponsibleLegend />
@@ -481,14 +532,20 @@ export default function AppointmentCalendar({
       <div style={{ width: '100%' }}>
         <DnDCalendar
           localizer={localizer}
-          events={calendarEvents}
+          events={eventosTeste}
           startAccessor="start"
           endAccessor="end"
           style={{ height: '600px', width: '100%' }}
           view={view}
-          onView={setView}
+          onView={(newView) => {
+            console.log('📱 [CALENDAR] Mudando view de', view, 'para', newView);
+            setView(newView);
+          }}
           date={date}
-          onNavigate={setDate}
+          onNavigate={(newDate) => {
+            console.log('📅 [CALENDAR] Navegando para nova data:', newDate.toISOString());
+            setDate(newDate);
+          }}
           eventPropGetter={eventStyleGetter}
           onEventDrop={handleEventDrop}
           onEventResize={handleEventResize}
