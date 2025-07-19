@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
@@ -16,6 +16,25 @@ export default function Services() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // CRÍTICO: Ref para controle de limpeza de componente
+  const isComponentMounted = useRef(true);
+  
+  // CRÍTICO: Cleanup do componente ao desmontar
+  useEffect(() => {
+    isComponentMounted.current = true;
+    
+    return () => {
+      console.log('🧹 [SERVICES] Limpando componente Services');
+      isComponentMounted.current = false;
+      
+      // Fechar modal se aberto durante desmontagem
+      if (isFormOpen) {
+        setIsFormOpen(false);
+        setSelectedService(null);
+      }
+    };
+  }, [isFormOpen]);
 
   const { data: services = [], isLoading } = useQuery({
     queryKey: ["/api/services"],
@@ -59,6 +78,12 @@ export default function Services() {
   };
 
   const handleFormClose = () => {
+    // CRÍTICO: Só executa se o componente ainda estiver montado
+    if (!isComponentMounted.current) {
+      console.log('⚠️ [SERVICES] Componente desmontado, não é possível fechar formulário');
+      return;
+    }
+    
     setIsFormOpen(false);
     setSelectedService(null);
   };

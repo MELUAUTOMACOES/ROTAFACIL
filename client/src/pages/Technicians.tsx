@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
@@ -20,6 +20,30 @@ export default function Technicians() {
   const [isTeamFormOpen, setIsTeamFormOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // CRÍTICO: Ref para controle de limpeza de componente
+  const isComponentMounted = useRef(true);
+  
+  // CRÍTICO: Cleanup do componente ao desmontar
+  useEffect(() => {
+    isComponentMounted.current = true;
+    
+    return () => {
+      console.log('🧹 [TECHNICIANS] Limpando componente Technicians');
+      isComponentMounted.current = false;
+      
+      // Fechar modais se abertos durante desmontagem
+      if (isTechnicianFormOpen) {
+        setIsTechnicianFormOpen(false);
+        setSelectedTechnician(null);
+      }
+      
+      if (isTeamFormOpen) {
+        setIsTeamFormOpen(false);
+        setSelectedTeam(null);
+      }
+    };
+  }, [isTechnicianFormOpen, isTeamFormOpen]);
 
   // Queries para técnicos
   const { data: technicians = [], isLoading: techniciansLoading } = useQuery({

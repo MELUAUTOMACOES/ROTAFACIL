@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
@@ -41,6 +41,30 @@ export default function Appointments() {
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // CRÍTICO: Ref para controle de limpeza de componente
+  const isComponentMounted = useRef(true);
+  
+  // CRÍTICO: Cleanup do componente ao desmontar
+  useEffect(() => {
+    isComponentMounted.current = true;
+    
+    return () => {
+      console.log('🧹 [APPOINTMENTS] Limpando componente Appointments');
+      isComponentMounted.current = false;
+      
+      // Fechar todos os modais e drawers se abertos durante desmontagem
+      if (isFormOpen) {
+        setIsFormOpen(false);
+        setSelectedAppointment(null);
+        setPrefilledData(null);
+      }
+      
+      if (isRouteDrawerOpen) {
+        setIsRouteDrawerOpen(false);
+      }
+    };
+  }, [isFormOpen, isRouteDrawerOpen]);
 
   // Logs para monitorar uso dos filtros
   useEffect(() => {
@@ -184,6 +208,12 @@ export default function Appointments() {
   };
 
   const handleFormClose = () => {
+    // CRÍTICO: Só executa se o componente ainda estiver montado
+    if (!isComponentMounted.current) {
+      console.log('⚠️ [APPOINTMENTS] Componente desmontado, não é possível fechar formulário');
+      return;
+    }
+    
     console.log("🧹 [DEBUG] handleFormClose - Limpando formulário");
     console.log("🧹 [DEBUG] handleFormClose - selectedAppointment antes:", selectedAppointment);
     console.log("🧹 [DEBUG] handleFormClose - prefilledData antes:", prefilledData);

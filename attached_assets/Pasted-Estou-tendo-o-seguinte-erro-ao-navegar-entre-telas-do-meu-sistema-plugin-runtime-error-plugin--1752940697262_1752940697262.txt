@@ -1,0 +1,23 @@
+Estou tendo o seguinte erro ao navegar entre telas do meu sistema:
+
+[plugin:runtime-error-plugin] Falha ao executar 'removeChild' em 'Node': O nó a ser removido não é um filho deste nó.
+
+Esse erro geralmente ocorre quando algum componente React, ou biblioteca de calendário/modal/popover, tenta remover um elemento do DOM que já foi removido, ou que nunca foi filho daquele nó.
+
+Preciso que você:
+- Revise **todo o código relacionado à renderização, desmontagem (unmount) e navegação de páginas**, especialmente os componentes de calendário, modais, tooltips e popovers.
+- Verifique todos os lugares onde há uso de bibliotecas de calendário, modais, tooltips, overlays e popovers (exemplo: AppointmentCalendar, DayPicker, react-big-calendar, etc).
+- Garanta que todos os event listeners, timers, popovers, modais e componentes externos estejam sendo desmontados (unmounted) corretamente no `useEffect` ou no ciclo de vida adequado.
+- Certifique-se que não há múltiplas instâncias de calendários, modais ou overlays sendo montadas/desmontadas ao trocar de tela.
+- Confirme que não há "vazamento de estado" (state leakage) entre páginas, como estados globais, refs, ou variáveis que podem causar renderizações duplicadas ou tentativas de acesso/remontagem de nós já removidos.
+- Siga as recomendações de desmontagem/cleanup de cada biblioteca de UI que estiver usando.
+- Revise e ajuste os hooks (`useEffect`, `useLayoutEffect`, etc), removendo listeners, timers, subscriptions e side-effects globais sempre que o componente for desmontado.
+- Teste a navegação entre todas as telas para garantir que o erro não volte a ocorrer, especialmente nas trocas de views do calendário.
+- Mostre e explique exatamente o que foi alterado, usando exemplos de código antes/depois, e justificando as mudanças.
+
+**Importante:**  
+Faça uma revisão minuciosa, pois esse erro já havia sido corrigido anteriormente, mas voltou após ajustes no calendário.  
+Se encontrar mais de um ponto de potencial problema, corrija todos e explique cada caso.
+
+No final, me mostre um resumo do que estava causando o erro e como evitar que aconteça de novo.
+

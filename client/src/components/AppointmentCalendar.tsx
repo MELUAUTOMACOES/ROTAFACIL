@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Calendar, dateFnsLocalizer, Event, Views } from "react-big-calendar";
 import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
 import { format, parse, startOfWeek, getDay } from "date-fns";
@@ -97,6 +97,25 @@ export default function AppointmentCalendar({
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // Ref para controle de limpeza de componente
+  const isComponentMounted = useRef(true);
+  
+  // CRÍTICO: Cleanup do componente ao desmontar
+  useEffect(() => {
+    isComponentMounted.current = true;
+    
+    return () => {
+      console.log('🧹 [CALENDAR] Limpando componente AppointmentCalendar');
+      isComponentMounted.current = false;
+      
+      // Fechar modal se aberto durante desmontagem
+      if (isEditDialogOpen) {
+        setIsEditDialogOpen(false);
+        setSelectedAppointment(null);
+      }
+    };
+  }, [isEditDialogOpen]);
 
   // Generate consistent colors for each responsible (technician/team)
   const responsibleColors = useMemo(() => {
@@ -294,8 +313,15 @@ export default function AppointmentCalendar({
 
   // Handle event click for editing
   const handleSelectEvent = useCallback((event: CalendarEvent) => {
+    // Verifica se o componente ainda está montado
+    if (!isComponentMounted.current) {
+      console.log('⚠️ [CALENDAR] Componente desmontado, cancelando seleção de evento');
+      return;
+    }
+    
     // Only open edit dialog in week/day view, not in month view
     if (view === Views.WEEK || view === Views.DAY || view === Views.AGENDA) {
+      console.log(`🖱️ [CALENDAR] Evento selecionado:`, event.appointment);
       setSelectedAppointment(event.appointment);
       setIsEditDialogOpen(true);
     }
@@ -303,9 +329,21 @@ export default function AppointmentCalendar({
 
   // Handle event movement (drag and drop)
   const handleEventDrop = useCallback(async ({ event, start, end }: { event: CalendarEvent; start: Date; end: Date }) => {
+    // CRÍTICO: Verifica se o componente ainda está montado
+    if (!isComponentMounted.current) {
+      console.log('⚠️ [CALENDAR] Componente desmontado, cancelando drag and drop');
+      return;
+    }
+    
     const draggedEvent = event as CalendarEvent;
     
-    console.log(`🎯 [CALENDAR] Arrastando agendamento ${draggedEvent.appointment.id} para ${start.toISOString()}`);
+    console.log(`🎯 [CALENDAR] Arrastando agendamento ${draggedEvent.appointment?.id} para ${start.toISOString()}`);
+
+    // CRÍTICO: Verificação de segurança para appointment válido
+    if (!draggedEvent.appointment || !draggedEvent.appointment.id) {
+      console.warn('⚠️ [CALENDAR] Evento inválido para drag and drop');
+      return;
+    }
 
     // Check for conflicts with the same responsible
     const conflictingEvent = calendarEvents.find(e => 
@@ -359,16 +397,31 @@ export default function AppointmentCalendar({
       // Success is handled by the mutation's onSuccess callback
     } catch (error) {
       console.error('❌ [CALENDAR] Erro ao atualizar agendamento:', error);
-      toast({
-        title: "Erro ao mover agendamento",
-        description: "Não foi possível atualizar o agendamento. Tente novamente.",
-        variant: "destructive",
-      });
+      // CRÍTICO: Só mostra toast se o componente ainda estiver montado
+      if (isComponentMounted.current) {
+        toast({
+          title: "Erro ao mover agendamento",
+          description: "Não foi possível atualizar o agendamento. Tente novamente.",
+          variant: "destructive",
+        });
+      }
     }
   }, [calendarEvents, toast, updateAppointmentMutation]);
 
   // Handle event resize (if needed)
   const handleEventResize = useCallback(async ({ event, start, end }: { event: CalendarEvent; start: Date; end: Date }) => {
+    // CRÍTICO: Verifica se o componente ainda está montado
+    if (!isComponentMounted.current) {
+      console.log('⚠️ [CALENDAR] Componente desmontado, cancelando resize');
+      return;
+    }
+    
+    // CRÍTICO: Verificação de segurança para appointment válido
+    if (!event.appointment || !event.appointment.id) {
+      console.warn('⚠️ [CALENDAR] Evento inválido para resize');
+      return;
+    }
+    
     console.log(`📏 [CALENDAR] Redimensionando agendamento ${event.appointment.id} para ${start.toISOString()}`);
     
     // For now, just update the start time
@@ -381,6 +434,13 @@ export default function AppointmentCalendar({
 
   // Handle closing edit dialog
   const handleCloseEditDialog = useCallback(() => {
+    // CRÍTICO: Só executa se o componente ainda estiver montado
+    if (!isComponentMounted.current) {
+      console.log('⚠️ [CALENDAR] Componente desmontado, não é possível fechar dialog');
+      return;
+    }
+    
+    console.log('🚪 [CALENDAR] Fechando dialog de edição');
     setIsEditDialogOpen(false);
     setSelectedAppointment(null);
   }, []);
