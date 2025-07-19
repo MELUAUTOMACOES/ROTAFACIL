@@ -28,7 +28,11 @@ export default function Technicians() {
       const response = await fetch("/api/technicians", {
         headers: getAuthHeaders(),
       });
-      return response.json();
+      if (!response.ok) {
+        throw new Error('Erro ao carregar técnicos');
+      }
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
     },
   });
 
@@ -54,7 +58,11 @@ export default function Technicians() {
       const response = await fetch("/api/services", {
         headers: getAuthHeaders(),
       });
-      return response.json();
+      if (!response.ok) {
+        throw new Error('Erro ao carregar serviços');
+      }
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
     },
   });
 
