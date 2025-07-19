@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import TechnicianForm from "@/components/forms/TechnicianForm";
 import TempTeamForm from "@/components/forms/TempTeamForm";
 import { Plus, UserCog, Mail, Phone, Wrench, Edit, Trash2, CheckCircle, XCircle, Users } from "lucide-react";
+import { useSafeNavigation } from "@/hooks/useSafeNavigation";
 import type { Technician, Team, Service } from "@shared/schema";
 
 export default function Technicians() {
@@ -21,29 +22,22 @@ export default function Technicians() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // CRÍTICO: Ref para controle de limpeza de componente
-  const isComponentMounted = useRef(true);
-  
-  // CRÍTICO: Cleanup do componente ao desmontar
-  useEffect(() => {
-    isComponentMounted.current = true;
-    
-    return () => {
-      console.log('🧹 [TECHNICIANS] Limpando componente Technicians');
-      isComponentMounted.current = false;
-      
-      // Fechar modais se abertos durante desmontagem
-      if (isTechnicianFormOpen) {
-        setIsTechnicianFormOpen(false);
-        setSelectedTechnician(null);
+  // Hook de navegação segura
+  const { isSafeToOperate } = useSafeNavigation({
+    componentName: 'TECHNICIANS',
+    modals: [
+      {
+        isOpen: isTechnicianFormOpen,
+        setIsOpen: setIsTechnicianFormOpen,
+        resetState: () => setSelectedTechnician(null)
+      },
+      {
+        isOpen: isTeamFormOpen,
+        setIsOpen: setIsTeamFormOpen,
+        resetState: () => setSelectedTeam(null)
       }
-      
-      if (isTeamFormOpen) {
-        setIsTeamFormOpen(false);
-        setSelectedTeam(null);
-      }
-    };
-  }, [isTechnicianFormOpen, isTeamFormOpen]);
+    ]
+  });
 
   // Queries para técnicos
   const { data: technicians = [], isLoading: techniciansLoading } = useQuery({

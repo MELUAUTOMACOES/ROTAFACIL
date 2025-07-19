@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import ClientForm from "@/components/forms/ClientForm";
 import { Plus, Users, Mail, Phone, MapPin, Edit, Trash2, Upload, Download } from "lucide-react";
+import { downloadCSV, downloadReport, downloadWithConfirmation } from "@/lib/download";
+import { useSafeNavigation } from "@/hooks/useSafeNavigation";
 import type { Client, InsertClient } from "@shared/schema";
 
 export default function Clients() {
@@ -16,24 +18,17 @@ export default function Clients() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // CRÍTICO: Ref para controle de limpeza de componente
-  const isComponentMounted = useRef(true);
-  
-  // CRÍTICO: Cleanup do componente ao desmontar
-  useEffect(() => {
-    isComponentMounted.current = true;
-    
-    return () => {
-      console.log('🧹 [CLIENTS] Limpando componente Clients');
-      isComponentMounted.current = false;
-      
-      // Fechar modal se aberto durante desmontagem
-      if (isFormOpen) {
-        setIsFormOpen(false);
-        setSelectedClient(null);
+  // Hook de navegação segura
+  const { isSafeToOperate } = useSafeNavigation({
+    componentName: 'CLIENTS',
+    modals: [
+      {
+        isOpen: isFormOpen,
+        setIsOpen: setIsFormOpen,
+        resetState: () => setSelectedClient(null)
       }
-    };
-  }, [isFormOpen]);
+    ]
+  });
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["/api/clients"],
@@ -213,19 +208,15 @@ export default function Clients() {
                 "OBSERVAÇÃO: Use o botão 'Baixar CSV Modelo' para obter um arquivo com a estrutura correta."
               ].join('\n');
 
-              const logBlob = new Blob([errorReport], { type: "text/plain;charset=utf-8;" });
-              const logLink = document.createElement("a");
-              const logUrl = URL.createObjectURL(logBlob);
-              logLink.setAttribute("href", logUrl);
-              logLink.setAttribute("download", `relatorio_erros_clientes_${new Date().toISOString().split('T')[0]}_${new Date().toTimeString().split(' ')[0].replace(/:/g, '')}.txt`);
-              logLink.style.visibility = "hidden";
-              document.body.appendChild(logLink);
-
+              // Download seguro do relatório de erros
+              const filename = `relatorio_erros_clientes_${new Date().toISOString().split('T')[0]}_${new Date().toTimeString().split(' ')[0].replace(/:/g, '')}.txt`;
+              
               setTimeout(() => {
-                if (confirm("Deseja baixar um relatório detalhado dos erros encontrados?")) {
-                  logLink.click();
-                }
-                document.body.removeChild(logLink);
+                downloadWithConfirmation(
+                  errorReport,
+                  filename,
+                  "Deseja baixar um relatório detalhado dos erros encontrados?"
+                );
               }, 1000);
             }
 
@@ -287,15 +278,8 @@ export default function Clients() {
       .map(row => row.map(field => `"${field}"`).join(","))
       .join("\n");
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", "modelo_importacao_clientes.csv");
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Download seguro do modelo CSV
+    downloadCSV(csvContent, "modelo_importacao_clientes.csv");
 
     toast({
       title: "Modelo baixado",
@@ -347,15 +331,9 @@ export default function Clients() {
       .map((row: any[]) => row.map((field: any) => `"${field}"`).join(","))
       .join("\n");
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `clientes_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Download seguro da exportação CSV
+    const filename = `clientes_${new Date().toISOString().split('T')[0]}.csv`;
+    downloadCSV(csvContent, filename);
 
     toast({
       title: "Exportação concluída",
@@ -375,9 +353,9 @@ export default function Clients() {
   };
 
   const handleFormClose = () => {
-    // CRÍTICO: Só executa se o componente ainda estiver montado
-    if (!isComponentMounted.current) {
-      console.log('⚠️ [CLIENTS] Componente desmontado, não é possível fechar formulário');
+    // Usa hook seguro para verificar se é seguro operar
+    if (!isSafeToOperate()) {
+      console.log('⚠️ [CLIENTS] Componente desmontado, operação cancelada');
       return;
     }
     

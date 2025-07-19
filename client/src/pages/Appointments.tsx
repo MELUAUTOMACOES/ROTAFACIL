@@ -13,6 +13,9 @@ import AppointmentCalendar from "@/components/AppointmentCalendar";
 import { Plus, Calendar, MapPin, Clock, User, Edit, Trash2, Download, Upload, Filter, Search, List, Route, X, Navigation, CheckCircle2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { downloadCSV, downloadReport, downloadWithConfirmation } from "@/lib/download";
+import { useSafeNavigation } from "@/hooks/useSafeNavigation";
+import { useCalendarCleanup } from "@/hooks/useCalendarCleanup";
 import type { Appointment, Client, Service, Technician, Team } from "@shared/schema";
 
 export default function Appointments() {
@@ -42,29 +45,36 @@ export default function Appointments() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // CRÍTICO: Ref para controle de limpeza de componente
-  const isComponentMounted = useRef(true);
+  // Hook de navegação segura com limpeza robusta
+  const { isSafeToOperate, registerCleanup } = useSafeNavigation({
+    componentName: 'APPOINTMENTS',
+    modals: [
+      {
+        isOpen: isFormOpen,
+        setIsOpen: setIsFormOpen,
+        resetState: () => {
+          setSelectedAppointment(null);
+          setPrefilledData(null);
+        }
+      },
+      {
+        isOpen: isRouteDrawerOpen,
+        setIsOpen: setIsRouteDrawerOpen,
+        resetState: () => {
+          setOptimizedRoute(null);
+          setSelectedAppointmentIds([]);
+        }
+      }
+    ],
+    calendars: [
+      {
+        isVisible: viewMode === 'calendar',
+      }
+    ]
+  });
   
-  // CRÍTICO: Cleanup do componente ao desmontar
-  useEffect(() => {
-    isComponentMounted.current = true;
-    
-    return () => {
-      console.log('🧹 [APPOINTMENTS] Limpando componente Appointments');
-      isComponentMounted.current = false;
-      
-      // Fechar todos os modais e drawers se abertos durante desmontagem
-      if (isFormOpen) {
-        setIsFormOpen(false);
-        setSelectedAppointment(null);
-        setPrefilledData(null);
-      }
-      
-      if (isRouteDrawerOpen) {
-        setIsRouteDrawerOpen(false);
-      }
-    };
-  }, [isFormOpen, isRouteDrawerOpen]);
+  // Hook específico para limpeza do calendário
+  const calendarContainerRef = useCalendarCleanup(viewMode === 'calendar');
 
   // Logs para monitorar uso dos filtros
   useEffect(() => {
@@ -208,9 +218,9 @@ export default function Appointments() {
   };
 
   const handleFormClose = () => {
-    // CRÍTICO: Só executa se o componente ainda estiver montado
-    if (!isComponentMounted.current) {
-      console.log('⚠️ [APPOINTMENTS] Componente desmontado, não é possível fechar formulário');
+    // Usa o hook seguro para verificar se é seguro operar
+    if (!isSafeToOperate()) {
+      console.log('⚠️ [APPOINTMENTS] Componente desmontado, operação cancelada');
       return;
     }
     
@@ -507,19 +517,15 @@ export default function Appointments() {
             ...data.detailedErrors.map((error: string, index: number) => `${index + 1}. ${error}`),
           ].join('\n');
 
-          const backendLogBlob = new Blob([backendErrorReport], { type: "text/plain;charset=utf-8;" });
-          const backendLogLink = document.createElement("a");
-          const backendLogUrl = URL.createObjectURL(backendLogBlob);
-          backendLogLink.setAttribute("href", backendLogUrl);
-          backendLogLink.setAttribute("download", `relatorio_servidor_${new Date().toISOString().split('T')[0]}_${new Date().toTimeString().split(' ')[0].replace(/:/g, '')}.txt`);
-          backendLogLink.style.visibility = "hidden";
-          document.body.appendChild(backendLogLink);
+          // Download seguro do relatório do servidor
+          const filename = `relatorio_servidor_${new Date().toISOString().split('T')[0]}_${new Date().toTimeString().split(' ')[0].replace(/:/g, '')}.txt`;
           
           setTimeout(() => {
-            if (confirm("Deseja baixar o relatório de erros do servidor?")) {
-              backendLogLink.click();
-            }
-            document.body.removeChild(backendLogLink);
+            downloadWithConfirmation(
+              backendErrorReport, 
+              filename, 
+              "Deseja baixar o relatório de erros do servidor?"
+            );
           }, 1500);
         }
       } else {
@@ -911,19 +917,15 @@ export default function Appointments() {
               ].join('\n');
 
               const logBlob = new Blob([logContent], { type: "text/plain;charset=utf-8;" });
-              const logLink = document.createElement("a");
-              const logUrl = URL.createObjectURL(logBlob);
-              logLink.setAttribute("href", logUrl);
-              logLink.setAttribute("download", `relatorio_erros_${new Date().toISOString().split('T')[0]}_${new Date().toTimeString().split(' ')[0].replace(/:/g, '')}.txt`);
-              logLink.style.visibility = "hidden";
-              document.body.appendChild(logLink);
+              // Download seguro do relatório de erros
+              const filename = `relatorio_erros_${new Date().toISOString().split('T')[0]}_${new Date().toTimeString().split(' ')[0].replace(/:/g, '')}.txt`;
               
-              // Perguntar se o usuário quer baixar o relatório
               setTimeout(() => {
-                if (confirm("Deseja baixar um relatório detalhado dos erros encontrados?")) {
-                  logLink.click();
-                }
-                document.body.removeChild(logLink);
+                downloadWithConfirmation(
+                  logContent,
+                  filename,
+                  "Deseja baixar um relatório detalhado dos erros encontrados?"
+                );
               }, 1000);
             }
 
@@ -996,15 +998,8 @@ export default function Appointments() {
       .map(row => row.map(field => `"${field}"`).join(","))
       .join("\n");
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", "modelo_importacao_agendamentos.csv");
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Download seguro do modelo CSV
+    downloadCSV(csvContent, "modelo_importacao_agendamentos.csv");
 
     toast({
       title: "Modelo baixado",
@@ -1074,15 +1069,9 @@ export default function Appointments() {
       .map((row: any[]) => row.map((field: any) => `"${field}"`).join(","))
       .join("\n");
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `agendamentos_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Download seguro da exportação CSV
+    const filename = `agendamentos_${new Date().toISOString().split('T')[0]}.csv`;
+    downloadCSV(csvContent, filename);
 
     toast({
       title: "Sucesso",

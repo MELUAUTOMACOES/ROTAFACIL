@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import ServiceForm from "@/components/forms/ServiceForm";
 import { Plus, Wrench, Clock, DollarSign, Edit, Trash2, FileText, Award } from "lucide-react";
+import { useSafeNavigation } from "@/hooks/useSafeNavigation";
 import type { Service } from "@shared/schema";
 
 export default function Services() {
@@ -17,24 +18,17 @@ export default function Services() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // CRÍTICO: Ref para controle de limpeza de componente
-  const isComponentMounted = useRef(true);
-  
-  // CRÍTICO: Cleanup do componente ao desmontar
-  useEffect(() => {
-    isComponentMounted.current = true;
-    
-    return () => {
-      console.log('🧹 [SERVICES] Limpando componente Services');
-      isComponentMounted.current = false;
-      
-      // Fechar modal se aberto durante desmontagem
-      if (isFormOpen) {
-        setIsFormOpen(false);
-        setSelectedService(null);
+  // Hook de navegação segura
+  const { isSafeToOperate } = useSafeNavigation({
+    componentName: 'SERVICES',
+    modals: [
+      {
+        isOpen: isFormOpen,
+        setIsOpen: setIsFormOpen,
+        resetState: () => setSelectedService(null)
       }
-    };
-  }, [isFormOpen]);
+    ]
+  });
 
   const { data: services = [], isLoading } = useQuery({
     queryKey: ["/api/services"],
@@ -78,9 +72,9 @@ export default function Services() {
   };
 
   const handleFormClose = () => {
-    // CRÍTICO: Só executa se o componente ainda estiver montado
-    if (!isComponentMounted.current) {
-      console.log('⚠️ [SERVICES] Componente desmontado, não é possível fechar formulário');
+    // Usa hook seguro para verificar se é seguro operar
+    if (!isSafeToOperate()) {
+      console.log('⚠️ [SERVICES] Componente desmontado, operação cancelada');
       return;
     }
     
