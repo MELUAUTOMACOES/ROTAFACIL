@@ -23,7 +23,7 @@ export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
   middlewareMode: true,
   hmr: { server },
-  allowedHosts: ["localhost", "127.0.0.1","f130346c-8d15-41c5-b416-c62a70be1792-00-ptd0q90wpvxz.janeway.replit.dev","d059825c-8bc2-4a75-95ae-1d75f6e74727-00-1ypwxiakbyba5.picard.replit.dev","c54aa1ee-525d-486a-98f5-34754d6a7788-00-cntx8gi80awg.riker.replit.dev","e05442f9-5f92-46b1-8cbd-d88173b3572e-00-2j5lnt4vitb74.janeway.replit.dev"],
+  allowedHosts: ["localhost", "127.0.0.1","f130346c-8d15-41c5-b416-c62a70be1792-00-ptd0q90wpvxz.janeway.replit.dev","d059825c-8bc2-4a75-95ae-1d75f6e74727-00-1ypwxiakbyba5.picard.replit.dev","c54aa1ee-525d-486a-98f5-34754d6a7788-00-cntx8gi80awg.riker.replit.dev","e05442f9-5f92-46b1-8cbd-d88173b3572e-00-2j5lnt4vitb74.janeway.replit.dev","7985cda7-ed8f-4c45-bc91-a25534a44d2b-00-11l93afjdjt5b.picard.replit.dev"],
   };
 
 
