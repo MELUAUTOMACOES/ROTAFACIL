@@ -61,6 +61,12 @@ export const technicians = pgTable("technicians", {
   specialization: text("specialization"),
   observacoes: text("observacoes"),
   serviceIds: text("service_ids").array(),
+  // Endereço de Início Diário (opcional) - usado como ponto de partida na roteirização
+  // Se não preenchido, será usado o endereço padrão da empresa
+  enderecoInicioCep: text("endereco_inicio_cep"),
+  enderecoInicioLogradouro: text("endereco_inicio_logradouro"),
+  enderecoInicioNumero: text("endereco_inicio_numero"),
+  enderecoInicioComplemento: text("endereco_inicio_complemento"),
   isActive: boolean("is_active").default(true).notNull(),
   userId: integer("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -136,6 +142,12 @@ export const teams = pgTable("teams", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(), // Nome da equipe
   serviceIds: text("service_ids").array(), // IDs dos serviços que a equipe atende
+  // Endereço de Início Diário (opcional) - usado como ponto de partida na roteirização
+  // Se não preenchido, será usado o endereço padrão da empresa
+  enderecoInicioCep: text("endereco_inicio_cep"),
+  enderecoInicioLogradouro: text("endereco_inicio_logradouro"),
+  enderecoInicioNumero: text("endereco_inicio_numero"),
+  enderecoInicioComplemento: text("endereco_inicio_complemento"),
   userId: integer("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -247,6 +259,17 @@ export const extendedInsertTechnicianSchema = insertTechnicianSchema.extend({
   cep: cepSchema,
   numero: z.string().regex(/^\d+$/, "Número deve conter apenas dígitos"),
   serviceIds: z.array(z.string()).optional(),
+  // Validações opcionais para endereço de início diário
+  enderecoInicioCep: z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no formato XXXXX-XXX").optional().or(z.literal("")),
+  enderecoInicioNumero: z.string().regex(/^\d+$/, "Número deve conter apenas dígitos").optional().or(z.literal("")),
+});
+
+// Team schema with extended validation
+export const extendedInsertTeamSchema = insertTeamSchema.extend({
+  serviceIds: z.array(z.string()).optional(),
+  // Validações opcionais para endereço de início diário
+  enderecoInicioCep: z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no formato XXXXX-XXX").optional().or(z.literal("")),
+  enderecoInicioNumero: z.string().regex(/^\d+$/, "Número deve conter apenas dígitos").optional().or(z.literal("")),
 });
 
 // Appointment schema with extended validation

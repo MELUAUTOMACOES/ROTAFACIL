@@ -1,64 +1,55 @@
-# Sistema de Agendamentos RotaFácil
+# Aplicativo de Gerenciamento de Agendamentos
 
 ## Visão Geral
-Sistema completo de gestão de agendamentos técnicos com funcionalidades avançadas de otimização de rotas.
+Aplicativo robusto de gerenciamento de agendamentos construído com React e react-big-calendar, projetado para fornecer agendamento de eventos perfeito e visualização.
 
-## Funcionalidades Implementadas Recentemente
-
-### Seleção de Agendamentos e Otimização de Rotas
-- **Checkbox individual**: Cada agendamento possui um checkbox para seleção
-- **Checkbox "Selecionar Todos"**: Permite selecionar/desmarcar todos os agendamentos visíveis
-- **Botão "Otimizar Rotas"**: Aparece apenas quando há mais de 1 agendamento selecionado
-- **Drawer lateral**: Painel lateral direito que mostra a rota otimizada
-- **Simulação de dados**: Distância total e tempo estimado são simulados
-- **Destaque visual**: Agendamentos selecionados ficam destacados com borda amarela
-
-### Como Acessar
-1. Faça login no sistema através do botão "Acessar Sistema"
-2. Navegue para a página "Agendamentos" no menu lateral
-3. Selecione agendamentos usando os checkboxes
-4. Clique em "Otimizar Rotas" para ver o drawer com a rota otimizada
+Stack:
+- Frontend React com TypeScript
+- react-big-calendar para agendamento
+- Interface de calendário responsiva e interativa
+- Manipulação e renderização de eventos personalizados
+- Tailwind CSS para estilização
 
 ## Arquitetura do Projeto
-
-### Frontend
-- **React** com TypeScript
-- **Tailwind CSS** para estilização
-- **Shadcn/ui** para componentes
-- **Wouter** para roteamento
-- **TanStack Query** para gerenciamento de estado de servidor
-
-### Backend
-- **Express.js** com TypeScript
-- **Drizzle ORM** para banco de dados
-- **PostgreSQL** como banco de dados
-- **Autenticação JWT** com sessões
-
-### Páginas Principais
-- `/` - Landing page (RotaFácil)
-- `/login` - Página de login
-- `/dashboard` - Dashboard principal
-- `/appointments` - **Página de agendamentos (onde está a funcionalidade implementada)**
-- `/routes` - Otimização de rotas
-- `/clients` - Gestão de clientes
-- `/technicians` - Gestão de técnicos
-- `/services` - Gestão de serviços
+- **Frontend**: React com TypeScript usando Wouter para roteamento
+- **Backend**: Express.js com autenticação JWT
+- **Banco de dados**: PostgreSQL com Drizzle ORM
+- **Componentes UI**: shadcn/ui com Tailwind CSS
+- **Formulários**: react-hook-form com validação Zod
+- **Estado**: TanStack Query para gerenciamento de estado do servidor
 
 ## Mudanças Recentes
-- **2025-01-18**: Implementado sistema de seleção de agendamentos com checkboxes
-- **2025-01-18**: Adicionado botão "Otimizar Rotas" com funcionalidade condicional
-- **2025-01-18**: Criado drawer lateral para exibir rota otimizada
-- **2025-01-18**: Implementado destaque visual para agendamentos selecionados
-- **2025-01-18**: Adicionado simulação de dados de distância e tempo
+
+### 19 de julho de 2025 - Campo "Endereço de Início Diário" Adicionado
+
+**Funcionalidade implementada**: Campo opcional "Endereço de Início Diário" para técnicos e equipes
+
+**Arquivos modificados**:
+1. **shared/schema.ts**:
+   - Adicionado campos no schema `technicians`: `enderecoInicioCep`, `enderecoInicioLogradouro`, `enderecoInicioNumero`, `enderecoInicioComplemento`
+   - Adicionado campos no schema `teams`: `enderecoInicioCep`, `enderecoInicioLogradouro`, `enderecoInicioNumero`, `enderecoInicioComplemento`
+   - Criado `extendedInsertTechnicianSchema` com validações para os novos campos
+   - Criado `extendedInsertTeamSchema` com validações para os novos campos
+
+2. **client/src/components/forms/TechnicianForm.tsx**:
+   - Adicionado campos de endereço de início diário no formulário
+   - Atualizado valores padrão para incluir os novos campos
+   - Seção visual com explicação sobre o uso na roteirização
+
+3. **client/src/components/forms/TeamForm.tsx**:
+   - Adicionado campos de endereço de início diário no formulário
+   - Atualizado schema de formulário para usar `extendedInsertTeamSchema`
+   - Atualizado valores padrão e funções de criação/edição
+
+**Regras de negócio implementadas**:
+- **Campo opcional**: Todos os campos de endereço de início diário são opcionais
+- **Uso na roteirização**: Se preenchido, será usado como ponto de partida na roteirização
+- **Fallback**: Se não preenchido, será usado o endereço padrão da empresa
+- **Validação**: CEP e número têm validações específicas (formato e apenas dígitos)
+
+**Comentários no código**: Adicionados comentários explicando que se o campo não for preenchido, a roteirização deve começar a partir do endereço padrão da empresa.
 
 ## Preferências do Usuário
-- Idioma: Português Brasileiro
-- Interface: Intuitiva e responsiva
-- Funcionalidades: Foco em otimização de rotas e gestão de agendamentos
-- Dados: Simulados para demonstração (conforme solicitado)
-
-## Estado Atual
-✅ Sistema de seleção de agendamentos implementado e funcional
-✅ Drawer de otimização de rotas implementado
-✅ Integração com dados existentes
-✅ Interface responsiva e intuitiva
+- Comunicação em português
+- Foco apenas no que foi solicitado, sem alterações adicionais
+- Implementação direta sem complicações desnecessárias

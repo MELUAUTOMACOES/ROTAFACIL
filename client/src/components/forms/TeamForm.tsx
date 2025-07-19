@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
-import { insertTeamSchema, type InsertTeam, type Team, type Technician, type Service } from "@shared/schema";
+import { extendedInsertTeamSchema, type InsertTeam, type Team, type Technician, type Service } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -19,16 +19,20 @@ interface TeamFormProps {
   onClose: () => void;
 }
 
-// Estender o schema base para incluir os campos adicionais do formulário
-const extendedTeamSchema = insertTeamSchema.extend({
-  technicianIds: insertTeamSchema.shape.name.array().optional(),
-  serviceIds: insertTeamSchema.shape.name.array().optional(),
+// Usar o schema estendido importado que já inclui os campos de endereço
+const extendedFormTeamSchema = extendedInsertTeamSchema.extend({
+  technicianIds: extendedInsertTeamSchema.shape.name.array().optional(),
 });
 
 type ExtendedTeamForm = {
   name: string;
   technicianIds?: number[];
-  serviceIds?: number[];
+  serviceIds?: string[];
+  // Campos de endereço de início diário
+  enderecoInicioCep?: string;
+  enderecoInicioLogradouro?: string;
+  enderecoInicioNumero?: string;
+  enderecoInicioComplemento?: string;
 };
 
 export default function TeamForm({ 
@@ -63,11 +67,16 @@ export default function TeamForm({
   });
 
   const form = useForm<ExtendedTeamForm>({
-    resolver: zodResolver(extendedTeamSchema),
+    resolver: zodResolver(extendedFormTeamSchema),
     defaultValues: {
       name: "",
       technicianIds: [],
       serviceIds: [],
+      // Campos de endereço de início diário
+      enderecoInicioCep: "",
+      enderecoInicioLogradouro: "",
+      enderecoInicioNumero: "",
+      enderecoInicioComplemento: "",
     },
   });
 
@@ -82,7 +91,12 @@ export default function TeamForm({
       form.reset({
         name: team.name || "",
         technicianIds: selectedTechnicians,
-        serviceIds: serviceIds,
+        serviceIds: serviceIds.map(id => id.toString()),
+        // Campos de endereço de início diário
+        enderecoInicioCep: team.enderecoInicioCep || "",
+        enderecoInicioLogradouro: team.enderecoInicioLogradouro || "",
+        enderecoInicioNumero: team.enderecoInicioNumero || "",
+        enderecoInicioComplemento: team.enderecoInicioComplemento || "",
       });
       
       setSelectedServices(serviceIds);
@@ -97,6 +111,11 @@ export default function TeamForm({
         name: "",
         technicianIds: [],
         serviceIds: [],
+        // Campos de endereço de início diário
+        enderecoInicioCep: "",
+        enderecoInicioLogradouro: "",
+        enderecoInicioNumero: "",
+        enderecoInicioComplemento: "",
       });
       setSelectedTechnicians([]);
       setSelectedServices([]);
@@ -118,7 +137,12 @@ export default function TeamForm({
       // Primeiro criar a equipe
       const teamData = {
         name: data.name,
-        serviceIds: data.serviceIds?.map(id => id.toString()) || [],
+        serviceIds: data.serviceIds || [],
+        // Campos de endereço de início diário
+        enderecoInicioCep: data.enderecoInicioCep || "",
+        enderecoInicioLogradouro: data.enderecoInicioLogradouro || "",
+        enderecoInicioNumero: data.enderecoInicioNumero || "",
+        enderecoInicioComplemento: data.enderecoInicioComplemento || "",
       };
       
       const response = await apiRequest("POST", "/api/teams", teamData);
@@ -161,7 +185,12 @@ export default function TeamForm({
       // Primeiro atualizar dados da equipe
       const teamData = {
         name: data.name,
-        serviceIds: data.serviceIds?.map(id => id.toString()) || [],
+        serviceIds: data.serviceIds || [],
+        // Campos de endereço de início diário
+        enderecoInicioCep: data.enderecoInicioCep || "",
+        enderecoInicioLogradouro: data.enderecoInicioLogradouro || "",
+        enderecoInicioNumero: data.enderecoInicioNumero || "",
+        enderecoInicioComplemento: data.enderecoInicioComplemento || "",
       };
       
       const response = await apiRequest("PUT", `/api/teams/${team?.id}`, teamData);
@@ -223,7 +252,7 @@ export default function TeamForm({
     const formData = {
       ...data,
       technicianIds: selectedTechnicians,
-      serviceIds: selectedServices,
+      serviceIds: selectedServices.map(id => id.toString()),
     };
     
     if (team) {
@@ -283,6 +312,95 @@ export default function TeamForm({
               </FormItem>
             )}
           />
+
+          {/* Endereço de Início Diário (Opcional) */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="h-5 w-5 text-blue-500">📍</span>
+              <h3 className="text-lg font-medium">Endereço de Início Diário (Opcional)</h3>
+            </div>
+            <p className="text-sm text-gray-500">
+              Se preenchido, será usado como ponto de partida na roteirização. Caso contrário, será usado o endereço padrão da empresa.
+            </p>
+            
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="enderecoInicioCep"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>CEP de Início</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="00000-000"
+                        maxLength={9}
+                        {...field}
+                        value={field.value || ""}
+                        onChange={(e) => {
+                          let value = e.target.value.replace(/\D/g, '');
+                          if (value.length > 5) {
+                            value = value.slice(0, 5) + '-' + value.slice(5, 8);
+                          }
+                          field.onChange(value);
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="enderecoInicioNumero"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Número</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="123"
+                        {...field}
+                        value={field.value || ""}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          field.onChange(value);
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="enderecoInicioLogradouro"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Logradouro</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Rua das Flores" {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="enderecoInicioComplemento"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Complemento</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Apto 123" {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
 
           {/* Seleção de Técnicos */}
           <div className="space-y-3">

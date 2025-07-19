@@ -38,6 +38,11 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
       specialization: technician.specialization || "",
       observacoes: technician.observacoes || "",
       serviceIds: technician.serviceIds || [],
+      // Campos de endereço de início diário
+      enderecoInicioCep: technician.enderecoInicioCep || "",
+      enderecoInicioLogradouro: technician.enderecoInicioLogradouro || "",
+      enderecoInicioNumero: technician.enderecoInicioNumero || "",
+      enderecoInicioComplemento: technician.enderecoInicioComplemento || "",
       isActive: technician.isActive,
     } : {
       name: "",
@@ -51,6 +56,11 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
       specialization: "",
       observacoes: "",
       serviceIds: [],
+      // Campos de endereço de início diário
+      enderecoInicioCep: "",
+      enderecoInicioLogradouro: "",
+      enderecoInicioNumero: "",
+      enderecoInicioComplemento: "",
       isActive: true,
     },
   });
@@ -334,6 +344,95 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
               <FormField
                 control={form.control}
                 name="complemento"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Complemento</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Apto 123" {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
+
+          {/* Endereço de Início Diário (Opcional) */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-blue-500" />
+              <h3 className="text-lg font-medium">Endereço de Início Diário (Opcional)</h3>
+            </div>
+            <p className="text-sm text-gray-500">
+              Se preenchido, será usado como ponto de partida na roteirização. Caso contrário, será usado o endereço padrão da empresa.
+            </p>
+            
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="enderecoInicioCep"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>CEP de Início</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="00000-000"
+                        maxLength={9}
+                        {...field}
+                        value={field.value || ""}
+                        onChange={(e) => {
+                          let value = e.target.value.replace(/\D/g, '');
+                          if (value.length > 5) {
+                            value = value.slice(0, 5) + '-' + value.slice(5, 8);
+                          }
+                          field.onChange(value);
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="enderecoInicioNumero"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Número</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="123"
+                        {...field}
+                        value={field.value || ""}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          field.onChange(value);
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="enderecoInicioLogradouro"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Logradouro</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Rua das Flores" {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="enderecoInicioComplemento"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Complemento</FormLabel>
