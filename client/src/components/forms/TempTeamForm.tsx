@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
-import { extendedInsertTeamSchema, type InsertTeam, type Team, type Technician, type Service } from "@shared/schema";
+import { type InsertTeam, type Team, type Technician, type Service } from "@shared/schema";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -28,24 +29,21 @@ interface TeamFormProps {
   onClose: () => void;
 }
 
-// Usar o schema estendido importado que já inclui os campos de endereço
-const extendedFormTeamSchema = extendedInsertTeamSchema.extend({
-  technicianIds: extendedInsertTeamSchema.shape.name.array().optional(),
+// Schema limpo e correto para o formulário de equipe
+const teamFormSchema = z.object({
+  name: z.string().min(1, "Nome é obrigatório"),
+  technicianIds: z.array(z.number()).optional(),
+  serviceIds: z.array(z.number()).optional(),
+  enderecoInicioCep: z.string().optional(),
+  enderecoInicioLogradouro: z.string().optional(),
+  enderecoInicioNumero: z.string().optional(),
+  enderecoInicioComplemento: z.string().optional(),
+  enderecoInicioBairro: z.string().optional(),
+  enderecoInicioCidade: z.string().optional(),
+  enderecoInicioEstado: z.string().optional(),
 });
 
-type ExtendedTeamForm = {
-  name: string;
-  technicianIds?: number[];
-  serviceIds?: string[];
-  // Campos de endereço de início diário - completos como técnicos
-  enderecoInicioCep?: string;
-  enderecoInicioLogradouro?: string;
-  enderecoInicioNumero?: string;
-  enderecoInicioComplemento?: string;
-  enderecoInicioBairro?: string;
-  enderecoInicioCidade?: string;
-  enderecoInicioEstado?: string;
-};
+type ExtendedTeamForm = z.infer<typeof teamFormSchema>;
 
 export default function TeamForm({ 
   team, 
@@ -81,7 +79,7 @@ export default function TeamForm({
   });
 
   const form = useForm<ExtendedTeamForm>({
-    resolver: zodResolver(extendedFormTeamSchema),
+    resolver: zodResolver(teamFormSchema),
     defaultValues: {
       name: "",
       technicianIds: [],
@@ -144,7 +142,7 @@ export default function TeamForm({
       setSelectedServices([]);
       console.log('✅ Formulário limpo para nova equipe');
     }
-  }, [team, form]);
+    }, [team?.id]);
 
   // Atualizar técnicos selecionados quando os membros da equipe são carregados
   useEffect(() => {
@@ -157,10 +155,10 @@ export default function TeamForm({
 
   const createTeamMutation = useMutation({
     mutationFn: async (data: ExtendedTeamForm) => {
-      // Primeiro criar a equipe
+      // Primeiro criar a equipe - convertendo serviceIds para string[] para o backend
       const teamData = {
         name: data.name,
-        serviceIds: data.serviceIds || [],
+        serviceIds: (data.serviceIds || []).map(id => id.toString()),
         // Campos de endereço de início diário - completos
         enderecoInicioCep: data.enderecoInicioCep || "",
         enderecoInicioLogradouro: data.enderecoInicioLogradouro || "",
@@ -208,10 +206,10 @@ export default function TeamForm({
 
   const updateTeamMutation = useMutation({
     mutationFn: async (data: ExtendedTeamForm) => {
-      // Primeiro atualizar dados da equipe
+      // Primeiro atualizar dados da equipe - convertendo serviceIds para string[] para o backend
       const teamData = {
         name: data.name,
-        serviceIds: data.serviceIds || [],
+        serviceIds: (data.serviceIds || []).map(id => id.toString()),
         // Campos de endereço de início diário - completos
         enderecoInicioCep: data.enderecoInicioCep || "",
         enderecoInicioLogradouro: data.enderecoInicioLogradouro || "",
@@ -278,15 +276,24 @@ export default function TeamForm({
   });
 
   const onSubmit = (data: ExtendedTeamForm) => {
-    console.log("🔧 onSubmit disparado!", { team, data, selectedTechnicians, selectedServices });
+    console.log("🔧 onSubmit disparado!", { 
+      team, 
+      data, 
+      selectedTechnicians, 
+      selectedServices,
+      formState: {
+        isValid: form.formState.isValid,
+        errors: form.formState.errors
+      }
+    });
     
     const formData = {
       ...data,
-      technicianIds: selectedTechnicians,
-      serviceIds: selectedServices.map(id => id.toString()),
+      technicianIds: selectedTechnicians, // number[]
+      serviceIds: selectedServices,      // number[] 
     };
 
-    console.log("📤 Dados preparados para envio:", formData);
+    console.log("📤 Dados preparados para envio (number[]):", formData);
 
     if (team) {
       console.log("📝 Modo EDIÇÃO - Chamando updateTeamMutation");
