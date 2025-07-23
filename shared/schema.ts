@@ -154,6 +154,9 @@ export const teams = pgTable("teams", {
   enderecoInicioLogradouro: text("endereco_inicio_logradouro"),
   enderecoInicioNumero: text("endereco_inicio_numero"),
   enderecoInicioComplemento: text("endereco_inicio_complemento"),
+  enderecoInicioBairro: text("endereco_inicio_bairro"),
+  enderecoInicioCidade: text("endereco_inicio_cidade"),
+  enderecoInicioEstado: text("endereco_inicio_estado"),
   userId: integer("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -280,9 +283,12 @@ export const extendedInsertTechnicianSchema = insertTechnicianSchema.extend({
 // Team schema with extended validation
 export const extendedInsertTeamSchema = insertTeamSchema.extend({
   serviceIds: z.array(z.string()).optional(),
-  // Validações opcionais para endereço de início diário
+  // Validações opcionais para endereço de início diário - idêntico aos técnicos
   enderecoInicioCep: z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no formato XXXXX-XXX").optional().or(z.literal("")),
   enderecoInicioNumero: z.string().regex(/^\d+$/, "Número deve conter apenas dígitos").optional().or(z.literal("")),
+  enderecoInicioBairro: z.string().optional().or(z.literal("")),
+  enderecoInicioCidade: z.string().optional().or(z.literal("")),
+  enderecoInicioEstado: z.string().optional().or(z.literal("")),
 });
 
 // Appointment schema with extended validation

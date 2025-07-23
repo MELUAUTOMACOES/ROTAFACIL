@@ -9,8 +9,17 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Users, UserPlus } from "lucide-react";
+import { Users, UserPlus, MapPin } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+
+// Função para buscar endereço por CEP - idêntica ao cadastro de técnico
+async function buscarEnderecoPorCep(cep: string) {
+  const url = `https://viacep.com.br/ws/${cep.replace(/\D/g, '')}/json/`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.erro) throw new Error("CEP não encontrado");
+  return data; // {logradouro, bairro, localidade, uf, ...}
+}
 
 interface TeamFormProps {
   team?: Team | null;
@@ -28,11 +37,14 @@ type ExtendedTeamForm = {
   name: string;
   technicianIds?: number[];
   serviceIds?: string[];
-  // Campos de endereço de início diário
+  // Campos de endereço de início diário - completos como técnicos
   enderecoInicioCep?: string;
   enderecoInicioLogradouro?: string;
   enderecoInicioNumero?: string;
   enderecoInicioComplemento?: string;
+  enderecoInicioBairro?: string;
+  enderecoInicioCidade?: string;
+  enderecoInicioEstado?: string;
 };
 
 export default function TeamForm({ 
@@ -72,11 +84,14 @@ export default function TeamForm({
       name: "",
       technicianIds: [],
       serviceIds: [],
-      // Campos de endereço de início diário
+      // Campos de endereço de início diário - completos
       enderecoInicioCep: "",
       enderecoInicioLogradouro: "",
       enderecoInicioNumero: "",
       enderecoInicioComplemento: "",
+      enderecoInicioBairro: "",
+      enderecoInicioCidade: "",
+      enderecoInicioEstado: "",
     },
   });
 
@@ -92,11 +107,14 @@ export default function TeamForm({
         name: team.name || "",
         technicianIds: selectedTechnicians,
         serviceIds: serviceIds.map(id => id.toString()),
-        // Campos de endereço de início diário
+        // Campos de endereço de início diário - completos
         enderecoInicioCep: team.enderecoInicioCep || "",
         enderecoInicioLogradouro: team.enderecoInicioLogradouro || "",
         enderecoInicioNumero: team.enderecoInicioNumero || "",
         enderecoInicioComplemento: team.enderecoInicioComplemento || "",
+        enderecoInicioBairro: team.enderecoInicioBairro || "",
+        enderecoInicioCidade: team.enderecoInicioCidade || "",
+        enderecoInicioEstado: team.enderecoInicioEstado || "",
       });
       
       setSelectedServices(serviceIds);
@@ -111,11 +129,14 @@ export default function TeamForm({
         name: "",
         technicianIds: [],
         serviceIds: [],
-        // Campos de endereço de início diário
+        // Campos de endereço de início diário - completos
         enderecoInicioCep: "",
         enderecoInicioLogradouro: "",
         enderecoInicioNumero: "",
         enderecoInicioComplemento: "",
+        enderecoInicioBairro: "",
+        enderecoInicioCidade: "",
+        enderecoInicioEstado: "",
       });
       setSelectedTechnicians([]);
       setSelectedServices([]);
@@ -138,11 +159,14 @@ export default function TeamForm({
       const teamData = {
         name: data.name,
         serviceIds: data.serviceIds || [],
-        // Campos de endereço de início diário
+        // Campos de endereço de início diário - completos
         enderecoInicioCep: data.enderecoInicioCep || "",
         enderecoInicioLogradouro: data.enderecoInicioLogradouro || "",
         enderecoInicioNumero: data.enderecoInicioNumero || "",
         enderecoInicioComplemento: data.enderecoInicioComplemento || "",
+        enderecoInicioBairro: data.enderecoInicioBairro || "",
+        enderecoInicioCidade: data.enderecoInicioCidade || "",
+        enderecoInicioEstado: data.enderecoInicioEstado || "",
       };
       
       const response = await apiRequest("POST", "/api/teams", teamData);
@@ -186,11 +210,14 @@ export default function TeamForm({
       const teamData = {
         name: data.name,
         serviceIds: data.serviceIds || [],
-        // Campos de endereço de início diário
+        // Campos de endereço de início diário - completos
         enderecoInicioCep: data.enderecoInicioCep || "",
         enderecoInicioLogradouro: data.enderecoInicioLogradouro || "",
         enderecoInicioNumero: data.enderecoInicioNumero || "",
         enderecoInicioComplemento: data.enderecoInicioComplemento || "",
+        enderecoInicioBairro: data.enderecoInicioBairro || "",
+        enderecoInicioCidade: data.enderecoInicioCidade || "",
+        enderecoInicioEstado: data.enderecoInicioEstado || "",
       };
       
       const response = await apiRequest("PUT", `/api/teams/${team?.id}`, teamData);
@@ -280,6 +307,37 @@ export default function TeamForm({
     }
   };
 
+  // Handler para busca automática de endereço de início diário por CEP
+  const handleEnderecoInicioCepChange = async (cep: string) => {
+    // Aplicar máscara de CEP
+    const maskedCep = cep.replace(/\D/g, '').replace(/(\d{5})(\d{3})/, '$1-$2');
+    form.setValue('enderecoInicioCep', maskedCep);
+
+    // Se o CEP estiver completo (8 dígitos), buscar endereço
+    if (cep.replace(/\D/g, '').length === 8) {
+      try {
+        const endereco = await buscarEnderecoPorCep(cep);
+        
+        // Preencher os campos automaticamente
+        form.setValue('enderecoInicioLogradouro', endereco.logradouro || '');
+        form.setValue('enderecoInicioBairro', endereco.bairro || '');
+        form.setValue('enderecoInicioCidade', endereco.localidade || '');
+        form.setValue('enderecoInicioEstado', endereco.uf || '');
+        
+        toast({
+          title: "CEP encontrado",
+          description: "Endereço preenchido automaticamente",
+        });
+      } catch (error) {
+        toast({
+          title: "CEP não encontrado",
+          description: "Verifique o CEP digitado",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
   return (
     <div className="max-h-[80vh] overflow-y-auto">
       <DialogHeader>
@@ -337,11 +395,8 @@ export default function TeamForm({
                         {...field}
                         value={field.value || ""}
                         onChange={(e) => {
-                          let value = e.target.value.replace(/\D/g, '');
-                          if (value.length > 5) {
-                            value = value.slice(0, 5) + '-' + value.slice(5, 8);
-                          }
-                          field.onChange(value);
+                          const newValue = e.target.value;
+                          handleEnderecoInicioCepChange(newValue);
                         }}
                       />
                     </FormControl>
@@ -394,6 +449,48 @@ export default function TeamForm({
                     <FormLabel>Complemento</FormLabel>
                     <FormControl>
                       <Input placeholder="Apto 123" {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="enderecoInicioBairro"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bairro</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Centro" {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="enderecoInicioCidade"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cidade</FormLabel>
+                    <FormControl>
+                      <Input placeholder="São Paulo" {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="enderecoInicioEstado"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Estado (UF)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="SP" maxLength={2} {...field} value={field.value || ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

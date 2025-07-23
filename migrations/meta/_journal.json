@@ -43,6 +43,13 @@
       "when": 1753231249502,
       "tag": "0005_add_technician_address_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1753232106616,
+      "tag": "0006_calm_micromax",
+      "breakpoints": true
     }
   ]
 }
