@@ -34,6 +34,19 @@ function getOsrmUrl() {
 
 // Auth middleware
 function authenticateToken(req: any, res: any, next: any) {
+  // 🚀 DEV MODE BYPASS: Permite acesso sem autenticação durante desenvolvimento
+  if (process.env.DEV_MODE === 'true') {
+    // Criar usuário fake para desenvolvimento
+    req.user = {
+      userId: 1,
+      email: 'dev@rotafacil.com',
+      name: 'Dev User',
+      plan: 'premium'
+    };
+    return next();
+  }
+
+  // 🔐 Autenticação normal para produção
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -818,7 +831,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Missing 'coords' parameter" });
       }
       // Usa o endereço da variável de ambiente, SEM barra no final!
-      const OSRM_URL = getOsrmUrl().replace(/\/$/, '');
+      const OSRM_URL = getOsrmUrl()?.replace(/\/$/, '') || null;
       if (!OSRM_URL) {
         return res.status(500).json({ error: "Endereço OSRM não configurado. Crie/atualize o arquivo osrm_url.txt." });
       }
