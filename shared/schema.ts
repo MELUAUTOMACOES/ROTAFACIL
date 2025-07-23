@@ -58,6 +58,9 @@ export const technicians = pgTable("technicians", {
   logradouro: text("logradouro").notNull(),
   numero: text("numero").notNull(),
   complemento: text("complemento"),
+  bairro: text("bairro").notNull().default("Não informado"),
+  cidade: text("cidade").notNull().default("Não informado"),
+  estado: text("estado").notNull().default("Não informado"),
   specialization: text("specialization"),
   observacoes: text("observacoes"),
   serviceIds: text("service_ids").array(),
@@ -67,6 +70,9 @@ export const technicians = pgTable("technicians", {
   enderecoInicioLogradouro: text("endereco_inicio_logradouro"),
   enderecoInicioNumero: text("endereco_inicio_numero"),
   enderecoInicioComplemento: text("endereco_inicio_complemento"),
+  enderecoInicioBairro: text("endereco_inicio_bairro"),
+  enderecoInicioCidade: text("endereco_inicio_cidade"),
+  enderecoInicioEstado: text("endereco_inicio_estado"),
   isActive: boolean("is_active").default(true).notNull(),
   userId: integer("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -257,11 +263,18 @@ export const extendedInsertClientSchema = insertClientSchema.extend({
 // Technician schema with extended validation  
 export const extendedInsertTechnicianSchema = insertTechnicianSchema.extend({
   cep: cepSchema,
+  bairro: z.string().min(1, "Bairro é obrigatório"),
+  cidade: z.string().min(1, "Cidade é obrigatória"),
+  estado: z.string().min(2, "Estado é obrigatório"),
   numero: z.string().regex(/^\d+$/, "Número deve conter apenas dígitos"),
   serviceIds: z.array(z.string()).optional(),
   // Validações opcionais para endereço de início diário
   enderecoInicioCep: z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no formato XXXXX-XXX").optional().or(z.literal("")),
   enderecoInicioNumero: z.string().regex(/^\d+$/, "Número deve conter apenas dígitos").optional().or(z.literal("")),
+  // Campos adicionais de endereço de início diário  
+  enderecoInicioBairro: z.string().optional(),
+  enderecoInicioCidade: z.string().optional(),
+  enderecoInicioEstado: z.string().optional(),
 });
 
 // Team schema with extended validation

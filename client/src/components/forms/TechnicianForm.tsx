@@ -14,6 +14,15 @@ import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { UserCog, Mail, Phone, Wrench, MapPin, FileText } from "lucide-react";
 
+// Função para buscar endereço por CEP - igual ao cadastro de cliente
+async function buscarEnderecoPorCep(cep: string) {
+  const url = `https://viacep.com.br/ws/${cep.replace(/\D/g, '')}/json/`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.erro) throw new Error("CEP não encontrado");
+  return data; // {logradouro, bairro, localidade, uf, ...}
+}
+
 interface TechnicianFormProps {
   technician?: Technician | null;
   services: Service[];
@@ -35,6 +44,9 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
       logradouro: technician.logradouro,
       numero: technician.numero,
       complemento: technician.complemento || "",
+      bairro: technician.bairro || "",
+      cidade: technician.cidade || "",
+      estado: technician.estado || "",
       specialization: technician.specialization || "",
       observacoes: technician.observacoes || "",
       serviceIds: technician.serviceIds || [],
@@ -43,6 +55,9 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
       enderecoInicioLogradouro: technician.enderecoInicioLogradouro || "",
       enderecoInicioNumero: technician.enderecoInicioNumero || "",
       enderecoInicioComplemento: technician.enderecoInicioComplemento || "",
+      enderecoInicioBairro: technician.enderecoInicioBairro || "",
+      enderecoInicioCidade: technician.enderecoInicioCidade || "",
+      enderecoInicioEstado: technician.enderecoInicioEstado || "",
       isActive: technician.isActive,
     } : {
       name: "",
@@ -53,6 +68,9 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
       logradouro: "",
       numero: "",
       complemento: "",
+      bairro: "",
+      cidade: "",
+      estado: "",
       specialization: "",
       observacoes: "",
       serviceIds: [],
@@ -61,6 +79,9 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
       enderecoInicioLogradouro: "",
       enderecoInicioNumero: "",
       enderecoInicioComplemento: "",
+      enderecoInicioBairro: "",
+      enderecoInicioCidade: "",
+      enderecoInicioEstado: "",
       isActive: true,
     },
   });
@@ -292,12 +313,36 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                         placeholder="00000-000"
                         maxLength={9}
                         {...field}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           let value = e.target.value.replace(/\D/g, '');
                           if (value.length > 5) {
                             value = value.slice(0, 5) + '-' + value.slice(5, 8);
                           }
                           field.onChange(value);
+
+                          // Busca automática de endereço quando CEP tem 8 dígitos
+                          if (value.replace(/\D/g, '').length === 8) {
+                            try {
+                              const endereco = await buscarEnderecoPorCep(value);
+
+                              // Preenche os campos automaticamente
+                              form.setValue("logradouro", endereco.logradouro || "");
+                              form.setValue("bairro", endereco.bairro || "");
+                              form.setValue("cidade", endereco.localidade || "");
+                              form.setValue("estado", endereco.uf || "");
+
+                            } catch (err) {
+                              toast({
+                                title: "CEP não encontrado",
+                                description: "Preencha o endereço manualmente.",
+                                variant: "destructive",
+                              });
+                              form.setValue("logradouro", "");
+                              form.setValue("bairro", "");
+                              form.setValue("cidade", "");
+                              form.setValue("estado", "");
+                            }
+                          }
                         }}
                       />
                     </FormControl>
@@ -354,6 +399,48 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="bairro"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bairro *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Centro" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="cidade"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cidade *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="São Paulo" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="estado"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Estado (UF) *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="SP" maxLength={2} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
           </div>
 
@@ -373,19 +460,43 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                 name="enderecoInicioCep"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>CEP de Início</FormLabel>
+                    <FormLabel>CEP</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="00000-000"
                         maxLength={9}
                         {...field}
                         value={field.value || ""}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           let value = e.target.value.replace(/\D/g, '');
                           if (value.length > 5) {
                             value = value.slice(0, 5) + '-' + value.slice(5, 8);
                           }
                           field.onChange(value);
+
+                          // Busca automática de endereço quando CEP tem 8 dígitos
+                          if (value.replace(/\D/g, '').length === 8) {
+                            try {
+                              const endereco = await buscarEnderecoPorCep(value);
+
+                              // Preenche os campos automaticamente
+                              form.setValue("enderecoInicioLogradouro", endereco.logradouro || "");
+                              form.setValue("enderecoInicioBairro", endereco.bairro || "");
+                              form.setValue("enderecoInicioCidade", endereco.localidade || "");
+                              form.setValue("enderecoInicioEstado", endereco.uf || "");
+
+                            } catch (err) {
+                              toast({
+                                title: "CEP não encontrado",
+                                description: "Preencha o endereço manualmente.",
+                                variant: "destructive",
+                              });
+                              form.setValue("enderecoInicioLogradouro", "");
+                              form.setValue("enderecoInicioBairro", "");
+                              form.setValue("enderecoInicioCidade", "");
+                              form.setValue("enderecoInicioEstado", "");
+                            }
+                          }
                         }}
                       />
                     </FormControl>
@@ -438,6 +549,48 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                     <FormLabel>Complemento</FormLabel>
                     <FormControl>
                       <Input placeholder="Apto 123" {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="enderecoInicioBairro"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bairro</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Centro" {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="enderecoInicioCidade"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cidade</FormLabel>
+                    <FormControl>
+                      <Input placeholder="São Paulo" {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="enderecoInicioEstado"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Estado (UF)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="SP" maxLength={2} {...field} value={field.value || ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

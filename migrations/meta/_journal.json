@@ -36,6 +36,13 @@
       "when": 1752939942409,
       "tag": "0004_lucky_madrox",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1753231249502,
+      "tag": "0005_add_technician_address_fields",
+      "breakpoints": true
     }
   ]
 }
