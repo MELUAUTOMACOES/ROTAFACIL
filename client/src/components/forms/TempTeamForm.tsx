@@ -220,7 +220,7 @@ export default function TeamForm({
         enderecoInicioEstado: data.enderecoInicioEstado || "",
       };
 
-      const response = await apiRequest("PUT", `/api/teams/${team?.id}`, teamData);
+      const response = await apiRequest("PATCH", `/api/teams/${team?.id}`, teamData);
       const updatedTeam = await response.json();
 
       // Remover todos os membros existentes da equipe
@@ -276,15 +276,21 @@ export default function TeamForm({
   });
 
   const onSubmit = (data: ExtendedTeamForm) => {
+    console.log("🔧 onSubmit disparado!", { team, data, selectedTechnicians, selectedServices });
+    
     const formData = {
       ...data,
       technicianIds: selectedTechnicians,
       serviceIds: selectedServices.map(id => id.toString()),
     };
 
+    console.log("📤 Dados preparados para envio:", formData);
+
     if (team) {
+      console.log("📝 Modo EDIÇÃO - Chamando updateTeamMutation");
       updateTeamMutation.mutate(formData);
     } else {
+      console.log("➕ Modo CRIAÇÃO - Chamando createTeamMutation");
       createTeamMutation.mutate(formData);
     }
   };
