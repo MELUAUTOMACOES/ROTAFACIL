@@ -584,10 +584,7 @@ export default function TeamForm({
             </Button>
             <Button 
               type="submit"
-              // CORREÇÃO: Disabled dividido para modos criação/edição
-              // Em modo edição (team existe): usar somente updateTeamMutation.isPending
-              // Em modo criação (team não existe): usar somente createTeamMutation.isPending
-              // disabled={ team ? updateTeamMutation.isPending : createTeamMutation.isPending }
+              disabled={team ? updateTeamMutation.isPending : createTeamMutation.isPending}
               className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
             >
               {(team ? updateTeamMutation.isPending : createTeamMutation.isPending) ? (
