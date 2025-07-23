@@ -53,6 +53,8 @@ export default function TeamForm({
   services, 
   onClose 
 }: TeamFormProps) {
+  console.log("🏗️ TempTeamForm renderizado com dados:", { team, technicians: technicians.length, services: services.length });
+  
   const [selectedTechnicians, setSelectedTechnicians] = useState<number[]>([]);
   const [selectedServices, setSelectedServices] = useState<number[]>(
     team?.serviceIds ? team.serviceIds.map(id => parseInt(id)) : []
@@ -592,6 +594,14 @@ export default function TeamForm({
               type="submit"
               disabled={team ? updateTeamMutation.isPending : createTeamMutation.isPending}
               className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+              onClick={() => {
+                console.log("🔘 Botão clicked! Estado do formulário:", {
+                  isValid: form.formState.isValid,
+                  errors: form.formState.errors,
+                  isDirty: form.formState.isDirty,
+                  isSubmitting: form.formState.isSubmitting
+                });
+              }}
             >
               {(team ? updateTeamMutation.isPending : createTeamMutation.isPending) ? (
                 <>
