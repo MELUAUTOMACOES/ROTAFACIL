@@ -501,11 +501,6 @@ export default function Technicians() {
                 team={selectedTeam || undefined}
                 technicians={technicians}
                 services={services}
-                existingTechIds={
-                  allTeamMembers
-                    .filter(m => m.teamId === selectedTeam?.id)
-                    .map(m => m.technicianId)
-                }
                 onClose={handleTeamFormClose}
               />
             </DialogContent>
