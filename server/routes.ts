@@ -818,7 +818,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Missing 'coords' parameter" });
       }
       // Usa o endereço da variável de ambiente, SEM barra no final!
-      const OSRM_URL = getOsrmUrl();
+      const OSRM_URL = getOsrmUrl().replace(/\/$/, '');
       if (!OSRM_URL) {
         return res.status(500).json({ error: "Endereço OSRM não configurado. Crie/atualize o arquivo osrm_url.txt." });
       }

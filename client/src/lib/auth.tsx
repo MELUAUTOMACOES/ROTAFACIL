@@ -12,7 +12,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children }: { children?: ReactNode } = {}) {
+  if (!children) {
+    console.warn("[AuthProvider] Renderizado sem children!");
+    return null;
+  }
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
