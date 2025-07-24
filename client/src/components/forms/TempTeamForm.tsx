@@ -101,12 +101,12 @@ export default function TeamForm({
     if (team && team.id) {
       console.log('📝 Carregando dados da equipe para edição:', team);
       // Edição: carregar dados da equipe existente
-      const serviceIds = team.serviceIds ? team.serviceIds.map(id => parseInt(id)) : [];
+      const serviceIds = team.serviceIds ? team.serviceIds.map(id => Number(id)) : [];
 
       form.reset({
         name: team.name || "",
         technicianIds: selectedTechnicians,
-        serviceIds: serviceIds.map(id => id.toString()),
+        serviceIds: serviceIds,                  // number[]
         // Campos de endereço de início diário - completos
         enderecoInicioCep: team.enderecoInicioCep || "",
         enderecoInicioLogradouro: team.enderecoInicioLogradouro || "",
