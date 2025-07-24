@@ -12,6 +12,7 @@ import { insertBusinessRulesSchema, type BusinessRules, type InsertBusinessRules
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { buscarEnderecoPorCep } from "@/lib/cep";
 
 export default function BusinessRules() {
   const { user } = useAuth();
@@ -36,7 +37,9 @@ export default function BusinessRules() {
       enderecoEmpresaLogradouro: "",
       enderecoEmpresaNumero: "",
       enderecoEmpresaComplemento: "",
-      areaOperacao: "Cidade",
+      enderecoEmpresaBairro: "",
+      enderecoEmpresaCidade: "",
+      enderecoEmpresaEstado: "",
     },
   });
 
@@ -54,7 +57,9 @@ export default function BusinessRules() {
         enderecoEmpresaLogradouro: businessRules.enderecoEmpresaLogradouro,
         enderecoEmpresaNumero: businessRules.enderecoEmpresaNumero,
         enderecoEmpresaComplemento: businessRules.enderecoEmpresaComplemento || "",
-        areaOperacao: businessRules.areaOperacao,
+        enderecoEmpresaBairro: businessRules.enderecoEmpresaBairro,
+        enderecoEmpresaCidade: businessRules.enderecoEmpresaCidade,
+        enderecoEmpresaEstado: businessRules.enderecoEmpresaEstado,
       });
     }
   });
@@ -259,22 +264,7 @@ export default function BusinessRules() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="areaOperacao"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Área de operação</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Ex: São Paulo, Rio de Janeiro"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+
               </CardContent>
             </Card>
           </div>
@@ -303,12 +293,36 @@ export default function BusinessRules() {
                           placeholder="00000-000"
                           maxLength={9}
                           {...field}
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             let value = e.target.value.replace(/\D/g, '');
                             if (value.length > 5) {
                               value = value.slice(0, 5) + '-' + value.slice(5, 8);
                             }
                             field.onChange(value);
+
+                            // Busca automática de endereço quando CEP tem 8 dígitos
+                            if (value.replace(/\D/g, '').length === 8) {
+                              try {
+                                const endereco = await buscarEnderecoPorCep(value);
+
+                                // Preenche os campos automaticamente
+                                form.setValue("enderecoEmpresaLogradouro", endereco.logradouro || "");
+                                form.setValue("enderecoEmpresaBairro", endereco.bairro || "");
+                                form.setValue("enderecoEmpresaCidade", endereco.localidade || "");
+                                form.setValue("enderecoEmpresaEstado", endereco.uf || "");
+
+                              } catch (err) {
+                                toast({
+                                  title: "CEP não encontrado",
+                                  description: "Preencha o endereço manualmente.",
+                                  variant: "destructive",
+                                });
+                                form.setValue("enderecoEmpresaLogradouro", "");
+                                form.setValue("enderecoEmpresaBairro", "");
+                                form.setValue("enderecoEmpresaCidade", "");
+                                form.setValue("enderecoEmpresaEstado", "");
+                              }
+                            }
                           }}
                         />
                       </FormControl>
@@ -348,6 +362,61 @@ export default function BusinessRules() {
                         <Input
                           placeholder="Rua das Flores"
                           {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="enderecoEmpresaBairro"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Bairro *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Centro"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="enderecoEmpresaCidade"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cidade *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="São Paulo"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="enderecoEmpresaEstado"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Estado (UF) *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="SP"
+                          maxLength={2}
+                          {...field}
+                          onChange={(e) => {
+                            field.onChange(e.target.value.toUpperCase());
+                          }}
                         />
                       </FormControl>
                       <FormMessage />

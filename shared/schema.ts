@@ -138,7 +138,9 @@ export const businessRules = pgTable("business_rules", {
   enderecoEmpresaLogradouro: text("endereco_empresa_logradouro").notNull(),
   enderecoEmpresaNumero: text("endereco_empresa_numero").notNull(),
   enderecoEmpresaComplemento: text("endereco_empresa_complemento"),
-  areaOperacao: text("area_operacao").notNull().default("Cidade"),
+  enderecoEmpresaBairro: text("endereco_empresa_bairro").notNull(),
+  enderecoEmpresaCidade: text("endereco_empresa_cidade").notNull(),
+  enderecoEmpresaEstado: text("endereco_empresa_estado").notNull(),
   userId: integer("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -240,6 +242,9 @@ export const insertBusinessRulesSchema = createInsertSchema(businessRules).omit(
   createdAt: true,
 }).extend({
   enderecoEmpresaCep: z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no formato XXXXX-XXX"),
+  enderecoEmpresaBairro: z.string().min(1, "Bairro é obrigatório"),
+  enderecoEmpresaCidade: z.string().min(1, "Cidade é obrigatória"),
+  enderecoEmpresaEstado: z.string().min(2, "Estado é obrigatório"),
 });
 
 // Login schema
