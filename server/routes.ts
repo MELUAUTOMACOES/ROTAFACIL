@@ -830,24 +830,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!coords) {
         return res.status(400).json({ error: "Missing 'coords' parameter" });
       }
+
+      // Validar que temos pelo menos dois pontos
+      const coordArray = coords.split(';');
+      if (coordArray.length < 2) {
+        return res.status(400).json({ error: "São necessárias pelo menos 2 coordenadas para calcular uma rota" });
+      }
+
+      // Validar formato das coordenadas
+      for (const coord of coordArray) {
+        const parts = coord.split(',');
+        if (parts.length !== 2 || isNaN(parseFloat(parts[0])) || isNaN(parseFloat(parts[1]))) {
+          return res.status(400).json({ error: `Formato de coordenada inválido: ${coord}. Use formato: longitude,latitude` });
+        }
+      }
+
       // Usa o endereço da variável de ambiente, SEM barra no final!
       const OSRM_URL = getOsrmUrl()?.replace(/\/$/, '') || null;
       if (!OSRM_URL) {
         return res.status(500).json({ error: "Endereço OSRM não configurado. Crie/atualize o arquivo osrm_url.txt." });
       }
+      
       const osrmUrl = `${OSRM_URL}/route/v1/driving/${coords}?overview=full&geometries=geojson`;
       console.log("🌐 Chamando OSRM:", osrmUrl);
+      console.log("📍 Coordenadas validadas:", coordArray.length, "pontos");
+      
       const osrmRes = await fetch(osrmUrl, {
         headers: { "ngrok-skip-browser-warning": "true" }
       });
       if (!osrmRes.ok) {
         const text = await osrmRes.text();
+        console.error("❌ Erro OSRM:", text);
         return res.status(500).json({ error: `OSRM error: ${text.substring(0, 300)}` });
       }
       const data = await osrmRes.json();
+      console.log("✅ Rota OSRM calculada com sucesso");
       return res.json(data);
     } catch (err) {
-      console.error("Erro no proxy OSRM:", err);
+      console.error("❌ Erro no proxy OSRM:", err);
       return res.status(500).json({ error: "Erro no proxy OSRM" });
     }
   });

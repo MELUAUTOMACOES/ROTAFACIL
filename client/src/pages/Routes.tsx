@@ -19,6 +19,7 @@ interface OptimizedRoute {
   optimizedOrder: Appointment[];
   totalDistance: number;
   estimatedTime: number;
+  geojson?: any;
 }
 
 async function geocodeEndereco(endereco: string) {
@@ -40,10 +41,15 @@ async function geocodeEndereco(endereco: string) {
 
 // Função para calcular rota usando OSRM
 async function calcularRotaOsrm(coordenadas: {lat: number, lon: number}[]) {
+  if (coordenadas.length < 2) {
+    throw new Error("São necessárias pelo menos 2 coordenadas para calcular uma rota");
+  }
+
   const pontos = coordenadas.map(coord => `${coord.lon},${coord.lat}`).join(';');
   const url = `/api/route?coords=${encodeURIComponent(pontos)}`;
 
-  console.log("Chamando PROXY OSRM:", url);
+  console.log("🚗 Chamando PROXY OSRM:", url);
+  console.log("📍 Coordenadas enviadas:", coordenadas);
 
   const res = await fetch(url);
 
@@ -153,6 +159,18 @@ export default function Routes() {
       const response = await fetch("/api/teams", {
         headers: getAuthHeaders(),
       });
+      return response.json();
+    },
+  });
+
+  // Query para buscar regras de negócio (endereço da empresa)
+  const { data: businessRules } = useQuery({
+    queryKey: ["/api/business-rules"],
+    queryFn: async () => {
+      const response = await fetch("/api/business-rules", {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) return null;
       return response.json();
     },
   });
@@ -309,6 +327,43 @@ export default function Routes() {
     });
   };
 
+  // Função para determinar o endereço de início correto
+  const getStartAddress = (appointment: Appointment) => {
+    // Verificar se há técnico ou equipe atribuído ao agendamento
+    let entity = null;
+    
+    if (appointment.technicianId) {
+      entity = technicians.find((t: Technician) => t.id === appointment.technicianId);
+    } else if (appointment.teamId) {
+      entity = teams.find((t: Team) => t.id === appointment.teamId);
+    }
+
+    // Se há entidade (técnico ou equipe), verificar se tem endereço de início próprio
+    if (entity) {
+      const hasOwnStartAddress = entity.enderecoInicioCep && 
+                                 entity.enderecoInicioLogradouro && 
+                                 entity.enderecoInicioBairro && 
+                                 entity.enderecoInicioCidade && 
+                                 entity.enderecoInicioEstado;
+
+      if (hasOwnStartAddress) {
+        // Usar endereço de início próprio
+        const numero = entity.enderecoInicioNumero ? `, ${entity.enderecoInicioNumero}` : '';
+        const complemento = entity.enderecoInicioComplemento ? `, ${entity.enderecoInicioComplemento}` : '';
+        return `${entity.enderecoInicioLogradouro}${numero}${complemento}, ${entity.enderecoInicioBairro}, ${entity.enderecoInicioCidade}, ${entity.enderecoInicioEstado}, Brasil`;
+      }
+    }
+
+    // Usar endereço da empresa como fallback
+    if (businessRules) {
+      const numero = businessRules.enderecoEmpresaNumero ? `, ${businessRules.enderecoEmpresaNumero}` : '';
+      const complemento = businessRules.enderecoEmpresaComplemento ? `, ${businessRules.enderecoEmpresaComplemento}` : '';
+      return `${businessRules.enderecoEmpresaLogradouro}${numero}${complemento}, ${businessRules.enderecoEmpresaBairro}, ${businessRules.enderecoEmpresaCidade}, ${businessRules.enderecoEmpresaEstado}, Brasil`;
+    }
+
+    throw new Error("Endereço de início não configurado - configure o endereço da empresa nas Regras de Negócio");
+  };
+
   const handleOptimizeRoute = async () => {
     if (selectedAppointments.length === 0) {
       toast({
@@ -320,43 +375,83 @@ export default function Routes() {
     }
 
     try {
-      // 1. Pegue os agendamentos selecionados completos
-      const selecionados = appointments.filter(apt => selectedAppointments.includes(apt.id));
-
-      // 2. Monte o endereço completo para cada um (adicione cidade/UF se quiser precisão)
-      const enderecos = selecionados.map((apt) => {
-        return `${apt.logradouro}, ${apt.numero}, ${apt.cep} Brasil`;
-      });
-
-      // 3. Geocode todos (um a um; pode melhorar depois com Promise.all)
-      const coordenadas = [];
-      for (const endereco of enderecos) {
-        const coord = await geocodeEndereco(endereco);
-        coordenadas.push(coord);
+      console.log("🚀 Iniciando otimização de rota...");
+      
+      // 1. Verificar se dados necessários estão carregados
+      if (!businessRules) {
+        throw new Error("Regras de negócio não carregadas - endereço da empresa necessário");
       }
 
-      // 4. Chame o OSRM!
-      const rota = await calcularRotaOsrm(coordenadas);
+      // 2. Pegue os agendamentos selecionados completos
+      const selecionados = appointments.filter((apt: Appointment) => selectedAppointments.includes(apt.id));
+      console.log("📋 Agendamentos selecionados:", selecionados.length);
 
-      // 5. Atualize a tela!
+      // 3. Determinar endereço de início (apenas uma vez para todos os agendamentos)
+      const firstAppointment = selecionados[0];
+      const enderecoInicio = getStartAddress(firstAppointment);
+      console.log("🏠 Endereço de início determinado:", enderecoInicio);
+
+      // 4. Monte o endereço completo para cada agendamento
+      const enderecosDestino = selecionados.map((apt: Appointment) => {
+        return `${apt.logradouro}, ${apt.numero}, ${apt.cep}, Brasil`;
+      });
+      console.log("📍 Endereços de destino:", enderecosDestino);
+
+      // 5. Geocodificar endereço de início
+      console.log("🌍 Geocodificando endereço de início...");
+      const coordenadaInicio = await geocodeEndereco(enderecoInicio);
+      console.log("✅ Coordenada de início:", coordenadaInicio);
+
+      // 6. Geocodificar todos os destinos
+      console.log("🌍 Geocodificando destinos...");
+      const coordenadasDestino = [];
+      for (let i = 0; i < enderecosDestino.length; i++) {
+        const endereco = enderecosDestino[i];
+        try {
+          const coord = await geocodeEndereco(endereco);
+          coordenadasDestino.push(coord);
+          console.log(`✅ Destino ${i + 1} geocodificado:`, coord);
+        } catch (error: any) {
+          console.error(`❌ Erro ao geocodificar destino ${i + 1}:`, endereco, error);
+          throw new Error(`Erro ao geocodificar endereço: ${endereco}. ${error.message || error}`);
+        }
+      }
+
+      // 7. Montar array final de coordenadas (início + destinos)
+      const todasCoordenadas = [coordenadaInicio, ...coordenadasDestino];
+      console.log("📍 Todas as coordenadas para OSRM:", todasCoordenadas);
+
+      // 8. Validar que temos pelo menos 2 pontos
+      if (todasCoordenadas.length < 2) {
+        throw new Error("São necessárias pelo menos 2 coordenadas (início + 1 destino) para calcular uma rota");
+      }
+
+      // 9. Chame o OSRM!
+      console.log("🚗 Enviando coordenadas para OSRM...");
+      const rota = await calcularRotaOsrm(todasCoordenadas);
+      console.log("✅ Rota calculada pelo OSRM:", rota);
+
+      // 10. Atualize a tela!
       setOptimizedRoute({
         optimizedOrder: selecionados, // Por enquanto, mantém a ordem original
-        totalDistance: rota.routes[0]?.distance ? (rota.routes[0].distance / 1000).toFixed(1) : 0,
+        totalDistance: rota.routes[0]?.distance ? parseFloat((rota.routes[0].distance / 1000).toFixed(1)) : 0,
         estimatedTime: rota.routes[0]?.duration ? Math.round(rota.routes[0].duration / 60) : 0,
         geojson: rota.routes[0]?.geometry,
       });
 
       toast({
         title: "Rota otimizada com sucesso!",
-        description: "Verifique o resultado à direita.",
+        description: `Rota calculada com ${selecionados.length} paradas. Verifique o resultado à direita.`,
       });
-    } catch (err) {
+
+      console.log("✅ Otimização concluída com sucesso!");
+    } catch (error: any) {
+      console.error("❌ Erro na otimização:", error);
       toast({
         title: "Erro",
-        description: "Falha ao otimizar rota: " + (err.message || err),
+        description: `Falha ao otimizar rota: ${error.message || error}`,
         variant: "destructive",
       });
-      console.error(err);
     }
   };
 

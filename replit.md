@@ -41,6 +41,31 @@ Stack:
 
 **Resultado**: Projeto 100% padronizado para PostgreSQL comum, sem dependências específicas do Neon
 
+### 25 de julho de 2025 - Lógica de Endereço de Início para Roteirização OSRM
+
+**Funcionalidade implementada**: Endereço de início inteligente na roteirização com fallback automático
+
+**Lógica implementada**:
+1. **Prioridade**: Endereço de início do técnico/equipe → Endereço da empresa
+2. **Validação completa**: Geocodificação obrigatória antes do envio ao OSRM
+3. **Logs detalhados**: Console mostra qual endereço está sendo usado
+4. **Bloqueio preventivo**: Botão "Otimizar Rotas" só funciona com dados válidos
+
+**Arquivos modificados**:
+- **client/src/pages/Routes.tsx**: Função `getStartAddress()` e `handleOptimizeRoute()` reescrita
+- **server/routes.ts**: Validação de coordenadas no endpoint `/api/route`
+
+**Resultado**: Array de coordenadas sempre inicia pelo ponto correto (técnico/equipe ou empresa)
+
+### 25 de julho de 2025 - Exibição de "Endereço de Início" nos Cards
+
+**Funcionalidade implementada**: Cards de técnicos e equipes exibem endereço de início em destaque
+
+**Visual implementado**:
+- **Posição**: Primeiro item de cada card com fundo âmbar
+- **Lógica**: Mesma regra da roteirização (próprio → empresa)
+- **Formato**: "Rua X, 100, Centro, Curitiba - PR"
+
 ### 25 de julho de 2025 - Endereço Completo da Empresa com Busca de CEP
 
 **Funcionalidade implementada**: Endereço completo da empresa na tela de Regras de Negócio (/business-rules)
