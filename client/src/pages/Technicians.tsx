@@ -105,6 +105,44 @@ export default function Technicians() {
     enabled: teams.length > 0,
   });
 
+  // Query para buscar regras de negócio (endereço da empresa)
+  const { data: businessRules } = useQuery({
+    queryKey: ["/api/business-rules"],
+    queryFn: async () => {
+      const response = await fetch("/api/business-rules", {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) return null;
+      return response.json();
+    },
+  });
+
+  // Função para formatar endereço de início (técnico ou empresa)
+  const formatStartAddress = (entity: Technician | Team) => {
+    // Verificar se tem endereço de início próprio
+    const hasOwnStartAddress = entity.enderecoInicioCep && 
+                               entity.enderecoInicioLogradouro && 
+                               entity.enderecoInicioBairro && 
+                               entity.enderecoInicioCidade && 
+                               entity.enderecoInicioEstado;
+
+    if (hasOwnStartAddress) {
+      // Usar endereço de início próprio
+      const numero = entity.enderecoInicioNumero ? `, ${entity.enderecoInicioNumero}` : '';
+      const complemento = entity.enderecoInicioComplemento ? `, ${entity.enderecoInicioComplemento}` : '';
+      return `${entity.enderecoInicioLogradouro}${numero}${complemento}, ${entity.enderecoInicioBairro}, ${entity.enderecoInicioCidade} - ${entity.enderecoInicioEstado}`;
+    }
+
+    // Usar endereço da empresa como fallback
+    if (businessRules) {
+      const numero = businessRules.enderecoEmpresaNumero ? `, ${businessRules.enderecoEmpresaNumero}` : '';
+      const complemento = businessRules.enderecoEmpresaComplemento ? `, ${businessRules.enderecoEmpresaComplemento}` : '';
+      return `${businessRules.enderecoEmpresaLogradouro}${numero}${complemento}, ${businessRules.enderecoEmpresaBairro}, ${businessRules.enderecoEmpresaCidade} - ${businessRules.enderecoEmpresaEstado}`;
+    }
+
+    return "Endereço não configurado";
+  };
+
   const deleteTechnicianMutation = useMutation({
     mutationFn: async (id: number) => {
       await apiRequest("DELETE", `/api/technicians/${id}`, undefined);
@@ -322,6 +360,14 @@ export default function Technicians() {
                   </CardHeader>
                   <CardContent className="p-6">
                     <div className="space-y-3">
+                      {/* Endereço de início em destaque */}
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <div className="flex items-start space-x-2 text-sm">
+                          <span className="font-medium text-amber-800">Endereço de início:</span>
+                          <span className="text-amber-700">{formatStartAddress(technician)}</span>
+                        </div>
+                      </div>
+
                       {technician.email && (
                         <div className="flex items-center space-x-2 text-sm text-gray-600">
                           <Mail className="h-4 w-4" />
@@ -437,6 +483,14 @@ export default function Technicians() {
                   </CardHeader>
                   <CardContent className="p-6">
                     <div className="space-y-4">
+                      {/* Endereço de início em destaque */}
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <div className="flex items-start space-x-2 text-sm">
+                          <span className="font-medium text-amber-800">Endereço de início:</span>
+                          <span className="text-amber-700">{formatStartAddress(team)}</span>
+                        </div>
+                      </div>
+
                       {/* Serviços atendidos */}
                       <div>
                         <h4 className="text-sm font-medium text-gray-700 mb-2">Serviços Atendidos</h4>
