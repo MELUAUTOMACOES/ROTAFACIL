@@ -1,0 +1,58 @@
+Corrigir Migração do Banco (Campos Endereço da Empresa)
+O que aconteceu:
+A tela de endereço da empresa em /business-rules já está certa, mas ao salvar dá erro porque os novos campos de endereço (bairro, cidade, estado, etc) não existem ainda no banco de dados.
+No Drizzle ou via SQL, as migrações anteriores não foram aplicadas corretamente ou não chegaram a ser executadas.
+
+O que preciso que você faça:
+
+Garanta que o banco de dados (PostgreSQL) tenha TODAS as colunas necessárias para o endereço da empresa, seguindo este padrão:
+
+endereco_empresa_cep (text, obrigatório)
+
+endereco_empresa_logradouro (text, obrigatório)
+
+endereco_empresa_numero (text, obrigatório)
+
+endereco_empresa_complemento (text, opcional ou vazio por padrão)
+
+endereco_empresa_bairro (text, obrigatório)
+
+endereco_empresa_cidade (text, obrigatório)
+
+endereco_empresa_estado (text, obrigatório)
+
+Remova completamente o campo area_operacao da tabela se ele ainda existir.
+
+Aplique a migração corretamente, usando Drizzle (preferencial) ou SQL direto.
+
+Se o Drizzle falhar, pode criar uma migration SQL manual (ALTER TABLE ...) e rodar.
+
+Não deixe nenhum campo faltando.
+
+Depois de rodar a migration, confirme:
+
+A tabela business_rules tem todos os campos novos.
+
+A tela de regras do negócio salva e lê todos os campos sem erro.
+
+Não existe mais erro de "coluna não existe" ao salvar.
+
+Não altere nada além da tabela de regras do negócio. Não mexa em outros fluxos, tabelas ou dados.
+
+Se a migration automática der erro de permissão, rode o comando SQL manualmente:
+
+sql
+Copiar
+Editar
+ALTER TABLE business_rules
+  ADD COLUMN IF NOT EXISTS endereco_empresa_bairro text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS endereco_empresa_cidade text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS endereco_empresa_estado text NOT NULL DEFAULT '';
+
+ALTER TABLE business_rules
+  DROP COLUMN IF EXISTS area_operacao;
+Se já existir migration criada mas não aplicada, execute novamente até o banco estar sincronizado. Mostre no log final as colunas existentes para conferência.
+
+Se ainda tiver erro, mostre o comando exato que tentou rodar e a mensagem do banco, que eu oriento o próximo passo.
+
+Favor não alterar nada além do que foi solicitado.
