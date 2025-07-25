@@ -20,6 +20,43 @@ Stack:
 
 ## Mudanças Recentes
 
+### 25 de julho de 2025 - Padronização para PostgreSQL/Supabase
+
+**Funcionalidade implementada**: Remoção completa de dependências Neon e padronização para PostgreSQL padrão
+
+**Arquivos modificados**:
+1. **server/db.ts**:
+   - **Removido**: Imports `@neondatabase/serverless`, `neonConfig`, `ws`
+   - **Adicionado**: Imports `pg` e `drizzle-orm/node-postgres`
+   - **Conexão**: Agora usa `Pool` do `pg` e `drizzle` do `node-postgres`
+   - **Simplificado**: Removida configuração WebSocket
+
+2. **package.json**:
+   - **Removidos**: `@neondatabase/serverless`, `ws`, `@types/ws`
+   - **Adicionados**: `pg`, `@types/pg`
+
+3. **CONFIGURACAO_BANCO.md**:
+   - **Atualizado**: Removida seção Neon Database
+   - **Priorizado**: Supabase como opção recomendada
+
+**Resultado**: Projeto 100% padronizado para PostgreSQL comum, sem dependências específicas do Neon
+
+### 25 de julho de 2025 - Endereço Completo da Empresa com Busca de CEP
+
+**Funcionalidade implementada**: Endereço completo da empresa na tela de Regras de Negócio (/business-rules)
+
+**Campos implementados**:
+- **endereco_empresa_cep** (obrigatório, com máscara 00000-000)
+- **endereco_empresa_logradouro** (obrigatório, preenchimento automático)
+- **endereco_empresa_numero** (obrigatório)
+- **endereco_empresa_complemento** (opcional)
+- **endereco_empresa_bairro** (obrigatório, preenchimento automático)
+- **endereco_empresa_cidade** (obrigatório, preenchimento automático)
+- **endereco_empresa_estado** (obrigatório, preenchimento automático)
+
+**Migração aplicada**: Campos adicionados ao banco PostgreSQL com valores padrão seguros
+**Campo removido**: `area_operacao` eliminado completamente
+
 ### 23 de julho de 2025 - Padronização Completa de Endereços para Técnicos
 
 **Funcionalidade implementada**: Padronização e robustecimento do cadastro de endereços na tela de cadastro/edição de técnicos

@@ -38,13 +38,7 @@ if (!process.env.JWT_SECRET) {
 
 Copie o arquivo `.env.example` para `.env` e configure:
 
-### Para **Neon Database**:
-```bash
-DATABASE_URL=postgresql://username:password@ep-xxx-xxx.us-east-1.aws.neon.tech/database_name?sslmode=require
-JWT_SECRET=sua_chave_secreta_muito_segura_aqui_32_caracteres_minimo
-```
-
-### Para **Supabase**:
+### Para **Supabase** (Recomendado):
 ```bash
 DATABASE_URL=postgresql://postgres:[SUA-SENHA]@db.[SEU-PROJETO].supabase.co:5432/postgres
 JWT_SECRET=sua_chave_secreta_muito_segura_aqui_32_caracteres_minimo
