@@ -822,8 +822,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Proxy OSRM para fronT
+  // Proxy OSRM para frontend
   console.log("Procurando arquivo em:", path.join(__dirname, 'osrm_url.txt'));
+  
+  // Novo endpoint: Otimização TSP com OSRM
+  app.get("/api/optimize-trip", async (req, res) => {
+    try {
+      const coords = req.query.coords as string;
+      if (!coords) {
+        return res.status(400).json({ error: "Missing 'coords' parameter" });
+      }
+
+      // Validar que temos pelo menos dois pontos
+      const coordArray = coords.split(';');
+      if (coordArray.length < 2) {
+        return res.status(400).json({ error: "São necessárias pelo menos 2 coordenadas para otimizar uma rota" });
+      }
+
+      // Validar formato das coordenadas
+      for (const coord of coordArray) {
+        const parts = coord.split(',');
+        if (parts.length !== 2 || isNaN(parseFloat(parts[0])) || isNaN(parseFloat(parts[1]))) {
+          return res.status(400).json({ error: `Formato de coordenada inválido: ${coord}. Use formato: longitude,latitude` });
+        }
+      }
+
+      // Usar o endereço do OSRM
+      const OSRM_URL = getOsrmUrl()?.replace(/\/$/, '') || null;
+      if (!OSRM_URL) {
+        return res.status(500).json({ error: "Endereço OSRM não configurado. Crie/atualize o arquivo osrm_url.txt." });
+      }
+      
+      const osrmUrl = `${OSRM_URL}/trip/v1/driving/${coords}?source=first&destination=last&roundtrip=false&overview=full&geometries=geojson`;
+      console.log("🎯 Chamando OSRM TSP:", osrmUrl);
+      console.log("📍 Coordenadas para otimização:", coordArray.length, "pontos");
+      
+      const osrmRes = await fetch(osrmUrl, {
+        headers: { "ngrok-skip-browser-warning": "true" }
+      });
+      
+      if (!osrmRes.ok) {
+        const text = await osrmRes.text();
+        console.error("❌ Erro OSRM TSP:", text);
+        return res.status(500).json({ error: `OSRM TSP error: ${text.substring(0, 300)}` });
+      }
+      
+      const data = await osrmRes.json();
+      console.log("✅ Rota otimizada OSRM TSP calculada com sucesso");
+      console.log("🔄 Waypoints otimizados:", data.waypoints?.length || 0, "pontos");
+      return res.json(data);
+    } catch (err) {
+      console.error("❌ Erro no proxy OSRM TSP:", err);
+      return res.status(500).json({ error: "Erro no proxy OSRM TSP" });
+    }
+  });
+
   app.get("/api/route", async (req, res) => {
     try {
       const coords = req.query.coords as string;

@@ -20,24 +20,42 @@ Stack:
 
 ## Mudanças Recentes
 
-### 30 de julho de 2025 - Sistema de Fallback de Geocodificação
+### 30 de julho de 2025 - Otimização TSP + Geocodificação Robusta Completa
 
-**Funcionalidade implementada**: Sistema robusto de fallback na geocodificação do endereço de início para roteirização
+**Funcionalidade implementada**: Sistema completo de otimização de rotas com OSRM TSP e geocodificação robusta de destinos
 
-**Lógica implementada**:
-1. **Múltiplas tentativas**: Geocodificação em ordem decrescente de detalhes:
-   - Endereço completo (logradouro, número, bairro, cidade, CEP, estado, Brasil)
-   - Sem número (logradouro, bairro, cidade, CEP, estado, Brasil) 
-   - Apenas localização (CEP, cidade, estado, Brasil)
-2. **Fallback empresa**: Se endereço do técnico/equipe falhar, tenta endereço da empresa
-3. **Logs detalhados**: Console mostra cada tentativa e resultado
-4. **Erro informativo**: Mensagem clara quando nenhuma tentativa funciona
+**Melhorias implementadas**:
+
+1. **Novo endpoint `/api/optimize-trip`**:
+   - Proxy para OSRM TSP (`/trip/v1/driving/`)
+   - Parâmetros: `source=first&destination=last&roundtrip=false&overview=full&geometries=geojson`
+   - Retorna rota otimizada com menor distância e ordem ótima de paradas
+
+2. **Geocodificação robusta de destinos**:
+   - Validação obrigatória: bairro, cidade, logradouro devem existir
+   - Endereço completo: logradouro, número, bairro, cidade, CEP, estado, Brasil
+   - Logs detalhados antes/depois de cada geocodificação
+   - Bloqueia otimização se campos obrigatórios faltarem
+
+3. **Sistema de fallback para endereço de início**:
+   - Múltiplas tentativas em ordem decrescente de detalhes
+   - Fallback automático para endereço da empresa
+   - Logs detalhados de cada tentativa
+
+4. **Reordenação inteligente**:
+   - Processa waypoints otimizados do OSRM TSP
+   - Reordena agendamentos conforme a sequência ótima
+   - Exibe nova ordem na interface
 
 **Arquivos modificados**:
-- **client/src/pages/Routes.tsx**: Nova função `geocodeComFallbacks()` implementada
-- **handleOptimizeRoute()**: Atualizada para usar nova função com fallbacks
+- **server/routes.ts**: Novo endpoint `/api/optimize-trip` adicionado
+- **client/src/pages/Routes.tsx**: 
+  - Nova função `otimizarRotaTsp()` 
+  - Geocodificação robusta com validação de campos
+  - Processamento de waypoints otimizados
+  - Logs detalhados em todas as etapas
 
-**Resultado**: Geocodificação mais robusta que tenta múltiplas variações de endereço antes de falhar
+**Resultado**: Otimização real de rotas com menor distância e geocodificação 100% robusta
 
 ### 25 de julho de 2025 - Padronização para PostgreSQL/Supabase
 
