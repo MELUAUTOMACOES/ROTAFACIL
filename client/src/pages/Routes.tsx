@@ -327,11 +327,10 @@ export default function Routes() {
     });
   };
 
-  // Função para determinar o endereço de início correto
+  // Função para determinar o endereço de início correto (incluindo CEP)
   const getStartAddress = (appointment: Appointment) => {
-    // Verificar se há técnico ou equipe atribuído ao agendamento
     let entity = null;
-    
+
     if (appointment.technicianId) {
       entity = technicians.find((t: Technician) => t.id === appointment.technicianId);
     } else if (appointment.teamId) {
@@ -347,10 +346,10 @@ export default function Routes() {
                                  entity.enderecoInicioEstado;
 
       if (hasOwnStartAddress) {
-        // Usar endereço de início próprio
         const numero = entity.enderecoInicioNumero ? `, ${entity.enderecoInicioNumero}` : '';
         const complemento = entity.enderecoInicioComplemento ? `, ${entity.enderecoInicioComplemento}` : '';
-        return `${entity.enderecoInicioLogradouro}${numero}${complemento}, ${entity.enderecoInicioBairro}, ${entity.enderecoInicioCidade}, ${entity.enderecoInicioEstado}, Brasil`;
+        // Inclui o CEP na montagem do endereço
+        return `${entity.enderecoInicioLogradouro}${numero}${complemento}, ${entity.enderecoInicioBairro}, ${entity.enderecoInicioCidade}, ${entity.enderecoInicioCep}, ${entity.enderecoInicioEstado}, Brasil`;
       }
     }
 
@@ -358,7 +357,8 @@ export default function Routes() {
     if (businessRules) {
       const numero = businessRules.enderecoEmpresaNumero ? `, ${businessRules.enderecoEmpresaNumero}` : '';
       const complemento = businessRules.enderecoEmpresaComplemento ? `, ${businessRules.enderecoEmpresaComplemento}` : '';
-      return `${businessRules.enderecoEmpresaLogradouro}${numero}${complemento}, ${businessRules.enderecoEmpresaBairro}, ${businessRules.enderecoEmpresaCidade}, ${businessRules.enderecoEmpresaEstado}, Brasil`;
+      // Inclui o CEP na montagem do endereço
+      return `${businessRules.enderecoEmpresaLogradouro}${numero}${complemento}, ${businessRules.enderecoEmpresaBairro}, ${businessRules.enderecoEmpresaCidade}, ${businessRules.enderecoEmpresaCep}, ${businessRules.enderecoEmpresaEstado}, Brasil`;
     }
 
     throw new Error("Endereço de início não configurado - configure o endereço da empresa nas Regras de Negócio");

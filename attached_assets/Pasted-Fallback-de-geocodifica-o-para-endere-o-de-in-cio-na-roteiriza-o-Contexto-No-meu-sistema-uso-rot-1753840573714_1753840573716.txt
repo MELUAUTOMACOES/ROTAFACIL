@@ -1,0 +1,76 @@
+Fallback de geocodificação para endereço de início na roteirização
+Contexto:
+No meu sistema, uso roteirização via OSRM. Para isso, preciso sempre converter o endereço de início do técnico/equipe (ou, se não houver, o da empresa) em coordenadas (lat/lon) usando geocodificação (Nominatim, OpenStreetMap ou equivalente).
+
+Porém, às vezes o endereço completo não é encontrado — principalmente quando é uma rodovia ou o número não existe na base de dados do geocoder.
+Nesses casos, quero que o sistema tente automaticamente variações mais simples do endereço, até conseguir encontrar uma coordenada.
+
+O que preciso:
+
+No código de roteirização (normalmente em Routes.tsx ou similar, no front):
+
+Antes de montar a string de coordenadas para enviar ao backend/OSRM, crie uma função de geocodificação de endereço de início com fallback:
+
+Primeiro tenta o endereço mais completo possível (logradouro, numero, bairro, cidade, cep, estado, Brasil)
+
+Se não achar, tenta variações menores:
+
+Tira o número
+
+Tira bairro
+
+Usa só CEP, cidade, estado, Brasil
+
+Por fim, se nada der certo, tenta geocodificar o endereço da empresa usando pelo menos o CEP, cidade, estado, Brasil.
+
+Exemplo de tentativas (em ordem):
+
+csharp
+Copiar
+Editar
+"Rodovia BR-116, 15480, Xaxim, Curitiba, 81690-200, PR, Brasil"
+"Rodovia BR-116, Xaxim, Curitiba, 81690-200, PR, Brasil"
+"81690-200, Curitiba, PR, Brasil"
+[e por fim, o endereço da empresa no mesmo formato]
+No código, faça assim (exemplo):
+
+ts
+Copiar
+Editar
+async function geocodeComFallbacks(entity, businessRules) {
+  const tentativas = [
+    // Endereço completo
+    [entity.enderecoInicioLogradouro, entity.enderecoInicioNumero, entity.enderecoInicioBairro, entity.enderecoInicioCidade, entity.enderecoInicioCep, entity.enderecoInicioEstado, "Brasil"].filter(Boolean).join(', '),
+    // Sem número
+    [entity.enderecoInicioLogradouro, entity.enderecoInicioBairro, entity.enderecoInicioCidade, entity.enderecoInicioCep, entity.enderecoInicioEstado, "Brasil"].filter(Boolean).join(', '),
+    // Só CEP, Cidade, Estado, Brasil
+    [entity.enderecoInicioCep, entity.enderecoInicioCidade, entity.enderecoInicioEstado, "Brasil"].filter(Boolean).join(', ')
+  ];
+  for (const endereco of tentativas) {
+    if (!endereco) continue;
+    const result = await geocodeEndereco(endereco); // sua função de geocodificação
+    if (result) return result;
+  }
+  // Fallback: endereço da empresa
+  if (businessRules) {
+    const enderecoEmpresa = [businessRules.enderecoEmpresaCep, businessRules.enderecoEmpresaCidade, businessRules.enderecoEmpresaEstado, "Brasil"].filter(Boolean).join(', ');
+    const resultEmpresa = await geocodeEndereco(enderecoEmpresa);
+    if (resultEmpresa) return resultEmpresa;
+  }
+  return null;
+}
+Ao otimizar rotas:
+
+Sempre chame essa função para obter o ponto de início (lat/lon).
+
+Se não encontrar, mostre erro amigável ao usuário (ex: “Não foi possível encontrar o endereço de início. Ajuste o endereço da equipe/técnico ou da empresa.”).
+
+Só permita otimizar rota se o início for encontrado com sucesso.
+
+Não altere nenhuma lógica do backend nem a regra de negócio de quem é prioridade. Só ajuste o front para garantir robustez na geocodificação!
+
+Se precisar de exemplos de logs ou como chamar essa função no contexto da tela de rotas, pode mostrar antes/depois.
+
+Resumindo:
+Implemente geocodificação de endereço de início com tentativas em fallback (menos detalhes até só CEP/cidade/estado), sempre tentando do mais completo para o mais simples, e só recuse se não encontrar nada — priorizando sempre endereço próprio (técnico/equipe) e depois o da empresa.
+
