@@ -20,6 +20,25 @@ Stack:
 
 ## Mudanças Recentes
 
+### 30 de julho de 2025 - Sistema de Fallback de Geocodificação
+
+**Funcionalidade implementada**: Sistema robusto de fallback na geocodificação do endereço de início para roteirização
+
+**Lógica implementada**:
+1. **Múltiplas tentativas**: Geocodificação em ordem decrescente de detalhes:
+   - Endereço completo (logradouro, número, bairro, cidade, CEP, estado, Brasil)
+   - Sem número (logradouro, bairro, cidade, CEP, estado, Brasil) 
+   - Apenas localização (CEP, cidade, estado, Brasil)
+2. **Fallback empresa**: Se endereço do técnico/equipe falhar, tenta endereço da empresa
+3. **Logs detalhados**: Console mostra cada tentativa e resultado
+4. **Erro informativo**: Mensagem clara quando nenhuma tentativa funciona
+
+**Arquivos modificados**:
+- **client/src/pages/Routes.tsx**: Nova função `geocodeComFallbacks()` implementada
+- **handleOptimizeRoute()**: Atualizada para usar nova função com fallbacks
+
+**Resultado**: Geocodificação mais robusta que tenta múltiplas variações de endereço antes de falhar
+
 ### 25 de julho de 2025 - Padronização para PostgreSQL/Supabase
 
 **Funcionalidade implementada**: Remoção completa de dependências Neon e padronização para PostgreSQL padrão

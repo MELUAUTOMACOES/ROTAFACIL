@@ -39,6 +39,79 @@ async function geocodeEndereco(endereco: string) {
   throw new Error("Endereço não encontrado: " + endereco);
 }
 
+// Função de geocodificação com fallbacks para endereço de início
+async function geocodeComFallbacks(entity: any, businessRules: any) {
+  console.log("🔍 Iniciando geocodificação com fallbacks para entidade:", entity?.name || "Não definida");
+  
+  // Se há entidade (técnico ou equipe), verificar se tem endereço de início próprio
+  if (entity) {
+    const hasOwnStartAddress = entity.enderecoInicioCep && 
+                               entity.enderecoInicioLogradouro && 
+                               entity.enderecoInicioBairro && 
+                               entity.enderecoInicioCidade && 
+                               entity.enderecoInicioEstado;
+
+    if (hasOwnStartAddress) {
+      console.log("🏠 Entidade tem endereço próprio, tentando fallbacks...");
+      
+      const tentativas = [
+        // Endereço completo
+        [entity.enderecoInicioLogradouro, entity.enderecoInicioNumero, entity.enderecoInicioBairro, entity.enderecoInicioCidade, entity.enderecoInicioCep, entity.enderecoInicioEstado, "Brasil"].filter(Boolean).join(', '),
+        // Sem número
+        [entity.enderecoInicioLogradouro, entity.enderecoInicioBairro, entity.enderecoInicioCidade, entity.enderecoInicioCep, entity.enderecoInicioEstado, "Brasil"].filter(Boolean).join(', '),
+        // Só CEP, Cidade, Estado, Brasil
+        [entity.enderecoInicioCep, entity.enderecoInicioCidade, entity.enderecoInicioEstado, "Brasil"].filter(Boolean).join(', ')
+      ];
+
+      for (let i = 0; i < tentativas.length; i++) {
+        const endereco = tentativas[i];
+        if (!endereco) continue;
+        
+        console.log(`🔄 Tentativa ${i + 1}: ${endereco}`);
+        
+        try {
+          const result = await geocodeEndereco(endereco);
+          console.log(`✅ Sucesso na tentativa ${i + 1}:`, result);
+          return result;
+        } catch (error: any) {
+          console.log(`❌ Falhou tentativa ${i + 1}:`, error.message);
+        }
+      }
+    }
+  }
+
+  // Fallback: endereço da empresa
+  if (businessRules) {
+    console.log("🏢 Tentando endereço da empresa como fallback...");
+    
+    const tentativasEmpresa = [
+      // Endereço completo da empresa
+      [businessRules.enderecoEmpresaLogradouro, businessRules.enderecoEmpresaNumero, businessRules.enderecoEmpresaBairro, businessRules.enderecoEmpresaCidade, businessRules.enderecoEmpresaCep, businessRules.enderecoEmpresaEstado, "Brasil"].filter(Boolean).join(', '),
+      // Sem número da empresa
+      [businessRules.enderecoEmpresaLogradouro, businessRules.enderecoEmpresaBairro, businessRules.enderecoEmpresaCidade, businessRules.enderecoEmpresaCep, businessRules.enderecoEmpresaEstado, "Brasil"].filter(Boolean).join(', '),
+      // Só CEP, Cidade, Estado, Brasil da empresa
+      [businessRules.enderecoEmpresaCep, businessRules.enderecoEmpresaCidade, businessRules.enderecoEmpresaEstado, "Brasil"].filter(Boolean).join(', ')
+    ];
+
+    for (let i = 0; i < tentativasEmpresa.length; i++) {
+      const endereco = tentativasEmpresa[i];
+      if (!endereco) continue;
+      
+      console.log(`🔄 Tentativa empresa ${i + 1}: ${endereco}`);
+      
+      try {
+        const result = await geocodeEndereco(endereco);
+        console.log(`✅ Sucesso na tentativa empresa ${i + 1}:`, result);
+        return result;
+      } catch (error: any) {
+        console.log(`❌ Falhou tentativa empresa ${i + 1}:`, error.message);
+      }
+    }
+  }
+  
+  throw new Error("Não foi possível encontrar o endereço de início. Ajuste o endereço da equipe/técnico ou da empresa.");
+}
+
 // Função para calcular rota usando OSRM
 async function calcularRotaOsrm(coordenadas: {lat: number, lon: number}[]) {
   if (coordenadas.length < 2) {
@@ -386,10 +459,17 @@ export default function Routes() {
       const selecionados = appointments.filter((apt: Appointment) => selectedAppointments.includes(apt.id));
       console.log("📋 Agendamentos selecionados:", selecionados.length);
 
-      // 3. Determinar endereço de início (apenas uma vez para todos os agendamentos)
+      // 3. Determinar entidade (técnico ou equipe) para o primeiro agendamento
       const firstAppointment = selecionados[0];
-      const enderecoInicio = getStartAddress(firstAppointment);
-      console.log("🏠 Endereço de início determinado:", enderecoInicio);
+      let entity = null;
+
+      if (firstAppointment.technicianId) {
+        entity = technicians.find((t: Technician) => t.id === firstAppointment.technicianId);
+      } else if (firstAppointment.teamId) {
+        entity = teams.find((t: Team) => t.id === firstAppointment.teamId);
+      }
+
+      console.log("👤 Entidade determinada:", entity?.name || "Nenhuma");
 
       // 4. Monte o endereço completo para cada agendamento
       const enderecosDestino = selecionados.map((apt: Appointment) => {
@@ -397,9 +477,9 @@ export default function Routes() {
       });
       console.log("📍 Endereços de destino:", enderecosDestino);
 
-      // 5. Geocodificar endereço de início
-      console.log("🌍 Geocodificando endereço de início...");
-      const coordenadaInicio = await geocodeEndereco(enderecoInicio);
+      // 5. Geocodificar endereço de início com fallbacks
+      console.log("🌍 Geocodificando endereço de início com fallbacks...");
+      const coordenadaInicio = await geocodeComFallbacks(entity, businessRules);
       console.log("✅ Coordenada de início:", coordenadaInicio);
 
       // 6. Geocodificar todos os destinos
