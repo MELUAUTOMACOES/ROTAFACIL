@@ -133,26 +133,7 @@ async function calcularRotaOsrm(coordenadas: {lat: number, lon: number}[]) {
   return res.json();
 }
 
-// Função para otimizar rota usando OSRM TSP
-async function otimizarRotaTsp(coordenadas: {lat: number, lon: number}[]) {
-  if (coordenadas.length < 2) {
-    throw new Error("São necessárias pelo menos 2 coordenadas para otimizar uma rota");
-  }
 
-  const pontos = coordenadas.map(coord => `${coord.lon},${coord.lat}`).join(';');
-  const url = `/api/optimize-trip?coords=${encodeURIComponent(pontos)}`;
-
-  console.log("🎯 Chamando PROXY OSRM TSP:", url);
-  console.log("📍 Coordenadas para otimização:", coordenadas);
-
-  const res = await fetch(url);
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Erro OSRM TSP: Status ${res.status}. Resposta: ${text.substring(0, 100)}...`);
-  }
-  return res.json();
-}
 
 export default function Routes() {
   const [selectedAppointments, setSelectedAppointments] = useState<number[]>([]);
@@ -554,52 +535,63 @@ export default function Routes() {
 
       // 8. Montar array final de coordenadas (início + destinos)
       const todasCoordenadas = [coordenadaInicio, ...coordenadasDestino];
-      console.log("📍 Todas as coordenadas para OSRM TSP:", todasCoordenadas);
+      console.log("📍 Todas as coordenadas para otimização:", todasCoordenadas);
 
       // 9. Validar que temos pelo menos 2 pontos
       if (todasCoordenadas.length < 2) {
         throw new Error("São necessárias pelo menos 2 coordenadas (início + 1 destino) para otimizar uma rota");
       }
 
-      // 10. Chame o OSRM TSP para otimização!
-      console.log("🎯 Enviando coordenadas para OSRM TSP (otimização)...");
-      const rotaOtimizada = await otimizarRotaTsp(todasCoordenadas);
-      console.log("✅ Rota otimizada pelo OSRM TSP:", rotaOtimizada);
+      // 10. Montar array de coordenadas no formato [lon, lat]
+      const coordsArray = todasCoordenadas.map(coord => [coord.lon, coord.lat]);
+      console.log("📍 Coordenadas formatadas para backend:", coordsArray);
 
-      // 11. Processar a ordem otimizada dos waypoints
-      const waypointsOtimizados = rotaOtimizada.waypoints || [];
-      console.log("🔄 Waypoints otimizados:", waypointsOtimizados);
-
-      // Reordenar agendamentos de acordo com os waypoints otimizados
-      const agendamentosOtimizados = [];
-      if (waypointsOtimizados.length > 1) {
-        // O primeiro waypoint é sempre o ponto de início, então começamos do índice 1
-        for (let i = 1; i < waypointsOtimizados.length; i++) {
-          const waypointIndex = waypointsOtimizados[i].waypoint_index;
-          // waypoint_index é baseado na ordem original (início + destinos)
-          // Subtraímos 1 porque o índice 0 é o ponto de início
-          if (waypointIndex > 0) {
-            const agendamentoIndex = waypointIndex - 1;
-            if (selecionados[agendamentoIndex]) {
-              agendamentosOtimizados.push(selecionados[agendamentoIndex]);
-            }
-          }
-        }
+      // 11. Chama backend para gerar matriz de durações
+      console.log("🎯 Enviando coordenadas para /api/rota/matrix...");
+      const matrixRes = await fetch("/api/rota/matrix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coords: coordsArray }),
+      });
+      if (!matrixRes.ok) {
+        const errorText = await matrixRes.text();
+        throw new Error("Erro ao calcular matriz: " + errorText);
       }
+      const matrixData = await matrixRes.json();
+      console.log("✅ Matriz de durações recebida:", matrixData);
+
+      // 12. Resolve TSP (ordem ótima)
+      console.log("🧠 Enviando matriz para /api/rota/tsp...");
+      const tspRes = await fetch("/api/rota/tsp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matrix: matrixData.matrix }),
+      });
+      if (!tspRes.ok) {
+        const errorText = await tspRes.text();
+        throw new Error("Erro ao otimizar rota: " + errorText);
+      }
+      const tspData = await tspRes.json();
+      console.log("✅ Ordem otimizada recebida:", tspData);
+
+      // 13. Aplica a ordem ao array de agendamentos
+      const agendamentosOtimizados = tspData.order
+        .filter((idx: number) => idx > 0)
+        .map((idx: number) => selecionados[idx - 1]); // -1 porque selecionados[0] corresponde ao destino 1
 
       console.log("📋 Agendamentos reordenados conforme otimização:", agendamentosOtimizados.length);
 
-      // 12. Atualize a tela com a rota otimizada!
+      // 14. Atualize a tela com a rota otimizada!
       setOptimizedRoute({
-        optimizedOrder: agendamentosOtimizados.length > 0 ? agendamentosOtimizados : selecionados,
-        totalDistance: rotaOtimizada.trips[0]?.distance ? parseFloat((rotaOtimizada.trips[0].distance / 1000).toFixed(1)) : 0,
-        estimatedTime: rotaOtimizada.trips[0]?.duration ? Math.round(rotaOtimizada.trips[0].duration / 60) : 0,
-        geojson: rotaOtimizada.trips[0]?.geometry,
+        optimizedOrder: agendamentosOtimizados,
+        totalDistance: 0, // pode deixar 0 por enquanto
+        estimatedTime: 0,
+        geojson: null,
       });
 
       toast({
         title: "Rota otimizada com sucesso!",
-        description: `Rota calculada com ${selecionados.length} paradas. Verifique o resultado à direita.`,
+        description: `Rota calculada com ${agendamentosOtimizados.length} paradas.`,
       });
 
       console.log("✅ Otimização concluída com sucesso!");

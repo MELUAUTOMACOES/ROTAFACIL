@@ -20,42 +20,40 @@ Stack:
 
 ## Mudanças Recentes
 
-### 30 de julho de 2025 - Otimização TSP + Geocodificação Robusta Completa
+### 02 de agosto de 2025 - Migração para Sistema de Otimização OR-Tools
 
-**Funcionalidade implementada**: Sistema completo de otimização de rotas com OSRM TSP e geocodificação robusta de destinos
+**Funcionalidade implementada**: Migração do sistema de otimização de rotas do OSRM TSP para o novo fluxo com OR-Tools (Google)
 
-**Melhorias implementadas**:
+**Mudanças implementadas**:
 
-1. **Novo endpoint `/api/optimize-trip`**:
-   - Proxy para OSRM TSP (`/trip/v1/driving/`)
-   - Parâmetros: `source=first&destination=last&roundtrip=false&overview=full&geometries=geojson`
-   - Retorna rota otimizada com menor distância e ordem ótima de paradas
+1. **Remoção do endpoint antigo**:
+   - Removida função `otimizarRotaTsp()` que usava `/api/optimize-trip`
+   - Eliminada dependência do endpoint OSRM `/trip/v1/driving/`
 
-2. **Geocodificação robusta de destinos**:
+2. **Novo fluxo de otimização**:
+   - **Passo 1**: Chamada para `/api/rota/matrix` (POST) → recebe matriz de durações do OSRM
+   - **Passo 2**: Chamada para `/api/rota/tsp` (POST) → resolve ordem ótima com OR-Tools (Python/Google)
+   - **Resultado**: Ordem otimizada sem retorno ao ponto inicial
+
+3. **Geocodificação robusta mantida**:
    - Validação obrigatória: bairro, cidade, logradouro devem existir
    - Endereço completo: logradouro, número, bairro, cidade, CEP, estado, Brasil
    - Logs detalhados antes/depois de cada geocodificação
-   - Bloqueia otimização se campos obrigatórios faltarem
+   - Sistema de fallback para endereço de início mantido
 
-3. **Sistema de fallback para endereço de início**:
-   - Múltiplas tentativas em ordem decrescente de detalhes
-   - Fallback automático para endereço da empresa
-   - Logs detalhados de cada tentativa
-
-4. **Reordenação inteligente**:
-   - Processa waypoints otimizados do OSRM TSP
-   - Reordena agendamentos conforme a sequência ótima
-   - Exibe nova ordem na interface
+4. **Novo processamento de dados**:
+   - Coordenadas formatadas como array `[lon, lat]` para o backend
+   - Reordenação baseada em `tspData.order` ignorando índice 0 (ponto inicial)
+   - Mapeamento correto: `selecionados[idx - 1]` para cada `idx > 0`
 
 **Arquivos modificados**:
-- **server/routes.ts**: Novo endpoint `/api/optimize-trip` adicionado
 - **client/src/pages/Routes.tsx**: 
-  - Nova função `otimizarRotaTsp()` 
-  - Geocodificação robusta com validação de campos
-  - Processamento de waypoints otimizados
-  - Logs detalhados em todas as etapas
+  - Função `handleOptimizeRoute()` completamente reescrita
+  - Removida função `otimizarRotaTsp()`
+  - Novo fluxo: geocodificação → matriz → TSP → reordenação
+  - Logs detalhados para debugging
 
-**Resultado**: Otimização real de rotas com menor distância e geocodificação 100% robusta
+**Resultado**: Sistema de otimização mais robusto usando OR-Tools ao invés de OSRM TSP
 
 ### 25 de julho de 2025 - Padronização para PostgreSQL/Supabase
 

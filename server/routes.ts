@@ -62,6 +62,49 @@ function authenticateToken(req: any, res: any, next: any) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Endpoint para gerar matriz do OSRM
+  app.post('/api/rota/matrix', async (req, res) => {
+    const { coords } = req.body; // Ex: [[lon, lat], [lon, lat], ...]
+    if (!coords || !Array.isArray(coords) || coords.length < 2)
+      return res.status(400).json({ error: 'Coordenadas inválidas' });
+
+    const coordStr = coords.map((c: number[]) => c.join(',')).join(';');
+    const osrmUrl = `http://localhost:5000/table/v1/driving/${coordStr}?annotations=duration`;
+
+    try {
+      const resp = await fetch(osrmUrl);
+      const data = await resp.json();
+      if (!data.durations) return res.status(500).json({ error: 'OSRM não respondeu corretamente' });
+      return res.json({ matrix: data.durations });
+    } catch (e: any) {
+      return res.status(500).json({ error: 'Erro consultando OSRM', details: e.message });
+    }
+  });
+
+  // Endpoint para resolver TSP via Python
+  app.post('/api/rota/tsp', async (req, res) => {
+    const { matrix } = req.body;
+    if (!matrix || !Array.isArray(matrix)) return res.status(400).json({ error: 'Matriz inválida' });
+
+    const { spawn } = require('child_process');
+    const py = spawn('python', ['solve_tsp.py']);
+    let output = '';
+    py.stdout.on('data', (data: Buffer) => output += data);
+    py.stderr.on('data', (data: Buffer) => console.error('py err:', data.toString()));
+
+    py.on('close', (code: number) => {
+      try {
+        const result = JSON.parse(output);
+        return res.json(result);
+      } catch (e: any) {
+        return res.status(500).json({ error: 'Erro no Python', details: output });
+      }
+    });
+
+    py.stdin.write(JSON.stringify({ matrix }));
+    py.stdin.end();
+  });
+
   // Auth routes
   app.post("/api/auth/register", async (req, res) => {
     try {
@@ -826,7 +869,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log("Procurando arquivo em:", path.join(__dirname, 'osrm_url.txt'));
   
   // Novo endpoint: Otimização TSP com OSRM
-  app.get("/api/optimize-trip", async (req, res) => {
+  //app.get("/api/optimize-trip", async (req, res) => {
     try {
       const coords = req.query.coords as string;
       if (!coords) {
