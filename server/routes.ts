@@ -64,45 +64,126 @@ function authenticateToken(req: any, res: any, next: any) {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Endpoint para gerar matriz do OSRM
   app.post('/api/rota/matrix', async (req, res) => {
+    console.log("==== LOG INÍCIO: /api/rota/matrix ====");
+    console.log("Dados recebidos no req.body:");
+    console.log(JSON.stringify(req.body, null, 2));
+    
     const { coords } = req.body; // Ex: [[lon, lat], [lon, lat], ...]
-    if (!coords || !Array.isArray(coords) || coords.length < 2)
+    if (!coords || !Array.isArray(coords) || coords.length < 2) {
+      console.log("❌ ERRO: Coordenadas inválidas");
+      console.log("Coordenadas recebidas:", coords);
+      console.log("==== LOG FIM: /api/rota/matrix (ERRO) ====");
       return res.status(400).json({ error: 'Coordenadas inválidas' });
+    }
 
     const coordStr = coords.map((c: number[]) => c.join(',')).join(';');
     const osrmUrl = `http://localhost:5000/table/v1/driving/${coordStr}?annotations=duration`;
 
+    console.log("🌐 URL para OSRM:");
+    console.log(osrmUrl);
+    console.log("📍 Coordenadas formatadas:");
+    console.log(JSON.stringify(coords, null, 2));
+    
     try {
+      console.log("🚀 Fazendo chamada para OSRM...");
       const resp = await fetch(osrmUrl);
       const data = await resp.json();
-      if (!data.durations) return res.status(500).json({ error: 'OSRM não respondeu corretamente' });
+      
+      console.log("📦 Resposta completa do OSRM:");
+      console.log(JSON.stringify(data, null, 2));
+      
+      if (!data.durations) {
+        console.log("❌ ERRO: OSRM não retornou durations");
+        console.log("==== LOG FIM: /api/rota/matrix (ERRO OSRM) ====");
+        return res.status(500).json({ error: 'OSRM não respondeu corretamente' });
+      }
+      
+      console.log("✅ Matriz de durações extraída:");
+      console.log(JSON.stringify(data.durations, null, 2));
+      console.log("==== LOG FIM: /api/rota/matrix (SUCESSO) ====");
+      
       return res.json({ matrix: data.durations });
     } catch (e: any) {
+      console.log("❌ ERRO na chamada OSRM:");
+      console.log("Mensagem de erro:", e.message);
+      console.log("Stack trace completo:");
+      console.log(e.stack);
+      console.log("==== LOG FIM: /api/rota/matrix (EXCEÇÃO) ====");
       return res.status(500).json({ error: 'Erro consultando OSRM', details: e.message });
     }
   });
 
   // Endpoint para resolver TSP via Python
   app.post('/api/rota/tsp', async (req, res) => {
+    console.log("==== LOG INÍCIO: /api/rota/tsp ====");
+    console.log("Dados recebidos no req.body:");
+    console.log(JSON.stringify(req.body, null, 2));
+    
     const { matrix } = req.body;
-    if (!matrix || !Array.isArray(matrix)) return res.status(400).json({ error: 'Matriz inválida' });
+    if (!matrix || !Array.isArray(matrix)) {
+      console.log("❌ ERRO: Matriz inválida");
+      console.log("Matriz recebida:", matrix);
+      console.log("==== LOG FIM: /api/rota/tsp (ERRO) ====");
+      return res.status(400).json({ error: 'Matriz inválida' });
+    }
+
+    console.log("📊 Matriz para TSP:");
+    console.log(`Dimensões: ${matrix.length}x${matrix[0]?.length || 0}`);
+    console.log("Primeira linha da matriz:");
+    console.log(JSON.stringify(matrix[0], null, 2));
+    console.log("Matriz completa:");
+    console.log(JSON.stringify(matrix, null, 2));
 
     const { spawn } = require('child_process');
+    console.log("🐍 Iniciando processo Python...");
     const py = spawn('python', ['solve_tsp.py']);
     let output = '';
-    py.stdout.on('data', (data: Buffer) => output += data);
-    py.stderr.on('data', (data: Buffer) => console.error('py err:', data.toString()));
+    let errors = '';
+    
+    py.stdout.on('data', (data: Buffer) => {
+      const chunk = data.toString();
+      console.log("📝 Python stdout:", chunk);
+      output += chunk;
+    });
+    
+    py.stderr.on('data', (data: Buffer) => {
+      const errorChunk = data.toString();
+      console.log("❌ Python stderr:", errorChunk);
+      errors += errorChunk;
+    });
 
     py.on('close', (code: number) => {
+      console.log(`🔚 Processo Python finalizado com código: ${code}`);
+      console.log("📤 Output completo do Python:");
+      console.log(output);
+      
+      if (errors) {
+        console.log("⚠️ Erros do Python:");
+        console.log(errors);
+      }
+      
       try {
         const result = JSON.parse(output);
+        console.log("✅ Resultado TSP parseado:");
+        console.log(JSON.stringify(result, null, 2));
+        console.log("==== LOG FIM: /api/rota/tsp (SUCESSO) ====");
         return res.json(result);
       } catch (e: any) {
-        return res.status(500).json({ error: 'Erro no Python', details: output });
+        console.log("❌ ERRO ao parsear JSON do Python:");
+        console.log("Output original:", output);
+        console.log("Erro de parse:", e.message);
+        console.log("==== LOG FIM: /api/rota/tsp (ERRO PARSE) ====");
+        return res.status(500).json({ error: 'Erro no Python', details: output, parseError: e.message });
       }
     });
 
-    py.stdin.write(JSON.stringify({ matrix }));
+    const inputData = { matrix };
+    console.log("📤 Enviando dados para Python:");
+    console.log(JSON.stringify(inputData, null, 2));
+    
+    py.stdin.write(JSON.stringify(inputData));
     py.stdin.end();
+    console.log("✅ Dados enviados para Python, aguardando resposta...");
   });
 
   // Auth routes
@@ -387,11 +468,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/technicians", authenticateToken, async (req: any, res) => {
+    console.log("==== LOG INÍCIO: POST /api/technicians ====");
+    console.log("Dados recebidos:");
+    console.log(JSON.stringify(req.body, null, 2));
+    
     try {
       const technicianData = insertTechnicianSchema.parse(req.body);
+      console.log("✅ Dados validados pelo schema");
+      
       const technician = await storage.createTechnician(technicianData, req.user.userId);
+      console.log("✅ Técnico criado com sucesso:");
+      console.log(`ID: ${technician.id}, Nome: ${technician.name}`);
+      console.log("==== LOG FIM: POST /api/technicians (SUCESSO) ====");
+      
       res.json(technician);
     } catch (error: any) {
+      console.log("❌ ERRO ao criar técnico:");
+      console.log("Tipo do erro:", error.constructor.name);
+      console.log("Mensagem:", error.message);
+      if (error.name === 'ZodError') {
+        console.log("Erros de validação:");
+        console.log(JSON.stringify(error.errors, null, 2));
+      }
+      console.log("==== LOG FIM: POST /api/technicians (ERRO) ====");
+      
       res.status(400).json({ message: error.message });
     }
   });
@@ -641,16 +741,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch("/api/appointments/:id", authenticateToken, async (req: any, res) => {
+    console.log(`==== LOG INÍCIO: PATCH /api/appointments/${req.params.id} ====`);
+    console.log("Dados recebidos:");
+    console.log(JSON.stringify(req.body, null, 2));
+    
     try {
       const id = parseInt(req.params.id);
       const appointmentData = req.body;
 
       // (repete o tratamento do campo scheduledDate, igual ao PUT)
       if (appointmentData.scheduledDate) {
+        console.log(`📅 [PATCH] Data recebida: ${appointmentData.scheduledDate}`);
         if (typeof appointmentData.scheduledDate === 'string') {
-          // ok
+          console.log("✅ [PATCH] Data já é string");
         } else if (appointmentData.scheduledDate instanceof Date) {
           appointmentData.scheduledDate = appointmentData.scheduledDate.toISOString();
+          console.log(`🔄 [PATCH] Data convertida: ${appointmentData.scheduledDate}`);
         } else {
           try {
             const dateObj = new Date(appointmentData.scheduledDate);
@@ -658,28 +764,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
               throw new Error(`Data inválida: ${appointmentData.scheduledDate}`);
             }
             appointmentData.scheduledDate = dateObj.toISOString();
+            console.log(`🔄 [PATCH] Data parseada: ${appointmentData.scheduledDate}`);
           } catch (dateError) {
+            console.log(`❌ [PATCH] Erro ao processar data:`, dateError);
+            console.log("==== LOG FIM: PATCH /api/appointments (ERRO DATA) ====");
             return res.status(400).json({ message: `Data inválida: ${appointmentData.scheduledDate}` });
           }
         }
       }
 
       const appointment = await storage.updateAppointment(id, appointmentData, req.user.userId);
+      console.log(`✅ [PATCH] Agendamento ${id} atualizado com sucesso`);
+      console.log("==== LOG FIM: PATCH /api/appointments (SUCESSO) ====");
+      
       res.json(appointment);
     } catch (error: any) {
+      console.log(`❌ [PATCH] Erro ao atualizar agendamento ${req.params.id}:`);
+      console.log("Tipo do erro:", error.constructor.name);
+      console.log("Mensagem:", error.message);
+      console.log("==== LOG FIM: PATCH /api/appointments (ERRO) ====");
+      
       res.status(400).json({ message: error.message });
     }
   });
 
   app.delete("/api/appointments/:id", authenticateToken, async (req: any, res) => {
+    console.log(`==== LOG INÍCIO: DELETE /api/appointments/${req.params.id} ====`);
+    
     try {
       const id = parseInt(req.params.id);
+      console.log(`🗑️ Tentando deletar agendamento ID: ${id}`);
+      
       const success = await storage.deleteAppointment(id, req.user.userId);
       if (!success) {
+        console.log(`❌ Agendamento ${id} não encontrado para o usuário`);
+        console.log("==== LOG FIM: DELETE /api/appointments (NÃO ENCONTRADO) ====");
         return res.status(404).json({ message: "Appointment not found" });
       }
+      
+      console.log(`✅ Agendamento ${id} deletado com sucesso`);
+      console.log("==== LOG FIM: DELETE /api/appointments (SUCESSO) ====");
+      
       res.json({ message: "Appointment deleted successfully" });
     } catch (error: any) {
+      console.log(`❌ Erro ao deletar agendamento ${req.params.id}:`);
+      console.log("Tipo do erro:", error.constructor.name);
+      console.log("Mensagem:", error.message);
+      console.log("==== LOG FIM: DELETE /api/appointments (ERRO) ====");
+      
       res.status(500).json({ message: error.message });
     }
   });
@@ -867,104 +999,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Proxy OSRM para frontend
   console.log("Procurando arquivo em:", path.join(__dirname, 'osrm_url.txt'));
-  
-  // Novo endpoint: Otimização TSP com OSRM
-  //app.get("/api/optimize-trip", async (req, res) => {
-    try {
-      const coords = req.query.coords as string;
-      if (!coords) {
-        return res.status(400).json({ error: "Missing 'coords' parameter" });
-      }
-
-      // Validar que temos pelo menos dois pontos
-      const coordArray = coords.split(';');
-      if (coordArray.length < 2) {
-        return res.status(400).json({ error: "São necessárias pelo menos 2 coordenadas para otimizar uma rota" });
-      }
-
-      // Validar formato das coordenadas
-      for (const coord of coordArray) {
-        const parts = coord.split(',');
-        if (parts.length !== 2 || isNaN(parseFloat(parts[0])) || isNaN(parseFloat(parts[1]))) {
-          return res.status(400).json({ error: `Formato de coordenada inválido: ${coord}. Use formato: longitude,latitude` });
-        }
-      }
-
-      // Usar o endereço do OSRM
-      const OSRM_URL = getOsrmUrl()?.replace(/\/$/, '') || null;
-      if (!OSRM_URL) {
-        return res.status(500).json({ error: "Endereço OSRM não configurado. Crie/atualize o arquivo osrm_url.txt." });
-      }
-      
-      const osrmUrl = `${OSRM_URL}/trip/v1/driving/${coords}?source=first&destination=last&roundtrip=false&overview=full&geometries=geojson`;
-      console.log("🎯 Chamando OSRM TSP:", osrmUrl);
-      console.log("📍 Coordenadas para otimização:", coordArray.length, "pontos");
-      
-      const osrmRes = await fetch(osrmUrl, {
-        headers: { "ngrok-skip-browser-warning": "true" }
-      });
-      
-      if (!osrmRes.ok) {
-        const text = await osrmRes.text();
-        console.error("❌ Erro OSRM TSP:", text);
-        return res.status(500).json({ error: `OSRM TSP error: ${text.substring(0, 300)}` });
-      }
-      
-      const data = await osrmRes.json();
-      console.log("✅ Rota otimizada OSRM TSP calculada com sucesso");
-      console.log("🔄 Waypoints otimizados:", data.waypoints?.length || 0, "pontos");
-      return res.json(data);
-    } catch (err) {
-      console.error("❌ Erro no proxy OSRM TSP:", err);
-      return res.status(500).json({ error: "Erro no proxy OSRM TSP" });
-    }
-  });
 
   app.get("/api/route", async (req, res) => {
+    console.log("==== LOG INÍCIO: /api/route ====");
+    console.log("Query params recebidos:");
+    console.log(JSON.stringify(req.query, null, 2));
+    
     try {
       const coords = req.query.coords as string;
       if (!coords) {
+        console.log("❌ ERRO: Parâmetro 'coords' ausente");
+        console.log("==== LOG FIM: /api/route (ERRO) ====");
         return res.status(400).json({ error: "Missing 'coords' parameter" });
       }
 
       // Validar que temos pelo menos dois pontos
       const coordArray = coords.split(';');
+      console.log("📍 Array de coordenadas:");
+      console.log(`Total de pontos: ${coordArray.length}`);
+      console.log("Coordenadas individuais:");
+      coordArray.forEach((coord, idx) => {
+        console.log(`  ${idx + 1}: ${coord}`);
+      });
+      
       if (coordArray.length < 2) {
+        console.log("❌ ERRO: Coordenadas insuficientes");
+        console.log("==== LOG FIM: /api/route (ERRO) ====");
         return res.status(400).json({ error: "São necessárias pelo menos 2 coordenadas para calcular uma rota" });
       }
 
       // Validar formato das coordenadas
+      console.log("🔍 Validando formato das coordenadas...");
       for (const coord of coordArray) {
         const parts = coord.split(',');
         if (parts.length !== 2 || isNaN(parseFloat(parts[0])) || isNaN(parseFloat(parts[1]))) {
+          console.log(`❌ ERRO: Formato inválido para coordenada: ${coord}`);
+          console.log("==== LOG FIM: /api/route (ERRO FORMATO) ====");
           return res.status(400).json({ error: `Formato de coordenada inválido: ${coord}. Use formato: longitude,latitude` });
         }
       }
 
       // Usa o endereço da variável de ambiente, SEM barra no final!
       const OSRM_URL = getOsrmUrl()?.replace(/\/$/, '') || null;
+      console.log("🌐 OSRM_URL configurado:", OSRM_URL);
+      
       if (!OSRM_URL) {
+        console.log("❌ ERRO: OSRM_URL não configurado");
+        console.log("==== LOG FIM: /api/route (ERRO CONFIG) ====");
         return res.status(500).json({ error: "Endereço OSRM não configurado. Crie/atualize o arquivo osrm_url.txt." });
       }
       
       const osrmUrl = `${OSRM_URL}/route/v1/driving/${coords}?overview=full&geometries=geojson`;
-      console.log("🌐 Chamando OSRM:", osrmUrl);
+      console.log("🌐 URL completa para OSRM:");
+      console.log(osrmUrl);
       console.log("📍 Coordenadas validadas:", coordArray.length, "pontos");
       
+      console.log("🚀 Fazendo chamada para OSRM...");
       const osrmRes = await fetch(osrmUrl, {
         headers: { "ngrok-skip-browser-warning": "true" }
       });
+      
+      console.log("📦 Status da resposta OSRM:", osrmRes.status);
+      console.log("📦 Headers da resposta:");
+      console.log(JSON.stringify(Object.fromEntries(osrmRes.headers.entries()), null, 2));
+      
       if (!osrmRes.ok) {
         const text = await osrmRes.text();
-        console.error("❌ Erro OSRM:", text);
+        console.log("❌ ERRO OSRM - Resposta completa:");
+        console.log(text);
+        console.log("==== LOG FIM: /api/route (ERRO OSRM) ====");
         return res.status(500).json({ error: `OSRM error: ${text.substring(0, 300)}` });
       }
+      
       const data = await osrmRes.json();
       console.log("✅ Rota OSRM calculada com sucesso");
+      console.log("📊 Estrutura da resposta OSRM:");
+      console.log(`- Rotas encontradas: ${data.routes?.length || 0}`);
+      console.log(`- Waypoints: ${data.waypoints?.length || 0}`);
+      if (data.routes?.[0]) {
+        console.log(`- Distância: ${data.routes[0].distance}m`);
+        console.log(`- Duração: ${data.routes[0].duration}s`);
+      }
+      console.log("==== LOG FIM: /api/route (SUCESSO) ====");
+      
       return res.json(data);
-    } catch (err) {
-      console.error("❌ Erro no proxy OSRM:", err);
-      return res.status(500).json({ error: "Erro no proxy OSRM" });
+    } catch (err: any) {
+      console.log("❌ ERRO EXCEÇÃO no proxy OSRM:");
+      console.log("Mensagem:", err.message);
+      console.log("Stack trace:");
+      console.log(err.stack);
+      console.log("==== LOG FIM: /api/route (EXCEÇÃO) ====");
+      return res.status(500).json({ error: "Erro no proxy OSRM", details: err.message });
     }
   });
 

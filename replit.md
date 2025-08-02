@@ -55,6 +55,40 @@ Stack:
 
 **Resultado**: Sistema de otimização mais robusto usando OR-Tools ao invés de OSRM TSP
 
+### 02 de agosto de 2025 - Logs Detalhados para Debug do Backend
+
+**Funcionalidade implementada**: Sistema completo de logs detalhados para todos os endpoints principais
+
+**Melhorias implementadas**:
+
+1. **Logs padronizados com divisores visuais**:
+   - Formato: `==== LOG INÍCIO: [ENDPOINT] ====` e `==== LOG FIM: [STATUS] ====`
+   - Status específicos: SUCESSO, ERRO, EXCEÇÃO, NÃO ENCONTRADO
+   - Logs 100% visíveis no console do Replit sem truncamento
+
+2. **Uso de JSON.stringify para objetos**:
+   - Todos os objetos logados com `JSON.stringify(objeto, null, 2)`
+   - Arrays grandes mostram apenas campos principais
+   - Logs organizados em múltiplas linhas para facilitar leitura
+
+3. **Logs específicos por endpoint**:
+   - **`/api/rota/matrix`**: URL OSRM, coordenadas formatadas, resposta completa
+   - **`/api/rota/tsp`**: Dados para Python, stdout/stderr em tempo real, resultado parseado
+   - **`/api/route`**: Query params, validação de coordenadas, headers de resposta
+   - **`POST /api/technicians`**: Dados recebidos, validação schema, erros Zod detalhados
+   - **`PATCH/DELETE /api/appointments`**: IDs processados, dados de update, status
+
+4. **Tratamento completo de erros**:
+   - Stack traces completos para exceções
+   - Tipo do erro (constructor.name)
+   - Mensagens de erro específicas
+   - Logs de Python stderr em tempo real
+
+**Arquivos modificados**:
+- **server/routes.ts**: Todos os endpoints principais com logs detalhados
+
+**Resultado**: Debugging 100% eficiente com logs completos visíveis no console do Replit
+
 ### 25 de julho de 2025 - Padronização para PostgreSQL/Supabase
 
 **Funcionalidade implementada**: Remoção completa de dependências Neon e padronização para PostgreSQL padrão
