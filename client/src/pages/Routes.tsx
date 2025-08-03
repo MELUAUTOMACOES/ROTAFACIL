@@ -24,6 +24,9 @@ interface OptimizedRoute {
   matrixDurations?: number[][];
   matrixDistances?: number[][];
   tspOrder?: number[];
+  startAddress?: string;
+  startToFirstDistance?: string;
+  startToFirstDuration?: string;
 }
 
 interface RouteStep {
@@ -158,6 +161,7 @@ export default function Routes() {
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false);
+  const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
   const { toast } = useToast();
 
   // Monitor fullscreen changes and DOM state
@@ -461,6 +465,8 @@ export default function Routes() {
       return;
     }
 
+    setIsOptimizing(true);
+
     try {
       console.log("🚀 Iniciando otimização de rota...");
       
@@ -523,6 +529,9 @@ export default function Routes() {
       console.log("🌍 Geocodificando endereço de início com fallbacks...");
       const coordenadaInicio = await geocodeComFallbacks(entity, businessRules);
       console.log("✅ Coordenada de início:", coordenadaInicio);
+      
+      // Capturar endereço de início formatado para exibição
+      const enderecoInicioFormatado = getStartAddress(selecionados[0]);
 
       // 7. Geocodificar todos os destinos com logs detalhados
       console.log("🌍 Geocodificando destinos...");
@@ -607,7 +616,18 @@ export default function Routes() {
       console.log("Matriz durações:", matrixDurations);
       console.log("Matriz distâncias:", matrixDistances);
 
-      // Calcular para cada trecho da rota otimizada
+      // Incluir trecho do início (índice 0) até o primeiro ponto na soma total
+      if (tspOrder.length > 1) {
+        const startToFirstTimeSec = matrixDurations[0][tspOrder[1]];
+        const startToFirstDistM = matrixDistances ? matrixDistances[0][tspOrder[1]] : 0;
+        
+        totalTime += startToFirstTimeSec;
+        totalDistance += startToFirstDistM;
+        
+        console.log(`📍 Início até primeiro ponto incluído nos totais: ${(startToFirstDistM / 1000).toFixed(1)} km / ${Math.round(startToFirstTimeSec / 60)} min`);
+      }
+
+      // Calcular para cada trecho da rota otimizada (entre os pontos da sequência)
       for (let i = 1; i < tspOrder.length; i++) {
         const from = tspOrder[i - 1];
         const to = tspOrder[i];
@@ -642,6 +662,21 @@ export default function Routes() {
         (totalDistance / 1000).toFixed(1) : 
         "0";
 
+      // Calcular distância e tempo do início ao primeiro ponto
+      const firstPointIndex = tspOrder.length > 1 ? tspOrder[1] : null;
+      let startToFirstDistance = "—";
+      let startToFirstDuration = "—";
+      
+      if (firstPointIndex !== null) {
+        const startToFirstTimeSec = matrixDurations[0][firstPointIndex];
+        const startToFirstDistM = matrixDistances ? matrixDistances[0][firstPointIndex] : 0;
+        
+        startToFirstDistance = startToFirstDistM > 0 ? (startToFirstDistM / 1000).toFixed(1) + " km" : "—";
+        startToFirstDuration = startToFirstTimeSec > 0 ? Math.round(startToFirstTimeSec / 60) + " min" : "—";
+        
+        console.log(`📍 Início até primeiro ponto: ${startToFirstDistance} / ${startToFirstDuration}`);
+      }
+
       console.log("📊 Totais calculados:");
       console.log(`- Tempo total: ${totalTimeFormatted} (${totalTime}s)`);
       console.log(`- Distância total: ${totalDistanceFormatted} km (${totalDistance}m)`);
@@ -655,7 +690,10 @@ export default function Routes() {
         routeSteps: routeSteps,
         matrixDurations: matrixDurations,
         matrixDistances: matrixDistances,
-        tspOrder: tspOrder
+        tspOrder: tspOrder,
+        startAddress: enderecoInicioFormatado,
+        startToFirstDistance: startToFirstDistance,
+        startToFirstDuration: startToFirstDuration
       });
 
       toast({
@@ -671,6 +709,8 @@ export default function Routes() {
         description: `Falha ao otimizar rota: ${error.message || error}`,
         variant: "destructive",
       });
+    } finally {
+      setIsOptimizing(false);
     }
   };
 
@@ -870,11 +910,11 @@ export default function Routes() {
                 
                 <Button 
                   onClick={handleOptimizeRoute}
-                  disabled={selectedAppointments.length === 0 || optimizeRouteMutation.isPending}
+                  disabled={selectedAppointments.length === 0 || isOptimizing}
                   className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white flex-1 sm:flex-none"
                   type="button"
                 >
-                  {optimizeRouteMutation.isPending ? (
+                  {isOptimizing ? (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
                   ) : (
                     <Route className="h-4 w-4 mr-2" />
@@ -1037,8 +1077,18 @@ export default function Routes() {
                 Rota Otimizada
               </CardTitle>
               {optimizedRoute && (
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">Distância total:</span> {optimizedRoute.totalDistance} km
+                <div className="flex flex-col items-end">
+                  <span className="text-sm text-gray-600">
+                    Distância total: <span className="text-blue-600 font-semibold">{optimizedRoute.totalDistance} km</span>
+                  </span>
+                  <span className="text-sm text-gray-600">
+                    Tempo total estimado: <span className="text-green-600 font-semibold">
+                      {optimizedRoute.estimatedTime > 60 
+                        ? `${Math.floor(optimizedRoute.estimatedTime / 60)}h ${optimizedRoute.estimatedTime % 60}min`
+                        : `${optimizedRoute.estimatedTime}min`
+                      }
+                    </span>
+                  </span>
                 </div>
               )}
             </div>
@@ -1063,6 +1113,14 @@ export default function Routes() {
                   </div>
                 </div>
                 
+                {/* Loading warning */}
+                {isOptimizing && (
+                  <div className="flex items-center justify-center text-yellow-700 font-medium my-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-700 mr-2" />
+                    Otimizando rota, aguarde...
+                  </div>
+                )}
+
                 {/* Route Steps */}
                 <div className="space-y-4">
                   <h4 className="font-medium text-gray-900 flex items-center">
@@ -1070,15 +1128,42 @@ export default function Routes() {
                     Sequência da Rota
                   </h4>
                   
+                  {/* Card de início da rota */}
+                  {optimizedRoute.startAddress && (
+                    <div className="flex items-start space-x-4 border-b border-gray-100 pb-4">
+                      <div className="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center text-white font-medium text-sm flex-shrink-0">
+                        📍
+                      </div>
+                      <div className="flex-1">
+                        <h5 className="font-medium text-gray-900">Início da rota</h5>
+                        <p className="text-sm text-gray-600">{optimizedRoute.startAddress}</p>
+                        <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                          <span>—</span>
+                          <span className="text-gray-400">—</span>
+                          <span className="text-gray-400">—</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   {optimizedRoute.optimizedOrder.map((appointment, index) => {
                     const client = getClient(appointment.clientId);
                     const service = getService(appointment.serviceId);
                     const { time } = formatDateTime(appointment.scheduledDate.toString());
                     
-                    // Pegar dados reais do trecho (ou início para o primeiro)
-                    const routeStep = optimizedRoute.routeSteps?.[index];
-                    const distance = index === 0 ? "—" : (routeStep?.distance || "—");
-                    const duration = index === 0 ? "—" : (routeStep?.duration || "—");
+                    // Pegar dados reais do trecho
+                    let distance, duration;
+                    
+                    if (index === 0) {
+                      // Para o primeiro ponto, usar dados do início até ele
+                      distance = optimizedRoute.startToFirstDistance || "—";
+                      duration = optimizedRoute.startToFirstDuration || "—";
+                    } else {
+                      // Para os demais, usar dados do trecho anterior
+                      const routeStep = optimizedRoute.routeSteps?.[index];
+                      distance = routeStep?.distance || "—";
+                      duration = routeStep?.duration || "—";
+                    }
                     
                     return (
                       <div key={appointment.id} className="flex items-start space-x-4">
@@ -1092,12 +1177,9 @@ export default function Routes() {
                           </p>
                           <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
                             <span>{time}</span>
-                            <span className={index === 0 ? "text-gray-400" : "text-blue-600 font-medium"}>{distance}</span>
-                            <span className={index === 0 ? "text-gray-400" : "text-green-600 font-medium"}>{duration}</span>
+                            <span className="text-blue-600 font-medium">{distance}</span>
+                            <span className="text-green-600 font-medium">{duration}</span>
                           </div>
-                          {index === 0 && (
-                            <p className="text-xs text-gray-400 mt-1">(ponto de início)</p>
-                          )}
                         </div>
                       </div>
                     );
@@ -1109,7 +1191,7 @@ export default function Routes() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-gray-600">Tempo total estimado:</span>
-                      <span className="font-medium text-gray-900">
+                      <span className="font-medium text-green-600">
                         {optimizedRoute.estimatedTime > 60 
                           ? `${Math.floor(optimizedRoute.estimatedTime / 60)}h ${optimizedRoute.estimatedTime % 60}min`
                           : `${optimizedRoute.estimatedTime}min`

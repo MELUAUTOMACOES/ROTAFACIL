@@ -55,6 +55,43 @@ Stack:
 
 **Resultado**: Sistema de otimização mais robusto usando OR-Tools ao invés de OSRM TSP
 
+### 02 de agosto de 2025 - Interface de Rota Otimizada Aprimorada com UX Melhorado
+
+**Funcionalidade implementada**: Interface de rota otimizada completamente redesenhada com cálculos precisos e melhor experiência do usuário
+
+**Melhorias implementadas**:
+
+1. **Card de início da rota**:
+   - Novo card especial mostrando endereço de partida (empresa ou técnico/equipe)
+   - Posicionado antes da sequência numerada
+   - Visual distintivo com ícone 📍 e fundo cinza
+
+2. **Cálculos de tempo e distância exatos**:
+   - Backend modificado para incluir matriz de distâncias (`?annotations=duration,distance`)
+   - Tempo/distância do início até primeiro ponto incluídos nos totais
+   - Cada card mostra tempo/distância do trecho anterior (dados reais OSRM)
+
+3. **Cabeçalho aprimorado**:
+   - Distância total em azul (`text-blue-600`)
+   - Tempo total em verde (`text-green-600`)
+   - Layout responsivo com informações alinhadas à direita
+
+4. **Aviso de carregamento**:
+   - Banner amarelo com spinner durante otimização
+   - Estado `isOptimizing` controla interface
+   - Botão desabilitado durante processamento
+
+5. **Consistência visual**:
+   - Cores padronizadas: azul para distância, verde para tempo
+   - Aplicadas em cards individuais e totais
+   - Formatação unificada (km/min)
+
+**Arquivos modificados**:
+- **server/routes.ts**: Endpoint `/api/rota/matrix` atualizado para incluir distâncias
+- **client/src/pages/Routes.tsx**: Interface completamente redesenhada com UX melhorado
+
+**Resultado**: Interface clara e precisa mostrando rota otimizada com dados exatos do OSRM e melhor experiência do usuário
+
 ### 02 de agosto de 2025 - Logs Detalhados para Debug do Backend
 
 **Funcionalidade implementada**: Sistema completo de logs detalhados para todos os endpoints principais
