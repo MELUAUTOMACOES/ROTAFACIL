@@ -77,12 +77,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     const coordStr = coords.map((c: number[]) => c.join(',')).join(';');
-    const osrmUrl = `http://localhost:5000/table/v1/driving/${coordStr}?annotations=duration`;
+    const OSRM_URL = getOsrmUrl()?.replace(/\/$/, '') || null;
+    console.log("🌐 OSRM_URL configurado:", OSRM_URL);
 
-    console.log("🌐 URL para OSRM:");
+    if (!OSRM_URL) {
+      console.log("❌ ERRO: OSRM_URL não configurado");
+      console.log("==== LOG FIM: /api/rota/matrix (ERRO CONFIG) ====");
+      return res.status(500).json({ error: "Endereço OSRM não configurado. Crie/atualize o arquivo osrm_url.txt." });
+    }
+
+    const osrmUrl = `${OSRM_URL}/table/v1/driving/${coordStr}?annotations=duration,distance`;
+    console.log("🌐 URL completa para OSRM:");
     console.log(osrmUrl);
-    console.log("📍 Coordenadas formatadas:");
-    console.log(JSON.stringify(coords, null, 2));
     
     try {
       console.log("🚀 Fazendo chamada para OSRM...");
@@ -92,17 +98,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("📦 Resposta completa do OSRM:");
       console.log(JSON.stringify(data, null, 2));
       
-      if (!data.durations) {
-        console.log("❌ ERRO: OSRM não retornou durations");
+      if (!data.durations || !data.distances) {
+        console.log("❌ ERRO: OSRM não retornou durations ou distances");
         console.log("==== LOG FIM: /api/rota/matrix (ERRO OSRM) ====");
-        return res.status(500).json({ error: 'OSRM não respondeu corretamente' });
+        return res.status(500).json({ error: 'OSRM não respondeu corretamente - durations ou distances não encontradas' });
       }
       
       console.log("✅ Matriz de durações extraída:");
       console.log(JSON.stringify(data.durations, null, 2));
+      console.log("✅ Matriz de distâncias extraída:");
+      console.log(JSON.stringify(data.distances, null, 2));
       console.log("==== LOG FIM: /api/rota/matrix (SUCESSO) ====");
       
-      return res.json({ matrix: data.durations });
+      return res.json({ 
+        matrix: data.durations,
+        durations: data.durations,
+        distances: data.distances
+      });
     } catch (e: any) {
       console.log("❌ ERRO na chamada OSRM:");
       console.log("Mensagem de erro:", e.message);
@@ -134,9 +146,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log("Matriz completa:");
     console.log(JSON.stringify(matrix, null, 2));
 
-    const { spawn } = require('child_process');
+    const { spawn } = await import('child_process');
     console.log("🐍 Iniciando processo Python...");
-    const py = spawn('python', ['solve_tsp.py']);
+    const py = spawn('python3', ['./server/solve_tsp.py']);
     let output = '';
     let errors = '';
     

@@ -20,6 +20,18 @@ interface OptimizedRoute {
   totalDistance: number;
   estimatedTime: number;
   geojson?: any;
+  routeSteps?: RouteStep[];
+  matrixDurations?: number[][];
+  matrixDistances?: number[][];
+  tspOrder?: number[];
+}
+
+interface RouteStep {
+  appointmentIndex: number;
+  distance: string;
+  duration: string;
+  distanceMeters: number;
+  durationSeconds: number;
 }
 
 async function geocodeEndereco(endereco: string) {
@@ -581,12 +593,69 @@ export default function Routes() {
 
       console.log("📋 Agendamentos reordenados conforme otimização:", agendamentosOtimizados.length);
 
-      // 14. Atualize a tela com a rota otimizada!
+      // 14. Calcular tempo e distância exatos usando as matrizes OSRM
+      const matrixDurations = matrixData.durations || matrixData.matrix; // fallback para compatibilidade
+      const matrixDistances = matrixData.distances;
+      const tspOrder = tspData.order;
+
+      let totalTime = 0;
+      let totalDistance = 0;
+      const routeSteps: RouteStep[] = [];
+
+      console.log("🧮 Calculando tempos e distâncias exatos...");
+      console.log("Ordem TSP:", tspOrder);
+      console.log("Matriz durações:", matrixDurations);
+      console.log("Matriz distâncias:", matrixDistances);
+
+      // Calcular para cada trecho da rota otimizada
+      for (let i = 1; i < tspOrder.length; i++) {
+        const from = tspOrder[i - 1];
+        const to = tspOrder[i];
+        
+        const timeSec = matrixDurations[from][to];
+        const distM = matrixDistances ? matrixDistances[from][to] : 0;
+        
+        totalTime += timeSec;
+        totalDistance += distM;
+        
+        // Formatar para exibição
+        const distanceKm = distM > 0 ? (distM / 1000).toFixed(1) + " km" : "—";
+        const durationMin = timeSec > 0 ? Math.round(timeSec / 60) + " min" : "—";
+        
+        routeSteps.push({
+          appointmentIndex: i - 1, // índice no array agendamentosOtimizados
+          distance: distanceKm,
+          duration: durationMin,
+          distanceMeters: distM,
+          durationSeconds: timeSec
+        });
+        
+        console.log(`📍 Trecho ${i}: de ${from} para ${to} = ${distanceKm} / ${durationMin}`);
+      }
+
+      // Formatar totais
+      const totalTimeFormatted = totalTime > 0 ? 
+        `${Math.floor(totalTime / 3600)}h ${Math.round((totalTime % 3600) / 60)}min` : 
+        "0min";
+      
+      const totalDistanceFormatted = totalDistance > 0 ? 
+        (totalDistance / 1000).toFixed(1) : 
+        "0";
+
+      console.log("📊 Totais calculados:");
+      console.log(`- Tempo total: ${totalTimeFormatted} (${totalTime}s)`);
+      console.log(`- Distância total: ${totalDistanceFormatted} km (${totalDistance}m)`);
+
+      // 15. Atualize a tela com a rota otimizada!
       setOptimizedRoute({
         optimizedOrder: agendamentosOtimizados,
-        totalDistance: 0, // pode deixar 0 por enquanto
-        estimatedTime: 0,
+        totalDistance: parseFloat(totalDistanceFormatted),
+        estimatedTime: Math.round(totalTime / 60), // em minutos
         geojson: null,
+        routeSteps: routeSteps,
+        matrixDurations: matrixDurations,
+        matrixDistances: matrixDistances,
+        tspOrder: tspOrder
       });
 
       toast({
@@ -1005,9 +1074,11 @@ export default function Routes() {
                     const client = getClient(appointment.clientId);
                     const service = getService(appointment.serviceId);
                     const { time } = formatDateTime(appointment.scheduledDate.toString());
-                    // Simulate distance and duration for each stop
-                    const distance = (Math.random() * 5 + 1).toFixed(1);
-                    const duration = Math.round(Math.random() * 10 + 5);
+                    
+                    // Pegar dados reais do trecho (ou início para o primeiro)
+                    const routeStep = optimizedRoute.routeSteps?.[index];
+                    const distance = index === 0 ? "—" : (routeStep?.distance || "—");
+                    const duration = index === 0 ? "—" : (routeStep?.duration || "—");
                     
                     return (
                       <div key={appointment.id} className="flex items-start space-x-4">
@@ -1021,9 +1092,12 @@ export default function Routes() {
                           </p>
                           <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
                             <span>{time}</span>
-                            <span>{distance} km</span>
-                            <span>{duration} min</span>
+                            <span className={index === 0 ? "text-gray-400" : "text-blue-600 font-medium"}>{distance}</span>
+                            <span className={index === 0 ? "text-gray-400" : "text-green-600 font-medium"}>{duration}</span>
                           </div>
+                          {index === 0 && (
+                            <p className="text-xs text-gray-400 mt-1">(ponto de início)</p>
+                          )}
                         </div>
                       </div>
                     );
@@ -1032,18 +1106,27 @@ export default function Routes() {
                 
                 {/* Route Summary */}
                 <div className="mt-6 pt-6 border-t border-gray-200">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-gray-600">Tempo total estimado:</span>
                       <span className="font-medium text-gray-900">
-                        {Math.floor(optimizedRoute.estimatedTime / 60)}h {optimizedRoute.estimatedTime % 60}min
+                        {optimizedRoute.estimatedTime > 60 
+                          ? `${Math.floor(optimizedRoute.estimatedTime / 60)}h ${optimizedRoute.estimatedTime % 60}min`
+                          : `${optimizedRoute.estimatedTime}min`
+                        }
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Distância total:</span>
+                      <span className="font-medium text-blue-600">
+                        {optimizedRoute.totalDistance} km
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between sm:col-span-2">
                       <span className="text-gray-600">Economia de combustível:</span>
                       <span className="font-medium text-green-600 flex items-center">
                         <TrendingUp className="h-3 w-3 mr-1" />
-                        25%
+                        Rota otimizada
                       </span>
                     </div>
                   </div>
