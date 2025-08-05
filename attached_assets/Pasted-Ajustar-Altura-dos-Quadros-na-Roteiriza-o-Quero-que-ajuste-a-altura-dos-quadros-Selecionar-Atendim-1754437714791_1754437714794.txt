@@ -1,0 +1,45 @@
+Ajustar Altura dos Quadros na Roteirização
+Quero que ajuste a altura dos quadros “Selecionar Atendimentos” e “Rota Otimizada” na tela de roteirização para que fiquem sempre do mesmo tamanho, mesmo após expandir o resultado da rota.
+
+O QUE QUERO:
+Quando a área de “Rota Otimizada” crescer/expandir após a otimização, a área de “Selecionar Atendimentos” também deve crescer junto e ocupar toda a altura disponível, para que os dois quadros fiquem simétricos e alinhados.
+
+Antes de otimizar, ambos os quadros devem ter o mesmo tamanho (menor), como na tela inicial.
+
+Depois de otimizar, ambos devem se expandir juntos, sem deixar espaço em branco embaixo de “Selecionar Atendimentos”.
+
+O scroll da lista de atendimentos deve aparecer só se realmente passar do tamanho do quadro, acompanhando a expansão do container.
+
+COMO QUERO QUE FAÇA:
+Use flexbox ou grid para garantir que as duas colunas tenham a mesma altura sempre, independente do conteúdo interno.
+
+Pode ajustar a altura mínima dos dois containers para ficarem sempre iguais.
+
+Evite setar height fixa, prefira height: 100%, min-height e uso de flex: 1 ou flex-grow para garantir o alinhamento responsivo.
+
+No React/Tailwind, normalmente isso é feito colocando ambos dentro de um container flex ou grid com items-stretch e usando h-full ou flex-1 nos filhos.
+
+Se necessário, mostre como ficou a estrutura do componente pai e dos dois filhos (os containers das duas colunas), mostrando onde devo alterar.
+
+EXEMPLO DE AJUSTE (para orientar):
+ANTES (Exemplo):
+
+jsx
+Copiar
+Editar
+<div className="grid grid-cols-2 gap-4">
+  <div className="bg-white rounded-xl p-4 shadow"> {/* Selecionar Atendimentos */}</div>
+  <div className="bg-white rounded-xl p-4 shadow"> {/* Rota Otimizada */}</div>
+</div>
+DEPOIS (Ajustado):
+
+jsx
+Copiar
+Editar
+<div className="grid grid-cols-2 gap-4 items-stretch min-h-[520px]">
+  <div className="bg-white rounded-xl p-4 shadow h-full flex flex-col">{/* Selecionar Atendimentos */}</div>
+  <div className="bg-white rounded-xl p-4 shadow h-full flex flex-col">{/* Rota Otimizada */}</div>
+</div>
+Use items-stretch no grid/flex e h-full flex-1 nos filhos para que cresçam juntos.
+
+Se a lista de atendimentos for muito longa, deixe o scroll só dentro da lista, mas o quadro de fora cresce junto com a "Rota Otimizada".

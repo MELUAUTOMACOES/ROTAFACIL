@@ -20,6 +20,43 @@ Stack:
 
 ## Mudanças Recentes
 
+### 06 de janeiro de 2025 - Funcionalidade "Terminar no Ponto Inicial" e Ajustes de UX
+
+**Funcionalidade implementada**: Sistema completo de otimização de rotas com escolha entre rotas circulares e abertas, incluindo melhorias de UX
+
+**Funcionalidades implementadas**:
+
+1. **Checkbox "Terminar no ponto inicial"**:
+   - Componente Shadcn/UI elegante com visual aprimorado
+   - Controle entre rota circular (volta ao início) vs rota aberta (termina no último cliente)
+   - Ícone Repeat2 e card destacado com borda dourada tracejada
+   - Descrições contextuais explicando cada opção
+
+2. **Loading state profissional**:
+   - Spinner Loader2 animado durante otimização
+   - Estado isOptimizing controla interface completa
+   - Loading sempre visível independente de rota anterior existir
+
+3. **Altura simétrica dos cards**:
+   - Grid com `items-stretch` e `min-h-[520px]` para altura mínima consistente
+   - Cards com `h-full flex flex-col` para ocupar altura total disponível
+   - Content com `flex-1` para expansão automática
+   - Scroll apenas na lista de atendimentos, mantendo simetria dos containers
+
+4. **Backend integrado**:
+   - Parâmetro `terminarNoPontoInicial` enviado para `/api/rota/tsp`
+   - Script Python `solve_tsp.py` controlando tipo de rota com OR-Tools
+   - Logs detalhados mostrando escolha do usuário
+
+**Arquivos modificados**:
+- **client/src/pages/Routes.tsx**: 
+  - Novo checkbox com componentes Shadcn/UI
+  - Loading state com Loader2 spinner
+  - Estrutura flexbox para altura simétrica dos cards
+  - Controle completo do fluxo de otimização
+
+**Resultado**: Interface profissional com funcionalidade completa de escolha do tipo de rota e UX aprimorado
+
 ### 02 de agosto de 2025 - Migração para Sistema de Otimização OR-Tools
 
 **Funcionalidade implementada**: Migração do sistema de otimização de rotas do OSRM TSP para o novo fluxo com OR-Tools (Google)
