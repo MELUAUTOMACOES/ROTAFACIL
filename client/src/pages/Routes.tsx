@@ -162,6 +162,7 @@ export default function Routes() {
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false);
   const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
+  const [terminarNoPontoInicial, setTerminarNoPontoInicial] = useState<boolean>(false);
   const { toast } = useToast();
 
   // Monitor fullscreen changes and DOM state
@@ -586,7 +587,10 @@ export default function Routes() {
       const tspRes = await fetch("/api/rota/tsp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matrix: matrixData.matrix }),
+        body: JSON.stringify({ 
+          matrix: matrixData.matrix,
+          terminarNoPontoInicial // este campo novo!
+        }),
       });
       if (!tspRes.ok) {
         const errorText = await tspRes.text();
@@ -894,8 +898,27 @@ export default function Routes() {
               </Select>
             </div>
             
-            {/* Botões de ação dentro dos filtros */}
+            {/* Opção "Terminar no ponto inicial" */}
             <div className="col-span-full pt-4 border-t border-gray-100">
+              <div className="flex items-center gap-2 mb-3">
+                <input
+                  type="checkbox"
+                  id="terminarNoPontoInicial"
+                  checked={terminarNoPontoInicial}
+                  onChange={e => setTerminarNoPontoInicial(e.target.checked)}
+                  className="mr-2"
+                />
+                <label htmlFor="terminarNoPontoInicial" className="text-sm font-medium">
+                  Terminar no ponto inicial
+                </label>
+              </div>
+              
+              <span className="text-xs text-gray-500 block mb-3">
+                {terminarNoPontoInicial
+                  ? "A rota irá terminar no ponto inicial"
+                  : "A rota irá terminar no cliente mais distante"}
+              </span>
+              
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button 
                   onClick={handleSelectAllAppointments}

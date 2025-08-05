@@ -131,7 +131,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log("Dados recebidos no req.body:");
     console.log(JSON.stringify(req.body, null, 2));
     
-    const { matrix } = req.body;
+    const { matrix, terminarNoPontoInicial } = req.body;
     if (!matrix || !Array.isArray(matrix)) {
       console.log("❌ ERRO: Matriz inválida");
       console.log("Matriz recebida:", matrix);
@@ -189,7 +189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
 
-    const inputData = { matrix };
+    const inputData = { matrix, terminarNoPontoInicial };
     console.log("📤 Enviando dados para Python:");
     console.log(JSON.stringify(inputData, null, 2));
     
