@@ -37,11 +37,12 @@ Stack:
    - Estado isOptimizing controla interface completa
    - Loading sempre visível independente de rota anterior existir
 
-3. **Altura simétrica dos cards**:
-   - Grid com `items-stretch` e `min-h-[520px]` para altura mínima consistente
-   - Cards com `h-full flex flex-col` para ocupar altura total disponível
-   - Content com `flex-1` para expansão automática
-   - Scroll apenas na lista de atendimentos, mantendo simetria dos containers
+3. **Layout otimizado dos cards**:
+   - Grid com `items-start` para alinhamento natural no topo
+   - Cards com `max-h-[70vh]` para altura máxima controlada (70% da viewport)
+   - Lista de atendimentos com scroll interno (`overflow-y-auto`) e padding na scrollbar
+   - Mapa da rota otimizada compactado (`h-48`) para melhor aproveitamento do espaço
+   - Estados vazios com `min-h-[300px]` para manter proporção visual
 
 4. **Backend integrado**:
    - Parâmetro `terminarNoPontoInicial` enviado para `/api/rota/tsp`

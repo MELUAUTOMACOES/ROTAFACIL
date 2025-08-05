@@ -952,9 +952,9 @@ export default function Routes() {
         </CardContent>
       </Card>
 
-      <div className={`grid gap-6 items-stretch ${isFullscreen ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1 lg:grid-cols-2'} min-h-[520px]`}>
+      <div className={`grid gap-6 items-start ${isFullscreen ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1 lg:grid-cols-2'}`}>
         {/* Appointments Selection */}
-        <Card className="h-full flex flex-col">
+        <Card className="flex flex-col max-h-[70vh]">
           <CardHeader className="border-b border-gray-100 flex-shrink-0">
             <CardTitle className="flex items-center">
               <MapPin className="h-5 w-5 mr-2 text-burnt-yellow" />
@@ -964,9 +964,9 @@ export default function Routes() {
               Escolha os atendimentos para incluir na rota ({selectedAppointments.length} selecionados)
             </p>
           </CardHeader>
-          <CardContent className="p-6 flex-1 flex flex-col">
+          <CardContent className="p-6 flex-1 flex flex-col overflow-hidden">
             {Object.keys(filteredAndGroupedAppointments).length === 0 ? (
-              <div className="text-center py-8 flex-1 flex flex-col justify-center">
+              <div className="text-center py-8 flex-1 flex flex-col justify-center min-h-[300px]">
                 <Route className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600">Nenhum agendamento encontrado</p>
                 <p className="text-sm text-gray-500 mt-2">
@@ -974,7 +974,7 @@ export default function Routes() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-6 flex-1 overflow-y-auto">
+              <div className="space-y-6 flex-1 overflow-y-auto pr-2">
                 {Object.entries(filteredAndGroupedAppointments).map(([date, dayAppointments]) => (
                   <div key={date}>
                     <div className="flex items-center mb-3">
@@ -1094,7 +1094,7 @@ export default function Routes() {
         </Card>
         
         {/* Optimized Route */}
-        <Card className="h-full flex flex-col">
+        <Card className="flex flex-col max-h-[70vh]">
           <CardHeader className="border-b border-gray-100 flex-shrink-0">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center">
@@ -1118,7 +1118,7 @@ export default function Routes() {
               )}
             </div>
           </CardHeader>
-          <CardContent className="p-6 flex-1 flex flex-col">
+          <CardContent className="p-6 flex-1 flex flex-col overflow-hidden">
             {/* Sempre mostra o loading se isOptimizing, independente se já existe optimizedRoute */}
             {isOptimizing ? (
               <div className="flex-1 flex items-center justify-center">
@@ -1133,16 +1133,16 @@ export default function Routes() {
             ) : optimizedRoute ? (
               <div className="flex-1 flex flex-col">
                 {/* Map Placeholder */}
-                <div className="bg-gray-100 rounded-lg h-64 flex items-center justify-center mb-6 flex-shrink-0">
+                <div className="bg-gray-100 rounded-lg h-48 flex items-center justify-center mb-4 flex-shrink-0">
                   <div className="text-center">
-                    <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 font-medium">Mapa da rota otimizada</p>
-                    <p className="text-sm text-gray-500">Integração com Google Maps</p>
+                    <MapPin className="h-10 w-10 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-600 font-medium text-sm">Mapa da rota otimizada</p>
+                    <p className="text-xs text-gray-500">Integração com Google Maps</p>
                   </div>
                 </div>
 
                 {/* Route Steps */}
-                <div className="space-y-4 flex-1 overflow-y-auto">
+                <div className="space-y-4 flex-1 overflow-y-auto pr-2">
                   <h4 className="font-medium text-gray-900 flex items-center">
                     <Clock className="h-4 w-4 mr-2" />
                     Sequência da Rota
@@ -1235,7 +1235,7 @@ export default function Routes() {
                 </div>
               </div>
             ) : (
-              <div className="flex-1 flex flex-col justify-center items-center text-center py-8">
+              <div className="flex-1 flex flex-col justify-center items-center text-center py-8 min-h-[300px]">
                 <Route className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600">Selecione agendamentos e clique em "Otimizar Rota"</p>
                 <p className="text-sm text-gray-500 mt-2">
