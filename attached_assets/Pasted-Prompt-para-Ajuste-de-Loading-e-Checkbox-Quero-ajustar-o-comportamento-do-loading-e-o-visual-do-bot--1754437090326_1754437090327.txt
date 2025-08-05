@@ -1,0 +1,87 @@
+Prompt para Ajuste de Loading e Checkbox
+Quero ajustar o comportamento do loading e o visual do botão/checkbox "Terminar no ponto inicial" na tela de roteirização. Seguem os requisitos detalhados:
+
+1. Comportamento do Loading “Otimizando rota, aguarde...”
+O loading deve aparecer sempre no painel de “Rota Otimizada”, toda vez que o usuário clicar no botão “Otimizar Rota”, independente de já ter resultados anteriores ou não.
+
+O loading deve ocupar o mesmo espaço do card de rota otimizada, ou seja, substitui o conteúdo da rota enquanto está carregando. Veja imagem 1 (anexa) para referência.
+
+O loading só deve desaparecer quando os dados da rota forem realmente recebidos e renderizados.
+
+Exemplo de código para ajuste do loading:
+Antes (padrão atual):
+
+jsx
+Copiar
+Editar
+{rotaOtimizada && isLoading && (
+  <Alert variant="warning">Otimizando rota, aguarde...</Alert>
+)}
+{rotaOtimizada && !isLoading && (
+  <CardRotaOtimizada dados={rotaOtimizada} />
+)}
+Depois (ajustado para funcionar sempre):
+
+jsx
+Copiar
+Editar
+{/* Sempre mostra o loading se isLoading, independente se já existe rotaOtimizada */}
+{isLoading ? (
+  <Alert variant="warning" className="mt-6 mb-4 w-full">
+    <LoaderIcon className="mr-2 inline-block" />
+    Otimizando rota, aguarde...
+  </Alert>
+) : rotaOtimizada ? (
+  <CardRotaOtimizada dados={rotaOtimizada} />
+) : (
+  // Pode mostrar um card informativo padrão enquanto não houver rota otimizada
+  <Card className="mt-6 mb-4 w-full min-h-[180px] flex items-center justify-center text-muted-foreground">
+    <MapPinIcon className="mr-2" />
+    Nenhuma rota otimizada gerada ainda.
+  </Card>
+)}
+Garanta que o estado isLoading seja ativado antes da chamada da API e desativado apenas ao receber a resposta.
+
+2. Visual do Checkbox “Terminar no ponto inicial”
+O checkbox precisa ficar mais chamativo e harmonioso, ocupando mais espaço vertical e ficando destacado acima dos botões.
+
+Use os componentes de UI do projeto, por exemplo, do Shadcn/UI, e acrescente uma borda leve, sombra sutil e um pequeno ícone para chamar atenção.
+
+Pode adicionar um texto de ajuda logo abaixo, como já está, mas com uma fonte menor e cor cinza.
+
+Exemplo de código sugerido:
+jsx
+Copiar
+Editar
+<Card className="p-4 mb-3 border-2 border-dashed border-yellow-600 bg-yellow-50/60 rounded-2xl shadow-sm flex items-center gap-3">
+  <Checkbox
+    id="terminarNoPontoInicial"
+    checked={terminarNoPontoInicial}
+    onCheckedChange={setTerminarNoPontoInicial}
+    className="w-5 h-5 accent-yellow-600 focus:ring-2 focus:ring-yellow-700"
+  />
+  <label htmlFor="terminarNoPontoInicial" className="font-medium text-base flex items-center gap-2 cursor-pointer">
+    <Repeat2Icon className="text-yellow-700 w-5 h-5" />
+    Terminar no ponto inicial
+  </label>
+</Card>
+<p className="text-xs text-muted-foreground ml-1 mb-4">
+  (A rota irá terminar no mesmo local de início. Se não marcado, termina no cliente mais distante.)
+</p>
+Ajuste o espaçamento, bordas e cores conforme o padrão visual do sistema!
+
+3. Checklist Rápido
+ O loading deve aparecer SEMPRE enquanto a requisição da rota está em andamento, mesmo na primeira otimização.
+
+ O loading some apenas quando a resposta chega e a rota otimizada é exibida.
+
+ O checkbox “Terminar no ponto inicial” fica mais destacado e agradável visualmente.
+
+ O aviso de ajuda do checkbox fica menor e com cor mais suave.
+
+ Não remover nenhum fluxo existente, apenas melhorar o que foi descrito acima.
+
+
+Se precisar de algum estado ou contexto novo, crie com nomes claros como isLoading, rotaOtimizada, e terminarNoPontoInicial.
+
+Se precisar de algum ajuste extra para UX, avise no final do ajuste.

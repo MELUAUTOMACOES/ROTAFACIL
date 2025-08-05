@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Route, MapPin, Clock, Navigation, TrendingUp, Filter, Search, Calendar, CheckSquare, Edit } from "lucide-react";
+import { Route, MapPin, Clock, Navigation, TrendingUp, Filter, Search, Calendar, CheckSquare, Edit, Repeat2, Loader2 } from "lucide-react";
 import type { Appointment, Client, Service, Technician, Team, User } from "@shared/schema";
 import { getPlanLimits } from "@shared/plan-limits";
 import AppointmentForm from "@/components/forms/AppointmentForm";
@@ -900,24 +900,26 @@ export default function Routes() {
             
             {/* Opção "Terminar no ponto inicial" */}
             <div className="col-span-full pt-4 border-t border-gray-100">
-              <div className="flex items-center gap-2 mb-3">
-                <input
-                  type="checkbox"
-                  id="terminarNoPontoInicial"
-                  checked={terminarNoPontoInicial}
-                  onChange={e => setTerminarNoPontoInicial(e.target.checked)}
-                  className="mr-2"
-                />
-                <label htmlFor="terminarNoPontoInicial" className="text-sm font-medium">
-                  Terminar no ponto inicial
-                </label>
-              </div>
+              <Card className="p-4 mb-3 border-2 border-dashed border-burnt-yellow bg-burnt-yellow/5 rounded-2xl shadow-sm">
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    id="terminarNoPontoInicial"
+                    checked={terminarNoPontoInicial}
+                    onCheckedChange={(checked) => setTerminarNoPontoInicial(checked === true)}
+                    className="w-5 h-5 data-[state=checked]:bg-burnt-yellow data-[state=checked]:border-burnt-yellow"
+                  />
+                  <label htmlFor="terminarNoPontoInicial" className="font-medium text-base flex items-center gap-2 cursor-pointer">
+                    <Repeat2 className="text-burnt-yellow w-5 h-5" />
+                    Terminar no ponto inicial
+                  </label>
+                </div>
+              </Card>
               
-              <span className="text-xs text-gray-500 block mb-3">
+              <p className="text-xs text-gray-500 ml-1 mb-4">
                 {terminarNoPontoInicial
-                  ? "A rota irá terminar no ponto inicial"
-                  : "A rota irá terminar no cliente mais distante"}
-              </span>
+                  ? "A rota irá terminar no mesmo local de início. Ideal para técnicos que voltam à empresa."
+                  : "A rota termina no cliente mais distante. Ideal para técnicos que encerram o dia no último cliente."}
+              </p>
               
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button 
@@ -1117,15 +1119,18 @@ export default function Routes() {
             </div>
           </CardHeader>
           <CardContent className="p-6">
-            {!optimizedRoute ? (
-              <div className="text-center py-8">
-                <Route className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">Selecione agendamentos e clique em "Otimizar Rota"</p>
-                <p className="text-sm text-gray-500 mt-2">
-                  A rota otimizada aparecerá aqui
-                </p>
+            {/* Sempre mostra o loading se isOptimizing, independente se já existe optimizedRoute */}
+            {isOptimizing ? (
+              <div className="min-h-[300px] flex items-center justify-center">
+                <div className="text-center">
+                  <Loader2 className="h-12 w-12 text-burnt-yellow mx-auto mb-4 animate-spin" />
+                  <p className="text-lg font-medium text-gray-900 mb-2">Otimizando rota, aguarde...</p>
+                  <p className="text-sm text-gray-500">
+                    Calculando a melhor sequência de atendimentos
+                  </p>
+                </div>
               </div>
-            ) : (
+            ) : optimizedRoute ? (
               <div>
                 {/* Map Placeholder */}
                 <div className="bg-gray-100 rounded-lg h-64 flex items-center justify-center mb-6">
@@ -1135,14 +1140,6 @@ export default function Routes() {
                     <p className="text-sm text-gray-500">Integração com Google Maps</p>
                   </div>
                 </div>
-                
-                {/* Loading warning */}
-                {isOptimizing && (
-                  <div className="flex items-center justify-center text-yellow-700 font-medium my-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-700 mr-2" />
-                    Otimizando rota, aguarde...
-                  </div>
-                )}
 
                 {/* Route Steps */}
                 <div className="space-y-4">
@@ -1236,6 +1233,14 @@ export default function Routes() {
                     </div>
                   </div>
                 </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Route className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">Selecione agendamentos e clique em "Otimizar Rota"</p>
+                <p className="text-sm text-gray-500 mt-2">
+                  A rota otimizada aparecerá aqui
+                </p>
               </div>
             )}
           </CardContent>
