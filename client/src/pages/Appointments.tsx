@@ -10,9 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import AppointmentForm from "@/components/forms/AppointmentForm";
 import AppointmentCalendar from "@/components/AppointmentCalendar";
-import { Plus, Calendar, MapPin, Clock, User, Edit, Trash2, Download, Upload, Filter, Search, List, Route, X, Navigation, CheckCircle2 } from "lucide-react";
+import { Plus, Calendar, MapPin, Clock, User, Edit, Trash2, Download, Upload, Filter, Search, List, Route, X, Navigation, CheckCircle2, Repeat2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { downloadCSV, downloadReport, downloadWithConfirmation } from "@/lib/download";
 import { useSafeNavigation } from "@/hooks/useSafeNavigation";
 import { useCalendarCleanup } from "@/hooks/useCalendarCleanup";
@@ -36,6 +37,7 @@ export default function Appointments() {
   // Estados para seleção de agendamentos e otimização de rotas
   const [selectedAppointmentIds, setSelectedAppointmentIds] = useState<number[]>([]);
   const [isRouteDrawerOpen, setIsRouteDrawerOpen] = useState(false);
+  const [terminarNoPontoInicial, setTerminarNoPontoInicial] = useState(false);
   const [optimizedRoute, setOptimizedRoute] = useState<{
     appointments: Appointment[];
     totalDistance: number;
@@ -256,6 +258,11 @@ export default function Appointments() {
     const selectedAppointments = filteredAppointments.filter(apt => 
       selectedAppointmentIds.includes(apt.id)
     );
+    
+    console.log("🗺️ [ROUTE] Otimizando rotas com configuração:", {
+      appointmentsCount: selectedAppointments.length,
+      terminarNoPontoInicial: terminarNoPontoInicial
+    });
     
     // Simulação de otimização de rotas - por enquanto apenas embaralha a ordem
     const shuffled = [...selectedAppointments].sort(() => Math.random() - 0.5);
@@ -1356,13 +1363,30 @@ export default function Appointments() {
               </div>
               
               {selectedAppointmentIds.length > 1 && (
-                <Button
-                  onClick={handleOptimizeRoute}
-                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                >
-                  <Route className="h-4 w-4 mr-2" />
-                  Otimizar Rotas
-                </Button>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="terminarNoPontoInicial"
+                      checked={terminarNoPontoInicial}
+                      onCheckedChange={checked => setTerminarNoPontoInicial(checked === true)}
+                      className="w-5 h-5 data-[state=checked]:bg-burnt-yellow data-[state=checked]:border-burnt-yellow"
+                    />
+                    <label
+                      htmlFor="terminarNoPontoInicial"
+                      className="font-medium text-base flex items-center gap-2 cursor-pointer"
+                    >
+                      <Repeat2 className="text-burnt-yellow w-5 h-5" />
+                      Terminar no ponto inicial
+                    </label>
+                  </div>
+                  <Button
+                    onClick={handleOptimizeRoute}
+                    className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                  >
+                    <Route className="h-4 w-4 mr-2" />
+                    Otimizar Rotas
+                  </Button>
+                </div>
               )}
             </div>
 
