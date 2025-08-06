@@ -1211,9 +1211,9 @@ export default function Routes() {
       </Card>
 
       <div
-        className="flex gap-6 items-stretch max-h-[1500px]">
+        className="flex gap-6 items-stretch max-h-[1200px]">
         {/* Appointments Selection */}
-        <Card className="flex flex-col flex-1 w-1/2 max-h-[1500px]">
+        <Card className="flex flex-col flex-1 w-1/2 max-h-[1200px]">
           <CardHeader className="border-b border-gray-100 flex-shrink-0">
             <CardTitle className="flex items-center">
               <MapPin className="h-5 w-5 mr-2 text-burnt-yellow" />
@@ -1414,7 +1414,7 @@ export default function Routes() {
         </Card>
 
         {/* Optimized Route */}
-        <Card className="flex flex-col flex-1 w-1/2 max-h-[1500px]">
+        <Card className="flex flex-col flex-1 w-1/2 max-h-[1200px]">
           <CardHeader className="border-b border-gray-100 flex-shrink-0">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center">
@@ -1456,7 +1456,7 @@ export default function Routes() {
                 </div>
               </div>
             ) : optimizedRoute ? (
-              <div className="flex-1 flex flex-col">
+              <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Map Placeholder */}
                 <div className="bg-gray-100 rounded-lg h-48 flex items-center justify-center mb-4 flex-shrink-0">
                   <div className="text-center">
@@ -1470,12 +1470,13 @@ export default function Routes() {
                   </div>
                 </div>
 
-                {/* Route Steps */}
-                <div className="space-y-4 flex-1 overflow-y-auto pr-2">
-                  <h4 className="font-medium text-gray-900 flex items-center">
-                    <Clock className="h-4 w-4 mr-2" />
-                    Sequência da Rota
-                  </h4>
+                {/* Route Steps - Container com scroll */}
+                <div className="flex-1 overflow-y-auto pr-2">
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-gray-900 flex items-center">
+                      <Clock className="h-4 w-4 mr-2" />
+                      Sequência da Rota
+                    </h4>
 
                   {/* Card de início da rota */}
                   {optimizedRoute.startAddress && (
@@ -1549,39 +1550,38 @@ export default function Routes() {
                       </div>
                     );
                   })}
-                </div>
-
-                {/* Route Summary */}
-                <div className="mt-6 pt-6 border-t border-gray-200 flex-shrink-0">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">
-                        Tempo total estimado:
-                      </span>
-                      <span className="font-medium text-green-600">
-                        {optimizedRoute.estimatedTime > 60
-                          ? `${Math.floor(optimizedRoute.estimatedTime / 60)}h ${optimizedRoute.estimatedTime % 60}min`
-                          : `${optimizedRoute.estimatedTime}min`}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Distância total:</span>
-                      <span className="font-medium text-blue-600">
-                        {optimizedRoute.totalDistance} km
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between sm:col-span-2">
-                      <span className="text-gray-600">
-                        Economia de combustível:
-                      </span>
-                      <span className="font-medium text-green-600 flex items-center">
-                        <TrendingUp className="h-3 w-3 mr-1" />
-                        Rota otimizada
-                      </span>
+                  
+                  {/* Route Summary */}
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600">
+                          Tempo total estimado:
+                        </span>
+                        <span className="font-medium text-green-600">
+                          {optimizedRoute.estimatedTime > 60
+                            ? `${Math.floor(optimizedRoute.estimatedTime / 60)}h ${optimizedRoute.estimatedTime % 60}min`
+                            : `${optimizedRoute.estimatedTime}min`}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600">Distância total:</span>
+                        <span className="font-medium text-blue-600">
+                          {optimizedRoute.totalDistance} km
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between sm:col-span-2">
+                        <span className="text-gray-600">
+                          Economia de combustível:
+                        </span>
+                        <span className="font-medium text-green-600 flex items-center">
+                          <TrendingUp className="h-3 w-3 mr-1" />
+                          Rota otimizada
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
             ) : (
               <div className="flex-1 flex flex-col justify-center items-center text-center py-8 min-h-[300px]">
                 <Route className="h-12 w-12 text-gray-400 mx-auto mb-4" />

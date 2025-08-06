@@ -39,9 +39,10 @@ Stack:
 
 3. **Layout otimizado dos cards**:
    - Layout flex lado a lado com `flex gap-6 items-stretch`
-   - Cards com `max-h-[1500px]` para altura máxima fixa de 1500px
+   - Cards com `max-h-[1200px]` para altura máxima ajustável (personalizado pelo usuário)
    - Lista de atendimentos com scroll interno (`overflow-y-auto`) e padding na scrollbar
    - CardContent com `overflow-hidden` para conter o scroll dentro dos cards
+   - Scroll interno implementado em ambos os cards: "Selecionar Atendimentos" e "Rota Otimizada"
    - Estados vazios com `min-h-[300px]` para manter proporção visual
    - Ambos os cards ocupam 50% da largura (`w-1/2`) mantendo alinhamento perfeito
 
