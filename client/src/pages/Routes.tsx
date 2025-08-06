@@ -1211,9 +1211,9 @@ export default function Routes() {
       </Card>
 
       <div
-        className="flex gap-6 items-stretch max-h-[1200px]">
+        className="flex gap-6 items-stretch max-h-[1000px]">
         {/* Appointments Selection */}
-        <Card className="flex flex-col flex-1 w-1/2 max-h-[1200px]">
+        <Card className="flex flex-col flex-1 w-1/2 max-h-[1000px]">
           <CardHeader className="border-b border-gray-100 flex-shrink-0">
             <CardTitle className="flex items-center">
               <MapPin className="h-5 w-5 mr-2 text-burnt-yellow" />
@@ -1414,7 +1414,7 @@ export default function Routes() {
         </Card>
 
         {/* Optimized Route */}
-        <Card className="flex flex-col flex-1 w-1/2 max-h-[1200px]">
+        <Card className="flex flex-col flex-1 w-1/2 max-h-[1000px]">
           <CardHeader className="border-b border-gray-100 flex-shrink-0">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center">
@@ -1582,7 +1582,10 @@ export default function Routes() {
                     </div>
                   </div>
                 </div>
-            ) : (
+              </div>
+            </div>
+            ) 
+            : (
               <div className="flex-1 flex flex-col justify-center items-center text-center py-8 min-h-[300px]">
                 <Route className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600">
