@@ -2,6 +2,11 @@ import { Express, Request, Response } from "express";
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 import { db } from "../db";
 import { routes, routeStops, appointments, clients, technicians, teams, businessRules } from "@shared/schema";
 import { eq, and, gte, lte, like, or, desc } from "drizzle-orm";
