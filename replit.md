@@ -20,6 +20,48 @@ Stack:
 
 ## Mudanças Recentes
 
+### 11 de agosto de 2025 - Criação das Tabelas de Rotas com Drizzle
+
+**Funcionalidade implementada**: Criação das tabelas `routes` e `routeStops` para salvar rotas otimizadas
+
+**Tabelas criadas**:
+
+1. **Tabela `routes`** (rotas principais):
+   - `id`: UUID primário com geração automática
+   - `title`: Título da rota (varchar 120 chars)
+   - `date`: Data da rota (timestamp sem timezone)
+   - `vehicleId`: ID do veículo (varchar 64 chars, opcional)
+   - `responsibleType`: Tipo do responsável - 'technician' ou 'team' (varchar 16 chars)
+   - `responsibleId`: ID do responsável (varchar 64 chars)
+   - `endAtStart`: Terminar no ponto inicial (boolean, padrão false)
+   - `distanceTotal`: Distância total em metros (integer, padrão 0)
+   - `durationTotal`: Duração total em segundos (integer, padrão 0)
+   - `stopsCount`: Número de paradas (integer, padrão 0)
+   - `status`: Status da rota - draft|optimized|running|done|canceled (varchar 24, padrão 'optimized')
+   - `polylineGeoJson`: GeoJSON LineString para visualização (jsonb)
+   - `createdAt`, `updatedAt`: Timestamps automáticos
+
+2. **Tabela `routeStops`** (paradas ordenadas):
+   - `id`: UUID primário com geração automática
+   - `routeId`: Referência para routes.id (UUID, obrigatório)
+   - `appointmentId`: ID do agendamento (UUID, obrigatório)
+   - `order`: Ordem da parada na rota (integer, obrigatório)
+   - `lat`, `lng`: Coordenadas latitude/longitude (doublePrecision)
+   - `address`: Endereço formatado (text)
+
+**Arquivos modificados**:
+- **shared/schema.ts**: 
+  - Adicionadas importações: `uuid`, `jsonb`, `doublePrecision`, `varchar`, `relations`
+  - Criadas tabelas `routes` e `routeStops` com relacionamento
+  - Adicionados schemas de inserção `insertRouteSchema` e `insertRouteStopSchema`
+  - Adicionados tipos TypeScript `Route`, `InsertRoute`, `RouteStop`, `InsertRouteStop`
+
+**Migração aplicada**:
+- Executado `npx drizzle-kit push` com sucesso
+- Tabelas criadas no banco PostgreSQL/Supabase
+
+**Resultado**: Base de dados preparada para salvar e gerenciar rotas otimizadas com suporte a CSV/GeoJSON futuro
+
 ### 06 de janeiro de 2025 - Funcionalidade "Terminar no Ponto Inicial" e Ajustes de UX
 
 **Funcionalidade implementada**: Sistema completo de otimização de rotas com escolha entre rotas circulares e abertas, incluindo melhorias de UX

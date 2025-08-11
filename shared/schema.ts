@@ -1,4 +1,5 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, uuid, jsonb, doublePrecision, varchar } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -172,6 +173,41 @@ export const teamMembers = pgTable("team_members", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Routes table - Tabela principal de rotas otimizadas
+export const routes = pgTable("routes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: varchar("title", { length: 120 }).notNull(),
+  date: timestamp("date", { withTimezone: false }).notNull(),
+  vehicleId: varchar("vehicle_id", { length: 64 }),
+  // responsável pode ser técnico OU equipe — usar union simples por tipo+id
+  responsibleType: varchar("responsible_type", { length: 16 }).notNull(), // 'technician' | 'team'
+  responsibleId: varchar("responsible_id", { length: 64 }).notNull(),
+  endAtStart: boolean("end_at_start").notNull().default(false),
+  distanceTotal: integer("distance_total").notNull().default(0), // em metros
+  durationTotal: integer("duration_total").notNull().default(0), // em segundos
+  stopsCount: integer("stops_count").notNull().default(0),
+  status: varchar("status", { length: 24 }).notNull().default("optimized"), // draft|optimized|running|done|canceled
+  polylineGeoJson: jsonb("polyline_geojson"), // GeoJSON LineString
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Route stops table - Paradas ordenadas (ligação rota → agendamentos)
+export const routeStops = pgTable("route_stops", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  routeId: uuid("route_id").references(() => routes.id).notNull(),
+  appointmentId: uuid("appointment_id").notNull(),
+  order: integer("order").notNull(), // 1..N
+  lat: doublePrecision("lat").notNull(),
+  lng: doublePrecision("lng").notNull(),
+  address: text("address").notNull(),
+});
+
+// Relations
+export const routeStopsRelations = relations(routeStops, ({ one }) => ({
+  route: one(routes, { fields: [routeStops.routeId], references: [routes.id] }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -234,6 +270,16 @@ export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({
   id: true,
   userId: true,
   createdAt: true,
+});
+
+export const insertRouteSchema = createInsertSchema(routes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertRouteStopSchema = createInsertSchema(routeStops).omit({
+  id: true,
 });
 
 export const insertBusinessRulesSchema = createInsertSchema(businessRules).omit({
@@ -335,4 +381,8 @@ export type Team = typeof teams.$inferSelect;
 export type InsertTeam = z.infer<typeof insertTeamSchema>;
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
+export type Route = typeof routes.$inferSelect;
+export type InsertRoute = z.infer<typeof insertRouteSchema>;
+export type RouteStop = typeof routeStops.$inferSelect;
+export type InsertRouteStop = z.infer<typeof insertRouteStopSchema>;
 export type LoginData = z.infer<typeof loginSchema>;
