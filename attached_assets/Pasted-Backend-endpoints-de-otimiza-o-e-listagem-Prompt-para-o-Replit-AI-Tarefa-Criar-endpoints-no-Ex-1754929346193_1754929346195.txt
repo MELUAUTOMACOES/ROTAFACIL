@@ -1,0 +1,79 @@
+Backend — endpoints de otimização e listagem
+Prompt para o Replit AI:
+
+Tarefa: Criar endpoints no Express para otimização e histórico de rotas.
+
+Arquivos alvo:
+
+server/index.ts (onde as rotas Express são registradas)
+
+server/routes/routes.api.ts (crie este arquivo para isolar as rotas de “routes”)
+
+Reutilizar helper que chama o OSRM já existente: GET /api/route (proxy) — crie também uma função de matrix se não existir.
+
+Endpoints a criar:
+
+POST /api/routes/optimize
+
+Body: { appointmentIds: string[], endAtStart: boolean }
+
+Busca os agendamentos (id, lat, lng, address, data/hora).
+
+Faz uma matriz de tempos/distâncias via OSRM (/table), monta TSP simples (nearest neighbor + 2-opt rápido).
+
+Se endAtStart===true, fechar o ciclo (voltar ao início); se false, termina no último ponto.
+
+Calcula distanceTotal, durationTotal, stopsCount, gera polylineGeoJson chamando /route com a ordem.
+
+Salva em routes e route_stops.
+
+Retorna:
+
+json
+Copiar
+Editar
+{
+  "route": {
+    "id": "...",
+    "title": "Rota ...",
+    "date": "2025-08-18T07:00:00.000Z",
+    "vehicleId": null,
+    "responsible": { "type":"team|technician", "id":"..." },
+    "endAtStart": true,
+    "distanceTotal": 38000,
+    "durationTotal": 178*60,
+    "stopsCount": 2,
+    "status": "optimized",
+    "polylineGeoJson": {...}
+  },
+  "stops": [
+    { "order":1, "appointmentId":"...", "title":"Pedro", "address":"...", "lat":-25..., "lng":-49... },
+    { "order":2, "appointmentId":"...", "title":"Maria", "address":"...", "lat":-25..., "lng":-49... }
+  ]
+}
+Logs em caso de erro/sucesso.
+
+GET /api/routes
+
+Query params de filtro (opcional): from, to, status, responsibleType, responsibleId, vehicleId, search.
+
+Retorna lista básica para tabela de histórico.
+
+GET /api/routes/:id
+
+Retorna cabeçalho + resumo + paradas ordenadas + polylineGeoJson.
+
+IMPORTANTE:
+
+Use o endereço do OSRM lendo getOsrmUrl() (igual já fazemos no proxy /api/route).
+
+Se ainda não existir função /table (matriz), implemente no servidor:
+GET ${OSRM_URL}/table/v1/driving/{lng,lat;...}?annotations=distance,duration
+
+Coloque um solver simples: nearest neighbor + 2-opt em JS (não use libs externas).
+
+Respeite timezone e datas dos agendamentos, mas para a rota basta a ordem.
+
+Responda com o mesmo formato do front da tela de Roteirização (para reaproveitar o drawer).
+
+Entrega esperada: novos arquivos + rotas registradas em server/index.ts.

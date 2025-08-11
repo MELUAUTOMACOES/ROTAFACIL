@@ -1105,6 +1105,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Registrar rotas de otimização
+  const { registerRoutesAPI } = await import("./routes/routes.api");
+  registerRoutesAPI(app);
+
   const httpServer = createServer(app);
   return httpServer;
 }
