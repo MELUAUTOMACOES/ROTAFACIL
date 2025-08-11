@@ -1,0 +1,60 @@
+1) Banco — Drizzle: criar tabela routes
+Prompt para o Replit AI:
+
+Contexto do projeto: Node.js + Express, Drizzle ORM, Vite/React/Tailwind.
+Tarefa: Criar uma tabela routes para salvar rotas otimizadas a partir de agendamentos.
+Regras do RotaFácil:
+
+Respeitar “herança” de técnicos das equipes.
+
+Guardar endAtStart (terminar no ponto inicial) como boolean.
+
+CSV/geojson serão usados depois, então já deixar campos.
+
+Faça:
+
+No arquivo server/db/schema.ts (ou onde ficam os schemas), adicionar a tabela routes e routeStops.
+
+Criar migração Drizzle correspondente.
+
+Não quebre o que já existe.
+
+Esquema desejado (Typescript Drizzle):
+
+ts
+Copiar
+Editar
+// Tabela principal de rotas
+export const routes = pgTable('routes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  title: varchar('title', { length: 120 }).notNull(),
+  date: timestamp('date', { withTimezone: false }).notNull(),
+  vehicleId: varchar('vehicle_id', { length: 64 }).null(),
+  // responsável pode ser técnico OU equipe — usar union simples por tipo+id
+  responsibleType: varchar('responsible_type', { length: 16 }).notNull(), // 'technician' | 'team'
+  responsibleId: varchar('responsible_id', { length: 64 }).notNull(),
+  endAtStart: boolean('end_at_start').notNull().default(false),
+  distanceTotal: integer('distance_total').notNull().default(0), // em metros
+  durationTotal: integer('duration_total').notNull().default(0), // em segundos
+  stopsCount: integer('stops_count').notNull().default(0),
+  status: varchar('status', { length: 24 }).notNull().default('optimized'), // draft|optimized|running|done|canceled
+  polylineGeoJson: jsonb('polyline_geojson'), // GeoJSON LineString
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Paradas ordenadas (ligação rota → agendamentos)
+export const routeStops = pgTable('route_stops', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  routeId: uuid('route_id').references(() => routes.id).notNull(),
+  appointmentId: uuid('appointment_id').notNull(),
+  order: integer('"order"').notNull(), // 1..N
+  lat: doublePrecision('lat').notNull(),
+  lng: doublePrecision('lng').notNull(),
+  address: text('address').notNull()
+});
+
+export const routeStopsRelations = relations(routeStops, ({ one }) => ({
+  route: one(routes, { fields: [routeStops.routeId], references: [routes.id] }),
+}));
+Entrega esperada: código adicionado + migração criada. Explique onde rodar npm run db:push/db:migrate se necessário.
