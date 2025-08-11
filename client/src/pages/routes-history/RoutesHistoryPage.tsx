@@ -229,6 +229,23 @@ export default function RoutesHistoryPage() {
     return client?.name || `Cliente não encontrado`;
   };
 
+  const getRouteVehicleName = (route: Route) => {
+    // Primeiro verifica se a rota tem veículo direto
+    if (route.vehicleId) {
+      return getVehicleName(route.vehicleId);
+    }
+    
+    // Se não tem veículo direto, verifica se é uma equipe com veículo vinculado
+    if (route.responsibleType === 'team') {
+      const team = teams.find((t: any) => t.id.toString() === route.responsibleId);
+      if (team?.vehicleId) {
+        return getVehicleName(team.vehicleId.toString());
+      }
+    }
+    
+    return '-';
+  };
+
   const handleStartNavigation = () => {
     // TODO: Implementar funcionalidade de navegação
     console.log('🧭 Iniciar navegação para rota:', selectedRoute);
@@ -410,7 +427,7 @@ export default function RoutesHistoryPage() {
                       <TableCell>
                         {fmtDateTime(route.date)}
                       </TableCell>
-                      <TableCell>{getVehicleName(route.vehicleId)}</TableCell>
+                      <TableCell>{getRouteVehicleName(route)}</TableCell>
                       <TableCell>{getResponsibleName(route)}</TableCell>
                       <TableCell className="text-blue-600">
                         {fmtKm(route.distanceTotal)}
@@ -470,7 +487,7 @@ export default function RoutesHistoryPage() {
                                       <div className="text-gray-500">Veículo</div>
                                       <div className="font-medium flex items-center gap-1">
                                         <Car className="h-4 w-4" />
-                                        {getVehicleName(routeDetail.route?.vehicleId)}
+                                        {getRouteVehicleName(routeDetail.route)}
                                       </div>
                                     </div>
                                     
@@ -520,6 +537,25 @@ export default function RoutesHistoryPage() {
                                   <h5 className="font-semibold mb-3">Paradas da Rota</h5>
                                   <ScrollArea className="h-[300px]">
                                     <div className="space-y-3">
+                                      {/* Ponto inicial */}
+                                      <div className="flex items-start gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                                        <div className="flex-shrink-0 w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                                          🏠
+                                        </div>
+                                        <div className="flex-1">
+                                          <div className="font-medium text-sm text-green-800">
+                                            Ponto inicial (Empresa)
+                                          </div>
+                                          <div className="text-sm text-green-700 mt-1">
+                                            Rodovia BR-116, 15480, Xaxim, Curitiba
+                                          </div>
+                                          <div className="text-xs text-green-600 mt-1">
+                                            -49.2654, -25.4284
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Paradas dos agendamentos */}
                                       {routeDetail.stops?.map((stop, index) => (
                                         <div key={stop.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
                                           <div className="flex-shrink-0 w-8 h-8 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-bold">
