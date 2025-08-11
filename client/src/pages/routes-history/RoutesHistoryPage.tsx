@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,8 +47,8 @@ interface Route {
   updatedAt: string;
 }
 
-interface RouteDetail extends Route {
-  polylineGeoJson?: any;
+interface RouteDetail {
+  route: Route;
   stops: Array<{
     id: string;
     routeId: string;
@@ -77,6 +75,22 @@ const statusColors = {
   done: 'bg-green-100 text-green-800',
   canceled: 'bg-red-100 text-red-800'
 };
+
+// Helpers seguros de formatação
+const fmtDateTime = (v?: string | number | Date | null) => {
+  if (!v) return "—";
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? "—" : d.toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" });
+};
+
+const fmtDate = (v?: string | number | Date | null) => {
+  if (!v) return "—";
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("pt-BR");
+};
+
+const fmtKm = (m?: number) => (m && m > 0 ? `${(m / 1000).toFixed(1)} km` : "—");
+const fmtMin = (s?: number) => (s && s > 0 ? `${Math.round(s / 60)} min` : "—");
 
 export default function RoutesHistoryPage() {
   const [filters, setFilters] = useState<RouteFilters>({
@@ -171,7 +185,8 @@ export default function RoutesHistoryPage() {
     return `${minutes}min`;
   };
 
-  const getResponsibleName = (route: Route) => {
+  const getResponsibleName = (route?: Route) => {
+    if (!route) return '—';
     if (route.responsibleType === 'technician') {
       const technician = technicians.find((t: any) => t.id.toString() === route.responsibleId);
       return technician?.name || `Técnico ${route.responsibleId}`;
@@ -366,15 +381,15 @@ export default function RoutesHistoryPage() {
                     <TableRow key={route.id} data-testid={`row-route-${route.id}`}>
                       <TableCell className="font-medium">{route.title}</TableCell>
                       <TableCell>
-                        {format(parseISO(route.date), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                        {fmtDateTime(route.date)}
                       </TableCell>
                       <TableCell>{getVehicleName(route.vehicleId)}</TableCell>
                       <TableCell>{getResponsibleName(route)}</TableCell>
                       <TableCell className="text-blue-600">
-                        {formatDistance(route.distanceTotal)}
+                        {fmtKm(route.distanceTotal)}
                       </TableCell>
                       <TableCell className="text-green-600">
-                        {formatDuration(route.durationTotal)}
+                        {fmtMin(route.durationTotal)}
                       </TableCell>
                       <TableCell>{route.stopsCount}</TableCell>
                       <TableCell>
@@ -407,20 +422,20 @@ export default function RoutesHistoryPage() {
                               <div className="mt-6 space-y-6">
                                 {/* Informações gerais */}
                                 <div>
-                                  <h4 className="font-semibold text-lg mb-3">{routeDetail.title}</h4>
+                                  <h4 className="font-semibold text-lg mb-3">{routeDetail.route?.title}</h4>
                                   
                                   <div className="grid grid-cols-2 gap-4 text-sm">
                                     <div>
                                       <div className="text-gray-500">Data</div>
                                       <div className="font-medium">
-                                        {format(parseISO(routeDetail.date), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                                        {fmtDateTime(routeDetail.route?.date)}
                                       </div>
                                     </div>
                                     
                                     <div>
                                       <div className="text-gray-500">Status</div>
-                                      <Badge className={statusColors[routeDetail.status] || statusColors.draft}>
-                                        {statusLabels[routeDetail.status] || routeDetail.status}
+                                      <Badge className={statusColors[routeDetail.route?.status] || statusColors.draft}>
+                                        {statusLabels[routeDetail.route?.status] || routeDetail.route?.status}
                                       </Badge>
                                     </div>
                                     
@@ -428,7 +443,7 @@ export default function RoutesHistoryPage() {
                                       <div className="text-gray-500">Veículo</div>
                                       <div className="font-medium flex items-center gap-1">
                                         <Car className="h-4 w-4" />
-                                        {getVehicleName(routeDetail.vehicleId)}
+                                        {getVehicleName(routeDetail.route?.vehicleId)}
                                       </div>
                                     </div>
                                     
@@ -436,7 +451,7 @@ export default function RoutesHistoryPage() {
                                       <div className="text-gray-500">Responsável</div>
                                       <div className="font-medium flex items-center gap-1">
                                         <User className="h-4 w-4" />
-                                        {getResponsibleName(routeDetail)}
+                                        {getResponsibleName(routeDetail.route)}
                                       </div>
                                     </div>
                                   </div>
@@ -450,7 +465,7 @@ export default function RoutesHistoryPage() {
                                     <Route className="h-6 w-6 text-blue-600 mx-auto mb-1" />
                                     <div className="text-sm text-gray-500">Distância</div>
                                     <div className="font-bold text-blue-600">
-                                      {formatDistance(routeDetail.distanceTotal)}
+                                      {fmtKm(routeDetail.route?.distanceTotal)}
                                     </div>
                                   </div>
                                   
@@ -458,7 +473,7 @@ export default function RoutesHistoryPage() {
                                     <Clock className="h-6 w-6 text-green-600 mx-auto mb-1" />
                                     <div className="text-sm text-gray-500">Duração</div>
                                     <div className="font-bold text-green-600">
-                                      {formatDuration(routeDetail.durationTotal)}
+                                      {fmtMin(routeDetail.route?.durationTotal)}
                                     </div>
                                   </div>
                                   
@@ -466,7 +481,7 @@ export default function RoutesHistoryPage() {
                                     <MapPin className="h-6 w-6 text-yellow-600 mx-auto mb-1" />
                                     <div className="text-sm text-gray-500">Paradas</div>
                                     <div className="font-bold text-yellow-600">
-                                      {routeDetail.stopsCount}
+                                      {routeDetail.route?.stopsCount}
                                     </div>
                                   </div>
                                 </div>
