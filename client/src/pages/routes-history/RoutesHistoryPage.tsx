@@ -104,6 +104,7 @@ export default function RoutesHistoryPage() {
 
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
 
+  console.log('✅ Página Histórico de Rotas carregada');
   console.log('🔍 [ROUTES HISTORY] Aplicando filtros:', filters);
 
   // Query para listar rotas com filtros
@@ -168,6 +169,24 @@ export default function RoutesHistoryPage() {
     }
   });
 
+  const { data: appointments = [] } = useQuery({
+    queryKey: ['/api/appointments'],
+    queryFn: async () => {
+      const response = await fetch('/api/appointments');
+      if (!response.ok) throw new Error('Erro ao buscar agendamentos');
+      return response.json();
+    }
+  });
+
+  const { data: clients = [] } = useQuery({
+    queryKey: ['/api/clients'],
+    queryFn: async () => {
+      const response = await fetch('/api/clients');
+      if (!response.ok) throw new Error('Erro ao buscar clientes');
+      return response.json();
+    }
+  });
+
   const formatDistance = (meters: number) => {
     if (meters >= 1000) {
       return `${(meters / 1000).toFixed(1)} km`;
@@ -200,6 +219,14 @@ export default function RoutesHistoryPage() {
     if (!vehicleId) return '-';
     const vehicle = vehicles.find((v: any) => v.id.toString() === vehicleId);
     return vehicle ? `${vehicle.plate} (${vehicle.model})` : vehicleId;
+  };
+
+  const getClientNameByAppointmentId = (appointmentId: string) => {
+    const appointment = appointments.find((apt: any) => apt.id.toString() === appointmentId);
+    if (!appointment) return `Agendamento #${appointmentId}`;
+    
+    const client = clients.find((cli: any) => cli.id.toString() === appointment.clientId?.toString());
+    return client?.name || `Cliente não encontrado`;
   };
 
   const handleStartNavigation = () => {
@@ -500,7 +527,7 @@ export default function RoutesHistoryPage() {
                                           </div>
                                           <div className="flex-1">
                                             <div className="font-medium text-sm">
-                                              Agendamento #{stop.appointmentId}
+                                              {getClientNameByAppointmentId(stop.appointmentId)}
                                             </div>
                                             <div className="text-sm text-gray-600 mt-1">
                                               {stop.address}
