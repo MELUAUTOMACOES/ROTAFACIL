@@ -14,7 +14,8 @@ import {
   LogOut,
   X,
   FileText,
-  Search
+  Search,
+  History
 } from "lucide-react";
 
 interface SidebarProps {
@@ -27,6 +28,7 @@ const navigation = [
   { name: "Agendamentos", href: "/appointments", icon: Calendar },
   { name: "Ache uma data", href: "/find-date", icon: Search },
   { name: "Roteirização", href: "/routes", icon: MapPin },
+  { name: "Histórico de Rotas", href: "/routes-history", icon: History },
   { name: "Clientes", href: "/clients", icon: Users },
   { name: "Técnicos/Equipes", href: "/technicians", icon: UserCog },
   { name: "Veículos", href: "/vehicles", icon: Car },
