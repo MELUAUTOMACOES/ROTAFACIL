@@ -43,12 +43,18 @@ function numberToUUID(num: number): string {
 
 // Schema de validação para otimização
 const optimizeRouteSchema = z.object({
-  appointmentIds: z.array(z.string()),
+  appointmentIds: z.array(z.union([z.string(), z.number()])),
   endAtStart: z.boolean(),
-  responsibleType: z.enum(['technician', 'team']),
-  responsibleId: z.string(),
+  responsibleType: z.enum(['technician','team']).optional(),
+  responsibleId: z.union([z.string(), z.number()]).optional(),
   vehicleId: z.string().optional(),
-  title: z.string().optional()
+  title: z.string().optional(),
+  preview: z.boolean().optional()
+});
+
+// Schema para atualização de status
+const updateStatusSchema = z.object({
+  status: z.enum(["draft","optimized","running","done","canceled"])
 });
 
 // Algoritmo TSP simples: Nearest Neighbor + 2-opt
@@ -197,15 +203,18 @@ export function registerRoutesAPI(app: Express) {
         return res.status(400).json({ error: "Dados inválidos", details: validation.error.errors });
       }
       
-      const { appointmentIds, endAtStart, responsibleType, responsibleId, vehicleId, title } = validation.data;
+      const { appointmentIds, endAtStart, vehicleId, title, preview } = validation.data;
+      const appointmentIdsNorm = appointmentIds.map((id: any) => Number(id));
       
       // 1. Buscar agendamentos com coordenadas
-      console.log("🔍 Buscando agendamentos:", appointmentIds);
+      console.log("🔍 Buscando agendamentos:", appointmentIdsNorm);
       const appointmentList = await db
         .select({
           id: appointments.id,
           clientId: appointments.clientId,
           serviceId: appointments.serviceId,
+          technicianId: appointments.technicianId,
+          teamId: appointments.teamId,
           scheduledDate: appointments.scheduledDate,
           cep: appointments.cep,
           logradouro: appointments.logradouro,
@@ -220,7 +229,7 @@ export function registerRoutesAPI(app: Express) {
         .where(eq(appointments.userId, req.user.userId));
       
       const selectedAppointments = appointmentList.filter(app => 
-        appointmentIds.includes(app.id.toString())
+        appointmentIdsNorm.includes(app.id)
       );
       
       if (selectedAppointments.length === 0) {
@@ -230,6 +239,27 @@ export function registerRoutesAPI(app: Express) {
       }
       
       console.log("✅ Agendamentos encontrados:", selectedAppointments.length);
+      
+      // ✅ Garantir responsável único entre os agendamentos selecionados
+      const responsibles = selectedAppointments.map((a: any) => {
+        if (a.technicianId && !a.teamId) return `technician:${a.technicianId}`;
+        if (a.teamId && !a.technicianId) return `team:${a.teamId}`;
+        return null;
+      }).filter(Boolean);
+
+      const uniqueResponsibles = Array.from(new Set(responsibles));
+      if (uniqueResponsibles.length !== 1) {
+        console.log("❌ ERRO: Responsáveis diferentes encontrados:", uniqueResponsibles);
+        console.log("==== LOG FIM: /api/routes/optimize (RESPONSÁVEL INVÁLIDO) ====");
+        return res.status(400).json({
+          error: "Seleção inválida",
+          details: "Todos os agendamentos devem pertencer ao mesmo responsável (mesmo técnico ou mesma equipe)."
+        });
+      }
+
+      const [respType, respId] = uniqueResponsibles[0].split(':');
+      const derivedResponsibleType = respType as 'technician' | 'team';
+      const derivedResponsibleId = respId;
       
       // 2. Obter endereço de início (empresa ou técnico/equipe)
       let startAddress = "Endereço da empresa";
@@ -303,36 +333,31 @@ export function registerRoutesAPI(app: Express) {
         console.log("⚠️ Erro ao gerar polyline:", error);
       }
       
-      // 8. Salvar rota no banco
+      // 8. Preparar dados da rota
       const routeTitle = title || `Rota ${new Date().toLocaleDateString('pt-BR')}`;
       const routeDate = selectedAppointments[0]?.scheduledDate || new Date();
       
-      console.log("💾 Salvando rota no banco...");
-      const [savedRoute] = await db
-        .insert(routes)
-        .values({
-          title: routeTitle,
-          date: routeDate,
-          vehicleId: vehicleId || null,
-          responsibleType,
-          responsibleId,
-          endAtStart,
-          distanceTotal: Math.round(totalDistance),
-          durationTotal: Math.round(totalDuration),
-          stopsCount: selectedAppointments.length,
-          status: "optimized",
-          polylineGeoJson
-        })
-        .returning();
-      
-      // 9. Salvar paradas
+      const routeData = {
+        title: routeTitle,
+        date: routeDate,
+        vehicleId: vehicleId || null,
+        responsibleType: derivedResponsibleType,
+        responsibleId: derivedResponsibleId,
+        endAtStart,
+        distanceTotal: Math.round(totalDistance),
+        durationTotal: Math.round(totalDuration),
+        stopsCount: selectedAppointments.length,
+        status: "draft" as const,
+        polylineGeoJson
+      };
+
+      // Preparar dados das paradas
       const stopData = [];
       for (let i = 1; i < tourOrder.length; i++) { // Pular índice 0 (início)
         const appointmentIndex = tourOrder[i] - 1; // Ajustar índice
         if (appointmentIndex >= 0 && appointmentIndex < appointmentData.length) {
           const app = appointmentData[appointmentIndex];
           stopData.push({
-            routeId: savedRoute.id,
             appointmentId: numberToUUID(Number(app.id)),
             order: i,
             lat: app.lat,
@@ -341,13 +366,14 @@ export function registerRoutesAPI(app: Express) {
           });
         }
       }
-      
-      if (stopData.length > 0) {
-        await db.insert(routeStops).values(stopData);
-        console.log("✅ Paradas salvas:", stopData.length);
-      }
-      
-      // 10. Preparar resposta — incluir bloco 'start' e enriquecer 'stops'
+
+      const start = {
+        address: startAddress,
+        lat: startCoordinates[1],
+        lng: startCoordinates[0]
+      };
+
+      // Preparar stops enriquecidos para resposta
       const stops = stopData.map(stop => {
         const app = appointmentData.find(a => numberToUUID(Number(a.id)) === stop.appointmentId);
         return {
@@ -363,11 +389,44 @@ export function registerRoutesAPI(app: Express) {
         };
       });
 
-      const start = {
-        address: startAddress,
-        lat: startCoordinates[1],
-        lng: startCoordinates[0]
-      };
+      // 9. Se preview !== false, NÃO salvar no banco (apenas retornar dados)
+      if (preview !== false) {
+        console.log("📋 Modo PREVIEW - não salvando no banco");
+        const responseData = {
+          route: {
+            id: null,
+            ...routeData,
+            responsible: {
+              type: derivedResponsibleType,
+              id: derivedResponsibleId
+            }
+          },
+          start,
+          stops
+        };
+        
+        console.log("✅ Rota otimizada (PREVIEW)");
+        console.log("📍 Start adicionado ao payload:", startAddress);
+        console.log("==== LOG FIM: /api/routes/optimize (SUCESSO - PREVIEW) ====");
+        return res.json(responseData);
+      }
+
+      // 10. Salvar no banco (se preview === false)
+      console.log("💾 Salvando rota no banco...");
+      const [savedRoute] = await db
+        .insert(routes)
+        .values(routeData)
+        .returning();
+      
+      // Salvar paradas
+      if (stopData.length > 0) {
+        const stopDataWithRouteId = stopData.map(stop => ({
+          ...stop,
+          routeId: savedRoute.id
+        }));
+        await db.insert(routeStops).values(stopDataWithRouteId);
+        console.log("✅ Paradas salvas:", stopDataWithRouteId.length);
+      }
 
       const responseData = {
         route: {
@@ -517,6 +576,28 @@ export function registerRoutesAPI(app: Express) {
       console.log("Mensagem:", error.message);
       console.log("==== LOG FIM: /api/routes/:id (ERRO) ====");
       res.status(500).json({ error: "Erro interno do servidor", details: error.message });
+    }
+  });
+
+  // PATCH /api/routes/:id/status - Atualizar status da rota
+  app.patch('/api/routes/:id/status', authenticateToken, async (req: any, res: Response) => {
+    try {
+      const routeId = req.params.id;
+      const parsed = updateStatusSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Status inválido" });
+      const { status } = parsed.data;
+
+      const [updated] = await db
+        .update(routes)
+        .set({ status })
+        .where(eq(routes.id, routeId))
+        .returning();
+
+      if (!updated) return res.status(404).json({ error: "Rota não encontrada" });
+      res.json({ ok: true, route: updated });
+    } catch (e: any) {
+      console.error("Erro ao atualizar status:", e);
+      res.status(500).json({ error: "Erro ao atualizar status", details: e.message });
     }
   });
 }

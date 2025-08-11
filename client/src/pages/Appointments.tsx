@@ -266,6 +266,22 @@ export default function Appointments() {
       return;
     }
 
+    // ✅ Responsável único (mesmo técnico OU mesma equipe)
+    const selected = filteredAppointments.filter(apt => selectedAppointmentIds.includes(apt.id));
+    const keys = selected.map(apt =>
+      apt.technicianId ? `technician-${apt.technicianId}` :
+      apt.teamId ? `team-${apt.teamId}` : null
+    ).filter(Boolean);
+    const uniqueKeys = Array.from(new Set(keys));
+    if (uniqueKeys.length !== 1) {
+      toast({
+        title: "Seleção inválida",
+        description: "Não é possível otimizar rota com técnicos/equipes diferentes. Selecione do mesmo responsável.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setIsOptimizing(true);
       setIsRouteDrawerOpen(true);
@@ -276,27 +292,14 @@ export default function Appointments() {
         endAtStart: endAtStart
       });
 
-      // Buscar dados do primeiro agendamento para determinar responsável
-      const firstAppointment = filteredAppointments.find(apt => 
-        selectedAppointmentIds.includes(apt.id)
-      );
-      
-      if (!firstAppointment) {
-        throw new Error("Agendamentos selecionados não encontrados");
-      }
-
-      const responsibleType = firstAppointment.technicianId ? 'technician' : 'team';
-      const responsibleId = firstAppointment.technicianId || firstAppointment.teamId;
-
       const res = await fetch("/api/routes/optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          appointmentIds: selectedAppointmentIds.map(id => id.toString()), 
+        body: JSON.stringify({
+          appointmentIds: selectedAppointmentIds, // números
           endAtStart,
-          responsibleType,
-          responsibleId: responsibleId?.toString(),
-          title: `Rota ${new Date().toLocaleDateString()}`
+          title: `Rota ${new Date().toLocaleDateString()}`,
+          preview: true
         }),
       });
 
@@ -328,7 +331,52 @@ export default function Appointments() {
     }
   };
 
+  const handleSaveRoute = async () => {
+    if (!optimizedRoute?.route || optimizedRoute.route.id) {
+      toast({
+        title: "Erro",
+        description: "Rota já foi salva ou dados inválidos",
+        variant: "destructive"
+      });
+      return;
+    }
 
+    try {
+      const res = await fetch("/api/routes/optimize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appointmentIds: selectedAppointmentIds,
+          endAtStart,
+          title: optimizedRoute.route.title,
+          preview: false
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Falha ao salvar rota");
+      }
+
+      const data = await res.json();
+      setOptimizedRoute(data);
+      setIsRouteDrawerOpen(false);
+      setSelectedAppointmentIds([]);
+
+      toast({
+        title: "Rota salva com sucesso!",
+        description: "A rota foi salva no histórico",
+      });
+
+    } catch (err) {
+      console.error("❌ [ROUTE] Erro ao salvar:", err);
+      toast({
+        title: "Erro ao salvar rota",
+        description: err.message || "Erro interno do servidor",
+        variant: "destructive"
+      });
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1712,6 +1760,17 @@ export default function Appointments() {
 
                       {/* Action Buttons */}
                       <div className="space-y-3">
+                        {/* Botão de salvar aparece apenas se é preview (sem ID) */}
+                        {!optimizedRoute.route?.id && (
+                          <Button 
+                            className="w-full bg-green-600 hover:bg-green-700 text-white"
+                            onClick={handleSaveRoute}
+                          >
+                            Salvar Rota
+                          </Button>
+                        )}
+                        
+                        {/* Botões padrão */}
                         <Button className="w-full bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
                           Iniciar Navegação
                         </Button>
