@@ -1,0 +1,172 @@
+o erro vem do tipo do campo route_stops.appointment_id: ele está definido como UUID, mas os seus appointments.id são números (inteiro). Quando o backend tentou salvar "6" nesse campo UUID, o Postgres barrou.
+
+Vamos corrigir em dois pontos:
+
+1) Ajustar o schema (Drizzle)
+Antes (como ficou ao criar as tabelas)
+ts
+Copiar
+Editar
+// shared/schema.ts (trecho atual)
+export const routeStops = pgTable('route_stops', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  routeId: uuid('route_id').references(() => routes.id).notNull(),
+  appointmentId: uuid('appointment_id').notNull(),    // ❌ errado para seu caso
+  order: integer('"order"').notNull(),
+  lat: doublePrecision('lat').notNull(),
+  lng: doublePrecision('lng').notNull(),
+  address: text('address').notNull()
+});
+Depois (corrigido para inteiro e com referência)
+ts
+Copiar
+Editar
+// shared/schema.ts (troque o tipo do appointmentId)
+export const routeStops = pgTable('route_stops', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  routeId: uuid('route_id').references(() => routes.id).notNull(),
+  appointmentId: integer('appointment_id')
+    .references(() => appointments.id)                // ✅ referencia a tabela correta
+    .notNull(),
+  order: integer('"order"').notNull(),
+  lat: doublePrecision('lat').notNull(),
+  lng: doublePrecision('lng').notNull(),
+  address: text('address').notNull()
+});
+Migração
+Se ainda não tem dados em route_stops, o caminho mais rápido é dropar e recriar a tabela:
+
+Opção rápida (sem dados em produção):
+
+Crie uma migração Drizzle com algo equivalente a:
+
+sql
+Copiar
+Editar
+DROP TABLE IF EXISTS route_stops;
+
+CREATE TABLE route_stops (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  route_id uuid NOT NULL REFERENCES routes(id),
+  appointment_id integer NOT NULL REFERENCES appointments(id),
+  "order" integer NOT NULL,
+  lat double precision NOT NULL,
+  lng double precision NOT NULL,
+  address text NOT NULL
+);
+Se já houver dados (provavelmente não no seu caso), me avisa que te mando a migração “sem perda” (coluna nova, copy, drop old, rename).
+
+Depois rode:
+
+bash
+Copiar
+Editar
+npx drizzle-kit push
+2) Ajustar o insert no backend
+No server/routes/routes.api.ts, na hora de montar o stopData, hoje está assim:
+
+Antes
+ts
+Copiar
+Editar
+// ao salvar paradas
+stopData.push({
+  routeId: savedRoute.id,
+  appointmentId: app.id.toString(),   // ❌ virando string
+  order: i,
+  lat: app.lat,
+  lng: app.lng,
+  address: app.address
+});
+Depois
+ts
+Copiar
+Editar
+stopData.push({
+  routeId: savedRoute.id,
+  appointmentId: Number(app.id),      // ✅ inteiro
+  order: i,
+  lat: app.lat,
+  lng: app.lng,
+  address: app.address
+});
+E ao montar a resposta, ajuste a comparação para número:
+
+Antes
+ts
+Copiar
+Editar
+const stops = stopData.map(stop => {
+  const app = appointmentData.find(a => a.id.toString() === stop.appointmentId);
+  // ...
+});
+Depois
+ts
+Copiar
+Editar
+const stops = stopData.map(stop => {
+  const app = appointmentData.find(a => Number(a.id) === Number(stop.appointmentId));
+  // ...
+});
+Dica: como appointmentData veio do select do Drizzle e a.id já é número, você pode simplesmente comparar a.id === stop.appointmentId.
+
+3) (Opcional) Padronizar o payload do front
+Você está enviando appointmentIds como string. Não tem problema (o backend já faz includes(app.id.toString())), mas, se quiser deixar tudo redondinho:
+
+Antes (front)
+ts
+Copiar
+Editar
+body: JSON.stringify({ 
+  appointmentIds: selectedAppointmentIds.map(id => id.toString()), // strings
+  endAtStart,
+  responsibleType,
+  responsibleId: responsibleId?.toString(),
+  title: ...
+}),
+Depois (opcional)
+ts
+Copiar
+Editar
+body: JSON.stringify({ 
+  appointmentIds: selectedAppointmentIds,              // números
+  endAtStart,
+  responsibleType,
+  responsibleId,                                       // se for número, mantenha número
+  title: ...
+}),
+Se fizer isso, também atualize o Zod no backend para aceitar número ou string:
+
+ts
+Copiar
+Editar
+const optimizeRouteSchema = z.object({
+  appointmentIds: z.array(z.union([z.string(), z.number()])),
+  endAtStart: z.boolean(),
+  responsibleType: z.enum(['technician', 'team']),
+  responsibleId: z.union([z.string(), z.number()]),
+  vehicleId: z.string().optional(),
+  title: z.string().optional()
+});
+E logo após validar:
+
+ts
+Copiar
+Editar
+const appointmentIdsNorm = appointmentIds.map(id => Number(id));
+...
+const selectedAppointments = appointmentList.filter(app => 
+  appointmentIdsNorm.includes(Number(app.id))
+);
+Checklist rápido
+ Alterar appointmentId para integer no schema.
+
+ Rodar migração (drop/recreate route_stops se não houver dados).
+
+ Ajustar stopData.appointmentId para Number(app.id).
+
+ Ajustar comparação ao montar a resposta.
+
+ (Opcional) Padronizar o payload do front e o schema Zod.
+
+Feito isso, esse erro “invalid input syntax for type uuid: "6"” some. Se quiser, te mando os blocos de migração Drizzle prontos no formato do seu projeto.

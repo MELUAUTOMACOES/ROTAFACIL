@@ -29,6 +29,18 @@ function getOsrmUrl() {
   }
 }
 
+// Helper para converter ID numérico para UUID válido
+function numberToUUID(num: number): string {
+  const padded = num.toString().padStart(32, '0');
+  return [
+    padded.slice(0, 8),
+    padded.slice(8, 12),
+    padded.slice(12, 16),
+    padded.slice(16, 20),
+    padded.slice(20, 32)
+  ].join('-');
+}
+
 // Schema de validação para otimização
 const optimizeRouteSchema = z.object({
   appointmentIds: z.array(z.string()),
@@ -317,7 +329,7 @@ export function registerRoutesAPI(app: Express) {
           const app = appointmentData[appointmentIndex];
           stopData.push({
             routeId: savedRoute.id,
-            appointmentId: app.id.toString(),
+            appointmentId: numberToUUID(Number(app.id)),
             order: i,
             lat: app.lat,
             lng: app.lng,
@@ -333,7 +345,7 @@ export function registerRoutesAPI(app: Express) {
       
       // 10. Preparar resposta
       const stops = stopData.map(stop => {
-        const app = appointmentData.find(a => a.id.toString() === stop.appointmentId);
+        const app = appointmentData.find(a => numberToUUID(Number(a.id)) === stop.appointmentId);
         return {
           order: stop.order,
           appointmentId: stop.appointmentId,
