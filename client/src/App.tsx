@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Appointments from "./pages/Appointments";
 import FindDate from "./pages/FindDate";
 import Routes from "./pages/Routes";
+import RoutesHistory from "./pages/routes/RoutesHistory";
 import Clients from "./pages/Clients";
 import Technicians from "./pages/Technicians";
 import Vehicles from "./pages/Vehicles";
@@ -46,7 +47,7 @@ function AppRoutes() {
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/appointments" component={Appointments} />
         <Route path="/find-date" component={FindDate} />
-        <Route path="/routes" component={Routes} />
+        <Route path="/routes" component={RoutesHistory} />
         <Route path="/clients" component={Clients} />
         <Route path="/technicians" component={Technicians} />
         <Route path="/vehicles" component={Vehicles} />
