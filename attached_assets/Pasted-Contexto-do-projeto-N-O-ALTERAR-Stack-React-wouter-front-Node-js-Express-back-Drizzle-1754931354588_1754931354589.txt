@@ -1,0 +1,307 @@
+Contexto do projeto (NÃO ALTERAR):
+
+Stack: React + wouter (front), Node.js + Express (back), Drizzle ORM, Vite, Tailwind.
+
+Regras RotaFácil: cores #DAA520 (amarelo queimado), #B8860B (amarelo queimado escuro), preto, branco; “herança” de técnicos da equipe; logs em submits/erros; UI minimalista.
+
+Já existe tela de Agendamentos com seleção de cards e botão Otimizar Rotas que abre um drawer lateral.
+
+Endpoint existente: POST /api/routes/optimize (usa OSRM /table + /route, TSP NN+2opt, salva em routes e route_stops).
+
+Hoje o back está retornando appointmentId como UUID sintético (numberToUUID). O front tenta achar o agendamento por ID numérico e não encontra, então a lista da ordem não aparece.
+
+Objetivo desta tarefa:
+
+Ajustar o backend (server/routes/routes.api.ts) para enriquecer o payload:
+
+Incluir um bloco start com endereço e coordenadas do ponto inicial (endereço da empresa).
+
+Em cada item de stops, incluir dados completos para renderizar diretamente no front, sem precisar consultar os agendamentos por ID (ou seja: clientName, serviceName, scheduledDate, address, lat, lng, etc.).
+
+Manter a lógica atual (OSRM + TSP + salvamento).
+
+Manter logs.
+
+Ajustar o frontend (client/src/pages/Appointments.tsx) para renderizar o drawer usando apenas o payload do backend (optimizedRoute.start e optimizedRoute.stops), sem fazer .find() por ID.
+
+Manter o resumo (paradas, distância total, tempo) usando optimizedRoute.route.
+
+Manter a checkbox “Terminar no ponto inicial” ao lado do botão Otimizar Rotas.
+
+Estilo deve respeitar as cores oficiais e o padrão do drawer já existente.
+
+PARTE 1 — BACKEND
+Arquivo: server/routes/routes.api.ts
+
+1.1. Garanta que o SELECT dos agendamentos traga dados suficientes
+Procurar por este SELECT (ele pega agendamentos de appointments + clients):
+
+ANTES (âncora aproximada):
+
+ts
+Copiar
+Editar
+const appointmentList = await db
+  .select({
+    id: appointments.id,
+    clientId: appointments.clientId,
+    scheduledDate: appointments.scheduledDate,
+    cep: appointments.cep,
+    logradouro: appointments.logradouro,
+    numero: appointments.numero,
+    complemento: appointments.complemento,
+    bairro: appointments.bairro,
+    cidade: appointments.cidade,
+    clientName: clients.name
+  })
+  .from(appointments)
+  .leftJoin(clients, eq(appointments.clientId, clients.id))
+  .where(eq(appointments.userId, req.user.userId));
+DEPOIS (adicione serviceName se services existir na schema):
+
+ts
+Copiar
+Editar
+// se não houver tabela services no join, ignore serviceName (deixe string vazia na resposta)
+const appointmentList = await db
+  .select({
+    id: appointments.id,
+    clientId: appointments.clientId,
+    serviceId: appointments.serviceId,
+    scheduledDate: appointments.scheduledDate,
+    cep: appointments.cep,
+    logradouro: appointments.logradouro,
+    numero: appointments.numero,
+    complemento: appointments.complemento,
+    bairro: appointments.bairro,
+    cidade: appointments.cidade,
+    clientName: clients.name,
+  })
+  .from(appointments)
+  .leftJoin(clients, eq(appointments.clientId, clients.id))
+  .where(eq(appointments.userId, req.user.userId));
+Obs.: se já havia serviceName via join com services, mantenha. Se não, vamos preencher string vazia mais abaixo.
+
+1.2. Ao montar appointmentData (logo antes de gerar coordenadas), inclua os campos de exibição
+ANTES (âncora):
+
+ts
+Copiar
+Editar
+const appointmentData = selectedAppointments.map(app => ({
+  ...app,
+  address: `${app.logradouro}, ${app.numero}, ${app.bairro}, ${app.cidade}`,
+  lat: -25.4284 + Math.random() * 0.1,
+  lng: -49.2654 + Math.random() * 0.1
+}));
+DEPOIS:
+
+ts
+Copiar
+Editar
+const appointmentData = selectedAppointments.map(app => ({
+  ...app,
+  address: `${app.logradouro}, ${app.numero}, ${app.bairro}, ${app.cidade}`,
+  clientName: app.clientName || "Cliente",
+  serviceName: (app as any).serviceName ?? "", // se não tiver join com services, fica ""
+  scheduledDate: app.scheduledDate ?? null,
+  // TODO: substituir mocks por coords reais quando existirem
+  lat: -25.4284 + Math.random() * 0.1,
+  lng: -49.2654 + Math.random() * 0.1
+}));
+1.3. Ao preparar a resposta, inclua start e enriqueça stops
+Procurar o bloco “// 10. Preparar resposta” e substituir.
+
+ANTES (âncora):
+
+ts
+Copiar
+Editar
+// 10. Preparar resposta
+const stops = stopData.map(stop => {
+  const app = appointmentData.find(a => numberToUUID(Number(a.id)) === stop.appointmentId);
+  return {
+    order: stop.order,
+    appointmentId: stop.appointmentId,
+    title: app?.clientName || "Cliente",
+    address: stop.address,
+    lat: stop.lat,
+    lng: stop.lng
+  };
+});
+
+const responseData = {
+  route: { ... },
+  stops
+};
+DEPOIS (cole exatamente):
+
+ts
+Copiar
+Editar
+// 10. Preparar resposta — incluir bloco 'start' e enriquecer 'stops'
+const stops = stopData.map(stop => {
+  const app = appointmentData.find(a => numberToUUID(Number(a.id)) === stop.appointmentId);
+  return {
+    order: stop.order,
+    appointmentId: stop.appointmentId,
+    appointmentNumericId: app?.id ?? null,
+    clientName: app?.clientName || "Cliente",
+    serviceName: app?.serviceName ?? "",
+    scheduledDate: app?.scheduledDate ?? null,
+    address: stop.address,
+    lat: stop.lat,
+    lng: stop.lng
+  };
+});
+
+const start = {
+  address: startAddress,
+  lat: startCoordinates[1],
+  lng: startCoordinates[0]
+};
+
+const responseData = {
+  route: {
+    id: savedRoute.id,
+    title: savedRoute.title,
+    date: savedRoute.date,
+    vehicleId: savedRoute.vehicleId,
+    responsible: {
+      type: savedRoute.responsibleType,
+      id: savedRoute.responsibleId
+    },
+    endAtStart: savedRoute.endAtStart,
+    distanceTotal: savedRoute.distanceTotal,
+    durationTotal: savedRoute.durationTotal,
+    stopsCount: savedRoute.stopsCount,
+    status: savedRoute.status,
+    polylineGeoJson: savedRoute.polylineGeoJson
+  },
+  start,
+  stops
+};
+Importante: não remover os logs existentes. Apenas ajuste para que mostre quantas paradas e que o start foi incluído.
+
+PARTE 2 — FRONTEND
+Arquivo: client/src/pages/Appointments.tsx
+
+2.1. No drawer de “Rota Otimizada”, renderize usando apenas o payload optimizedRoute
+Localize o bloco que hoje faz:
+
+optimizedRoute && !isOptimizing && (...)
+
+Dentro dele, tem a seção “Resumo da Rota” e a “Ordem Otimizada”.
+
+Na “Ordem Otimizada”, atualmente o código faz .find nos filteredAppointments pelo stop.appointmentId.
+
+ANTES (âncora da lista, reduzido):
+
+tsx
+Copiar
+Editar
+{optimizedRoute.stops?.map((stop, index) => {
+  const appointment = filteredAppointments.find(apt => apt.id === stop.appointmentId);
+  if (!appointment) return null;
+  const client = getClient(appointment.clientId);
+  const service = getService(appointment.serviceId);
+  const { date, time } = formatDateTime(appointment.scheduledDate.toString());
+  ...
+})}
+DEPOIS (cole exatamente, sem usar find; inclui “Início da rota” como no layout da Roteirização):
+
+tsx
+Copiar
+Editar
+{/* Resumo já usa optimizedRoute.route, manter como está */}
+
+{/* Ordem Otimizada */}
+<div>
+  <h3 className="font-semibold text-gray-900 mb-4">Ordem Otimizada</h3>
+
+  {/* Início da rota (endereço da empresa) */}
+  {optimizedRoute.start && (
+    <div className="bg-gray-50 rounded-lg p-4 mb-3">
+      <div className="flex items-start space-x-3">
+        <div className="flex-shrink-0 w-6 h-6 bg-gray-400 text-white rounded-full flex items-center justify-center text-sm font-medium">
+          <span>•</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="font-medium text-gray-900 truncate">Início da rota</h4>
+          <p className="text-sm text-gray-600 truncate">
+            {optimizedRoute.start.address}
+          </p>
+        </div>
+      </div>
+    </div>
+  )}
+
+  <div className="space-y-3">
+    {optimizedRoute.stops?.map((stop: any, index: number) => {
+      const dt = stop.scheduledDate ? new Date(stop.scheduledDate) : null;
+      const date = dt ? dt.toLocaleDateString('pt-BR') : null;
+      const time = dt ? dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
+
+      return (
+        <div key={`${stop.appointmentId}-${index}`} className="bg-gray-50 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0 w-6 h-6 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-medium">
+              {index + 1}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-medium text-gray-900 truncate">
+                {stop.clientName || "Cliente"}
+              </h4>
+              {stop.serviceName && (
+                <p className="text-sm text-gray-600 truncate">{stop.serviceName}</p>
+              )}
+              {dt && (
+                <p className="text-sm text-gray-500">{date} às {time}</p>
+              )}
+              <p className="text-sm text-gray-500 truncate">{stop.address}</p>
+            </div>
+            <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+          </div>
+        </div>
+      );
+    })}
+  </div>
+</div>
+2.2. Garanta que o Resumo usa os dados do back (já está assim, apenas confirme):
+tsx
+Copiar
+Editar
+<span className="font-medium">
+  {optimizedRoute.route?.stopsCount ?? optimizedRoute.stops?.length ?? 0}
+</span>
+<span className="font-medium text-blue-600">
+  {optimizedRoute.route?.distanceTotal ? `${(optimizedRoute.route.distanceTotal / 1000).toFixed(1)} km` : 'N/A'}
+</span>
+<span className="font-medium text-green-600">
+  {optimizedRoute.route?.durationTotal ? `${Math.round(optimizedRoute.route.durationTotal / 60)} min` : 'N/A'}
+</span>
+PARTE 3 — TESTES QUE DEVEM PASSAR
+Selecionar 2+ agendamentos, marcar/desmarcar “Terminar no ponto inicial”, clicar “Otimizar Rotas”.
+
+Drawer deve mostrar loading e depois:
+
+Resumo da Rota com paradas, distância e tempo.
+
+Início da rota (endereço da empresa).
+
+Ordem Otimizada com nome do cliente, serviço, data/hora e endereço de cada parada, sem depender de .find() por ID.
+
+Logs no servidor devem indicar sucesso, matriz OSRM chamada, tour resolvido e rota salva.
+
+Nenhum erro de “não encontrado” no front ao renderizar a lista.
+
+IMPORTANTE (RotaFácil)
+Não mudar o layout geral do drawer; apenas preencher com dados reais.
+
+Manter as cores #DAA520 / #B8860B nos elementos de destaque (ícones, badges, etc.).
+
+Não remover logs — apenas complemente quando necessário (ex.: “start adicionado ao payload”).
+
+Não alterar outras telas nem os componentes compartilhados.
+
+No final, explique brevemente o que foi modificado (arquivos e blocos) e confirme o passo a passo para teste.

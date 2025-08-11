@@ -1632,7 +1632,9 @@ export default function Appointments() {
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
                             <span>Paradas:</span>
-                            <span className="font-medium">{optimizedRoute.stops?.length || 0}</span>
+                            <span className="font-medium">
+                              {optimizedRoute.route?.stopsCount ?? optimizedRoute.stops?.length ?? 0}
+                            </span>
                           </div>
                           <div className="flex justify-between">
                             <span>Distância Total:</span>
@@ -1655,36 +1657,50 @@ export default function Appointments() {
                         </div>
                       </div>
 
-                      {/* Optimized Order */}
+                      {/* Ordem Otimizada */}
                       <div>
                         <h3 className="font-semibold text-gray-900 mb-4">Ordem Otimizada</h3>
+
+                        {/* Início da rota (endereço da empresa) */}
+                        {optimizedRoute.start && (
+                          <div className="bg-gray-50 rounded-lg p-4 mb-3">
+                            <div className="flex items-start space-x-3">
+                              <div className="flex-shrink-0 w-6 h-6 bg-gray-400 text-white rounded-full flex items-center justify-center text-sm font-medium">
+                                <span>•</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-gray-900 truncate">Início da rota</h4>
+                                <p className="text-sm text-gray-600 truncate">
+                                  {optimizedRoute.start.address}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="space-y-3">
-                          {optimizedRoute.stops?.map((stop, index) => {
-                            const appointment = filteredAppointments.find(apt => apt.id === stop.appointmentId);
-                            if (!appointment) return null;
-                            const client = getClient(appointment.clientId);
-                            const service = getService(appointment.serviceId);
-                            const { date, time } = formatDateTime(appointment.scheduledDate.toString());
-                            
+                          {optimizedRoute.stops?.map((stop: any, index: number) => {
+                            const dt = stop.scheduledDate ? new Date(stop.scheduledDate) : null;
+                            const date = dt ? dt.toLocaleDateString('pt-BR') : null;
+                            const time = dt ? dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
+
                             return (
-                              <div key={appointment.id} className="bg-gray-50 rounded-lg p-4">
+                              <div key={`${stop.appointmentId}-${index}`} className="bg-gray-50 rounded-lg p-4">
                                 <div className="flex items-start space-x-3">
                                   <div className="flex-shrink-0 w-6 h-6 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-medium">
                                     {index + 1}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <h4 className="font-medium text-gray-900 truncate">
-                                      {client?.name || "Cliente não encontrado"}
+                                      {stop.clientName || "Cliente"}
                                     </h4>
-                                    <p className="text-sm text-gray-600 truncate">
-                                      {service?.name || "Serviço não encontrado"}
-                                    </p>
-                                    <p className="text-sm text-gray-500">{date} às {time}</p>
-                                    <p className="text-sm text-gray-500 truncate">
-                                      {client?.logradouro || "Endereço não disponível"}
-                                      {client?.numero ? `, ${client.numero}` : ""}
-                                      {client?.bairro ? `, ${client.bairro}` : ""}
-                                    </p>
+                                    {stop.serviceName && (
+                                      <p className="text-sm text-gray-600 truncate">{stop.serviceName}</p>
+                                    )}
+                                    {dt && (
+                                      <p className="text-sm text-gray-500">{date} às {time}</p>
+                                    )}
+                                    <p className="text-sm text-gray-500 truncate">{stop.address}</p>
                                   </div>
                                   <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
                                 </div>

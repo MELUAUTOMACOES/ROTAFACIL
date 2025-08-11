@@ -205,6 +205,7 @@ export function registerRoutesAPI(app: Express) {
         .select({
           id: appointments.id,
           clientId: appointments.clientId,
+          serviceId: appointments.serviceId,
           scheduledDate: appointments.scheduledDate,
           cep: appointments.cep,
           logradouro: appointments.logradouro,
@@ -212,7 +213,7 @@ export function registerRoutesAPI(app: Express) {
           complemento: appointments.complemento,
           bairro: appointments.bairro,
           cidade: appointments.cidade,
-          clientName: clients.name
+          clientName: clients.name,
         })
         .from(appointments)
         .leftJoin(clients, eq(appointments.clientId, clients.id))
@@ -256,8 +257,11 @@ export function registerRoutesAPI(app: Express) {
       const appointmentData = selectedAppointments.map(app => ({
         ...app,
         address: `${app.logradouro}, ${app.numero}, ${app.bairro}, ${app.cidade}`,
-        // TODO: Implementar geocodificação real ou usar coordenadas salvas
-        lat: -25.4284 + Math.random() * 0.1, // Mock para teste
+        clientName: app.clientName || "Cliente",
+        serviceName: (app as any).serviceName ?? "", // se não tiver join com services, fica ""
+        scheduledDate: app.scheduledDate ?? null,
+        // TODO: substituir mocks por coords reais quando existirem
+        lat: -25.4284 + Math.random() * 0.1,
         lng: -49.2654 + Math.random() * 0.1
       }));
       
@@ -343,19 +347,28 @@ export function registerRoutesAPI(app: Express) {
         console.log("✅ Paradas salvas:", stopData.length);
       }
       
-      // 10. Preparar resposta
+      // 10. Preparar resposta — incluir bloco 'start' e enriquecer 'stops'
       const stops = stopData.map(stop => {
         const app = appointmentData.find(a => numberToUUID(Number(a.id)) === stop.appointmentId);
         return {
           order: stop.order,
           appointmentId: stop.appointmentId,
-          title: app?.clientName || "Cliente",
+          appointmentNumericId: app?.id ?? null,
+          clientName: app?.clientName || "Cliente",
+          serviceName: app?.serviceName ?? "",
+          scheduledDate: app?.scheduledDate ?? null,
           address: stop.address,
           lat: stop.lat,
           lng: stop.lng
         };
       });
-      
+
+      const start = {
+        address: startAddress,
+        lat: startCoordinates[1],
+        lng: startCoordinates[0]
+      };
+
       const responseData = {
         route: {
           id: savedRoute.id,
@@ -373,10 +386,12 @@ export function registerRoutesAPI(app: Express) {
           status: savedRoute.status,
           polylineGeoJson: savedRoute.polylineGeoJson
         },
+        start,
         stops
       };
       
       console.log("✅ Rota otimizada e salva com sucesso");
+      console.log("📍 Start adicionado ao payload:", startAddress);
       console.log("==== LOG FIM: /api/routes/optimize (SUCESSO) ====");
       
       res.json(responseData);
