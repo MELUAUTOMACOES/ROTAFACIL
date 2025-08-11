@@ -37,11 +37,14 @@ export default function Appointments() {
   // Estados para seleção de agendamentos e otimização de rotas
   const [selectedAppointmentIds, setSelectedAppointmentIds] = useState<number[]>([]);
   const [isRouteDrawerOpen, setIsRouteDrawerOpen] = useState(false);
-  const [terminarNoPontoInicial, setTerminarNoPontoInicial] = useState(false);
+  const [endAtStart, setEndAtStart] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizedRoute, setOptimizedRoute] = useState<{
-    appointments: Appointment[];
-    totalDistance: number;
-    totalDuration: number;
+    route?: any;
+    stops?: any[];
+    appointments?: Appointment[];
+    totalDistance?: number;
+    totalDuration?: number;
   } | null>(null);
   
   const { toast } = useToast();
@@ -254,26 +257,75 @@ export default function Appointments() {
     }
   };
 
-  const handleOptimizeRoute = () => {
-    const selectedAppointments = filteredAppointments.filter(apt => 
-      selectedAppointmentIds.includes(apt.id)
-    );
-    
-    console.log("🗺️ [ROUTE] Otimizando rotas com configuração:", {
-      appointmentsCount: selectedAppointments.length,
-      terminarNoPontoInicial: terminarNoPontoInicial
-    });
-    
-    // Simulação de otimização de rotas - por enquanto apenas embaralha a ordem
-    const shuffled = [...selectedAppointments].sort(() => Math.random() - 0.5);
-    
-    setOptimizedRoute({
-      appointments: shuffled,
-      totalDistance: Math.round(Math.random() * 100 + 20), // Simula distância entre 20-120 km
-      totalDuration: Math.round(Math.random() * 180 + 60), // Simula duração entre 60-240 minutos
-    });
-    
-    setIsRouteDrawerOpen(true);
+  const handleOptimizeRoute = async () => {
+    if (selectedAppointmentIds.length < 2) {
+      toast({ 
+        title: "Selecione ao menos 2 agendamentos.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    try {
+      setIsOptimizing(true);
+      setIsRouteDrawerOpen(true);
+      setOptimizedRoute(null);
+
+      console.log("🗺️ [ROUTE] Otimizando rotas com configuração:", {
+        appointmentIds: selectedAppointmentIds,
+        endAtStart: endAtStart
+      });
+
+      // Buscar dados do primeiro agendamento para determinar responsável
+      const firstAppointment = filteredAppointments.find(apt => 
+        selectedAppointmentIds.includes(apt.id)
+      );
+      
+      if (!firstAppointment) {
+        throw new Error("Agendamentos selecionados não encontrados");
+      }
+
+      const responsibleType = firstAppointment.technicianId ? 'technician' : 'team';
+      const responsibleId = firstAppointment.technicianId || firstAppointment.teamId;
+
+      const res = await fetch("/api/routes/optimize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          appointmentIds: selectedAppointmentIds.map(id => id.toString()), 
+          endAtStart,
+          responsibleType,
+          responsibleId: responsibleId?.toString(),
+          title: `Rota ${new Date().toLocaleDateString()}`
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Falha ao otimizar rota");
+      }
+
+      const data = await res.json();
+      console.log("✅ [ROUTE] Rota otimizada recebida:", data);
+      
+      setOptimizedRoute(data);
+      
+      toast({
+        title: "Rota otimizada com sucesso!",
+        description: `${data.stops?.length || 0} paradas organizadas`,
+      });
+
+    } catch (err) {
+      console.error("❌ [ROUTE] Erro ao otimizar:", err);
+      toast({ 
+        title: "Erro ao otimizar rota", 
+        description: err.message || "Erro interno do servidor",
+        variant: "destructive" 
+      });
+      setIsRouteDrawerOpen(false);
+    } finally {
+      setIsOptimizing(false);
+    }
   };
 
 
@@ -1364,21 +1416,15 @@ export default function Appointments() {
               
               {selectedAppointmentIds.length > 1 && (
                 <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="terminarNoPontoInicial"
-                      checked={terminarNoPontoInicial}
-                      onCheckedChange={checked => setTerminarNoPontoInicial(checked === true)}
-                      className="w-5 h-5 data-[state=checked]:bg-burnt-yellow data-[state=checked]:border-burnt-yellow"
+                  <label className="flex items-center gap-2 text-[14px] font-medium text-[#B8860B]">
+                    <input
+                      type="checkbox"
+                      checked={endAtStart}
+                      onChange={(e) => setEndAtStart(e.target.checked)}
+                      className="h-4 w-4 rounded border-[#DAA520] text-[#DAA520] focus:ring-[#DAA520]"
                     />
-                    <label
-                      htmlFor="terminarNoPontoInicial"
-                      className="font-medium text-base flex items-center gap-2 cursor-pointer"
-                    >
-                      <Repeat2 className="text-burnt-yellow w-5 h-5" />
-                      Terminar no ponto inicial
-                    </label>
-                  </div>
+                    Terminar no ponto inicial
+                  </label>
                   <Button
                     onClick={handleOptimizeRoute}
                     className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
@@ -1571,23 +1617,40 @@ export default function Appointments() {
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6">
-                  {optimizedRoute && (
+                  {isOptimizing && (
+                    <div className="p-4 text-sm text-gray-600 flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#DAA520] mr-3"></div>
+                      Otimizando rota, aguarde...
+                    </div>
+                  )}
+                  
+                  {optimizedRoute && !isOptimizing && (
                     <div className="space-y-6">
                       {/* Summary */}
-                      <div className="bg-burnt-yellow/10 rounded-lg p-4">
+                      <div className="bg-[#DAA520]/10 rounded-lg p-4">
                         <h3 className="font-semibold text-gray-900 mb-2">Resumo da Rota</h3>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
-                            <span>Agendamentos:</span>
-                            <span className="font-medium">{optimizedRoute.appointments.length}</span>
+                            <span>Paradas:</span>
+                            <span className="font-medium">{optimizedRoute.stops?.length || 0}</span>
                           </div>
                           <div className="flex justify-between">
                             <span>Distância Total:</span>
-                            <span className="font-medium">{optimizedRoute.totalDistance} km</span>
+                            <span className="font-medium text-blue-600">
+                              {optimizedRoute.route?.distanceTotal ? 
+                                `${(optimizedRoute.route.distanceTotal / 1000).toFixed(1)} km` : 
+                                'N/A'
+                              }
+                            </span>
                           </div>
                           <div className="flex justify-between">
                             <span>Tempo Estimado:</span>
-                            <span className="font-medium">{optimizedRoute.totalDuration} min</span>
+                            <span className="font-medium text-green-600">
+                              {optimizedRoute.route?.durationTotal ? 
+                                `${Math.round(optimizedRoute.route.durationTotal / 60)} min` : 
+                                'N/A'
+                              }
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -1596,7 +1659,9 @@ export default function Appointments() {
                       <div>
                         <h3 className="font-semibold text-gray-900 mb-4">Ordem Otimizada</h3>
                         <div className="space-y-3">
-                          {optimizedRoute.appointments.map((appointment, index) => {
+                          {optimizedRoute.stops?.map((stop, index) => {
+                            const appointment = filteredAppointments.find(apt => apt.id === stop.appointmentId);
+                            if (!appointment) return null;
                             const client = getClient(appointment.clientId);
                             const service = getService(appointment.serviceId);
                             const { date, time } = formatDateTime(appointment.scheduledDate.toString());

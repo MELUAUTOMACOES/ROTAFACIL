@@ -1,0 +1,96 @@
+3) Front — tela Agendamentos com checkbox e chamada real
+Prompt para o Replit AI:
+
+Tarefa: Ajustar client/src/pages/appointments/Appointments.tsx (ou caminho equivalente) para:
+
+Adicionar checkbox “Terminar no ponto inicial” à esquerda do botão Otimizar Rotas (estilo destacado, igual tela de Roteirização; usar as cores oficiais).
+
+Ao clicar Otimizar Rotas:
+
+Se houver 2+ agendamentos selecionados:
+
+Mostre setLoading(true) e texto “Otimizando rota, aguarde…” sempre, inclusive na primeira vez.
+
+Chame POST /api/routes/optimize com { appointmentIds, endAtStart }.
+
+Ao receber resposta, abrir o drawer lateral (reutilizar o componente da tela de Roteirização) exibindo: Resumo da Rota e Ordem Otimizada, usando os dados retornados.
+
+Guardar currentRoute no estado (id, stops, resumo) para permitir “Iniciar Navegação” e “Exportar”.
+
+Se <2 selecionados: toast de erro.
+
+Layout responsivo: quando o drawer abrir (conteúdo expandir), o quadro “Selecionar atendimentos” deve expandir junto até o fim da página (mesma altura do painel de rota).
+
+Instruções de edição com ANTES/DEPOIS:
+
+Antes do bloco onde ficam os botões de ação (procure pelo botão “Otimizar Rotas”), cole abaixo:
+
+tsx
+Copiar
+Editar
+// DEPOIS — novo estado
+const [endAtStart, setEndAtStart] = useState(false);
+const [isOptimizing, setIsOptimizing] = useState(false);
+const [optimizedRoute, setOptimizedRoute] = useState<null | OptimizedRouteDTO>(null);
+Antes do botão “Otimizar Rotas”, inserir à esquerda:
+
+tsx
+Copiar
+Editar
+// DEPOIS — checkbox "Terminar no ponto inicial"
+<label className="flex items-center gap-2 text-[14px] font-medium text-[#B8860B]">
+  <input
+    type="checkbox"
+    checked={endAtStart}
+    onChange={(e) => setEndAtStart(e.target.checked)}
+    className="h-4 w-4 rounded border-[#DAA520] text-[#DAA520] focus:ring-[#DAA520]"
+  />
+  Terminar no ponto inicial
+</label>
+Substituir o onClick do botão “Otimizar Rotas” por:
+
+tsx
+Copiar
+Editar
+const handleOptimize = async () => {
+  if (selectedIds.length < 2) {
+    toast({ title: "Selecione ao menos 2 agendamentos.", variant: "destructive" });
+    return;
+  }
+  try {
+    setIsOptimizing(true);
+    setDrawerOpen(true);
+    setOptimizedRoute(null);
+    setDrawerLoadingText("Otimizando rota, aguarde...");
+    const res = await fetch("/api/routes/optimize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ appointmentIds: selectedIds, endAtStart }),
+    });
+    if (!res.ok) throw new Error("Falha ao otimizar rota");
+    const data = await res.json();
+    setOptimizedRoute(data);
+    setDrawerLoadingText(null);
+  } catch (err) {
+    console.error(err);
+    toast({ title: "Erro ao otimizar rota", variant: "destructive" });
+  } finally {
+    setIsOptimizing(false);
+  }
+};
+No drawer lateral, renderizar:
+
+tsx
+Copiar
+Editar
+{isOptimizing && <div className="p-4 text-sm text-gray-600">Otimizando rota, aguarde...</div>}
+{optimizedRoute && (
+  <RouteSummaryAndList route={optimizedRoute.route} stops={optimizedRoute.stops} />
+)}
+Observações RotaFácil:
+
+Manter cores (#DAA520, #B8860B) e estilo minimalista.
+
+Logs no submit/erro.
+
+Respeitar exibição de Técnico/Equipe corretamente nos cards.
