@@ -1,0 +1,126 @@
+Histórico de Rotas
+Contexto do projeto:
+
+Frontend: React + wouter, Vite, Tailwind CSS.
+
+Backend: Express + Drizzle ORM.
+
+Cores RotaFácil:
+
+Amarelo queimado #DAA520
+
+Amarelo queimado escuro #B8860B
+
+Preto #000000
+
+Branco #FFFFFF
+
+Já existe um drawer funcionando na tela Agendamentos que exibe rotas otimizadas.
+
+Importante: NÃO modificar nem sobrescrever nenhum arquivo ou tela existente. Criar um novo arquivo totalmente independente para esta página.
+
+Objetivo:
+Criar uma nova página chamada Histórico de Rotas acessível pela rota /routes que:
+
+Mostra filtros no topo (período, responsável, veículo, status, busca por título).
+
+Mostra uma tabela com colunas: Título, Data, Veículo, Técnico/Equipe, Distância, Duração, Paradas, Status.
+
+Ao clicar numa linha da tabela, abre um drawer próprio desta página exibindo os detalhes da rota.
+
+O drawer desta página pode copiar o layout e estilo do drawer de “Rota Otimizada” já usado em Agendamentos, mas o código deve estar neste novo arquivo — não reutilizar componente diretamente, não alterar o arquivo original.
+
+Usar os endpoints existentes:
+
+GET /api/routes para listar rotas.
+
+GET /api/routes/:id para detalhes.
+
+Regras obrigatórias:
+
+Criar novo arquivo: client/src/pages/routes/RoutesHistory.tsx.
+
+Criar rota /routes no sistema, apontando para esta página.
+
+Não alterar nem remover código de outras telas.
+
+Drawer desta página deve ser autônomo: pode copiar a marcação/estilo do drawer de agendamentos, mas dentro do próprio arquivo.
+
+Respeitar cores e estilo minimalista do RotaFácil.
+
+Campos obrigatórios destacados, mensagens de erro claras.
+
+Logar no console eventos de filtro, carregamento, e abertura de detalhes.
+
+Toast em erros (usar useToast).
+
+Select único para Técnico/Equipe, igual padrão do sistema.
+
+Estrutura esperada da página:
+
+Header com título "Histórico de Rotas" e subtítulo.
+
+Card de filtros com:
+
+Período: campo De / Até
+
+Responsável: select técnico/equipe
+
+Veículo: select
+
+Status: select
+
+Busca por título: input com ícone de busca
+
+Botões: Aplicar / Limpar
+
+Tabela responsiva com as colunas indicadas.
+
+Ao clicar numa linha, abre drawer com detalhes.
+
+Drawer desta página contendo:
+
+Resumo (paradas, distância total, tempo total)
+
+“Início da rota” (endereço do start)
+
+Lista das paradas com ordem, nome do cliente, serviço, data/hora, endereço
+
+Botões: Iniciar Navegação / Exportar Rota (não precisam ter função implementada agora)
+
+Dados para preenchimento:
+
+Na listagem (GET /api/routes), exibir diretamente os dados retornados.
+
+No detalhe (GET /api/routes/:id), usar o payload { route, start, stops } para preencher o drawer.
+
+Distância: exibir em km com 1 casa decimal ((m/1000).toFixed(1) km).
+
+Duração: exibir em minutos arredondado (Math.round(s/60) min).
+
+Data: formatar pt-BR.
+
+Status: exibir com capitalização e cor diferente por tipo (optimized, running, done, canceled).
+
+IMPORTANTE:
+
+Este arquivo novo (RoutesHistory.tsx) deve funcionar isoladamente.
+
+Não remover nem modificar Appointments.tsx ou qualquer outra tela.
+
+Não alterar componentes globais, apenas utilizar os existentes.
+
+Manter logs (console.log) para depuração.
+
+Garantir responsividade (desktop/mobile).
+
+Entrega esperada:
+
+Arquivo client/src/pages/routes/RoutesHistory.tsx criado com toda a lógica e layout.
+
+Registro da nova rota /routes.
+
+Drawer funcional apenas dentro desta página.
+
+Instruções curtas no final explicando como acessar a nova página no navegador.
+
