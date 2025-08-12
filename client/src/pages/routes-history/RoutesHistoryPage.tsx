@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,6 +43,7 @@ interface Route {
   durationTotal: number;
   stopsCount: number;
   status: 'draft' | 'optimized' | 'running' | 'done' | 'canceled';
+  displayNumber: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -106,6 +107,21 @@ export default function RoutesHistoryPage() {
   });
 
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
+
+  // Função para verificar URL params e abrir automaticamente a modal
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const openRouteId = urlParams.get('open');
+    if (openRouteId && routes.length > 0) {
+      const routeExists = routes.find(route => route.id === openRouteId);
+      if (routeExists) {
+        setSelectedRoute(openRouteId);
+        // Limpar o parâmetro da URL após abrir
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+      }
+    }
+  }, [routes]);
 
   console.log('✅ Página Histórico de Rotas carregada');
   console.log('🔍 [ROUTES HISTORY] Aplicando filtros:', filters);
@@ -412,6 +428,7 @@ export default function RoutesHistoryPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>ID</TableHead>
                     <TableHead>Título</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Veículo</TableHead>
@@ -426,6 +443,7 @@ export default function RoutesHistoryPage() {
                 <TableBody>
                   {routes.map((route) => (
                     <TableRow key={route.id} data-testid={`row-route-${route.id}`}>
+                      <TableCell className="font-medium">#{route.displayNumber}</TableCell>
                       <TableCell className="font-medium">{route.title}</TableCell>
                       <TableCell>
                         {fmtDateTime(route.date)}

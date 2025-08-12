@@ -46,6 +46,7 @@ export default function Appointments() {
     totalDistance?: number;
     totalDuration?: number;
   } | null>(null);
+  const [savedInfo, setSavedInfo] = useState<null | { id: string; displayNumber: number }>(null);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -360,11 +361,12 @@ export default function Appointments() {
 
       const data = await res.json();
       setOptimizedRoute(data);
-      setIsRouteDrawerOpen(false);
+      setSavedInfo({ id: data.route.id, displayNumber: data.route.displayNumber });
+      // mantém drawer aberto
       setSelectedAppointmentIds([]);
 
       toast({
-        title: "Rota salva com sucesso!",
+        title: `Rota salva com sucesso — ID #${data.route.displayNumber}`,
         description: "A rota foi salva no histórico",
       });
 
@@ -1777,6 +1779,23 @@ export default function Appointments() {
                         <Button variant="outline" className="w-full">
                           Exportar Rota
                         </Button>
+
+                        {/* Aviso de rota salva + botão Ver no Histórico */}
+                        {savedInfo && (
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            <div className="text-sm">
+                              <span className="font-medium">Rota salva com sucesso</span>
+                              <span className="ml-1">ID #{savedInfo.displayNumber}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="px-3 py-2 rounded-xl bg-[#DAA520] text-black hover:bg-[#B8860B] transition"
+                              onClick={() => window.open(`/routes-history?open=${savedInfo.id}&id=${savedInfo.displayNumber}`, '_blank')}
+                            >
+                              Ver no Histórico
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
