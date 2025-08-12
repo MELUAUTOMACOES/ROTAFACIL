@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import { db } from "../db";
 import { routes, routeStops, appointments, clients, technicians, teams, businessRules } from "@shared/schema";
-import { eq, and, gte, lte, like, or, desc, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, like, or, desc, inArray, sql } from "drizzle-orm";
 
 // Extend Request type for authenticated user
 interface AuthenticatedRequest extends Request {
@@ -201,6 +201,17 @@ export function registerRoutesAPI(app: Express) {
     req.user = { userId: 1 };
     next();
   };
+
+  // Endpoint temporário para migração display_number
+  app.post('/api/routes/migrate-display-numbers', authenticateToken, async (req: any, res: Response) => {
+    console.log("🚀 Simulando migração display_number (in-memory)...");
+    console.log("✅ Migração simulada concluída");
+    res.json({ 
+      success: true, 
+      message: "Migração simulada - novas rotas usarão displayNumber automaticamente",
+      note: "As rotas existentes mostrarão displayNumber: null até serem recriadas"
+    });
+  });
   
   // POST /api/routes/optimize - Otimizar rota
   app.post('/api/routes/optimize', authenticateToken, async (req: any, res: Response) => {
@@ -424,11 +435,23 @@ export function registerRoutesAPI(app: Express) {
         return res.json(responseData);
       }
 
-      // 10. Salvar no banco (se preview === false)
+      // 10. Calcular próximo displayNumber
+      let nextDisplayNumber = 1;
+      {
+        const [maxRes] = await db
+          .select({ maxNum: sql<number>`COALESCE(MAX(${routes.displayNumber}), 0)` })
+          .from(routes);
+        nextDisplayNumber = (maxRes?.maxNum ?? 0) + 1;
+      }
+
+      // 11. Salvar no banco (se preview === false)
       console.log("💾 Salvando rota no banco...");
       const [savedRoute] = await db
         .insert(routes)
-        .values(routeData)
+        .values({
+          ...routeData,
+          displayNumber: nextDisplayNumber
+        })
         .returning();
       
       // Salvar paradas
@@ -456,7 +479,8 @@ export function registerRoutesAPI(app: Express) {
           durationTotal: savedRoute.durationTotal,
           stopsCount: savedRoute.stopsCount,
           status: savedRoute.status,
-          polylineGeoJson: savedRoute.polylineGeoJson
+          polylineGeoJson: savedRoute.polylineGeoJson,
+          displayNumber: savedRoute.displayNumber
         },
         start,
         stops
@@ -528,6 +552,7 @@ export function registerRoutesAPI(app: Express) {
           durationTotal: routes.durationTotal,
           stopsCount: routes.stopsCount,
           status: routes.status,
+          displayNumber: routes.displayNumber,
           createdAt: routes.createdAt
         })
         .from(routes);

@@ -188,6 +188,7 @@ export const routes = pgTable("routes", {
   stopsCount: integer("stops_count").notNull().default(0),
   status: varchar("status", { length: 24 }).notNull().default("optimized"), // draft|optimized|running|done|canceled
   polylineGeoJson: jsonb("polyline_geojson"), // GeoJSON LineString
+  displayNumber: integer("display_number").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
