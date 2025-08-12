@@ -41,6 +41,19 @@ function numberToUUID(num: number): string {
   ].join('-');
 }
 
+// Helper inverso: UUID "fake" -> número (remove hifens, tira zeros à esquerda)
+function uuidToNumber(uuidStr: string): number | null {
+  if (!uuidStr || typeof uuidStr !== 'string') return null;
+  const compact = uuidStr.replace(/-/g, '');
+  if (!/^[0-9a-fA-F]{32}$/.test(compact)) return null;
+  // Nosso UUID é composto só por zeros + dígitos (sem letras), pois vem de número padLeft(32,'0')
+  // Removemos zeros à esquerda e parseamos
+  const numeric = compact.replace(/^0+/, '');
+  if (numeric === '') return 0;
+  const asNum = Number(numeric);
+  return Number.isFinite(asNum) ? asNum : null;
+}
+
 // Schema de validação para otimização
 const optimizeRouteSchema = z.object({
   appointmentIds: z.array(z.union([z.string(), z.number()])),
@@ -557,15 +570,61 @@ export function registerRoutesAPI(app: Express) {
       }
       
       // Buscar paradas
-      const stops = await db
+      // Buscar paradas
+      const stopsRaw = await db
         .select()
         .from(routeStops)
         .where(eq(routeStops.routeId, routeId))
         .orderBy(routeStops.order);
-      
-      console.log("✅ Rota encontrada com", stops.length, "paradas");
-      console.log("==== LOG FIM: /api/routes/:id (SUCESSO) ====");
-      
+
+      console.log("🧩 Enriquecendo paradas com dados do cliente...");
+
+      // 1) Convertemos appointmentId (UUID fake) -> número
+      const appointmentNumericIds = stopsRaw
+        .map(s => uuidToNumber(s.appointmentId as unknown as string))
+        .filter((n): n is number => typeof n === 'number' && Number.isFinite(n));
+
+      let appointmentsWithClients: Array<{
+        id: number,
+        clientId: number,
+        clientName: string | null,
+        scheduledDate: Date | null
+      }> = [];
+
+      // 2) Buscamos appointments + clients (apenas dos IDs necessários)
+      if (appointmentNumericIds.length > 0) {
+        appointmentsWithClients = await db
+          .select({
+            id: appointments.id,
+            clientId: appointments.clientId,
+            clientName: clients.name,
+            scheduledDate: appointments.scheduledDate,
+          })
+          .from(appointments)
+          .leftJoin(clients, eq(appointments.clientId, clients.id))
+          .where(eq(appointments.userId, (req as any).user.userId)); // garante escopo do usuário
+      }
+
+      // 3) Montamos um map id->dados para resolver rápido
+      const appMap = new Map<number, { clientName: string | null, scheduledDate: Date | null }>();
+      for (const a of appointmentsWithClients) {
+        appMap.set(a.id, { clientName: a.clientName ?? null, scheduledDate: a.scheduledDate ?? null });
+      }
+
+      // 4) Enriquecemos as paradas
+      const stops = stopsRaw.map(s => {
+        const numericId = uuidToNumber(s.appointmentId as unknown as string);
+        const extra = numericId != null ? appMap.get(numericId) : undefined;
+        return {
+          ...s,
+          appointmentNumericId: numericId ?? null,
+          clientName: extra?.clientName ?? null,
+          scheduledDate: extra?.scheduledDate ?? null,
+        };
+      });
+
+      console.log("✅ Rota encontrada com", stops.length, "paradas (enriquecidas)");
+
       res.json({
         route,
         stops
