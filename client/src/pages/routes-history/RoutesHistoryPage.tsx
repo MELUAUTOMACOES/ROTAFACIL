@@ -57,6 +57,9 @@ interface RouteDetail {
     lat: number;
     lng: number;
     address: string;
+    appointmentNumericId?: number | null;
+    clientName?: string | null;
+    scheduledDate?: Date | null;
   }>;
 }
 
@@ -563,7 +566,7 @@ export default function RoutesHistoryPage() {
                                           </div>
                                           <div className="flex-1">
                                             <div className="font-medium text-sm">
-                                              {getClientNameByAppointmentId(stop.appointmentId)}
+                                              {stop.clientName ? stop.clientName : `Agendamento #${stop.appointmentId}`}
                                             </div>
                                             <div className="text-sm text-gray-600 mt-1">
                                               {stop.address}

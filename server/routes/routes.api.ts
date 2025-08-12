@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import { db } from "../db";
 import { routes, routeStops, appointments, clients, technicians, teams, businessRules } from "@shared/schema";
-import { eq, and, gte, lte, like, or, desc } from "drizzle-orm";
+import { eq, and, gte, lte, like, or, desc, inArray } from "drizzle-orm";
 
 // Extend Request type for authenticated user
 interface AuthenticatedRequest extends Request {
@@ -270,7 +270,7 @@ export function registerRoutesAPI(app: Express) {
         });
       }
 
-      const [respType, respId] = uniqueResponsibles[0].split(':');
+      const [respType, respId] = uniqueResponsibles[0]!.split(':');
       const derivedResponsibleType = respType as 'technician' | 'team';
       const derivedResponsibleId = respId;
       
@@ -569,8 +569,7 @@ export function registerRoutesAPI(app: Express) {
         return res.status(404).json({ error: "Rota não encontrada" });
       }
       
-      // Buscar paradas
-      // Buscar paradas
+      // 1) Buscar paradas da rota
       const stopsRaw = await db
         .select()
         .from(routeStops)
@@ -579,19 +578,19 @@ export function registerRoutesAPI(app: Express) {
 
       console.log("🧩 Enriquecendo paradas com dados do cliente...");
 
-      // 1) Convertemos appointmentId (UUID fake) -> número
+      // 2) Converter appointmentId (UUID fake) -> número
       const appointmentNumericIds = stopsRaw
         .map(s => uuidToNumber(s.appointmentId as unknown as string))
         .filter((n): n is number => typeof n === 'number' && Number.isFinite(n));
 
       let appointmentsWithClients: Array<{
         id: number,
-        clientId: number,
+        clientId: number | null,
         clientName: string | null,
         scheduledDate: Date | null
       }> = [];
 
-      // 2) Buscamos appointments + clients (apenas dos IDs necessários)
+      // 3) Buscar appointments + clients apenas dos IDs necessários (com inArray)
       if (appointmentNumericIds.length > 0) {
         appointmentsWithClients = await db
           .select({
@@ -602,16 +601,19 @@ export function registerRoutesAPI(app: Express) {
           })
           .from(appointments)
           .leftJoin(clients, eq(appointments.clientId, clients.id))
-          .where(eq(appointments.userId, (req as any).user.userId)); // garante escopo do usuário
+          .where(and(
+            eq(appointments.userId, (req as any).user.userId),
+            inArray(appointments.id, appointmentNumericIds)
+          ));
       }
 
-      // 3) Montamos um map id->dados para resolver rápido
+      // 4) Montar map id->dados para resolver rápido
       const appMap = new Map<number, { clientName: string | null, scheduledDate: Date | null }>();
       for (const a of appointmentsWithClients) {
         appMap.set(a.id, { clientName: a.clientName ?? null, scheduledDate: a.scheduledDate ?? null });
       }
 
-      // 4) Enriquecemos as paradas
+      // 5) Enriquecer as paradas com clientName e scheduledDate
       const stops = stopsRaw.map(s => {
         const numericId = uuidToNumber(s.appointmentId as unknown as string);
         const extra = numericId != null ? appMap.get(numericId) : undefined;
@@ -623,7 +625,7 @@ export function registerRoutesAPI(app: Express) {
         };
       });
 
-      console.log("✅ Rota encontrada com", stops.length, "paradas (enriquecidas)");
+      console.log("✅ Rota encontrada com", stops.length, "paradas (enriquecidas com clientName)");
 
       res.json({
         route,
