@@ -70,6 +70,7 @@ export default function Appointments() {
           setOptimizedRoute(null);
           setSelectedAppointmentIds([]);
           setSavedInfo(null);
+          setIsOptimizing(false);
         }
       }
     ],
@@ -83,14 +84,19 @@ export default function Appointments() {
   // Hook específico para limpeza do calendário
   const calendarContainerRef = useCalendarCleanup(viewMode === 'calendar');
 
-  // Zerar savedInfo quando o drawer fechar
+  // Limpar todos os estados quando o drawer fechar
   useEffect(() => { 
-    if (!isRouteDrawerOpen) setSavedInfo(null); 
+    if (!isRouteDrawerOpen) {
+      setSavedInfo(null);
+      setOptimizedRoute(null);
+      setIsOptimizing(false);
+    }
   }, [isRouteDrawerOpen]);
 
-  // Zerar savedInfo quando mudar a seleção (nova otimização)
+  // Limpar estados quando mudar a seleção (nova otimização)
   useEffect(() => { 
-    setSavedInfo(null); 
+    setSavedInfo(null);
+    setOptimizedRoute(null);
   }, [JSON.stringify(selectedAppointmentIds)]);
 
   // Logs para monitorar uso dos filtros
@@ -295,9 +301,11 @@ export default function Appointments() {
     }
 
     try {
+      // Limpar estados ao iniciar nova otimização
+      setSavedInfo(null);
+      setOptimizedRoute(null);
       setIsOptimizing(true);
       setIsRouteDrawerOpen(true);
-      setOptimizedRoute(null);
 
       console.log("🗺️ [ROUTE] Otimizando rotas com configuração:", {
         appointmentIds: selectedAppointmentIds,
@@ -1659,7 +1667,7 @@ export default function Appointments() {
       {isRouteDrawerOpen && (
         <div className="fixed inset-0 z-50 overflow-hidden">
           <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => { setIsRouteDrawerOpen(false); setSavedInfo(null); }} />
+            <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => { setIsRouteDrawerOpen(false); }} />
             <section className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl">
               <div className="flex h-full flex-col">
                 {/* Header */}
@@ -1669,7 +1677,7 @@ export default function Appointments() {
                     Rota Otimizada
                   </h2>
                   <button
-                    onClick={() => { setIsRouteDrawerOpen(false); setSavedInfo(null); }}
+                    onClick={() => { setIsRouteDrawerOpen(false); }}
                     className="text-gray-400 hover:text-gray-600"
                   >
                     <X className="h-5 w-5" />
