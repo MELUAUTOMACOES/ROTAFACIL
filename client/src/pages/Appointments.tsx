@@ -69,6 +69,7 @@ export default function Appointments() {
         resetState: () => {
           setOptimizedRoute(null);
           setSelectedAppointmentIds([]);
+          setSavedInfo(null);
         }
       }
     ],
@@ -81,6 +82,16 @@ export default function Appointments() {
   
   // Hook específico para limpeza do calendário
   const calendarContainerRef = useCalendarCleanup(viewMode === 'calendar');
+
+  // Zerar savedInfo quando o drawer fechar
+  useEffect(() => { 
+    if (!isRouteDrawerOpen) setSavedInfo(null); 
+  }, [isRouteDrawerOpen]);
+
+  // Zerar savedInfo quando mudar a seleção (nova otimização)
+  useEffect(() => { 
+    setSavedInfo(null); 
+  }, [JSON.stringify(selectedAppointmentIds)]);
 
   // Logs para monitorar uso dos filtros
   useEffect(() => {
@@ -1648,7 +1659,7 @@ export default function Appointments() {
       {isRouteDrawerOpen && (
         <div className="fixed inset-0 z-50 overflow-hidden">
           <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setIsRouteDrawerOpen(false)} />
+            <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => { setIsRouteDrawerOpen(false); setSavedInfo(null); }} />
             <section className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl">
               <div className="flex h-full flex-col">
                 {/* Header */}
@@ -1658,7 +1669,7 @@ export default function Appointments() {
                     Rota Otimizada
                   </h2>
                   <button
-                    onClick={() => setIsRouteDrawerOpen(false)}
+                    onClick={() => { setIsRouteDrawerOpen(false); setSavedInfo(null); }}
                     className="text-gray-400 hover:text-gray-600"
                   >
                     <X className="h-5 w-5" />
