@@ -92,6 +92,31 @@ O aplicativo é construído com uma arquitetura moderna e escalável, utilizando
 
 **Resultado**: Sistema completo de otimização backend pronto para integração com interface de histórico e automação
 
+### 12 de agosto de 2025 - Implementação de DisplayNumber Sequencial
+
+**Funcionalidade implementada**: Sistema de numeração sequencial para rotas com campo `displayNumber`
+
+**Modificações realizadas**:
+
+1. **Schema atualizado** (`shared/schema.ts`):
+   - Campo `displayNumber: integer('display_number').notNull().default(0)` já existente na tabela routes
+
+2. **Backend endpoints** (`server/routes/routes.api.ts`):
+   - **Import do sql**: Adicionado `sql` no import do drizzle-orm para consultas complexas
+   - **POST /api/routes/optimize**: 
+     - Cálculo automático do próximo displayNumber usando `MAX(displayNumber) + 1`
+     - Inserção do displayNumber na nova rota salva
+     - Retorno do displayNumber na resposta JSON
+   - **GET /api/routes**: Inclusão do campo `displayNumber` no select da listagem
+   - **GET /api/routes/:id**: Retorna displayNumber automaticamente com todas as colunas
+
+**Algoritmo de numeração**:
+- Consulta `COALESCE(MAX(displayNumber), 0) + 1` para calcular próximo número
+- Numeração global (não por usuário) devido à ausência de userId na tabela routes
+- Valores sequenciais: 1, 2, 3... garantindo ordem cronológica
+
+**Resultado**: Rotas agora possuem IDs sequenciais amigáveis (displayNumber) além do UUID técnico, facilitando referência e ordenação
+
 ### 11 de agosto de 2025 - Criação das Tabelas de Rotas com Drizzle
 
 **Funcionalidade implementada**: Criação das tabelas `routes` e `routeStops` para salvar rotas otimizadas
