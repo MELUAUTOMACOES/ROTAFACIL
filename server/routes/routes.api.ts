@@ -9,15 +9,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import { db } from "../db";
 import {
-  routes,
-  routeStops,
+  routes as routesTbl,
+  routeStops as stopsTbl,
   appointments,
   clients,
   technicians,
   teams,
   businessRules,
 } from "@shared/schema";
-import { eq, and, gte, lte, like, or, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, gte, lte, like, or, desc, inArray, sql, asc } from "drizzle-orm";
 
 // Extend Request type for authenticated user
 interface AuthenticatedRequest extends Request {
@@ -282,7 +282,139 @@ export function registerRoutesAPI(app: Express) {
     },
   );
 
-  // POST /api/routes/optimize - Otimizar rota
+  // ==== POST /api/routes/:id/optimize ====
+  app.post("/api/routes/:id/optimize", async (req, res) => {
+    try {
+      const routeId = req.params.id;
+      const terminarNoPontoInicial = !!req.body?.terminarNoPontoInicial;
+
+      // 1) Carrega rota e paradas
+      const [route] = await db.select().from(routesTbl).where(eq(routesTbl.id, routeId));
+      if (!route) return res.status(404).json({ message: "Rota não encontrada" });
+
+      const stops = await db
+        .select({
+          id: stopsTbl.id,
+          order: stopsTbl.order,
+          lat: stopsTbl.lat,
+          lng: stopsTbl.lng,
+        })
+        .from(stopsTbl)
+        .where(eq(stopsTbl.routeId, routeId))
+        .orderBy(asc(stopsTbl.order));
+
+      if (stops.length < 2) {
+        return res.status(400).json({ message: "É preciso pelo menos 2 paradas para otimizar." });
+      }
+
+      // garante coords válidas
+      const coords = stops.map(s => {
+        const lat = Number(s.lat), lng = Number(s.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          throw new Error(`Parada ${s.id} sem coordenadas válidas.`);
+        }
+        return { lat, lng };
+      });
+
+      // 2) OSRM /table (matriz)
+      const OSRM_URL = getOsrmUrl();
+      if (!OSRM_URL) {
+        return res.status(500).json({ message: "OSRM não configurado (osrm_url.txt)." });
+      }
+
+      const coordStr = coords.map(c => `${c.lng},${c.lat}`).join(";");
+      const tableUrl = `${OSRM_URL}/table/v1/driving/${coordStr}?annotations=duration,distance`;
+      const tableResp = await fetch(tableUrl);
+      if (!tableResp.ok) {
+        const t = await tableResp.text();
+        return res.status(500).json({ message: `Falha no OSRM table: ${t.slice(0,200)}` });
+      }
+      const tableData: any = await tableResp.json();
+      const matrix: number[][] = tableData.durations;
+      const distances: number[][] = tableData.distances;
+
+      if (!Array.isArray(matrix) || matrix.length !== coords.length) {
+        return res.status(500).json({ message: "Matriz inválida do OSRM." });
+      }
+
+      // 3) Chama o solver TSP em Python (igual ao seu /api/rota/tsp)
+      const { spawn } = await import("child_process");
+      const py = spawn("python3", ["./server/solve_tsp.py"]);
+      const input = JSON.stringify({ matrix, terminarNoPontoInicial });
+      let out = "", err = "";
+      py.stdout.on("data", (d: Buffer) => (out += d.toString()));
+      py.stderr.on("data", (d: Buffer) => (err += d.toString()));
+      py.stdin.write(input); py.stdin.end();
+
+      const tspResult = await new Promise<any>((resolve, reject) => {
+        py.on("close", (code: number) => {
+          if (code !== 0) return reject(new Error(err || "Python returned non-zero code"));
+          try { resolve(JSON.parse(out)); }
+          catch (e: any) { reject(new Error("Erro parseando saída do Python: " + e.message)); }
+        });
+      });
+
+      // tspResult.order é um array de índices [0..n-1] na nova ordem
+      const newOrderIdx: number[] = tspResult.order;
+      if (!Array.isArray(newOrderIdx) || newOrderIdx.length !== stops.length) {
+        return res.status(500).json({ message: "Retorno TSP inválido." });
+      }
+
+      // 4) Atualiza order das paradas
+      // mapeia: índice -> stop.id  | novo order = posição + 1
+      const updates = newOrderIdx.map((idx, pos) => ({
+        id: stops[idx].id,
+        newOrder: pos + 1,
+      }));
+
+      // Drizzle: atualiza em série (simples e seguro)
+      for (const u of updates) {
+        await db.update(stopsTbl)
+          .set({ order: u.newOrder })
+          .where(eq(stopsTbl.id, u.id));
+      }
+
+      // 5) Recalcular métricas (somando a distância/duração na ordem encontrada)
+      let totalDistance = 0;
+      let totalDuration = 0;
+      for (let i = 0; i < newOrderIdx.length - 1; i++) {
+        const from = newOrderIdx[i];
+        const to   = newOrderIdx[i+1];
+        totalDuration += Number(matrix[from][to] ?? 0);
+        totalDistance += Number(distances[from][to] ?? 0);
+      }
+
+      // 6) Atualizar polyline_geojson com a rota na nova ordem
+      // monta coords na ordem
+      const orderedCoords = newOrderIdx.map(i => coords[i]);
+      const osrmCoords = orderedCoords.map(c => `${c.lng},${c.lat}`).join(";");
+      const routeUrl = `${OSRM_URL}/route/v1/driving/${osrmCoords}?overview=full&geometries=geojson`;
+      const routeResp = await fetch(routeUrl);
+      let polylineGeoJson: any = null;
+      if (routeResp.ok) {
+        const rjson: any = await routeResp.json();
+        polylineGeoJson = rjson?.routes?.[0]?.geometry || null;
+      }
+
+      await db.update(routesTbl)
+        .set({
+          distanceTotal: Math.round(totalDistance),
+          durationTotal: Math.round(totalDuration),
+          stopsCount: stops.length,
+          polylineGeoJson: polylineGeoJson ? JSON.stringify(polylineGeoJson) : routesTbl.polylineGeoJson,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(eq(routesTbl.id, routeId));
+
+      // 7) ok: o front vai refazer o GET /api/routes/:id
+      return res.json({ ok: true });
+    } catch (e: any) {
+      console.error("❌ /api/routes/:id/optimize erro:", e?.message, e?.stack);
+      return res.status(500).json({ message: e?.message || "Erro ao otimizar" });
+    }
+  });
+
+  // ==== POST /api/routes ====
   app.post(
     "/api/routes/optimize",
     authenticateToken,
@@ -927,16 +1059,16 @@ export function registerRoutesAPI(app: Express) {
         {
           const [maxRes] = await db
             .select({
-              maxNum: sql<number>`COALESCE(MAX(${routes.displayNumber}), 0)`,
+              maxNum: sql<number>`COALESCE(MAX(${routesTbl.displayNumber}), 0)`,
             })
-            .from(routes);
+            .from(routesTbl);
           nextDisplayNumber = (maxRes?.maxNum ?? 0) + 1;
         }
 
         // 11. Salvar no banco (se preview === false)
         console.log("💾 Salvando rota no banco...");
         const [savedRoute] = await db
-          .insert(routes)
+          .insert(routesTbl)
           .values({
             ...routeData,
             displayNumber: nextDisplayNumber,
@@ -949,7 +1081,7 @@ export function registerRoutesAPI(app: Express) {
             ...stop,
             routeId: savedRoute.id,
           }));
-          await db.insert(routeStops).values(stopDataWithRouteId);
+          await db.insert(stopsTbl).values(stopDataWithRouteId);
           console.log("✅ Paradas salvas:", stopDataWithRouteId.length);
         }
 
@@ -1011,57 +1143,57 @@ export function registerRoutesAPI(app: Express) {
       const conditions = [];
 
       if (from) {
-        conditions.push(gte(routes.date, new Date(from as string)));
+        conditions.push(gte(routesTbl.date, new Date(from as string)));
       }
 
       if (to) {
-        conditions.push(lte(routes.date, new Date(to as string)));
+        conditions.push(lte(routesTbl.date, new Date(to as string)));
       }
 
       if (status) {
-        conditions.push(eq(routes.status, status as string));
+        conditions.push(eq(routesTbl.status, status as string));
       }
 
       if (responsibleType) {
-        conditions.push(eq(routes.responsibleType, responsibleType as string));
+        conditions.push(eq(routesTbl.responsibleType, responsibleType as string));
       }
 
       if (responsibleId) {
-        conditions.push(eq(routes.responsibleId, responsibleId as string));
+        conditions.push(eq(routesTbl.responsibleId, responsibleId as string));
       }
 
       if (vehicleId) {
-        conditions.push(eq(routes.vehicleId, vehicleId as string));
+        conditions.push(eq(routesTbl.vehicleId, vehicleId as string));
       }
 
       if (search) {
-        conditions.push(like(routes.title, `%${search}%`));
+        conditions.push(like(routesTbl.title, `%${search}%`));
       }
 
       const baseQuery = db
         .select({
-          id: routes.id,
-          title: routes.title,
-          date: routes.date,
-          vehicleId: routes.vehicleId,
-          responsibleType: routes.responsibleType,
-          responsibleId: routes.responsibleId,
-          endAtStart: routes.endAtStart,
-          distanceTotal: routes.distanceTotal,
-          durationTotal: routes.durationTotal,
-          stopsCount: routes.stopsCount,
-          status: routes.status,
-          displayNumber: routes.displayNumber,
-          createdAt: routes.createdAt,
+          id: routesTbl.id,
+          title: routesTbl.title,
+          date: routesTbl.date,
+          vehicleId: routesTbl.vehicleId,
+          responsibleType: routesTbl.responsibleType,
+          responsibleId: routesTbl.responsibleId,
+          endAtStart: routesTbl.endAtStart,
+          distanceTotal: routesTbl.distanceTotal,
+          durationTotal: routesTbl.durationTotal,
+          stopsCount: routesTbl.stopsCount,
+          status: routesTbl.status,
+          displayNumber: routesTbl.displayNumber,
+          createdAt: routesTbl.createdAt,
         })
-        .from(routes);
+        .from(routesTbl);
 
       const routeList =
         conditions.length > 0
           ? await baseQuery
               .where(and(...conditions))
-              .orderBy(desc(routes.createdAt))
-          : await baseQuery.orderBy(desc(routes.createdAt));
+              .orderBy(desc(routesTbl.createdAt))
+          : await baseQuery.orderBy(desc(routesTbl.createdAt));
 
       console.log("✅ Rotas encontradas:", routeList.length);
       console.log("==== LOG FIM: /api/routes (SUCESSO) ====");
@@ -1091,8 +1223,8 @@ export function registerRoutesAPI(app: Express) {
         // Buscar rota
         const [route] = await db
           .select()
-          .from(routes)
-          .where(eq(routes.id, routeId));
+          .from(routesTbl)
+          .where(eq(routesTbl.id, routeId));
 
         if (!route) {
           console.log("❌ ERRO: Rota não encontrada");
@@ -1103,9 +1235,9 @@ export function registerRoutesAPI(app: Express) {
         // 1) Buscar paradas da rota
         const stopsRaw = await db
           .select()
-          .from(routeStops)
-          .where(eq(routeStops.routeId, routeId))
-          .orderBy(routeStops.order);
+          .from(stopsTbl)
+          .where(eq(stopsTbl.routeId, routeId))
+          .orderBy(stopsTbl.order);
 
         console.log("🧩 Enriquecendo paradas com dados do cliente...");
 
@@ -1200,9 +1332,9 @@ export function registerRoutesAPI(app: Express) {
         const { status } = parsed.data;
 
         const [updated] = await db
-          .update(routes)
+          .update(routesTbl)
           .set({ status })
-          .where(eq(routes.id, routeId))
+          .where(eq(routesTbl.id, routeId))
           .returning();
 
         if (!updated)

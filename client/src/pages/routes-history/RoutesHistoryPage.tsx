@@ -25,7 +25,8 @@ import {
   Route as RouteIcon,   // ⬅ renomeado
   Navigation,
   Download,
-  Eye
+  Eye,
+  Wand2 // Adicionado
 } from 'lucide-react';
 
 
@@ -154,7 +155,7 @@ export default function RoutesHistoryPage() {
     const encoded = encodeURIComponent(btoa(JSON.stringify(prefill)));
     setLocation(`/appointments?prefill=${encoded}`);
   };
-  
+
   // Query para listar rotas com filtros
   const { data: routesData = [], isLoading: isLoadingRoutes } = useQuery<Route[]>({
     queryKey: ['/api/routes', filters],
@@ -177,7 +178,7 @@ export default function RoutesHistoryPage() {
       return response.json();
     }
   });
-  
+
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
 
   // Função para verificar URL params e abrir automaticamente a modal
@@ -212,7 +213,7 @@ export default function RoutesHistoryPage() {
   // Rótulo bonitinho da data da rota (para mostrar no modal)
   const routeDayLabel = routeDetail?.route ? fmtDateList(routeDetail.route.date) : "—";
 
-  
+
   // ================== BLOCO ÚNICO DO MODAL: estado + queries + lista ==================
 
   // Estado do modal + seleção
@@ -289,7 +290,7 @@ export default function RoutesHistoryPage() {
               "| exibindo:", availableList.length);
 
   // ================== FIM DO BLOCO ÚNICO DO MODAL ==================
-  
+
   // Queries para options dos filtros
   const { data: technicians = [] } = useQuery({
     queryKey: ['/api/technicians'],
@@ -303,44 +304,71 @@ export default function RoutesHistoryPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // mutation para adicionar paradas
   const addStopsMutation = useMutation({
-    mutationFn: async (payload: { routeId: string; appointmentIds: number[] }) => {
+    mutationFn: async ({ routeId, appointmentIds }: { routeId: string; appointmentIds: string[] }) => {
+      const response = await apiRequest("POST", `/api/routes/${routeId}/stops`, {
+        appointmentIds,
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Erro ao adicionar paradas");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Paradas adicionadas",
+        description: "Os agendamentos foram incluídos na rota com sucesso.",
+      });
+      setAddStopsOpen(false);
+      setSelectedToAdd([]);
+      // Recarrega tanto o detalhe quanto a lista
+      queryClient.invalidateQueries({ queryKey: ["/api/routes", selectedRoute] });
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erro ao adicionar paradas",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // mutation para otimizar rota
+  const optimizeRouteMutation = useMutation({
+    mutationFn: async (routeId: string) => {
       const res = await apiRequest(
         "POST",
-        `/api/routes/${payload.routeId}/stops/bulk-add`,
-        { appointmentIds: payload.appointmentIds }
+        `/api/routes/${routeId}/optimize`,
+        {
+          terminarNoPontoInicial:
+            // se existir, manda como preferir; senão, false
+            (routeDetail?.route as any)?.end_at_start ?? false,
+        }
       );
       return res.json();
     },
     onSuccess: () => {
       toast({
-        title: "Paradas incluídas",
-        description: "Os agendamentos foram adicionados à rota.",
+        title: "Rota otimizada",
+        description: "A ordem das paradas foi recalculada.",
       });
-      setAddStopsOpen(false);
-      setSelectedToAdd([]);
-      // invalida listagens/detalhe
+      // Recarrega detalhe e lista
       queryClient.invalidateQueries({ queryKey: ['/api/routes', selectedRoute] });
       queryClient.invalidateQueries({ queryKey: ['/api/routes'] });
     },
     onError: (err: any) => {
       toast({
-        title: "Erro ao incluir paradas",
+        title: "Erro ao otimizar",
         description: err?.message || "Tente novamente.",
         variant: "destructive",
       });
     },
   });
 
-  const confirmAddStops = () => {
-    if (!routeDetail?.route?.id || selectedToAdd.length === 0) return;
-    addStopsMutation.mutate({
-      routeId: routeDetail.route.id,
-      appointmentIds: selectedToAdd,
-    });
-  };
 
-  
   const { data: teams = [] } = useQuery({
     queryKey: ['/api/teams'],
     queryFn: async () => {
@@ -383,7 +411,7 @@ export default function RoutesHistoryPage() {
   const formatAddressFromAppt = (a: any) =>
     joinParts(a?.logradouro, a?.numero, a?.bairro, a?.cidade);
 
-  
+
   const { data: businessRules } = useQuery<BusinessRules | null>({
     queryKey: ['/api/business-rules'],
     queryFn: async () => {
@@ -402,7 +430,7 @@ export default function RoutesHistoryPage() {
   const formatDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    
+
     if (hours > 0) {
       return `${hours}h ${minutes}min`;
     }
@@ -429,7 +457,7 @@ export default function RoutesHistoryPage() {
   const getClientNameByAppointmentId = (appointmentId: string) => {
     const appointment = appointments.find((apt: any) => apt.id.toString() === appointmentId);
     if (!appointment) return `Agendamento #${appointmentId}`;
-    
+
     const client = clients.find((cli: any) => cli.id.toString() === appointment.clientId?.toString());
     return client?.name || `Cliente não encontrado`;
   };
@@ -439,7 +467,7 @@ export default function RoutesHistoryPage() {
     if (route.vehicleId) {
       return getVehicleName(route.vehicleId);
     }
-    
+
     // Se não tem veículo direto, verifica se é uma equipe com veículo vinculado
     if (route.responsibleType === 'team') {
       const team = teams.find((t: any) => t.id.toString() === route.responsibleId);
@@ -447,7 +475,7 @@ export default function RoutesHistoryPage() {
         return getVehicleName(team.vehicleId.toString());
       }
     }
-    
+
     return '-';
   };
 
@@ -604,7 +632,7 @@ export default function RoutesHistoryPage() {
     return "";
   };
 
-  
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -897,6 +925,19 @@ export default function RoutesHistoryPage() {
                       >
                         + Incluir agendamentos existentes
                       </Button>
+
+                      <Button
+                        onClick={() => routeDetail?.route?.id && optimizeRouteMutation.mutate(routeDetail.route.id)}
+                        disabled={
+                          optimizeRouteMutation.isPending ||
+                          !routeDetail?.stops || routeDetail.stops.length < 2
+                        }
+                        className="bg-black text-white hover:bg-gray-800"
+                        data-testid="btn-optimize-route"
+                      >
+                        <Wand2 className="h-4 w-4 mr-2" />
+                        {optimizeRouteMutation.isPending ? "Otimizando..." : "Otimizar rota"}
+                      </Button>
                     </div>
                   </div>
 
@@ -1007,7 +1048,7 @@ export default function RoutesHistoryPage() {
                     </DialogContent>
                   </Dialog>
 
-                  
+
                   {/* Lista de paradas */}
                   <div>
                     <h5 className="font-semibold text-sm sm:text-base mb-2 sm:mb-3">
@@ -1143,7 +1184,7 @@ export default function RoutesHistoryPage() {
 
             {/* Rodapé fixo (ações) */}
             <div className="border-t px-4 py-3 bg-white">
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-col sm:flex-flex-row gap-3">
                 <Button
                   onClick={handleStartNavigation}
                   className="flex-1"
