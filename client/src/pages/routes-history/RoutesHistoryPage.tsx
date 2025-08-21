@@ -289,6 +289,17 @@ export default function RoutesHistoryPage() {
               "| fallback:", fallbackFromAll.length,
               "| exibindo:", availableList.length);
 
+  // Função para confirmar adição das paradas selecionadas
+  const confirmAddStops = () => {
+    if (!selectedRoute || selectedToAdd.length === 0) return;
+    
+    const appointmentIds = selectedToAdd.map(id => String(id));
+    addStopsMutation.mutate({
+      routeId: selectedRoute,
+      appointmentIds
+    });
+  };
+
   // ================== FIM DO BLOCO ÚNICO DO MODAL ==================
 
   // Queries para options dos filtros
