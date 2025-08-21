@@ -16,7 +16,6 @@ export function useCalendarCleanup(isCalendarVisible: boolean) {
       // Aguarda um tick para garantir que outros hooks já foram processados
       setTimeout(() => {
         try {
-          console.log('🗓️ [CALENDAR] (Safe cleanup) Ignorando limpeza manual de tooltips/overlays para evitar conflitos com React.');
           // NÃO REMOVA manualmente elementos do DOM aqui!
           // Confie no ciclo de vida do React e do react-big-calendar.
 

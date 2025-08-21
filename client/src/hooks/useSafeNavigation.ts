@@ -29,7 +29,6 @@ export function useSafeNavigation(config: SafeNavigationConfig) {
   // Função segura para fechar modais
   const safeCloseModals = useCallback(() => {
     if (!isComponentMounted.current) {
-      console.log(`⚠️ [${config.componentName}] Componente desmontado, ignorando fechamento de modais`);
       return false;
     }
 
@@ -51,7 +50,6 @@ export function useSafeNavigation(config: SafeNavigationConfig) {
   // Função segura para limpeza de calendários
   const safeCleanupCalendars = useCallback(() => {
     if (!isComponentMounted.current) {
-      console.log(`⚠️ [${config.componentName}] Componente desmontado, ignorando limpeza de calendários`);
       return false;
     }
 
@@ -74,7 +72,6 @@ export function useSafeNavigation(config: SafeNavigationConfig) {
     isComponentMounted.current = true;
 
     return () => {
-      console.log(`🧹 [${config.componentName}] Iniciando limpeza segura do componente`);
       isComponentMounted.current = false;
 
       // Executar todas as limpezas registradas
@@ -92,8 +89,6 @@ export function useSafeNavigation(config: SafeNavigationConfig) {
       
       // Limpeza de calendários
       safeCleanupCalendars();
-
-      console.log(`✨ [${config.componentName}] Limpeza completa concluída`);
     };
   }, [config.componentName, safeCloseModals, safeCleanupCalendars]);
 

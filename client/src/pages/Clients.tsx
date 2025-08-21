@@ -503,7 +503,7 @@ export default function Clients() {
                   <div className="flex items-start space-x-2 text-sm text-gray-600">
                     <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
                     <span className="leading-relaxed">
-                      {client.logradouro}, {client.numero}
+                      {client.logradouro}, {client.numero}, {client.bairro}, {client.cidade} 
                       {client.complemento && `, ${client.complemento}`}
                       <br />
                       CEP: {client.cep}

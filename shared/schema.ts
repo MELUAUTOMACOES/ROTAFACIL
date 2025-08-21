@@ -23,14 +23,16 @@ export const clients = pgTable("clients", {
   phone2: text("phone2"),
   cpf: text("cpf").notNull().unique(),
   cep: text("cep").notNull(),
-  bairro: text("bairro").notNull(),      // <-- NOVO CAMPO
-  cidade: text("cidade").notNull(),      // <-- NOVO CAMPO
+  bairro: text("bairro").notNull(),
+  cidade: text("cidade").notNull(),
   logradouro: text("logradouro").notNull(),
   numero: text("numero").notNull(),
   complemento: text("complemento"),
   observacoes: text("observacoes"),
+  lat: doublePrecision("lat"),   // latitude (ex.: -25.4284)
+  lng: doublePrecision("lng"),   // longitude (ex.: -49.2733)
   userId: integer("user_id").notNull().references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull()
 });
 
 
@@ -178,7 +180,7 @@ export const routes = pgTable("routes", {
   id: uuid("id").defaultRandom().primaryKey(),
   title: varchar("title", { length: 120 }).notNull(),
   date: timestamp("date", { withTimezone: false }).notNull(),
-  vehicleId: varchar("vehicle_id", { length: 64 }),
+  vehicleId: integer("vehicle_id").references(() => vehicles.id),
   // responsável pode ser técnico OU equipe — usar union simples por tipo+id
   responsibleType: varchar("responsible_type", { length: 16 }).notNull(), // 'technician' | 'team'
   responsibleId: varchar("responsible_id", { length: 64 }).notNull(),
@@ -202,6 +204,7 @@ export const routeStops = pgTable("route_stops", {
   lat: doublePrecision("lat").notNull(),
   lng: doublePrecision("lng").notNull(),
   address: text("address").notNull(),
+  appointmentNumericId: integer("appointment_numeric_id"),
 });
 
 // Relations
@@ -241,13 +244,10 @@ export const insertVehicleSchema = createInsertSchema(vehicles).omit({
   brand: z.string().min(1, "Marca é obrigatória"),
   model: z.string().min(1, "Modelo é obrigatório"),
   year: z.number().min(1900, "Ano deve ser válido").max(new Date().getFullYear() + 1, "Ano não pode ser no futuro"),
-}).refine((data) => {
-  // Pelo menos um responsável deve ser selecionado (técnico ou equipe)
-  return data.technicianId || data.teamId;
-}, {
-  message: "Selecione um técnico ou equipe responsável pelo veículo",
-  path: ["technicianId"],
-});
+}).refine(
+  (d) => (d.technicianId ? !d.teamId : !!d.teamId),
+  { message: "Selecione Técnico OU Equipe (apenas um)", path: ["technicianId"] }
+);
 
 export const insertAppointmentSchema = createInsertSchema(appointments).omit({
   id: true,

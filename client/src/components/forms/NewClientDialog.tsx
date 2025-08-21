@@ -89,6 +89,13 @@ export default function NewClientDialog({ onClientCreated, children }: NewClient
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertClient) => {
+      // Log para depuração — verifica se lat/lng estão sendo enviados
+      console.log("📤 Enviando cliente para backend:", {
+        ...data,
+        lat: data.lat ?? null,
+        lng: data.lng ?? null,
+      });
+
       const response = await fetch("/api/clients", {
         method: "POST",
         headers: {
@@ -99,12 +106,12 @@ export default function NewClientDialog({ onClientCreated, children }: NewClient
         },
         body: JSON.stringify(data),
       });
-      
+
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({}));
         throw new Error(error.message || "Erro ao criar cliente");
       }
-      
+
       return response.json();
     },
     onSuccess: (newClient) => {
@@ -127,6 +134,7 @@ export default function NewClientDialog({ onClientCreated, children }: NewClient
       });
     },
   });
+
 
   const onSubmit = (data: InsertClient) => {
     // Impedir envio se CPF já está cadastrado

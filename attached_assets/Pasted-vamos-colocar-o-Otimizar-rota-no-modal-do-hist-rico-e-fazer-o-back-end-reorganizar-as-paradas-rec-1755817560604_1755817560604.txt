@@ -1,0 +1,264 @@
+vamos colocar o “Otimizar rota” no modal do histórico e fazer o back-end reorganizar as paradas, recalcular distância/duração e atualizar o polyline_geojson.
+
+abaixo já te deixo:
+
+o patch no front (um botão + uma mutation)
+
+o endpoint no back /api/routes/:id/optimize pronto pra usar o OSRM + seu solver TSP em Python
+
+1) Frontend — RoutesHistoryPage.tsx
+1.1 Imports
+
+No topo, junto dos ícones e hooks que você já usa, acrescente:
+
+import { Wand2 } from "lucide-react";
+
+1.2 Mutation para otimizar a rota
+
+Cole depois da addStopsMutation (ou junto das mutations) este bloco:
+
+const optimizeRouteMutation = useMutation({
+  mutationFn: async (routeId: string) => {
+    const res = await apiRequest(
+      "POST",
+      `/api/routes/${routeId}/optimize`,
+      {
+        terminarNoPontoInicial:
+          // se existir, manda como preferir; senão, false
+          (routeDetail?.route as any)?.end_at_start ?? false,
+      }
+    );
+    return res.json();
+  },
+  onSuccess: () => {
+    toast({
+      title: "Rota otimizada",
+      description: "A ordem das paradas foi recalculada.",
+    });
+    // Recarrega detalhe e lista
+    queryClient.invalidateQueries({ queryKey: ['/api/routes', selectedRoute] });
+    queryClient.invalidateQueries({ queryKey: ['/api/routes'] });
+  },
+  onError: (err: any) => {
+    toast({
+      title: "Erro ao otimizar",
+      description: err?.message || "Tente novamente.",
+      variant: "destructive",
+    });
+  },
+});
+
+1.3 Botão na área “Ações do detalhe”
+
+Encontre a área onde hoje está o botão “+ Incluir agendamentos existentes” e adicione este segundo botão ao lado:
+
+{/* Ações do detalhe */}
+<div className="mt-3 flex flex-wrap gap-2">
+  <Button
+    variant="outline"
+    className="border-burnt-yellow text-burnt-yellow hover:bg-yellow-50"
+    onClick={() => setAddStopsOpen(true)}
+    data-testid="btn-add-existing-appointments"
+  >
+    + Incluir agendamentos existentes
+  </Button>
+
+  <Button
+    onClick={() => routeDetail?.route?.id && optimizeRouteMutation.mutate(routeDetail.route.id)}
+    disabled={
+      optimizeRouteMutation.isPending ||
+      !routeDetail?.stops || routeDetail.stops.length < 2
+    }
+    className="bg-black text-white hover:bg-gray-800"
+    data-testid="btn-optimize-route"
+  >
+    <Wand2 className="h-4 w-4 mr-2" />
+    {optimizeRouteMutation.isPending ? "Otimizando..." : "Otimizar rota"}
+  </Button>
+</div>
+
+
+Obs.: mantenha apenas uma definição de addStopsOpen, selectedToAdd e da query appointmentsAll (você tinha duplicado esses blocos em versões anteriores). Se ver qualquer “Identifier has already been declared”, remova o bloco repetido.
+
+2) Back-end — Endpoint /api/routes/:id/optimize
+
+Implemente no seu arquivo server/routes/routes.api.ts (onde você registrou as rotas de /api/routes) o endpoint abaixo.
+Se preferir, pode colocar direto em routes.ts; o importante é chamar isso no registerRoutesAPI(app) ou no mesmo registerRoutes(app).
+
+O código usa:
+
+OSRM /table para matriz (distância/duração)
+
+seu solver Python (server/solve_tsp.py) igual ao endpoint /api/rota/tsp
+
+Atualiza route_stops.order + routes.distance_total, routes.duration_total, routes.stops_count, routes.polyline_geojson
+
+// server/routes/routes.api.ts
+import type { Express } from "express";
+import { db } from "../db";
+import { routes as routesTbl, routeStops as stopsTbl } from "@shared/schema";
+import { eq, asc } from "drizzle-orm";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// mesmo helper do routes.ts
+function getOsrmUrl() {
+  const filePath = path.join(__dirname, "..", "osrm_url.txt"); // ajusta 1 nível acima
+  try {
+    return fs.readFileSync(filePath, "utf8").trim().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
+export function registerRoutesAPI(app: Express) {
+  // ... seus outros endpoints já existentes ...
+
+  app.post("/api/routes/:id/optimize", async (req, res) => {
+    try {
+      const routeId = req.params.id;
+      const terminarNoPontoInicial = !!req.body?.terminarNoPontoInicial;
+
+      // 1) Carrega rota e paradas
+      const [route] = await db.select().from(routesTbl).where(eq(routesTbl.id, routeId));
+      if (!route) return res.status(404).json({ message: "Rota não encontrada" });
+
+      const stops = await db
+        .select({
+          id: stopsTbl.id,
+          order: stopsTbl.order,
+          lat: stopsTbl.lat,
+          lng: stopsTbl.lng,
+        })
+        .from(stopsTbl)
+        .where(eq(stopsTbl.routeId, routeId))
+        .orderBy(asc(stopsTbl.order));
+
+      if (stops.length < 2) {
+        return res.status(400).json({ message: "É preciso pelo menos 2 paradas para otimizar." });
+      }
+
+      // garante coords válidas
+      const coords = stops.map(s => {
+        const lat = Number(s.lat), lng = Number(s.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          throw new Error(`Parada ${s.id} sem coordenadas válidas.`);
+        }
+        return { lat, lng };
+      });
+
+      // 2) OSRM /table (matriz)
+      const OSRM_URL = getOsrmUrl();
+      if (!OSRM_URL) {
+        return res.status(500).json({ message: "OSRM não configurado (osrm_url.txt)." });
+      }
+
+      const coordStr = coords.map(c => `${c.lng},${c.lat}`).join(";");
+      const tableUrl = `${OSRM_URL}/table/v1/driving/${coordStr}?annotations=duration,distance`;
+      const tableResp = await fetch(tableUrl);
+      if (!tableResp.ok) {
+        const t = await tableResp.text();
+        return res.status(500).json({ message: `Falha no OSRM table: ${t.slice(0,200)}` });
+      }
+      const tableData: any = await tableResp.json();
+      const matrix: number[][] = tableData.durations;
+      const distances: number[][] = tableData.distances;
+
+      if (!Array.isArray(matrix) || matrix.length !== coords.length) {
+        return res.status(500).json({ message: "Matriz inválida do OSRM." });
+      }
+
+      // 3) Chama o solver TSP em Python (igual ao seu /api/rota/tsp)
+      const { spawn } = await import("child_process");
+      const py = spawn("python3", ["./server/solve_tsp.py"]);
+      const input = JSON.stringify({ matrix, terminarNoPontoInicial });
+      let out = "", err = "";
+      py.stdout.on("data", (d: Buffer) => (out += d.toString()));
+      py.stderr.on("data", (d: Buffer) => (err += d.toString()));
+      py.stdin.write(input); py.stdin.end();
+
+      const tspResult = await new Promise<any>((resolve, reject) => {
+        py.on("close", (code: number) => {
+          if (code !== 0) return reject(new Error(err || "Python returned non-zero code"));
+          try { resolve(JSON.parse(out)); }
+          catch (e: any) { reject(new Error("Erro parseando saída do Python: " + e.message)); }
+        });
+      });
+
+      // tspResult.order é um array de índices [0..n-1] na nova ordem
+      const newOrderIdx: number[] = tspResult.order;
+      if (!Array.isArray(newOrderIdx) || newOrderIdx.length !== stops.length) {
+        return res.status(500).json({ message: "Retorno TSP inválido." });
+      }
+
+      // 4) Atualiza order das paradas
+      // mapeia: índice -> stop.id  | novo order = posição + 1
+      const updates = newOrderIdx.map((idx, pos) => ({
+        id: stops[idx].id,
+        newOrder: pos + 1,
+      }));
+
+      // Drizzle: atualiza em série (simples e seguro)
+      for (const u of updates) {
+        await db.update(stopsTbl)
+          .set({ order: u.newOrder })
+          .where(eq(stopsTbl.id, u.id));
+      }
+
+      // 5) Recalcular métricas (somando a distância/duração na ordem encontrada)
+      let totalDistance = 0;
+      let totalDuration = 0;
+      for (let i = 0; i < newOrderIdx.length - 1; i++) {
+        const from = newOrderIdx[i];
+        const to   = newOrderIdx[i+1];
+        totalDuration += Number(matrix[from][to] ?? 0);
+        totalDistance += Number(distances[from][to] ?? 0);
+      }
+
+      // 6) Atualizar polyline_geojson com a rota na nova ordem
+      // monta coords na ordem
+      const orderedCoords = newOrderIdx.map(i => coords[i]);
+      const osrmCoords = orderedCoords.map(c => `${c.lng},${c.lat}`).join(";");
+      const routeUrl = `${OSRM_URL}/route/v1/driving/${osrmCoords}?overview=full&geometries=geojson`;
+      const routeResp = await fetch(routeUrl);
+      let polylineGeoJson: any = null;
+      if (routeResp.ok) {
+        const rjson: any = await routeResp.json();
+        polylineGeoJson = rjson?.routes?.[0]?.geometry || null;
+      }
+
+      await db.update(routesTbl)
+        .set({
+          distanceTotal: Math.round(totalDistance),
+          durationTotal: Math.round(totalDuration),
+          stopsCount: stops.length,
+          polylineGeoJson: polylineGeoJson ? JSON.stringify(polylineGeoJson) : routesTbl.polylineGeoJson,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(eq(routesTbl.id, routeId));
+
+      // 7) ok: o front vai refazer o GET /api/routes/:id
+      return res.json({ ok: true });
+    } catch (e: any) {
+      console.error("❌ /api/routes/:id/optimize erro:", e?.message, e?.stack);
+      return res.status(500).json({ message: e?.message || "Erro ao otimizar" });
+    }
+  });
+}
+
+
+Se seu registerRoutesAPI já existe (você o chama no final do routes.ts), apenas adicione esse endpoint dentro dele. Se preferir pôr diretamente em routes.ts, também funciona — só não esqueça de ajustar os imports relativos (o osrm_url.txt acima está ../osrm_url.txt; se estiver no mesmo diretório do routes.ts, troque o caminho).
+
+O que isso entrega
+
+Botão Otimizar rota dentro do modal do histórico.
+
+Reordena as paradas no banco (route_stops.order) via TSP.
+
+Atualiza routes.distance_total, routes.duration_total, routes.stops_count e polyline_geojson.
+
+O front já refaz o GET e renderiza a nova ordem.

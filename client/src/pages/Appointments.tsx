@@ -10,32 +10,70 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import AppointmentForm from "@/components/forms/AppointmentForm";
 import AppointmentCalendar from "@/components/AppointmentCalendar";
-import { Plus, Calendar, MapPin, Clock, User, Edit, Trash2, Download, Upload, Filter, Search, List, Route, X, Navigation, CheckCircle2, Repeat2 } from "lucide-react";
+import {
+  Plus,
+  Calendar,
+  MapPin,
+  Clock,
+  User,
+  Edit,
+  Trash2,
+  Download,
+  Upload,
+  Filter,
+  Search,
+  List,
+  Route,
+  X,
+  Navigation,
+  CheckCircle2,
+  Repeat2,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { downloadCSV, downloadReport, downloadWithConfirmation } from "@/lib/download";
+import {
+  downloadCSV,
+  downloadReport,
+  downloadWithConfirmation,
+} from "@/lib/download";
 import { useSafeNavigation } from "@/hooks/useSafeNavigation";
 import { useCalendarCleanup } from "@/hooks/useCalendarCleanup";
-import type { Appointment, Client, Service, Technician, Team } from "@shared/schema";
+import type {
+  Appointment,
+  Client,
+  Service,
+  Technician,
+  Team,
+} from "@shared/schema";
+import OptimizedRouteMap from "@/components/maps/OptimizedRouteMap";
 
 export default function Appointments() {
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [selectedAppointment, setSelectedAppointment] =
+    useState<Appointment | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [prefilledData, setPrefilledData] = useState<any>(null);
-  
+
   // Estados para filtros
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [selectedService, setSelectedService] = useState<string>("all");
   const [selectedTechnician, setSelectedTechnician] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
-  
+
   // Estado para controlar visualização (lista ou calendário)
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
-  
+
   // Estados para seleção de agendamentos e otimização de rotas
-  const [selectedAppointmentIds, setSelectedAppointmentIds] = useState<number[]>([]);
+  const [selectedAppointmentIds, setSelectedAppointmentIds] = useState<
+    number[]
+  >([]);
   const [isRouteDrawerOpen, setIsRouteDrawerOpen] = useState(false);
   const [endAtStart, setEndAtStart] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -46,14 +84,22 @@ export default function Appointments() {
     totalDistance?: number;
     totalDuration?: number;
   } | null>(null);
-  const [savedInfo, setSavedInfo] = useState<null | { id: string; displayNumber: number }>(null);
-  
+  const [polyline, setPolyline] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [savedInfo, setSavedInfo] = useState<null | {
+    id: string;
+    displayNumber: number;
+  }>(null);
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
+  //Mapa
+  const [routeWaypoints, setRouteWaypoints] = useState<{ lat: number; lon: number }[] | null>(null);
+
   // Hook de navegação segura com limpeza robusta
   const { isSafeToOperate, registerCleanup } = useSafeNavigation({
-    componentName: 'APPOINTMENTS',
+    componentName: "APPOINTMENTS",
     modals: [
       {
         isOpen: isFormOpen,
@@ -61,43 +107,71 @@ export default function Appointments() {
         resetState: () => {
           setSelectedAppointment(null);
           setPrefilledData(null);
-        }
+        },
       },
       {
         isOpen: isRouteDrawerOpen,
         setIsOpen: setIsRouteDrawerOpen,
         resetState: () => {
           setOptimizedRoute(null);
+          setPolyline(null);
+          setError(null);
           setSelectedAppointmentIds([]);
           setSavedInfo(null);
           setIsOptimizing(false);
-        }
-      }
+        },
+      },
     ],
     calendars: [
       {
-        isVisible: viewMode === 'calendar',
-      }
-    ]
+        isVisible: viewMode === "calendar",
+      },
+    ],
   });
-  
+
   // Hook específico para limpeza do calendário
-  const calendarContainerRef = useCalendarCleanup(viewMode === 'calendar');
+  const calendarContainerRef = useCalendarCleanup(viewMode === "calendar");
 
   // Limpar todos os estados quando o drawer fechar
-  useEffect(() => { 
+  useEffect(() => {
     if (!isRouteDrawerOpen) {
       setSavedInfo(null);
       setOptimizedRoute(null);
+      setPolyline(null);
+      setError(null);
       setIsOptimizing(false);
     }
   }, [isRouteDrawerOpen]);
 
-  // Limpar estados quando mudar a seleção (nova otimização)
-  useEffect(() => { 
-    setSavedInfo(null);
-    setOptimizedRoute(null);
-  }, [JSON.stringify(selectedAppointmentIds)]);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("prefill");
+    if (!raw) return;
+
+    try {
+      const decoded = JSON.parse(atob(decodeURIComponent(raw)));
+      console.log("🧩 [APPOINTMENTS] Prefill recebido:", decoded);
+
+      setPrefilledData(decoded);
+      setIsFormOpen(true);
+
+      // limpa a query para não reabrir ao recarregar
+      window.history.replaceState({}, "", window.location.pathname);
+    } catch (e) {
+      console.error("❌ [APPOINTMENTS] Erro ao ler prefill:", e);
+    }
+  }, []);
+
+  
+  // Limpar estados ao alterar a seleção, MAS só se o drawer NÃO estiver aberto
+  useEffect(() => {
+    if (!isRouteDrawerOpen) {
+      setSavedInfo(null);
+      setOptimizedRoute(null);
+      setPolyline(null);
+      setError(null);
+    }
+  }, [JSON.stringify(selectedAppointmentIds), isRouteDrawerOpen]);
 
   // Logs para monitorar uso dos filtros
   useEffect(() => {
@@ -106,51 +180,68 @@ export default function Appointments() {
       searchTerm,
       selectedService,
       selectedTechnician,
-      selectedStatus
+      selectedStatus,
     });
-  }, [selectedDate, searchTerm, selectedService, selectedTechnician, selectedStatus]);
+  }, [
+    selectedDate,
+    searchTerm,
+    selectedService,
+    selectedTechnician,
+    selectedStatus,
+  ]);
 
   // Verificar parâmetros da URL ao carregar a página
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const preselected = urlParams.get('preselected');
-    
+    const preselected = urlParams.get("preselected");
+
     console.log("📋 [DEBUG] Appointments - Verificando parâmetros URL:", {
       preselected,
-      date: urlParams.get('date'),
-      cep: urlParams.get('cep'),
-      numero: urlParams.get('numero'),
-      serviceId: urlParams.get('serviceId'),
-      technicianId: urlParams.get('technicianId'),
-      teamId: urlParams.get('teamId'),
-      clientId: urlParams.get('clientId')
+      date: urlParams.get("date"),
+      cep: urlParams.get("cep"),
+      numero: urlParams.get("numero"),
+      serviceId: urlParams.get("serviceId"),
+      technicianId: urlParams.get("technicianId"),
+      teamId: urlParams.get("teamId"),
+      clientId: urlParams.get("clientId"),
     });
-    
-    if (preselected === 'true') {
+
+    if (preselected === "true") {
       const data = {
-        date: urlParams.get('date'),
-        cep: urlParams.get('cep'),
-        numero: urlParams.get('numero'),
-        serviceId: urlParams.get('serviceId'),
-        technicianId: urlParams.get('technicianId'),
-        teamId: urlParams.get('teamId'),
-        clientId: urlParams.get('clientId'),
+        date: urlParams.get("date"),
+        cep: urlParams.get("cep"),
+        numero: urlParams.get("numero"),
+        serviceId: urlParams.get("serviceId"),
+        technicianId: urlParams.get("technicianId"),
+        teamId: urlParams.get("teamId"),
+        clientId: urlParams.get("clientId"),
       };
-      
+
       console.log("📋 [DEBUG] Appointments - Dados processados:", data);
-      
+
       // Verificar se todos os campos obrigatórios estão presentes
-      const hasRequiredFields = data.date && data.cep && data.numero && data.serviceId && 
-                               (data.technicianId || data.teamId);
-      
-      console.log("📋 [DEBUG] Appointments - Campos obrigatórios presentes:", hasRequiredFields);
-      
+      const hasRequiredFields =
+        data.date &&
+        data.cep &&
+        data.numero &&
+        data.serviceId &&
+        (data.technicianId || data.teamId);
+
+      console.log(
+        "📋 [DEBUG] Appointments - Campos obrigatórios presentes:",
+        hasRequiredFields,
+      );
+
       if (hasRequiredFields) {
         setPrefilledData(data);
         setIsFormOpen(true);
-        
+
         // Limpar parâmetros da URL
-        window.history.replaceState({}, document.title, window.location.pathname);
+        window.history.replaceState(
+          {},
+          document.title,
+          window.location.pathname,
+        );
       }
     }
   }, []);
@@ -243,33 +334,48 @@ export default function Appointments() {
   const handleFormClose = () => {
     // Usa o hook seguro para verificar se é seguro operar
     if (!isSafeToOperate()) {
-      console.log('⚠️ [APPOINTMENTS] Componente desmontado, operação cancelada');
+      console.log(
+        "⚠️ [APPOINTMENTS] Componente desmontado, operação cancelada",
+      );
       return;
     }
-    
+
     console.log("🧹 [DEBUG] handleFormClose - Limpando formulário");
-    console.log("🧹 [DEBUG] handleFormClose - selectedAppointment antes:", selectedAppointment);
-    console.log("🧹 [DEBUG] handleFormClose - prefilledData antes:", prefilledData);
-    
+    console.log(
+      "🧹 [DEBUG] handleFormClose - selectedAppointment antes:",
+      selectedAppointment,
+    );
+    console.log(
+      "🧹 [DEBUG] handleFormClose - prefilledData antes:",
+      prefilledData,
+    );
+
     setIsFormOpen(false);
     setSelectedAppointment(null);
     setPrefilledData(null);
-    
-    console.log("🧹 [DEBUG] handleFormClose - Estado limpo - formulário deve abrir vazio na próxima vez");
+
+    console.log(
+      "🧹 [DEBUG] handleFormClose - Estado limpo - formulário deve abrir vazio na próxima vez",
+    );
   };
 
   // Handlers para seleção de agendamentos
-  const handleAppointmentSelection = (appointmentId: number, isSelected: boolean) => {
+  const handleAppointmentSelection = (
+    appointmentId: number,
+    isSelected: boolean,
+  ) => {
     if (isSelected) {
-      setSelectedAppointmentIds(prev => [...prev, appointmentId]);
+      setSelectedAppointmentIds((prev) => [...prev, appointmentId]);
     } else {
-      setSelectedAppointmentIds(prev => prev.filter(id => id !== appointmentId));
+      setSelectedAppointmentIds((prev) =>
+        prev.filter((id) => id !== appointmentId),
+      );
     }
   };
 
   const handleSelectAll = (isSelected: boolean) => {
     if (isSelected) {
-      setSelectedAppointmentIds(filteredAppointments.map(apt => apt.id));
+      setSelectedAppointmentIds(filteredAppointments.map((apt) => apt.id));
     } else {
       setSelectedAppointmentIds([]);
     }
@@ -277,24 +383,32 @@ export default function Appointments() {
 
   const handleOptimizeRoute = async () => {
     if (selectedAppointmentIds.length < 2) {
-      toast({ 
-        title: "Selecione ao menos 2 agendamentos.", 
-        variant: "destructive" 
+      toast({
+        title: "Selecione ao menos 2 agendamentos.",
+        variant: "destructive",
       });
       return;
     }
 
     // ✅ Responsável único (mesmo técnico OU mesma equipe)
-    const selected = filteredAppointments.filter(apt => selectedAppointmentIds.includes(apt.id));
-    const keys = selected.map(apt =>
-      apt.technicianId ? `technician-${apt.technicianId}` :
-      apt.teamId ? `team-${apt.teamId}` : null
-    ).filter(Boolean);
+    const selected = filteredAppointments.filter((apt) =>
+      selectedAppointmentIds.includes(apt.id),
+    );
+    const keys = selected
+      .map((apt) =>
+        apt.technicianId
+          ? `technician-${apt.technicianId}`
+          : apt.teamId
+            ? `team-${apt.teamId}`
+            : null,
+      )
+      .filter(Boolean);
     const uniqueKeys = Array.from(new Set(keys));
     if (uniqueKeys.length !== 1) {
       toast({
         title: "Seleção inválida",
-        description: "Não é possível otimizar rota com técnicos/equipes diferentes. Selecione do mesmo responsável.",
+        description:
+          "Não é possível otimizar rota com técnicos/equipes diferentes. Selecione do mesmo responsável.",
         variant: "destructive",
       });
       return;
@@ -304,46 +418,163 @@ export default function Appointments() {
       // Limpar estados ao iniciar nova otimização
       setSavedInfo(null);
       setOptimizedRoute(null);
+      setPolyline(null);
+      setError(null);
       setIsOptimizing(true);
       setIsRouteDrawerOpen(true);
 
       console.log("🗺️ [ROUTE] Otimizando rotas com configuração:", {
         appointmentIds: selectedAppointmentIds,
-        endAtStart: endAtStart
+        endAtStart: endAtStart,
       });
 
-      const res = await fetch("/api/routes/optimize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          appointmentIds: selectedAppointmentIds, // números
-          endAtStart,
-          title: `Rota ${new Date().toLocaleDateString()}`,
-          preview: true
-        }),
-      });
+      // 1) Pré-geocodificar (não-bloqueante): apenas chama a API e ignora avisos
+      try {
+        const geoRes = await fetch("/api/appointments/geocode-missing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ appointmentIds: selectedAppointmentIds }),
+        });
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Falha ao otimizar rota");
+        // não precisa tratar erros/pending → segue direto
+        await geoRes.json().catch(() => ({}));
+      } catch {
+        // ignora
       }
 
-      const data = await res.json();
-      console.log("✅ [ROUTE] Rota otimizada recebida:", data);
-      
+      // função auxiliar para tentar otimizar com até 2 tentativas
+      const tryOptimize = async (attempt: number) => {
+        console.log(`🗺️ [ROUTE] Tentativa ${attempt} de otimização...`);
+
+        const res = await fetch("/api/routes/optimize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            appointmentIds: selectedAppointmentIds, // números
+            endAtStart,
+            title: `Rota ${new Date().toLocaleDateString()}`,
+            preview: true,
+          }),
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          console.error(`❌ [ROUTE] Falha tentativa ${attempt}:`, errorData);
+          if (attempt < 2) {
+            console.log("🔄 Retentando otimização...");
+            return tryOptimize(attempt + 1); // tenta de novo
+          }
+          throw new Error(errorData.error || "Falha ao otimizar rota");
+        }
+
+        const data = await res.json();
+        console.log("✅ [ROUTE] Rota otimizada recebida:", data);
+        return data;
+      };
+
+      // aqui dentro do seu try principal
+      const data = await tryOptimize(1);
+
+      // 1) Polyline do backend (checa vários nomes) — senão, criamos fallback depois
+      const backendGeo =
+        data?.route?.polylineGeoJson ??
+        data?.route?.routeGeoJson ??
+        data?.route?.geojson ??
+        data?.polylineGeoJson ??
+        data?.routeGeoJson ??
+        data?.geojson ??
+        null;
+
+      // 2) Monta waypoints: início + paradas, com múltiplos fallbacks
+      const asNum = (v: any) => (v === undefined || v === null ? undefined : Number(v));
+
+      // Início (start) via payload
+      let startWp: { lat: number; lon: number } | null = null;
+      const sLat =
+        asNum(data?.start?.lat) ??
+        asNum(data?.start?.latitude) ??
+        asNum(data?.route?.startLat) ??
+        (Array.isArray(data?.route?.start) ? asNum(data.route.start[1]) : undefined);
+      const sLon =
+        asNum(data?.start?.lon) ??
+        asNum(data?.start?.lng) ??
+        asNum(data?.start?.longitude) ??
+        asNum(data?.route?.startLng) ??
+        (Array.isArray(data?.route?.start) ? asNum(data.route.start[0]) : undefined);
+      if (Number.isFinite(sLat) && Number.isFinite(sLon)) startWp = { lat: sLat!, lon: sLon! };
+
+      // Paradas (stops) do payload (ou último recurso: clientes dos agendamentos selecionados)
+      let stopWps: { lat: number; lon: number }[] = [];
+      if (Array.isArray(data?.stops) && data.stops.length) {
+        stopWps = data.stops
+          .map((s: any) => ({
+            lat: asNum(s.lat ?? s.latitude ?? s.coords?.lat),
+            lon: asNum(s.lon ?? s.lng ?? s.longitude ?? s.coords?.lng),
+          }))
+          .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon)) as any;
+      } else {
+        const selected = filteredAppointments.filter((apt) =>
+          selectedAppointmentIds.includes(apt.id),
+        );
+        stopWps = selected
+          .map((apt) => {
+            const client = getClient(apt.clientId) as any;
+            const lat = asNum((apt as any).lat ?? (apt as any).latitude ?? client?.lat);
+            const lon =
+              asNum((apt as any).lng ?? (apt as any).lon ?? (apt as any).longitude ?? client?.lng);
+            return Number.isFinite(lat) && Number.isFinite(lon) ? { lat: lat!, lon: lon! } : null;
+          })
+          .filter(Boolean) as any;
+      }
+
+      // Se não temos início mas temos polyline do backend → usa o 1º vértice do polyline como início real
+      if (!startWp && backendGeo) {
+        try {
+          const geom =
+            backendGeo?.type === "LineString"
+              ? backendGeo
+              : backendGeo?.type === "Feature"
+              ? backendGeo.geometry
+              : backendGeo?.geometry?.type === "LineString"
+              ? backendGeo.geometry
+              : null;
+          const first = geom?.coordinates?.[0];
+          if (Array.isArray(first) && first.length >= 2) {
+            const [lon, lat] = first;
+            if (Number.isFinite(lat) && Number.isFinite(lon)) {
+              startWp = { lat: Number(lat), lon: Number(lon) };
+            }
+          }
+        } catch {}
+      }
+
+      // Waypoints finais (índice 0 é sempre o início quando existir)
+      const allWps = startWp ? [startWp, ...stopWps] : stopWps;
+
+      // 3) Atualiza estados de forma resiliente
       setOptimizedRoute(data);
-      
+      setRouteWaypoints(allWps.length >= 2 ? allWps : null);
+      setPolyline(
+        backendGeo ??
+          (allWps.length >= 2
+            ? { type: "LineString", coordinates: allWps.map((w) => [w.lon, w.lat]) }
+            : null),
+      );
+
+
+
+
       toast({
         title: "Rota otimizada com sucesso!",
         description: `${data.stops?.length || 0} paradas organizadas`,
       });
-
     } catch (err) {
       console.error("❌ [ROUTE] Erro ao otimizar:", err);
-      toast({ 
-        title: "Erro ao otimizar rota", 
+      setError(err.message || "Erro interno do servidor");
+      toast({
+        title: "Erro ao otimizar rota",
         description: err.message || "Erro interno do servidor",
-        variant: "destructive" 
+        variant: "destructive",
       });
       setIsRouteDrawerOpen(false);
     } finally {
@@ -351,12 +582,41 @@ export default function Appointments() {
     }
   };
 
+  // Abre o Google Maps com origem, paradas e destino, na ordem otimizada.
+  // Se roundTrip = true, volta ao ponto inicial (encerra onde começou).
+  const openInGoogleMaps = (waypoints: { lat: number; lon: number }[] | null, roundTrip: boolean) => {
+    if (!waypoints || waypoints.length < 2) {
+      toast({
+        title: "Rota insuficiente",
+        description: "É preciso ter ao menos início e um destino.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const pts = roundTrip ? [...waypoints, waypoints[0]] : [...waypoints];
+
+    const origin = `${pts[0].lat},${pts[0].lon}`;
+    const destination = `${pts[pts.length - 1].lat},${pts[pts.length - 1].lon}`;
+    const mids = pts.slice(1, -1).map(p => `${p.lat},${p.lon}`).join("|");
+
+    const url =
+      `https://www.google.com/maps/dir/?api=1` +
+      `&origin=${encodeURIComponent(origin)}` +
+      `&destination=${encodeURIComponent(destination)}` +
+      (mids ? `&waypoints=${encodeURIComponent(mids)}` : "") +
+      `&travelmode=driving&dir_action=navigate`;
+
+    window.open(url, "_blank");
+  };
+
+  
   const handleSaveRoute = async () => {
     if (!optimizedRoute?.route || optimizedRoute.route.id) {
       toast({
         title: "Erro",
         description: "Rota já foi salva ou dados inválidos",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -369,7 +629,7 @@ export default function Appointments() {
           appointmentIds: selectedAppointmentIds,
           endAtStart,
           title: optimizedRoute.route.title,
-          preview: false
+          preview: false,
         }),
       });
 
@@ -380,21 +640,23 @@ export default function Appointments() {
 
       const data = await res.json();
       setOptimizedRoute(data);
-      setSavedInfo({ id: data.route.id, displayNumber: data.route.displayNumber });
-      // mantém drawer aberto
-      setSelectedAppointmentIds([]);
+      setSavedInfo({
+        id: data.route.id,
+        displayNumber: data.route.displayNumber,
+      });
+      // ❌ NÃO limpe a seleção aqui
+      // setSelectedAppointmentIds([]);  // REMOVIDO
 
       toast({
         title: `Rota salva com sucesso — ID #${data.route.displayNumber}`,
         description: "A rota foi salva no histórico",
       });
-
     } catch (err) {
       console.error("❌ [ROUTE] Erro ao salvar:", err);
       toast({
         title: "Erro ao salvar rota",
         description: err.message || "Erro interno do servidor",
-        variant: "destructive"
+        variant: "destructive",
       });
     }
   };
@@ -458,58 +720,69 @@ export default function Appointments() {
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
     return {
-      date: date.toLocaleDateString('pt-BR'),
-      time: date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      date: date.toLocaleDateString("pt-BR"),
+      time: date.toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
     };
   };
 
-  const getClient = (clientId: number | null) => clientId ? clients.find((c: Client) => c.id === clientId) : null;
-  const getService = (serviceId: number) => services.find((s: Service) => s.id === serviceId);
-  const getTechnician = (technicianId: number | null) => technicianId ? technicians.find((t: Technician) => t.id === technicianId) : null;
-  const getTeam = (teamId: number | null) => teamId ? teams.find((t: Team) => t.id === teamId) : null;
+  const getClient = (clientId: number | null) =>
+    clientId ? clients.find((c: Client) => c.id === clientId) : null;
+  const getService = (serviceId: number) =>
+    services.find((s: Service) => s.id === serviceId);
+  const getTechnician = (technicianId: number | null) =>
+    technicianId
+      ? technicians.find((t: Technician) => t.id === technicianId)
+      : null;
+  const getTeam = (teamId: number | null) =>
+    teamId ? teams.find((t: Team) => t.id === teamId) : null;
 
   // Função para obter informações do responsável (técnico ou equipe) com logs detalhados
   const getResponsibleInfo = (appointment: Appointment) => {
     if (appointment.technicianId) {
       const technician = getTechnician(appointment.technicianId);
-      console.log(`👤 [DEBUG] Agendamento ${appointment.id} - Técnico individual:`, technician?.name, "ID:", appointment.technicianId);
       return {
-        type: 'technician' as const,
+        type: "technician" as const,
         name: technician?.name || "Técnico não encontrado",
         id: appointment.technicianId,
-        displayName: `👤 ${technician?.name || "Técnico não encontrado"}`
+        displayName: `👤 ${technician?.name || "Técnico não encontrado"}`,
       };
     } else if (appointment.teamId) {
       const team = getTeam(appointment.teamId);
-      console.log(`👥 [DEBUG] Agendamento ${appointment.id} - Equipe:`, team?.name, "ID:", appointment.teamId);
       return {
-        type: 'team' as const,
+        type: "team" as const,
         name: team?.name || "Equipe não encontrada",
         id: appointment.teamId,
-        displayName: `👥 ${team?.name || "Equipe não encontrada"}`
+        displayName: `👥 ${team?.name || "Equipe não encontrada"}`,
       };
     }
-    console.log(`❌ [DEBUG] Agendamento ${appointment.id} - Nenhum responsável atribuído`);
+    console.log(
+      `❌ [DEBUG] Agendamento ${appointment.id} - Nenhum responsável atribuído`,
+    );
     return {
-      type: 'none' as const,
+      type: "none" as const,
       name: "Responsável não atribuído",
       id: null,
-      displayName: "❌ Responsável não atribuído"
+      displayName: "❌ Responsável não atribuído",
     };
   };
 
   // Lógica de filtragem dos agendamentos
   const filteredAppointments = useMemo(() => {
     if (!appointments || appointments.length === 0) return [];
-    
+
     console.log("🔍 [FILTER] Aplicando filtros nos agendamentos...");
     console.log("🔍 [FILTER] Total de agendamentos:", appointments.length);
-    
+
     const filtered = appointments.filter((apt: Appointment) => {
       // Filter by date
       if (selectedDate) {
-        const aptDate = new Date(apt.scheduledDate).toLocaleDateString('en-CA'); // YYYY-MM-DD format
-        console.log(`🔍 [FILTER] Comparando datas - selectedDate: ${selectedDate}, aptDate: ${aptDate}`);
+        const aptDate = new Date(apt.scheduledDate).toLocaleDateString("en-CA"); // YYYY-MM-DD format
+        console.log(
+          `🔍 [FILTER] Comparando datas - selectedDate: ${selectedDate}, aptDate: ${aptDate}`,
+        );
         if (aptDate !== selectedDate) {
           console.log(`🔍 [FILTER] Agendamento ${apt.id} filtrado por data`);
           return false;
@@ -519,18 +792,24 @@ export default function Appointments() {
       // Filter by client name (search term)
       if (searchTerm) {
         const client = getClient(apt.clientId);
-        const clientName = client?.name?.toLowerCase() || '';
+        const clientName = client?.name?.toLowerCase() || "";
         const searchLower = searchTerm.toLowerCase();
-        console.log(`🔍 [FILTER] Pesquisando "${searchTerm}" em "${clientName}"`);
+        console.log(
+          `🔍 [FILTER] Pesquisando "${searchTerm}" em "${clientName}"`,
+        );
         if (!clientName.includes(searchLower)) {
-          console.log(`🔍 [FILTER] Agendamento ${apt.id} filtrado por busca de cliente`);
+          console.log(
+            `🔍 [FILTER] Agendamento ${apt.id} filtrado por busca de cliente`,
+          );
           return false;
         }
       }
 
       // Filter by service
       if (selectedService && selectedService !== "all") {
-        console.log(`🔍 [FILTER] Filtro de serviço aplicado - selectedService: ${selectedService}, apt.serviceId: ${apt.serviceId}`);
+        console.log(
+          `🔍 [FILTER] Filtro de serviço aplicado - selectedService: ${selectedService}, apt.serviceId: ${apt.serviceId}`,
+        );
         if (apt.serviceId.toString() !== selectedService) {
           console.log(`🔍 [FILTER] Agendamento ${apt.id} filtrado por serviço`);
           return false;
@@ -539,27 +818,37 @@ export default function Appointments() {
 
       // Filter by technician/team
       if (selectedTechnician && selectedTechnician !== "all") {
-        console.log(`🔍 [FILTER] Filtro de técnico/equipe aplicado - selectedTechnician: ${selectedTechnician}`);
-        
+        console.log(
+          `🔍 [FILTER] Filtro de técnico/equipe aplicado - selectedTechnician: ${selectedTechnician}`,
+        );
+
         // Verificar se é um técnico individual
         const technician = getTechnician(apt.technicianId);
-        const isMatchingTechnician = technician?.id.toString() === selectedTechnician;
-        
+        const isMatchingTechnician =
+          technician?.id.toString() === selectedTechnician;
+
         // Verificar se é uma equipe (o valor vem como "team-{id}")
         const team = teams.find((t: any) => t.id === apt.teamId);
         const isMatchingTeam = team && selectedTechnician === `team-${team.id}`;
-        
-        console.log(`🔍 [FILTER] isMatchingTechnician: ${isMatchingTechnician}, isMatchingTeam: ${isMatchingTeam}, team:`, team?.name);
-        
+
+        console.log(
+          `🔍 [FILTER] isMatchingTechnician: ${isMatchingTechnician}, isMatchingTeam: ${isMatchingTeam}, team:`,
+          team?.name,
+        );
+
         if (!isMatchingTechnician && !isMatchingTeam) {
-          console.log(`🔍 [FILTER] Agendamento ${apt.id} filtrado por técnico/equipe`);
+          console.log(
+            `🔍 [FILTER] Agendamento ${apt.id} filtrado por técnico/equipe`,
+          );
           return false;
         }
       }
 
       // Filter by status
       if (selectedStatus && selectedStatus !== "all") {
-        console.log(`🔍 [FILTER] Filtro de status aplicado - selectedStatus: ${selectedStatus}, apt.status: ${apt.status}`);
+        console.log(
+          `🔍 [FILTER] Filtro de status aplicado - selectedStatus: ${selectedStatus}, apt.status: ${apt.status}`,
+        );
         if (apt.status !== selectedStatus) {
           console.log(`🔍 [FILTER] Agendamento ${apt.id} filtrado por status`);
           return false;
@@ -569,69 +858,92 @@ export default function Appointments() {
       return true;
     });
 
-    console.log(`🔍 [FILTER] Resultado da filtragem: ${filtered.length} de ${appointments.length} agendamentos`);
+    console.log(
+      `🔍 [FILTER] Resultado da filtragem: ${filtered.length} de ${appointments.length} agendamentos`,
+    );
     return filtered;
-  }, [appointments, selectedDate, searchTerm, selectedService, selectedTechnician, selectedStatus, clients, services, technicians, teams]);
+  }, [
+    appointments,
+    selectedDate,
+    searchTerm,
+    selectedService,
+    selectedTechnician,
+    selectedStatus,
+    clients,
+    services,
+    technicians,
+    teams,
+  ]);
 
   // Computed values for route optimization
-  const selectedAppointments = filteredAppointments.filter(apt => 
-    selectedAppointmentIds.includes(apt.id)
+  const selectedAppointments = filteredAppointments.filter((apt) =>
+    selectedAppointmentIds.includes(apt.id),
   );
-  const isAllSelected = filteredAppointments.length > 0 && 
+  const isAllSelected =
+    filteredAppointments.length > 0 &&
     selectedAppointmentIds.length === filteredAppointments.length;
-  const isPartiallySelected = selectedAppointmentIds.length > 0 && 
+  const isPartiallySelected =
+    selectedAppointmentIds.length > 0 &&
     selectedAppointmentIds.length < filteredAppointments.length;
 
   const importCSVMutation = useMutation({
     mutationFn: async (appointments: any[]) => {
-      const response = await apiRequest("POST", "/api/appointments/import", { appointments });
+      const response = await apiRequest("POST", "/api/appointments/import", {
+        appointments,
+      });
       return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
-      
+
       // Log detalhado dos resultados do backend
       console.group("📊 RESULTADO DA IMPORTAÇÃO NO BACKEND");
       console.log(`✅ Sucessos: ${data.success}`);
       console.log(`❌ Erros: ${data.errors}`);
-      
+
       if (data.detailedErrors && data.detailedErrors.length > 0) {
         console.log("\n📋 Erros detalhados do servidor:");
         data.detailedErrors.forEach((error: string, index: number) => {
           console.log(`   ${index + 1}. ${error}`);
         });
       }
-      
+
       if (data.processedItems) {
         console.log(`\n📈 Itens processados: ${data.processedItems.length}`);
-        const successItems = data.processedItems.filter((item: any) => item.status === 'success');
-        const errorItems = data.processedItems.filter((item: any) => item.status === 'error');
+        const successItems = data.processedItems.filter(
+          (item: any) => item.status === "success",
+        );
+        const errorItems = data.processedItems.filter(
+          (item: any) => item.status === "error",
+        );
         console.log(`   • Sucessos: ${successItems.length}`);
         console.log(`   • Erros: ${errorItems.length}`);
       }
       console.groupEnd();
-      
+
       // Toast com resultado
       if (data.errors > 0) {
-        const errorMessage = data.detailedErrors ? 
-          data.detailedErrors.slice(0, 2).join('\n') + 
-          (data.detailedErrors.length > 2 ? `\n... e mais ${data.detailedErrors.length - 2} erros` : '') : 
-          `${data.errors} erros encontrados`;
-          
+        const errorMessage = data.detailedErrors
+          ? data.detailedErrors.slice(0, 2).join("\n") +
+            (data.detailedErrors.length > 2
+              ? `\n... e mais ${data.detailedErrors.length - 2} erros`
+              : "")
+          : `${data.errors} erros encontrados`;
+
         toast({
           title: `Importação parcial: ${data.success} sucessos, ${data.errors} erros`,
           description: errorMessage,
           variant: "destructive",
         });
-        
+
         // Gerar relatório de erros do backend se houver
         if (data.detailedErrors && data.detailedErrors.length > 0) {
           const backendErrorReport = [
             "RELATÓRIO DE ERROS - PROCESSAMENTO NO SERVIDOR",
             "=" + "=".repeat(50),
             "",
-            `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
+            `Data/Hora: ${new Date().toLocaleString("pt-BR")}`,
             "",
             "RESUMO:",
             "-".repeat(20),
@@ -642,17 +954,19 @@ export default function Appointments() {
             "",
             "ERROS DO SERVIDOR:",
             "-".repeat(40),
-            ...data.detailedErrors.map((error: string, index: number) => `${index + 1}. ${error}`),
-          ].join('\n');
+            ...data.detailedErrors.map(
+              (error: string, index: number) => `${index + 1}. ${error}`,
+            ),
+          ].join("\n");
 
           // Download seguro do relatório do servidor
-          const filename = `relatorio_servidor_${new Date().toISOString().split('T')[0]}_${new Date().toTimeString().split(' ')[0].replace(/:/g, '')}.txt`;
-          
+          const filename = `relatorio_servidor_${new Date().toISOString().split("T")[0]}_${new Date().toTimeString().split(" ")[0].replace(/:/g, "")}.txt`;
+
           setTimeout(() => {
             downloadWithConfirmation(
-              backendErrorReport, 
-              filename, 
-              "Deseja baixar o relatório de erros do servidor?"
+              backendErrorReport,
+              filename,
+              "Deseja baixar o relatório de erros do servidor?",
             );
           }, 1500);
         }
@@ -674,9 +988,9 @@ export default function Appointments() {
   });
 
   const handleImportCSV = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.csv';
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".csv";
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
@@ -684,29 +998,42 @@ export default function Appointments() {
         reader.onload = (event) => {
           try {
             const csv = event.target?.result as string;
-            const lines = csv.split('\n').filter(line => line.trim());
-            
+            const lines = csv.split("\n").filter((line) => line.trim());
+
             if (lines.length < 2) {
               toast({
                 title: "Erro",
-                description: "Arquivo CSV deve conter pelo menos uma linha de dados",
+                description:
+                  "Arquivo CSV deve conter pelo menos uma linha de dados",
                 variant: "destructive",
               });
               return;
             }
 
-            const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+            const headers = lines[0]
+              .split(",")
+              .map((h) => h.replace(/"/g, "").trim());
             const appointmentsToImport = [];
             const errors = [];
 
-            console.log("📋 [CSV IMPORT] Iniciando importação de agendamentos...");
+            console.log(
+              "📋 [CSV IMPORT] Iniciando importação de agendamentos...",
+            );
             console.log("📋 [CSV IMPORT] Campos reconhecidos:", headers);
-            console.log("📋 [CSV IMPORT] Técnicos disponíveis:", technicians.map((t: Technician) => t.name));
-            console.log("📋 [CSV IMPORT] Equipes disponíveis:", teams.map((t: Team) => t.name));
+            console.log(
+              "📋 [CSV IMPORT] Técnicos disponíveis:",
+              technicians.map((t: Technician) => t.name),
+            );
+            console.log(
+              "📋 [CSV IMPORT] Equipes disponíveis:",
+              teams.map((t: Team) => t.name),
+            );
 
             for (let i = 1; i < lines.length; i++) {
-              const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
-              
+              const values = lines[i]
+                .split(",")
+                .map((v) => v.replace(/"/g, "").trim());
+
               if (values.length < headers.length) continue;
 
               const clientName = values[0];
@@ -722,8 +1049,9 @@ export default function Appointments() {
               const complemento = values[15] || "";
               const notes = values[16] || "";
 
-
-              console.log(`📋 [CSV IMPORT] Linha ${i + 1}: Cliente=${clientName}, CPF=${cpfCliente}`);
+              console.log(
+                `📋 [CSV IMPORT] Linha ${i + 1}: Cliente=${clientName}, CPF=${cpfCliente}`,
+              );
 
               // Encontrar cliente pelo CPF (prioritário) ou nome (fallback) ANTES da validação
               let client = null;
@@ -732,31 +1060,42 @@ export default function Appointments() {
               let finalCep = cep;
               let finalLogradouro = logradouro;
               let finalNumero = numero;
-              
+
               if (cpfCliente) {
                 // Buscar cliente pelo CPF primeiro
                 client = clients.find((c: Client) => c.cpf === cpfCliente);
-                
+
                 if (client) {
-                  console.log(`✅ [CSV IMPORT] Cliente encontrado pelo CPF ${cpfCliente}: ${client.name}`);
-                  console.log(`📋 [CSV IMPORT] Usando dados do cliente cadastrado, ignorando dados do CSV`);
-                  
+                  console.log(
+                    `✅ [CSV IMPORT] Cliente encontrado pelo CPF ${cpfCliente}: ${client.name}`,
+                  );
+                  console.log(
+                    `📋 [CSV IMPORT] Usando dados do cliente cadastrado, ignorando dados do CSV`,
+                  );
+
                   // Usar dados do cliente cadastrado
                   finalClientName = client.name;
                   finalCep = client.cep;
                   finalLogradouro = client.logradouro;
                   finalNumero = client.numero;
                 } else {
-                  console.log(`🔍 [CSV IMPORT] CPF ${cpfCliente} não encontrado, criando novo cliente`);
+                  console.log(
+                    `🔍 [CSV IMPORT] CPF ${cpfCliente} não encontrado, criando novo cliente`,
+                  );
                 }
               }
-              
+
               if (!client && clientName) {
                 // Se não encontrou pelo CPF, tentar por nome como fallback
-                client = clients.find((c: Client) => c.name.toLowerCase() === clientName.toLowerCase());
-                
+                client = clients.find(
+                  (c: Client) =>
+                    c.name.toLowerCase() === clientName.toLowerCase(),
+                );
+
                 if (client) {
-                  console.log(`⚠️ [CSV IMPORT] Cliente encontrado pelo nome: ${client.name} (sem CPF fornecido)`);
+                  console.log(
+                    `⚠️ [CSV IMPORT] Cliente encontrado pelo nome: ${client.name} (sem CPF fornecido)`,
+                  );
                   // Usar dados do cliente cadastrado
                   finalClientName = client.name;
                   finalCep = client.cep;
@@ -768,32 +1107,47 @@ export default function Appointments() {
               // Validar campos obrigatórios APÓS puxar dados do cliente
               const validationErrors = [];
               const phone1 = values[3];
-              
+
               // Validar campos obrigatórios (agora usando dados finais)
-              if (!finalClientName) validationErrors.push("Cliente não identificado (forneça nome ou CPF válido)");
-              if (!serviceName) validationErrors.push("Serviço (coluna 6) está vazio");
-              if (!dateTime) validationErrors.push("Data/Hora (coluna 8) está vazia");
-              if (!finalCep) validationErrors.push("CEP não disponível (cliente não cadastrado)");
-              if (!finalNumero) validationErrors.push("Número não disponível (cliente não cadastrado)");
-              
+              if (!finalClientName)
+                validationErrors.push(
+                  "Cliente não identificado (forneça nome ou CPF válido)",
+                );
+              if (!serviceName)
+                validationErrors.push("Serviço (coluna 6) está vazio");
+              if (!dateTime)
+                validationErrors.push("Data/Hora (coluna 8) está vazia");
+              if (!finalCep)
+                validationErrors.push(
+                  "CEP não disponível (cliente não cadastrado)",
+                );
+              if (!finalNumero)
+                validationErrors.push(
+                  "Número não disponível (cliente não cadastrado)",
+                );
+
               // Validar formato do CEP
               if (finalCep && !/^\d{5}-?\d{3}$/.test(finalCep)) {
-                validationErrors.push(`CEP "${finalCep}" inválido (formato esperado: XXXXX-XXX)`);
+                validationErrors.push(
+                  `CEP "${finalCep}" inválido (formato esperado: XXXXX-XXX)`,
+                );
               }
-              
+
               // Validar se o número é numérico
               if (finalNumero && isNaN(Number(finalNumero))) {
-                validationErrors.push(`Número "${finalNumero}" deve ser numérico`);
+                validationErrors.push(
+                  `Número "${finalNumero}" deve ser numérico`,
+                );
               }
-              
+
               if (validationErrors.length > 0) {
                 errors.push(`Linha ${i + 1}: ${validationErrors.join("; ")}`);
                 continue;
               }
-              
+
               if (!client) {
                 // Preparar dados do cliente para criação automática
-                 clientData = {
+                clientData = {
                   name: finalClientName,
                   cpf: cpfCliente || "",
                   email: values[2] || "",
@@ -805,36 +1159,55 @@ export default function Appointments() {
                   logradouro: finalLogradouro,
                   numero: finalNumero,
                   complemento: complemento,
-                  observacoes: `Cliente criado automaticamente via importação CSV em ${new Date().toLocaleString('pt-BR')}`
+                  observacoes: `Cliente criado automaticamente via importação CSV em ${new Date().toLocaleString("pt-BR")}`,
                 };
-                console.log(`🆕 [CSV IMPORT] Preparando criação de novo cliente: ${finalClientName}`);
+                console.log(
+                  `🆕 [CSV IMPORT] Preparando criação de novo cliente: ${finalClientName}`,
+                );
               }
 
               // Encontrar serviço
-              const service = services.find((s: Service) => s.name.toLowerCase() === serviceName.toLowerCase());
+              const service = services.find(
+                (s: Service) =>
+                  s.name.toLowerCase() === serviceName.toLowerCase(),
+              );
               if (!service) {
-                errors.push(`Linha ${i + 1}: Serviço "${serviceName}" não encontrado`);
+                errors.push(
+                  `Linha ${i + 1}: Serviço "${serviceName}" não encontrado`,
+                );
                 continue;
               }
 
               // Encontrar técnico ou equipe
               let technician = null;
               let team = null;
-              
+
               if (technicianName) {
                 // Primeiro, procurar por técnico individual
-                technician = technicians.find((t: Technician) => t.name.toLowerCase() === technicianName.toLowerCase());
-                
+                technician = technicians.find(
+                  (t: Technician) =>
+                    t.name.toLowerCase() === technicianName.toLowerCase(),
+                );
+
                 if (technician) {
-                  console.log(`👤 [CSV IMPORT] Técnico encontrado: ${technician.name}`);
+                  console.log(
+                    `👤 [CSV IMPORT] Técnico encontrado: ${technician.name}`,
+                  );
                 } else {
                   // Se não encontrou técnico, procurar por equipe
-                  team = teams.find((team: Team) => team.name.toLowerCase() === technicianName.toLowerCase());
-                  
+                  team = teams.find(
+                    (team: Team) =>
+                      team.name.toLowerCase() === technicianName.toLowerCase(),
+                  );
+
                   if (team) {
-                    console.log(`👥 [CSV IMPORT] Equipe encontrada: ${team.name}`);
+                    console.log(
+                      `👥 [CSV IMPORT] Equipe encontrada: ${team.name}`,
+                    );
                   } else {
-                    console.log(`⚠️ [CSV IMPORT] Técnico/Equipe "${technicianName}" não encontrado`);
+                    console.log(
+                      `⚠️ [CSV IMPORT] Técnico/Equipe "${technicianName}" não encontrado`,
+                    );
                   }
                 }
               }
@@ -846,12 +1219,20 @@ export default function Appointments() {
                 const lowerPriority = priorityValue.toLowerCase().trim();
                 if (lowerPriority === "normal") {
                   normalizedPriority = "normal";
-                } else if (lowerPriority === "alta" || lowerPriority === "high") {
+                } else if (
+                  lowerPriority === "alta" ||
+                  lowerPriority === "high"
+                ) {
                   normalizedPriority = "high";
-                } else if (lowerPriority === "urgente" || lowerPriority === "urgent") {
+                } else if (
+                  lowerPriority === "urgente" ||
+                  lowerPriority === "urgent"
+                ) {
                   normalizedPriority = "urgent";
                 } else {
-                  errors.push(`Linha ${i + 1}: Prioridade "${priorityValue}" inválida. Use: Normal, Alta ou Urgente`);
+                  errors.push(
+                    `Linha ${i + 1}: Prioridade "${priorityValue}" inválida. Use: Normal, Alta ou Urgente`,
+                  );
                   continue;
                 }
               }
@@ -861,7 +1242,7 @@ export default function Appointments() {
               try {
                 // Tentar diferentes formatos de data
                 let dateObj;
-                
+
                 // Formato ISO (YYYY-MM-DD HH:MM:SS)
                 if (/^\d{4}-\d{2}-\d{2}/.test(dateTime)) {
                   dateObj = new Date(dateTime);
@@ -875,60 +1256,72 @@ export default function Appointments() {
                 // Formato americano (MM/DD/YYYY HH:MM)
                 else if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(dateTime)) {
                   dateObj = new Date(dateTime);
-                }
-                else {
+                } else {
                   dateObj = new Date(dateTime);
                 }
-                
+
                 if (isNaN(dateObj.getTime())) {
                   throw new Error("Data inválida");
                 }
-                
+
                 // Verificar se a data não é muito antiga (antes de 2020) ou muito futura (depois de 2030)
                 const year = dateObj.getFullYear();
                 if (year < 2020 || year > 2030) {
-                  errors.push(`Linha ${i + 1}: Data "${dateTime}" fora do intervalo válido (2020-2030)`);
+                  errors.push(
+                    `Linha ${i + 1}: Data "${dateTime}" fora do intervalo válido (2020-2030)`,
+                  );
                   continue;
                 }
-                
+
                 scheduledDate = dateObj.toISOString();
               } catch {
-                errors.push(`Linha ${i + 1}: Data/hora "${dateTime}" inválida. Formatos aceitos: YYYY-MM-DD HH:MM, DD/MM/YYYY HH:MM`);
+                errors.push(
+                  `Linha ${i + 1}: Data/hora "${dateTime}" inválida. Formatos aceitos: YYYY-MM-DD HH:MM, DD/MM/YYYY HH:MM`,
+                );
                 continue;
               }
 
               // Mapear status em português para valores do sistema
               let finalStatus = "scheduled"; // padrão
               const statusInput = (values[8] || "").trim();
-              
-              console.log(`🔄 [CSV IMPORT] Status recebido da linha ${i + 1}: "${statusInput}"`);
-              
+
+              console.log(
+                `🔄 [CSV IMPORT] Status recebido da linha ${i + 1}: "${statusInput}"`,
+              );
+
               if (statusInput) {
-                const statusLower = statusInput.toLowerCase()
-                  .normalize('NFD')
-                  .replace(/[\u0300-\u036f]/g, ''); // remove acentos
-                
+                const statusLower = statusInput
+                  .toLowerCase()
+                  .normalize("NFD")
+                  .replace(/[\u0300-\u036f]/g, ""); // remove acentos
+
                 const statusMap: { [key: string]: string } = {
-                  'agendado': 'scheduled',
-                  'em andamento': 'in_progress', 
-                  'em-andamento': 'in_progress',
-                  'emandamento': 'in_progress',
-                  'concluido': 'completed',
-                  'concluído': 'completed',
-                  'cancelado': 'cancelled',
+                  agendado: "scheduled",
+                  "em andamento": "in_progress",
+                  "em-andamento": "in_progress",
+                  emandamento: "in_progress",
+                  concluido: "completed",
+                  concluído: "completed",
+                  cancelado: "cancelled",
                   // Manter compatibilidade com inglês
-                  'scheduled': 'scheduled',
-                  'in_progress': 'in_progress',
-                  'completed': 'completed',
-                  'cancelled': 'cancelled'
+                  scheduled: "scheduled",
+                  in_progress: "in_progress",
+                  completed: "completed",
+                  cancelled: "cancelled",
                 };
-                
+
                 if (statusMap[statusLower]) {
                   finalStatus = statusMap[statusLower];
-                  console.log(`✅ [CSV IMPORT] Status "${statusInput}" mapeado para: ${finalStatus}`);
+                  console.log(
+                    `✅ [CSV IMPORT] Status "${statusInput}" mapeado para: ${finalStatus}`,
+                  );
                 } else {
-                  errors.push(`Linha ${i + 1}: Status "${statusInput}" inválido. Valores aceitos: Agendado, Em Andamento, Concluído, Cancelado`);
-                  console.log(`❌ [CSV IMPORT] Status inválido na linha ${i + 1}: "${statusInput}"`);
+                  errors.push(
+                    `Linha ${i + 1}: Status "${statusInput}" inválido. Valores aceitos: Agendado, Em Andamento, Concluído, Cancelado`,
+                  );
+                  console.log(
+                    `❌ [CSV IMPORT] Status inválido na linha ${i + 1}: "${statusInput}"`,
+                  );
                   continue;
                 }
               }
@@ -943,21 +1336,24 @@ export default function Appointments() {
                 status: finalStatus,
                 priority: normalizedPriority,
                 cep: finalCep,
-                bairro: client ? client.bairro : (bairro || ""),
-                cidade: client ? client.cidade : (cidade || ""),
+                bairro: client ? client.bairro : bairro || "",
+                cidade: client ? client.cidade : cidade || "",
                 logradouro: finalLogradouro,
                 numero: finalNumero,
                 complemento,
-                notes
+                notes,
               };
-              
-              console.log(`📋 [CSV IMPORT] Agendamento preparado - Linha ${i + 1}:`, {
-                technicianId: appointmentData.technicianId,
-                teamId: appointmentData.teamId,
-                serviceId: appointmentData.serviceId,
-                clientId: appointmentData.clientId
-              });
-              
+
+              console.log(
+                `📋 [CSV IMPORT] Agendamento preparado - Linha ${i + 1}:`,
+                {
+                  technicianId: appointmentData.technicianId,
+                  teamId: appointmentData.teamId,
+                  serviceId: appointmentData.serviceId,
+                  clientId: appointmentData.clientId,
+                },
+              );
+
               appointmentsToImport.push(appointmentData);
             }
 
@@ -967,39 +1363,58 @@ export default function Appointments() {
                 totalLines: lines.length - 1,
                 validAppointments: appointmentsToImport.length,
                 errorCount: errors.length,
-                errors: errors
+                errors: errors,
               };
 
               // Mostrar primeiros 3 erros no toast
-              const shortErrorMessage = errors.slice(0, 3).join('\n') + 
-                (errors.length > 3 ? `\n... e mais ${errors.length - 3} erros` : '');
-              
+              const shortErrorMessage =
+                errors.slice(0, 3).join("\n") +
+                (errors.length > 3
+                  ? `\n... e mais ${errors.length - 3} erros`
+                  : "");
+
               toast({
                 title: `${errors.length} erros encontrados na importação`,
                 description: shortErrorMessage,
                 variant: "destructive",
               });
-              
+
               // Log detalhado no console
               console.group("📋 RELATÓRIO DETALHADO DE IMPORTAÇÃO CSV");
               console.log(`📊 Resumo:`);
-              console.log(`   • Total de linhas processadas: ${errorReport.totalLines}`);
-              console.log(`   • Agendamentos válidos: ${errorReport.validAppointments}`);
+              console.log(
+                `   • Total de linhas processadas: ${errorReport.totalLines}`,
+              );
+              console.log(
+                `   • Agendamentos válidos: ${errorReport.validAppointments}`,
+              );
               console.log(`   • Erros encontrados: ${errorReport.errorCount}`);
-              console.log(`   • Taxa de sucesso: ${((errorReport.validAppointments / errorReport.totalLines) * 100).toFixed(1)}%`);
+              console.log(
+                `   • Taxa de sucesso: ${((errorReport.validAppointments / errorReport.totalLines) * 100).toFixed(1)}%`,
+              );
               console.log("\n📝 LISTA COMPLETA DE ERROS:");
               errorReport.errors.forEach((error, index) => {
                 console.log(`   ${index + 1}. ${error}`);
               });
               console.log("\n💡 DICAS PARA CORREÇÃO:");
-              console.log("   • Verifique se os nomes de clientes, serviços e técnicos estão exatamente como cadastrados");
-              console.log("   • Formato de data aceito: YYYY-MM-DD HH:MM:SS ou DD/MM/YYYY HH:MM");
+              console.log(
+                "   • Verifique se os nomes de clientes, serviços e técnicos estão exatamente como cadastrados",
+              );
+              console.log(
+                "   • Formato de data aceito: YYYY-MM-DD HH:MM:SS ou DD/MM/YYYY HH:MM",
+              );
               console.log("   • CEP deve estar no formato XXXXX-XXX");
               console.log("   • Campos obrigatórios não podem estar vazios");
               console.log("\n📋 ORDEM DOS CAMPOS NO CSV:");
-              console.log("   1. Cliente | 2. CPF Cliente | 3. Email Cliente | 4. Telefone 1 | 5. Telefone 2");
-              console.log("   6. Serviço | 7. Técnico | 8. Data/Hora | 9. Status | 10. Prioridade");
-              console.log("   11. CEP | 12. Logradouro | 13. Número | 14. Complemento | 15. Observações");
+              console.log(
+                "   1. Cliente | 2. CPF Cliente | 3. Email Cliente | 4. Telefone 1 | 5. Telefone 2",
+              );
+              console.log(
+                "   6. Serviço | 7. Técnico | 8. Data/Hora | 9. Status | 10. Prioridade",
+              );
+              console.log(
+                "   11. CEP | 12. Logradouro | 13. Número | 14. Complemento | 15. Observações",
+              );
               console.groupEnd();
 
               // Criar arquivo de log para download
@@ -1007,7 +1422,7 @@ export default function Appointments() {
                 "RELATÓRIO DE ERROS - IMPORTAÇÃO CSV",
                 "=" + "=".repeat(40),
                 "",
-                `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
+                `Data/Hora: ${new Date().toLocaleString("pt-BR")}`,
                 `Arquivo processado: ${file.name}`,
                 "",
                 "RESUMO:",
@@ -1019,7 +1434,9 @@ export default function Appointments() {
                 "",
                 "ERROS DETALHADOS:",
                 "-".repeat(40),
-                ...errorReport.errors.map((error, index) => `${index + 1}. ${error}`),
+                ...errorReport.errors.map(
+                  (error, index) => `${index + 1}. ${error}`,
+                ),
                 "",
                 "DICAS PARA CORREÇÃO:",
                 "-".repeat(40),
@@ -1032,7 +1449,7 @@ export default function Appointments() {
                 "ORDEM DOS CAMPOS NO CSV:",
                 "-".repeat(40),
                 "1. Cliente | 2. CPF Cliente | 3. Email Cliente | 4. Telefone 1 | 5. Telefone 2",
-                "6. Serviço | 7. Técnico | 8. Data/Hora | 9. Status | 10. Prioridade", 
+                "6. Serviço | 7. Técnico | 8. Data/Hora | 9. Status | 10. Prioridade",
                 "11. CEP | 12. Logradouro | 13. Número | 14. Complemento | 15. Observações",
                 "",
                 "COMPORTAMENTO INTELIGENTE DE CPF:",
@@ -1041,18 +1458,20 @@ export default function Appointments() {
                 "• Neste caso, os dados do CSV (nome, telefone, endereço) serão ignorados para esse cliente",
                 "• Isso garante consistência com os dados já cadastrados no sistema",
                 "",
-                "OBSERVAÇÃO: Use o botão 'Baixar CSV Modelo' para obter um arquivo com a estrutura correta."
-              ].join('\n');
+                "OBSERVAÇÃO: Use o botão 'Baixar CSV Modelo' para obter um arquivo com a estrutura correta.",
+              ].join("\n");
 
-              const logBlob = new Blob([logContent], { type: "text/plain;charset=utf-8;" });
+              const logBlob = new Blob([logContent], {
+                type: "text/plain;charset=utf-8;",
+              });
               // Download seguro do relatório de erros
-              const filename = `relatorio_erros_${new Date().toISOString().split('T')[0]}_${new Date().toTimeString().split(' ')[0].replace(/:/g, '')}.txt`;
-              
+              const filename = `relatorio_erros_${new Date().toISOString().split("T")[0]}_${new Date().toTimeString().split(" ")[0].replace(/:/g, "")}.txt`;
+
               setTimeout(() => {
                 downloadWithConfirmation(
                   logContent,
                   filename,
-                  "Deseja baixar um relatório detalhado dos erros encontrados?"
+                  "Deseja baixar um relatório detalhado dos erros encontrados?",
                 );
               }, 1000);
             }
@@ -1066,7 +1485,6 @@ export default function Appointments() {
                 variant: "destructive",
               });
             }
-
           } catch (error) {
             toast({
               title: "Erro",
@@ -1084,46 +1502,46 @@ export default function Appointments() {
   const downloadCSVTemplate = () => {
     const templateHeaders = [
       "Cliente",
-      "CPF Cliente", 
+      "CPF Cliente",
       "Email Cliente",
       "Telefone 1",
-      "Telefone 2", 
+      "Telefone 2",
       "Serviço",
       "Técnico",
       "Data/Hora",
       "Status",
       "Prioridade",
       "CEP",
-      "Bairro",      // NOVO
-      "Cidade",      // NOVO
-      "Logradouro", 
+      "Bairro", // NOVO
+      "Cidade", // NOVO
+      "Logradouro",
       "Número",
       "Complemento",
-      "Observações"
+      "Observações",
     ];
 
     const exampleRow = [
       "João Silva",
       "123.456.789-01",
-      "joao@email.com", 
+      "joao@email.com",
       "(11) 99999-9999",
       "(11) 88888-8888",
       "Instalação",
       "Carlos Técnico",
       "2024-12-25 14:30",
       "Agendado",
-      "normal", 
+      "normal",
       "01234-567",
-      "Portão",     // EXEMPLO
-      "Curitiba",   // EXEMPLO
+      "Portão", // EXEMPLO
+      "Curitiba", // EXEMPLO
       "Rua das Flores",
       "123",
       "Apto 45",
-      "Cliente preferencial"
+      "Cliente preferencial",
     ];
 
     const csvContent = [templateHeaders, exampleRow]
-      .map(row => row.map(field => `"${field}"`).join(","))
+      .map((row) => row.map((field) => `"${field}"`).join(","))
       .join("\n");
 
     // Download seguro do modelo CSV
@@ -1134,7 +1552,6 @@ export default function Appointments() {
       description: "Use este arquivo como base para importar seus agendamentos",
     });
   };
-
 
   const exportToCSV = () => {
     if (appointments.length === 0) {
@@ -1147,58 +1564,60 @@ export default function Appointments() {
     }
 
     const csvHeaders = [
-    "ID",
-    "Cliente",
-    "Email Cliente",
-    "Telefone 1",
-    "Telefone 2",
-    "Serviço",
-    "Técnico",
-    "Data/Hora",
-    "Status",
-    "Prioridade",
-    "CEP",
-    "Bairro",         // NOVO
-    "Cidade",         // NOVO
-    "Logradouro",
-    "Número",
-    "Complemento",
-    "Observações"
-  ];
-
-  const csvData = appointments.map((appointment: Appointment) => {
-    const client = getClient(appointment.clientId);
-    const service = getService(appointment.serviceId);
-    const technician = getTechnician(appointment.technicianId);
-    const { date, time } = formatDateTime(appointment.scheduledDate.toString());
-
-    return [
-      appointment.id,
-      client?.name || "Cliente não encontrado",
-      client?.email || "",
-      client?.phone1 || "",
-      client?.phone2 || "",
-      service?.name || "Serviço não encontrado",
-      technician?.name || "Técnico não encontrado",
-      `${date} ${time}`,
-      getStatusText(appointment.status),
-      getPriorityText(appointment.priority),
-      appointment.cep,
-      appointment.bairro || "",       // NOVO
-      appointment.cidade || "",       // NOVO
-      appointment.logradouro,
-      appointment.numero,
-      appointment.complemento || "",
-      appointment.notes || ""
+      "ID",
+      "Cliente",
+      "Email Cliente",
+      "Telefone 1",
+      "Telefone 2",
+      "Serviço",
+      "Técnico",
+      "Data/Hora",
+      "Status",
+      "Prioridade",
+      "CEP",
+      "Bairro", // NOVO
+      "Cidade", // NOVO
+      "Logradouro",
+      "Número",
+      "Complemento",
+      "Observações",
     ];
-  });
+
+    const csvData = appointments.map((appointment: Appointment) => {
+      const client = getClient(appointment.clientId);
+      const service = getService(appointment.serviceId);
+      const technician = getTechnician(appointment.technicianId);
+      const { date, time } = formatDateTime(
+        appointment.scheduledDate.toString(),
+      );
+
+      return [
+        appointment.id,
+        client?.name || "Cliente não encontrado",
+        client?.email || "",
+        client?.phone1 || "",
+        client?.phone2 || "",
+        service?.name || "Serviço não encontrado",
+        technician?.name || "Técnico não encontrado",
+        `${date} ${time}`,
+        getStatusText(appointment.status),
+        getPriorityText(appointment.priority),
+        appointment.cep,
+        appointment.bairro || "", // NOVO
+        appointment.cidade || "", // NOVO
+        appointment.logradouro,
+        appointment.numero,
+        appointment.complemento || "",
+        appointment.notes || "",
+      ];
+    });
 
     const csvContent = [csvHeaders, ...csvData]
       .map((row: any[]) => row.map((field: any) => `"${field}"`).join(","))
       .join("\n");
 
     // Download seguro da exportação CSV
-    const filename = `agendamentos_${new Date().toISOString().split('T')[0]}.csv`;
+    const filename = `agendamentos_${new Date().toISOString().split("T")[0]}.csv`;
     downloadCSV(csvContent, filename);
 
     toast({
@@ -1223,7 +1642,7 @@ export default function Appointments() {
           <h1 className="text-2xl font-bold text-gray-900">Agendamentos</h1>
           <p className="text-gray-600">Gerencie todos os seus agendamentos</p>
         </div>
-        
+
         {/* Action Buttons - Stack on mobile */}
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
@@ -1234,7 +1653,7 @@ export default function Appointments() {
             >
               Baixar CSV Modelo
             </Button>
-            
+
             <Button
               variant="outline"
               onClick={handleImportCSV}
@@ -1243,7 +1662,7 @@ export default function Appointments() {
               <Upload className="h-4 w-4 mr-2" />
               Importar CSV
             </Button>
-            
+
             <Button
               variant="outline"
               onClick={exportToCSV}
@@ -1253,12 +1672,14 @@ export default function Appointments() {
               Exportar CSV
             </Button>
           </div>
-          
-          <Button 
+
+          <Button
             className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white w-full md:w-auto"
             onClick={() => {
               console.log("🆕 [DEBUG] Novo Agendamento - Botão clicado");
-              console.log("🆕 [DEBUG] Novo Agendamento - Limpando selectedAppointment e prefilledData");
+              console.log(
+                "🆕 [DEBUG] Novo Agendamento - Limpando selectedAppointment e prefilledData",
+              );
               setSelectedAppointment(null);
               setPrefilledData(null);
               setIsFormOpen(true);
@@ -1296,74 +1717,108 @@ export default function Appointments() {
                     className="w-full"
                   />
                 </div>
-                
+
                 <div>
-                  <label className="text-sm font-medium mb-2 block">Buscar Cliente</label>
+                  <label className="text-sm font-medium mb-2 block">
+                    Buscar Cliente
+                  </label>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                     <Input
                       placeholder="Nome do cliente..."
                       value={searchTerm}
                       onChange={(e) => {
-                        console.log("🔍 [FILTER] Busca alterada:", e.target.value);
+                        console.log(
+                          "🔍 [FILTER] Busca alterada:",
+                          e.target.value,
+                        );
                         setSearchTerm(e.target.value);
                       }}
                       className="pl-10"
                     />
                   </div>
                 </div>
-                
+
                 <div>
-                  <label className="text-sm font-medium mb-2 block">Serviço</label>
-                  <Select value={selectedService} onValueChange={(value) => {
-                    console.log("🔍 [FILTER] Serviço alterado:", value);
-                    setSelectedService(value);
-                  }}>
+                  <label className="text-sm font-medium mb-2 block">
+                    Serviço
+                  </label>
+                  <Select
+                    value={selectedService}
+                    onValueChange={(value) => {
+                      console.log("🔍 [FILTER] Serviço alterado:", value);
+                      setSelectedService(value);
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Todos os serviços" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos os serviços</SelectItem>
                       {services.map((service: Service) => (
-                        <SelectItem key={service.id} value={service.id.toString()}>
+                        <SelectItem
+                          key={service.id}
+                          value={service.id.toString()}
+                        >
                           {service.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 <div>
-                  <label className="text-sm font-medium mb-2 block">Técnicos/Equipes</label>
-                  <Select value={selectedTechnician} onValueChange={(value) => {
-                    console.log("🔍 [FILTER] Técnico/Equipe alterado:", value);
-                    setSelectedTechnician(value);
-                  }}>
+                  <label className="text-sm font-medium mb-2 block">
+                    Técnicos/Equipes
+                  </label>
+                  <Select
+                    value={selectedTechnician}
+                    onValueChange={(value) => {
+                      console.log(
+                        "🔍 [FILTER] Técnico/Equipe alterado:",
+                        value,
+                      );
+                      setSelectedTechnician(value);
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Todos os técnicos e equipes" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos os técnicos e equipes</SelectItem>
+                      <SelectItem value="all">
+                        Todos os técnicos e equipes
+                      </SelectItem>
                       {technicians.map((technician: Technician) => (
-                        <SelectItem key={`tech-${technician.id}`} value={technician.id.toString()}>
+                        <SelectItem
+                          key={`tech-${technician.id}`}
+                          value={technician.id.toString()}
+                        >
                           👤 {technician.name}
                         </SelectItem>
                       ))}
                       {teams.map((team: any) => (
-                        <SelectItem key={`team-${team.id}`} value={`team-${team.id}`}>
+                        <SelectItem
+                          key={`team-${team.id}`}
+                          value={`team-${team.id}`}
+                        >
                           👥 {team.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 <div>
-                  <label className="text-sm font-medium mb-2 block">Status</label>
-                  <Select value={selectedStatus} onValueChange={(value) => {
-                    console.log("🔍 [FILTER] Status alterado:", value);
-                    setSelectedStatus(value);
-                  }}>
+                  <label className="text-sm font-medium mb-2 block">
+                    Status
+                  </label>
+                  <Select
+                    value={selectedStatus}
+                    onValueChange={(value) => {
+                      console.log("🔍 [FILTER] Status alterado:", value);
+                      setSelectedStatus(value);
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Todos os status" />
                     </SelectTrigger>
@@ -1382,19 +1837,27 @@ export default function Appointments() {
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pt-4 border-t border-gray-100">
                 {/* View Mode Toggle */}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                  <span className="text-sm font-medium text-gray-700">Modo de Visualização:</span>
+                  <span className="text-sm font-medium text-gray-700">
+                    Modo de Visualização:
+                  </span>
                   <div className="bg-white border border-gray-200 rounded p-0.5 shadow-sm w-full max-w-sm sm:w-auto">
-                    <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as "list" | "calendar")} className="w-full">
+                    <Tabs
+                      value={viewMode}
+                      onValueChange={(value) =>
+                        setViewMode(value as "list" | "calendar")
+                      }
+                      className="w-full"
+                    >
                       <TabsList className="grid w-full grid-cols-2 h-auto sm:h-8 bg-gray-50 p-0 gap-1 sm:gap-0">
-                        <TabsTrigger 
-                          value="list" 
+                        <TabsTrigger
+                          value="list"
                           className="flex items-center justify-center gap-2 py-2 px-3 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
                         >
                           <List className="h-4 w-4" />
                           <span className="text-sm sm:text-xs">Lista</span>
                         </TabsTrigger>
-                        <TabsTrigger 
-                          value="calendar" 
+                        <TabsTrigger
+                          value="calendar"
                           className="flex items-center justify-center gap-2 py-2 px-3 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
                         >
                           <Calendar className="h-4 w-4" />
@@ -1404,9 +1867,9 @@ export default function Appointments() {
                     </Tabs>
                   </div>
                 </div>
-                
+
                 {/* Clear Filters Button */}
-                <Button 
+                <Button
                   onClick={() => {
                     console.log("🔍 [FILTER] Limpando todos os filtros");
                     setSelectedDate("");
@@ -1435,15 +1898,16 @@ export default function Appointments() {
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Calendar className="h-12 w-12 text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {appointments.length === 0 ? "Nenhum agendamento encontrado" : "Nenhum agendamento encontrado com os filtros aplicados"}
+                {appointments.length === 0
+                  ? "Nenhum agendamento encontrado"
+                  : "Nenhum agendamento encontrado com os filtros aplicados"}
               </h3>
               <p className="text-gray-600 text-center mb-6">
-                {appointments.length === 0 
+                {appointments.length === 0
                   ? "Comece criando seu primeiro agendamento para organizar seus atendimentos técnicos."
-                  : "Tente ajustar os filtros ou limpar todos os filtros para ver mais agendamentos."
-                }
+                  : "Tente ajustar os filtros ou limpar todos os filtros para ver mais agendamentos."}
               </p>
-              <Button 
+              <Button
                 className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
                 onClick={() => {
                   setPrefilledData(null);
@@ -1472,17 +1936,21 @@ export default function Appointments() {
                     onChange={(e) => handleSelectAll(e.target.checked)}
                     className="w-4 h-4 text-burnt-yellow bg-gray-100 border-gray-300 rounded focus:ring-burnt-yellow focus:ring-2"
                   />
-                  <label htmlFor="select-all" className="text-sm font-medium text-gray-700">
+                  <label
+                    htmlFor="select-all"
+                    className="text-sm font-medium text-gray-700"
+                  >
                     Selecionar Todos
                   </label>
                 </div>
                 {selectedAppointmentIds.length > 0 && (
                   <span className="text-sm text-gray-600">
-                    {selectedAppointmentIds.length} de {filteredAppointments.length} selecionados
+                    {selectedAppointmentIds.length} de{" "}
+                    {filteredAppointments.length} selecionados
                   </span>
                 )}
               </div>
-              
+
               {selectedAppointmentIds.length > 1 && (
                 <div className="flex items-center gap-4">
                   <label className="flex items-center gap-2 text-[14px] font-medium text-[#B8860B]">
@@ -1514,86 +1982,122 @@ export default function Appointments() {
                 const { date, time } = formatDateTime(appointment.scheduledDate.toString());
                 const isSelected = selectedAppointmentIds.includes(appointment.id);
 
+                // helper para alternar seleção
+                const toggleSelection = () =>
+                  handleAppointmentSelection(appointment.id, !isSelected);
+
+                // evita que cliques em elementos internos (checkbox/botões) propaguem
+                const stop = (e: React.MouseEvent | React.KeyboardEvent) => e.stopPropagation();
+
                 return (
-                  <Card key={appointment.id} className={`hover:shadow-md transition-shadow ${isSelected ? 'ring-2 ring-burnt-yellow' : ''}`}>
+                  <Card
+                    key={appointment.id}
+                    onClick={toggleSelection}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        stop(e);
+                        toggleSelection();
+                      }
+                    }}
+                    role="checkbox"
+                    aria-checked={isSelected}
+                    tabIndex={0}
+                    className={`cursor-pointer select-none hover:shadow-md transition-shadow ${
+                      isSelected ? "ring-2 ring-burnt-yellow" : ""
+                    }`}
+                  >
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start space-x-3">
                           <input
                             type="checkbox"
                             checked={isSelected}
-                            onChange={(e) => handleAppointmentSelection(appointment.id, e.target.checked)}
+                            onClick={stop}
+                            onChange={(e) =>
+                              handleAppointmentSelection(appointment.id, e.target.checked)
+                            }
                             className="w-4 h-4 text-burnt-yellow bg-gray-100 border-gray-300 rounded focus:ring-burnt-yellow focus:ring-2 mt-1"
                           />
                           <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-3">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {client?.name || "Cliente não encontrado"}
-                          </h3>
-                          <Badge className={getStatusColor(appointment.status)}>
-                            {getStatusText(appointment.status)}
-                          </Badge>
-                          <Badge className={getPriorityColor(appointment.priority)}>
-                            {getPriorityText(appointment.priority)}
-                          </Badge>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                          <div className="flex items-center space-x-2">
-                            <Calendar className="h-4 w-4" />
-                            <span>{date} às {time}</span>
-                          </div>
-                          
-                          <div className="flex items-center space-x-2">
-                            <User className="h-4 w-4" />
-                            <span>{responsible.displayName}</span>
-                          </div>
-                          
-                          <div className="flex items-center space-x-2">
-                            <MapPin className="h-4 w-4" />
-                            <span>
-                              {client
-                                ? (
+                            <div className="flex items-center space-x-3 mb-3">
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                {client?.name || "Cliente não encontrado"}
+                              </h3>
+                              <Badge className={getStatusColor(appointment.status)}>
+                                {getStatusText(appointment.status)}
+                              </Badge>
+                              <Badge className={getPriorityColor(appointment.priority)}>
+                                {getPriorityText(appointment.priority)}
+                              </Badge>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                              <div className="flex items-center space-x-2">
+                                <Calendar className="h-4 w-4" />
+                                <span>
+                                  {date} às {time}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center space-x-2">
+                                <User className="h-4 w-4" />
+                                <span>{responsible.displayName}</span>
+                              </div>
+
+                              <div className="flex items-center space-x-2">
+                                <MapPin className="h-4 w-4" />
+                                <span>
+                                  {client ? (
                                     <>
                                       {client.logradouro || "Logradouro não informado"}
                                       {client.numero ? `, ${client.numero}` : ""}
-                                      {client.complemento ? `, ${client.complemento}` : ""}
                                       {client.bairro ? `, ${client.bairro}` : ""}
                                       {client.cidade ? `, ${client.cidade}` : ""}
                                       {client.cep ? ` - ${client.cep}` : ""}
+                                      {client.complemento
+                                        ? `, ${client.complemento.toUpperCase()}`
+                                        : ""}
                                     </>
-                                  )
-                                : <span style={{ color: "red" }}>Cliente não encontrado</span>
-                              }
-                            </span>
-                          </div>
-                          
-                          <div className="flex items-center space-x-2">
-                            <Clock className="h-4 w-4" />
-                            <span>{service?.name || "Serviço não encontrado"}</span>
+                                  ) : (
+                                    <span style={{ color: "red" }}>
+                                      Cliente não encontrado
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center space-x-2">
+                                <Clock className="h-4 w-4" />
+                                <span>{service?.name || "Serviço não encontrado"}</span>
+                              </div>
+                            </div>
+
+                            {appointment.notes && (
+                              <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                                <p className="text-sm text-gray-700">{appointment.notes}</p>
+                              </div>
+                            )}
                           </div>
                         </div>
-                        
-                        {appointment.notes && (
-                          <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                            <p className="text-sm text-gray-700">{appointment.notes}</p>
-                          </div>
-                        )}
-                          </div>
-                        </div>
-                        
+
                         <div className="flex space-x-2 ml-4">
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleEdit(appointment)}
+                            onClick={(e) => {
+                              stop(e);
+                              handleEdit(appointment);
+                            }}
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleDelete(appointment)}
+                            onClick={(e) => {
+                              stop(e);
+                              handleDelete(appointment);
+                            }}
                             className="text-red-600 hover:text-red-700 hover:border-red-300"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1601,11 +2105,11 @@ export default function Appointments() {
                         </div>
                       </div>
                     </CardContent>
-                </Card>
-              );
-            })}
+                  </Card>
+                );
+              })}
+            </div>
           </div>
-        </div>
         )
       ) : (
         /* Calendar View */
@@ -1615,15 +2119,16 @@ export default function Appointments() {
               <div className="flex flex-col items-center justify-center py-12">
                 <Calendar className="h-12 w-12 text-gray-400 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  {appointments.length === 0 ? "Nenhum agendamento encontrado" : "Nenhum agendamento encontrado com os filtros aplicados"}
+                  {appointments.length === 0
+                    ? "Nenhum agendamento encontrado"
+                    : "Nenhum agendamento encontrado com os filtros aplicados"}
                 </h3>
                 <p className="text-gray-600 text-center mb-6">
-                  {appointments.length === 0 
+                  {appointments.length === 0
                     ? "Comece criando seu primeiro agendamento para organizar seus atendimentos técnicos."
-                    : "Tente ajustar os filtros ou limpar todos os filtros para ver mais agendamentos."
-                  }
+                    : "Tente ajustar os filtros ou limpar todos os filtros para ver mais agendamentos."}
                 </p>
-                <Button 
+                <Button
                   className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
                   onClick={() => {
                     setPrefilledData(null);
@@ -1647,7 +2152,7 @@ export default function Appointments() {
           </CardContent>
         </Card>
       )}
-      
+
       {/* Centralized Dialog for All Appointment Forms */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -1665,24 +2170,36 @@ export default function Appointments() {
 
       {/* Route Optimization Drawer */}
       {isRouteDrawerOpen && (
-        <div className="fixed inset-0 z-50 overflow-hidden">
-          <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => { setIsRouteDrawerOpen(false); }} />
-            <section className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl">
-              <div className="flex h-full flex-col">
-                {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                  <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-                    <Navigation className="h-5 w-5 mr-2 text-burnt-yellow" />
-                    Rota Otimizada
-                  </h2>
-                  <button
-                    onClick={() => { setIsRouteDrawerOpen(false); }}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
+        <div className="fixed inset-0 z-[9999]">
+          {/* Overlay cobre a viewport inteira */}
+          <div
+            className="fixed inset-0 bg-black/50"
+            onClick={() => setIsRouteDrawerOpen(false)}
+          />
+
+          {/* Painel à direita */}
+          <section
+            className="
+              fixed right-0 top-0 h-full w-full bg-white shadow-xl
+              max-w-[90vw] md:max-w-[60vw] lg:max-w-[40vw]
+            "
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="flex h-full flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <Navigation className="h-5 w-5 mr-2 text-burnt-yellow" />
+                  Rota Otimizada
+                </h2>
+                <button
+                  onClick={() => setIsRouteDrawerOpen(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6">
@@ -1692,35 +2209,48 @@ export default function Appointments() {
                       Otimizando rota, aguarde...
                     </div>
                   )}
-                  
-                  {optimizedRoute && !isOptimizing && (
+
+                  {!isOptimizing && optimizedRoute && (
                     <div className="space-y-6">
+                      {/* Mapa com altura garantida para evitar 0px */}
+                      <div className="relative w-full h-[420px] md:h-[480px] rounded-lg overflow-hidden border">
+                        <div className="absolute inset-0">
+                          <OptimizedRouteMap
+                            key={`${Boolean(polyline)}-${routeWaypoints?.length ?? 0}-${isRouteDrawerOpen ? 'open' : 'closed'}`}
+                            routeGeoJson={polyline ?? undefined}
+                            waypoints={routeWaypoints ?? undefined}
+                          />
+                        </div>
+                      </div>
+
                       {/* Summary */}
                       <div className="bg-[#DAA520]/10 rounded-lg p-4">
-                        <h3 className="font-semibold text-gray-900 mb-2">Resumo da Rota</h3>
+                        <h3 className="font-semibold text-gray-900 mb-2">
+                          Resumo da Rota
+                        </h3>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
                             <span>Paradas:</span>
                             <span className="font-medium">
-                              {optimizedRoute.route?.stopsCount ?? optimizedRoute.stops?.length ?? 0}
+                              {optimizedRoute.route?.stopsCount ??
+                                optimizedRoute.stops?.length ??
+                                0}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span>Distância Total:</span>
                             <span className="font-medium text-blue-600">
-                              {optimizedRoute.route?.distanceTotal ? 
-                                `${(optimizedRoute.route.distanceTotal / 1000).toFixed(1)} km` : 
-                                'N/A'
-                              }
+                              {optimizedRoute.route?.distanceTotal
+                                ? `${(optimizedRoute.route.distanceTotal / 1000).toFixed(1)} km`
+                                : "N/A"}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span>Tempo Estimado:</span>
                             <span className="font-medium text-green-600">
-                              {optimizedRoute.route?.durationTotal ? 
-                                `${Math.round(optimizedRoute.route.durationTotal / 60)} min` : 
-                                'N/A'
-                              }
+                              {optimizedRoute.route?.durationTotal
+                                ? `${Math.round(optimizedRoute.route.durationTotal / 60)} min`
+                                : "N/A"}
                             </span>
                           </div>
                         </div>
@@ -1728,54 +2258,74 @@ export default function Appointments() {
 
                       {/* Ordem Otimizada */}
                       <div>
-                        <h3 className="font-semibold text-gray-900 mb-4">Ordem Otimizada</h3>
+                        <h3 className="font-semibold text-gray-900 mb-4">
+                          Ordem Otimizada
+                        </h3>
 
                         {/* Início da rota (endereço da empresa) */}
                         {optimizedRoute.start && (
                           <div className="bg-gray-50 rounded-lg p-4 mb-3">
                             <div className="flex items-start space-x-3">
-                              <div className="flex-shrink-0 w-6 h-6 bg-gray-400 text-white rounded-full flex items-center justify-center text-sm font-medium">
-                                <span>•</span>
+                              <div className="flex-shrink-0 w-6 h-6 bg-gray-400 text-white rounded-full flex items-center justify-center">
+                                <img src="/brand/rotafacil-pin.png" alt="Início" className="w-3.5 h-3.5" />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <h4 className="font-medium text-gray-900 truncate">Início da rota</h4>
-                                <p className="text-sm text-gray-600 truncate">
-                                  {optimizedRoute.start.address}
-                                </p>
+                                <p className="text-sm text-gray-600 truncate">{optimizedRoute.start.address}</p>
                               </div>
                             </div>
                           </div>
                         )}
 
                         <div className="space-y-3">
-                          {optimizedRoute.stops?.map((stop: any, index: number) => {
-                            const dt = stop.scheduledDate ? new Date(stop.scheduledDate) : null;
-                            const date = dt ? dt.toLocaleDateString('pt-BR') : null;
-                            const time = dt ? dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
+                          {optimizedRoute.stops?.map(
+                            (stop: any, index: number) => {
+                              const dt = stop.scheduledDate
+                                ? new Date(stop.scheduledDate)
+                                : null;
+                              const date = dt
+                                ? dt.toLocaleDateString("pt-BR")
+                                : null;
+                              const time = dt
+                                ? dt.toLocaleTimeString("pt-BR", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })
+                                : null;
 
-                            return (
-                              <div key={`${stop.appointmentId}-${index}`} className="bg-gray-50 rounded-lg p-4">
-                                <div className="flex items-start space-x-3">
-                                  <div className="flex-shrink-0 w-6 h-6 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-medium">
-                                    {index + 1}
+                              return (
+                                <div
+                                  key={`${stop.appointmentId}-${index}`}
+                                  className="bg-gray-50 rounded-lg p-4"
+                                >
+                                  <div className="flex items-start space-x-3">
+                                    <div className="flex-shrink-0 w-6 h-6 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-medium">
+                                      {index + 1}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <h4 className="font-medium text-gray-900 truncate">
+                                        {stop.clientName || "Cliente"}
+                                      </h4>
+                                      {stop.serviceName && (
+                                        <p className="text-sm text-gray-600 truncate">
+                                          {stop.serviceName}
+                                        </p>
+                                      )}
+                                      {dt && (
+                                        <p className="text-sm text-gray-500">
+                                          {date} às {time}
+                                        </p>
+                                      )}
+                                      <p className="text-sm text-gray-500 truncate">
+                                        {stop.address}
+                                      </p>
+                                    </div>
+                                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
                                   </div>
-                                  <div className="flex-1 min-w-0">
-                                    <h4 className="font-medium text-gray-900 truncate">
-                                      {stop.clientName || "Cliente"}
-                                    </h4>
-                                    {stop.serviceName && (
-                                      <p className="text-sm text-gray-600 truncate">{stop.serviceName}</p>
-                                    )}
-                                    {dt && (
-                                      <p className="text-sm text-gray-500">{date} às {time}</p>
-                                    )}
-                                    <p className="text-sm text-gray-500 truncate">{stop.address}</p>
-                                  </div>
-                                  <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
                                 </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            },
+                          )}
                         </div>
                       </div>
 
@@ -1783,16 +2333,20 @@ export default function Appointments() {
                       <div className="space-y-3">
                         {/* Botão de salvar aparece apenas se é preview (sem ID) */}
                         {!optimizedRoute.route?.id && (
-                          <Button 
+                          <Button
                             className="w-full bg-green-600 hover:bg-green-700 text-white"
                             onClick={handleSaveRoute}
                           >
                             Salvar Rota
                           </Button>
                         )}
-                        
+
                         {/* Botões padrão */}
-                        <Button className="w-full bg-burnt-yellow hover:bg-burnt-yellow-dark text-white">
+                        <Button
+                          className="w-full bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                          onClick={() => openInGoogleMaps(routeWaypoints, endAtStart)}
+                          disabled={!routeWaypoints || routeWaypoints.length < 2}
+                        >
                           Iniciar Navegação
                         </Button>
                         <Button variant="outline" className="w-full">
@@ -1803,13 +2357,22 @@ export default function Appointments() {
                         {savedInfo && (
                           <div className="mt-3 flex items-center justify-between gap-2">
                             <div className="text-sm">
-                              <span className="font-medium">Rota salva com sucesso</span>
-                              <span className="ml-1">ID #{savedInfo.displayNumber}</span>
+                              <span className="font-medium">
+                                Rota salva com sucesso
+                              </span>
+                              <span className="ml-1">
+                                ID #{savedInfo.displayNumber}
+                              </span>
                             </div>
                             <button
                               type="button"
                               className="px-3 py-2 rounded-xl bg-[#DAA520] text-black hover:bg-[#B8860B] transition"
-                              onClick={() => window.open(`/routes-history?open=${savedInfo.id}&id=${savedInfo.displayNumber}`, '_blank')}
+                              onClick={() =>
+                                window.open(
+                                  `/routes-history?open=${savedInfo.id}&id=${savedInfo.displayNumber}`,
+                                  "_blank",
+                                )
+                              }
                             >
                               Ver no Histórico
                             </button>
@@ -1822,7 +2385,6 @@ export default function Appointments() {
               </div>
             </section>
           </div>
-        </div>
       )}
     </div>
   );

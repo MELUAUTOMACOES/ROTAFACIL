@@ -2,6 +2,10 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import jwt from "jsonwebtoken";
 import { storage } from "./storage";
+import crypto from "node:crypto"; // para randomUUID
+import { db } from "./db"; // ajuste o caminho se o seu db estiver noutro arquivo
+import { routes, routeStops, appointments, clients } from "@shared/schema";
+import { eq, inArray, sql } from "drizzle-orm";
 import { 
   insertUserSchema, loginSchema, insertClientSchema, insertServiceSchema,
   insertTechnicianSchema, insertVehicleSchema, insertAppointmentSchema,
@@ -60,6 +64,61 @@ function authenticateToken(req: any, res: any, next: any) {
     next();
   });
 }
+
+// ==================== GEO HELPERS (NOMINATIM) ====================
+
+// Monta um endereço completo a partir do registro do AGENDAMENTO.
+// Tenta cobrir diferentes nomes de campos que você possa ter no schema.
+function composeFullAddressFromAppointment(a: any) {
+  const street = a?.address || a?.street || a?.logradouro;
+  const number = a?.number || a?.numero;
+  const neighborhood = a?.neighborhood || a?.bairro || a?.district;
+  const city = a?.city || a?.cidade;
+  const state = a?.state || a?.uf || a?.estado;
+  const zip = a?.zip || a?.zipcode || a?.cep;
+
+  const parts = [
+    [street, number].filter(Boolean).join(", "),
+    neighborhood,
+    city,
+    state,
+    zip,
+    "Brasil"
+  ].filter(Boolean);
+
+  return parts.join(", ");
+}
+
+// Chama Nominatim e retorna { lat, lng } (numbers)
+async function geocodeWithNominatim(fullAddress: string) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}&limit=1`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "RotaFacil/1.0 (contato: suporte@rotafacil.app)",
+      "Accept-Language": "pt-BR"
+    }
+  });
+  if (!res.ok) {
+    throw new Error(`Nominatim error ${res.status}`);
+  }
+  const arr = await res.json();
+  if (!Array.isArray(arr) || arr.length === 0) {
+    throw new Error("Nenhum resultado do Nominatim");
+  }
+  const { lat, lon } = arr[0];
+  const latNum = Number(lat);
+  const lngNum = Number(lon);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
+    throw new Error("Coordenadas inválidas do Nominatim");
+  }
+  return { lat: latNum, lng: lngNum };
+}
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// ================================================================
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Endpoint para gerar matriz do OSRM
@@ -333,13 +392,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/clients/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
+      console.log("📝 [PUT /clients] payload recebido:", req.body); // <- vê se lat/lng estão vindo
       const clientData = insertClientSchema.partial().parse(req.body);
+      console.log("📝 [PUT /clients] payload após Zod:", clientData); // <- confirma que lat/lng passaram
       const client = await storage.updateClient(id, clientData, req.user.userId);
       res.json(client);
     } catch (error: any) {
+      console.error("❌ [PUT /clients] erro:", error);
       res.status(400).json({ message: error.message });
     }
   });
+
 
   app.post("/api/clients/import", authenticateToken, async (req: any, res) => {
     try {
@@ -828,6 +891,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Geocodificar e salvar coordenadas de appointments que não têm lat/lng
+  // Body: { appointmentIds: number[] }
+  // Retorno: { updatedIds: number[], failed: Array<{id:number, error:string}> }
+  app.post("/api/appointments/geocode-missing", authenticateToken, async (req: any, res) => {
+    try {
+      const ids = (req.body?.appointmentIds ?? []).filter((x: any) => Number.isFinite(x));
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: "appointmentIds vazio" });
+      }
+
+      // Pega TODOS os appointments do usuário e filtra pelos IDs informados
+      // (usamos storage para manter o padrão do projeto)
+      const all = await storage.getAppointments(req.user.userId);
+      const rows = all.filter((a: any) => ids.includes(a.id));
+
+      const updatedIds: number[] = [];
+      const failed: Array<{ id: number; error: string }> = [];
+
+      // Processa em série para respeitar o rate-limit do Nominatim
+      for (const a of rows) {
+        const hasCoords = Number.isFinite(a?.lat) && Number.isFinite(a?.lng);
+        if (hasCoords) continue;
+
+        const fullAddress = composeFullAddressFromAppointment(a);
+        console.log("📍 [GEO] Geocodificando:", a.id, "=>", fullAddress);
+
+        try {
+          const { lat, lng } = await geocodeWithNominatim(fullAddress);
+
+          // Salva no banco usando a camada de storage já existente
+          await storage.updateAppointment(a.id, { lat, lng }, req.user.userId);
+          updatedIds.push(a.id);
+
+          // pequena pausa para evitar 429
+          await sleep(700);
+        } catch (err: any) {
+          console.error("❌ [GEO] Falha ao geocodificar", a.id, err?.message);
+          failed.push({ id: a.id, error: err?.message ?? "erro desconhecido" });
+          await sleep(400);
+        }
+      }
+
+      return res.json({ updatedIds, failed });
+    } catch (e: any) {
+      console.error("❌ [/api/appointments/geocode-missing] Erro:", e?.message);
+      return res.status(500).json({ error: "Falha ao geocodificar agendamentos" });
+    }
+  });
+  
   // Route optimization
   app.post("/api/gerar-rota", authenticateToken, async (req: any, res) => {
     try {
@@ -1016,95 +1128,380 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log("==== LOG INÍCIO: /api/route ====");
     console.log("Query params recebidos:");
     console.log(JSON.stringify(req.query, null, 2));
-    
+
     try {
-      const coords = req.query.coords as string;
-      if (!coords) {
+      const coords = (req.query.coords as string) || "";
+      if (!coords.trim()) {
         console.log("❌ ERRO: Parâmetro 'coords' ausente");
         console.log("==== LOG FIM: /api/route (ERRO) ====");
         return res.status(400).json({ error: "Missing 'coords' parameter" });
       }
 
-      // Validar que temos pelo menos dois pontos
-      const coordArray = coords.split(';');
-      console.log("📍 Array de coordenadas:");
-      console.log(`Total de pontos: ${coordArray.length}`);
-      console.log("Coordenadas individuais:");
-      coordArray.forEach((coord, idx) => {
-        console.log(`  ${idx + 1}: ${coord}`);
-      });
-      
-      if (coordArray.length < 2) {
+      // Helpers de normalização
+      type Pair = { lat: number; lng: number };
+      const BRAZIL = { latMin: -34.0, latMax: 5.5, lngMin: -74.5, lngMax: -34.0 };
+      const inBrazil = (p: Pair) =>
+        p.lat >= BRAZIL.latMin && p.lat <= BRAZIL.latMax &&
+        p.lng >= BRAZIL.lngMin && p.lng <= BRAZIL.lngMax;
+      const parseNumber = (s: string) => Number(String(s).replace(",", "."));
+      const to6 = (n: number) => Number(n.toFixed(6));
+
+      // Parse “a,b;c,d;...”
+      const rawPairs = coords.split(";").map(p => p.trim()).filter(Boolean);
+      if (rawPairs.length < 2) {
         console.log("❌ ERRO: Coordenadas insuficientes");
         console.log("==== LOG FIM: /api/route (ERRO) ====");
         return res.status(400).json({ error: "São necessárias pelo menos 2 coordenadas para calcular uma rota" });
       }
 
-      // Validar formato das coordenadas
-      console.log("🔍 Validando formato das coordenadas...");
-      for (const coord of coordArray) {
-        const parts = coord.split(',');
-        if (parts.length !== 2 || isNaN(parseFloat(parts[0])) || isNaN(parseFloat(parts[1]))) {
-          console.log(`❌ ERRO: Formato inválido para coordenada: ${coord}`);
-          console.log("==== LOG FIM: /api/route (ERRO FORMATO) ====");
-          return res.status(400).json({ error: `Formato de coordenada inválido: ${coord}. Use formato: longitude,latitude` });
-        }
-      }
+      const parsed = rawPairs.map((p) => {
+        const [a, b] = p.split(",").map(parseNumber);
+        return { a, b };
+      });
 
-      // Usa o endereço da variável de ambiente, SEM barra no final!
-      const OSRM_URL = getOsrmUrl()?.replace(/\/$/, '') || null;
+      // Detecta se veio "lat,lng" (comum no front) ou "lng,lat" (padrão OSRM)
+      const normalized: Pair[] = parsed.map(({ a, b }) => {
+        const asLngLat = { lat: b, lng: a }; // interpretando "a,b" como "lng,lat"
+        const asLatLng = { lat: a, lng: b }; // interpretando "a,b" como "lat,lng"
+        if (inBrazil(asLngLat) && !inBrazil(asLatLng)) return asLngLat; // já estava OSRM
+        if (inBrazil(asLatLng) && !inBrazil(asLngLat)) return asLatLng; // veio lat,lng
+        // Empate: preferimos lat,lng (mais comum no front) e depois convertemos
+        return asLatLng;
+      });
+
+      const swapSuspect = normalized.some(p => !inBrazil(p)) &&
+                          normalized.some(p => inBrazil({ lat: p.lng as any, lng: p.lat as any }));
+
+      // Monta string final no padrão OSRM: "lng,lat;lng,lat;..."
+      const osrmCoords = normalized.map(p => `${to6(p.lng)},${to6(p.lat)}`).join(";");
+
+      // URL do OSRM (sem barra ao final)
+      const OSRM_URL = getOsrmUrl()?.replace(/\/$/, "") || null;
       console.log("🌐 OSRM_URL configurado:", OSRM_URL);
-      
       if (!OSRM_URL) {
         console.log("❌ ERRO: OSRM_URL não configurado");
         console.log("==== LOG FIM: /api/route (ERRO CONFIG) ====");
         return res.status(500).json({ error: "Endereço OSRM não configurado. Crie/atualize o arquivo osrm_url.txt." });
       }
-      
-      const osrmUrl = `${OSRM_URL}/route/v1/driving/${coords}?overview=full&geometries=geojson`;
-      console.log("🌐 URL completa para OSRM:");
-      console.log(osrmUrl);
-      console.log("📍 Coordenadas validadas:", coordArray.length, "pontos");
-      
+
+      const osrmUrl = `${OSRM_URL}/route/v1/driving/${osrmCoords}?overview=full&geometries=geojson`;
+
+      console.log("🧭 DEBUG /api/route:", JSON.stringify({
+        raw: coords,
+        parsedPairs: rawPairs.length,
+        normalizedSample: normalized[0],
+        osrmCoords,
+        swapSuspect
+      }, null, 2));
+
       console.log("🚀 Fazendo chamada para OSRM...");
-      const osrmRes = await fetch(osrmUrl, {
-        headers: { "ngrok-skip-browser-warning": "true" }
-      });
-      
+      const osrmRes = await fetch(osrmUrl, { headers: { "ngrok-skip-browser-warning": "true" } });
       console.log("📦 Status da resposta OSRM:", osrmRes.status);
-      console.log("📦 Headers da resposta:");
-      console.log(JSON.stringify(Object.fromEntries(osrmRes.headers.entries()), null, 2));
-      
+
       if (!osrmRes.ok) {
         const text = await osrmRes.text();
-        console.log("❌ ERRO OSRM - Resposta completa:");
-        console.log(text);
+        console.log("❌ ERRO OSRM - Resposta completa (primeiros 500 chars):");
+        console.log(text.slice(0, 500));
         console.log("==== LOG FIM: /api/route (ERRO OSRM) ====");
         return res.status(500).json({ error: `OSRM error: ${text.substring(0, 300)}` });
       }
-      
+
       const data = await osrmRes.json();
       console.log("✅ Rota OSRM calculada com sucesso");
-      console.log("📊 Estrutura da resposta OSRM:");
-      console.log(`- Rotas encontradas: ${data.routes?.length || 0}`);
-      console.log(`- Waypoints: ${data.waypoints?.length || 0}`);
+      console.log("📊 Rotas:", data.routes?.length || 0, "Waypoints:", data.waypoints?.length || 0);
       if (data.routes?.[0]) {
-        console.log(`- Distância: ${data.routes[0].distance}m`);
-        console.log(`- Duração: ${data.routes[0].duration}s`);
+        console.log(`- Distância: ${data.routes[0].distance} m  - Duração: ${data.routes[0].duration} s`);
       }
       console.log("==== LOG FIM: /api/route (SUCESSO) ====");
-      
       return res.json(data);
     } catch (err: any) {
       console.log("❌ ERRO EXCEÇÃO no proxy OSRM:");
       console.log("Mensagem:", err.message);
-      console.log("Stack trace:");
-      console.log(err.stack);
+      console.log("Stack:", err.stack);
       console.log("==== LOG FIM: /api/route (EXCEÇÃO) ====");
       return res.status(500).json({ error: "Erro no proxy OSRM", details: err.message });
     }
   });
 
+  // ============================================================
+  // ROTAS (Histórico) - Detalhe enriquecido e inclusão em lote
+  // ============================================================
+
+  // GET /api/routes/:id  -> detalhe da rota com clientName/scheduledDate nas paradas
+  app.get("/api/routes/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const routeId = req.params.id as string;
+
+      const [routeRow] = await db.select().from(routes).where(eq(routes.id, routeId)).limit(1);
+      if (!routeRow) return res.status(404).json({ error: "Rota não encontrada" });
+
+      // 1) Traz as paradas com o JOIN normal (para as novas, via appointment_numeric_id)
+      let stops = await db
+        .select({
+          id: routeStops.id,
+          routeId: routeStops.routeId,
+          appointmentId: routeStops.appointmentId,               // uuid legado
+          appointmentNumericId: routeStops.appointmentNumericId, // vínculo real (novas)
+          order: routeStops.order,
+          lat: routeStops.lat,
+          lng: routeStops.lng,
+          address: routeStops.address,
+
+          // enriquecimento (quando houver vínculo)
+          clientName: clients.name,
+          scheduledDate: appointments.scheduledDate,
+        })
+        .from(routeStops)
+        .leftJoin(appointments, eq(routeStops.appointmentNumericId, appointments.id))
+        .leftJoin(clients, eq(appointments.clientId, clients.id))
+        .where(eq(routeStops.routeId, routeId))
+        .orderBy(routeStops.order);
+
+      // 2) Fallback: algumas paradas antigas não têm appointment_numeric_id -> clientName vem vazio.
+      //    Para elas, vamos achar o cliente mais próximo por coordenadas e preencher clientName.
+      const needsFallback = stops.some((s: any) => !s.clientName && Number.isFinite(s.lat) && Number.isFinite(s.lng));
+      if (needsFallback) {
+        // pega todos clientes com coordenadas
+        const allClients = await db
+          .select({
+            id: clients.id,
+            name: clients.name,
+            lat: clients.lat,
+            lng: clients.lng,
+          })
+          .from(clients);
+
+        // função simples de distância (Haversine) em metros
+        const toRad = (deg: number) => (deg * Math.PI) / 180;
+        const distMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+          if (![lat1, lon1, lat2, lon2].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
+          const R = 6371000; // raio da Terra em metros
+          const dLat = toRad(lat2 - lat1);
+          const dLon = toRad(lon2 - lon1);
+          const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          return R * c;
+        };
+
+        // tolerância de 80 m (ajuste se quiser mais/menos estrito)
+        const THRESHOLD_M = 80;
+
+        stops = stops.map((s: any) => {
+          if (s.clientName) return s; // já veio do JOIN normal
+          if (!Number.isFinite(s.lat) || !Number.isFinite(s.lng)) return s;
+
+          let best: { name: string; d: number } | null = null;
+          for (const c of allClients) {
+            if (!Number.isFinite(c.lat as any) || !Number.isFinite(c.lng as any)) continue;
+            const d = distMeters(Number(s.lat), Number(s.lng), Number(c.lat), Number(c.lng));
+            if (best === null || d < best.d) best = { name: c.name as string, d };
+          }
+
+          if (best && best.d <= THRESHOLD_M) {
+            return { ...s, clientName: best.name };
+          }
+          return s; // sem fallback (mantém como está)
+        });
+      }
+
+      return res.json({ route: routeRow, stops });
+    } catch (err: any) {
+      console.error("❌ [/api/routes/:id] ERRO:", err?.message);
+      return res.status(500).json({ error: "Falha ao carregar detalhes da rota" });
+    }
+  });
+
+  // POST /api/routes/:id/stops/bulk-add  -> inclui vários agendamentos existentes na rota
+  app.post("/api/routes/:id/stops/bulk-add", authenticateToken, async (req: any, res) => {
+    try {
+      const routeId = req.params.id as string;
+      const { appointmentIds } = req.body as { appointmentIds: number[] };
+
+      if (!routeId) return res.status(400).json({ error: "routeId ausente" });
+      if (!Array.isArray(appointmentIds) || appointmentIds.length === 0) {
+        return res.status(400).json({ error: "Envie appointmentIds[]" });
+      }
+
+      // Confirma rota
+      const [routeRow] = await db.select().from(routes).where(eq(routes.id, routeId)).limit(1);
+      if (!routeRow) return res.status(404).json({ error: "Rota não encontrada" });
+
+      // Busca appointments + cliente (para lat/lng e endereço)
+      const appts = await db
+        .select({
+          id: appointments.id,
+          clientId: appointments.clientId,
+          scheduledDate: appointments.scheduledDate,
+          status: appointments.status,
+          logradouro: appointments.logradouro,
+          numero: appointments.numero,
+          bairro: appointments.bairro,
+          cidade: appointments.cidade,
+          cep: appointments.cep,
+
+          clientName: clients.name,
+          lat: clients.lat,
+          lng: clients.lng,
+        })
+        .from(appointments)
+        .leftJoin(clients, eq(appointments.clientId, clients.id))
+        .where(inArray(appointments.id, appointmentIds));
+
+      if (appts.length === 0) {
+        return res.status(404).json({ error: "Agendamentos não encontrados" });
+      }
+
+      // Validar coordenadas
+      const noCoords = appts.filter(a => a.lat == null || a.lng == null);
+      if (noCoords.length > 0) {
+        return res.status(400).json({
+          error: "Alguns agendamentos não possuem coordenadas do cliente (lat/lng). Geocodifique os clientes primeiro.",
+          missing: noCoords.map(a => a.id),
+        });
+      }
+
+      // Próximo 'order' da rota
+      const [maxOrderRow] = await db
+        .select({ max: sql<number>`COALESCE(MAX(${routeStops.order}), 0)` })
+        .from(routeStops)
+        .where(eq(routeStops.routeId, routeId));
+      let nextOrder = Number(maxOrderRow?.max || 0) + 1;
+
+      // Monta inserts
+      const toInsert = appts.map(a => {
+        const address = [a.logradouro, a.numero, a.bairro, a.cidade].filter(Boolean).join(", ");
+        return {
+          routeId,
+          appointmentId: crypto.randomUUID(),     // ainda cumpre o NOT NULL do schema legado
+          appointmentNumericId: a.id,             // vínculo REAL com appointments.id (integer)
+          order: nextOrder++,
+          lat: Number(a.lat),
+          lng: Number(a.lng),
+          address,
+        };
+      });
+
+      const inserted = await db.insert(routeStops).values(toInsert).returning();
+
+      // Atualiza contador de paradas (mantém o que já existia + novas)
+      await db
+        .update(routes)
+        .set({ stopsCount: (routeRow.stopsCount || 0) + inserted.length, updatedAt: new Date() })
+        .where(eq(routes.id, routeId));
+
+      // Payload enriquecido para a UI
+      const payload = inserted.map(s => {
+        const a = appts.find(x => x.id === s.appointmentNumericId);
+        return {
+          ...s,
+          clientName: a?.clientName ?? null,
+          scheduledDate: a?.scheduledDate ?? null,
+        };
+      });
+
+      return res.json({ added: payload });
+    } catch (err: any) {
+      console.error("❌ [/api/routes/:id/stops/bulk-add] ERRO:", err?.message);
+      return res.status(500).json({ error: "Falha ao incluir agendamentos na rota" });
+    }
+  });
+
+  // GET /api/routes/:id/available-appointments
+  // Retorna apenas agendamentos "do mesmo dia da rota", do usuário logado,
+  // com status 'scheduled' e que AINDA NÃO estão nessa rota.
+  app.get("/api/routes/:id/available-appointments", authenticateToken, async (req: any, res) => {
+    try {
+      const routeId = req.params.id as string;
+
+      // 1) Carrega a rota (para saber o dia)
+      const [routeRow] = await db.select().from(routes).where(eq(routes.id, routeId)).limit(1);
+      if (!routeRow) return res.status(404).json({ error: "Rota não encontrada" });
+
+      // 2) Quais agendamentos já estão nessa rota?
+      const usedRows = await db
+        .select({ aid: routeStops.appointmentNumericId })
+        .from(routeStops)
+        .where(eq(routeStops.routeId, routeId));
+
+      const usedIds: number[] = usedRows
+        .map((r) => r.aid as number | null)
+        .filter((x): x is number => Number.isFinite(x));
+
+      // 3) Monta as condições (mesmo dia da rota, usuário, status scheduled, NOT IN usados)
+      //    Usamos drizzle + sql para o date_trunc.
+      const conditions: any[] = [
+        eq(appointments.userId, req.user.userId),
+        sql`date_trunc('day', ${appointments.scheduledDate}) = date_trunc('day', ${routeRow.date})`,
+        eq(appointments.status, "scheduled"),
+      ];
+
+      // notInArray só quando há IDs; se não, pula a condição
+      if (usedIds.length > 0) {
+        const { notInArray, and } = await import("drizzle-orm");
+        const joined = await db
+          .select({
+            id: appointments.id,
+            clientId: appointments.clientId,
+            scheduledDate: appointments.scheduledDate,
+            status: appointments.status,
+            // campos úteis pra exibir
+            logradouro: appointments.logradouro,
+            numero: appointments.numero,
+            bairro: appointments.bairro,
+            cidade: appointments.cidade,
+            cep: appointments.cep,
+
+            clientName: clients.name,
+            lat: clients.lat,
+            lng: clients.lng,
+          })
+          .from(appointments)
+          .leftJoin(clients, eq(appointments.clientId, clients.id))
+          .where(
+            and(
+              ...conditions,
+              notInArray(appointments.id, usedIds),
+            )
+          )
+          .orderBy(appointments.scheduledDate);
+
+        return res.json(joined);
+      } else {
+        // Sem usados — condição mais simples
+        const { and } = await import("drizzle-orm");
+        const joined = await db
+          .select({
+            id: appointments.id,
+            clientId: appointments.clientId,
+            scheduledDate: appointments.scheduledDate,
+            status: appointments.status,
+            logradouro: appointments.logradouro,
+            numero: appointments.numero,
+            bairro: appointments.bairro,
+            cidade: appointments.cidade,
+            cep: appointments.cep,
+
+            clientName: clients.name,
+            lat: clients.lat,
+            lng: clients.lng,
+          })
+          .from(appointments)
+          .leftJoin(clients, eq(appointments.clientId, clients.id))
+          .where(and(...conditions))
+          .orderBy(appointments.scheduledDate);
+
+        return res.json(joined);
+      }
+    } catch (err: any) {
+      console.error("❌ [/api/routes/:id/available-appointments] ERRO:", err?.message);
+      return res.status(500).json({ error: "Falha ao listar agendamentos disponíveis para a rota" });
+    }
+  });
+
+  
   // Registrar rotas de otimização
   const { registerRoutesAPI } = await import("./routes/routes.api");
   registerRoutesAPI(app);

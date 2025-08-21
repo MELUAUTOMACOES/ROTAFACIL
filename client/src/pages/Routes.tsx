@@ -45,12 +45,15 @@ import type {
 } from "@shared/schema";
 import { getPlanLimits } from "@shared/plan-limits";
 import AppointmentForm from "@/components/forms/AppointmentForm";
+import OptimizedRouteMap from "@/components/maps/OptimizedRouteMap";
+
 
 interface OptimizedRoute {
   optimizedOrder: Appointment[];
   totalDistance: number;
   estimatedTime: number;
   geojson?: any;
+   waypoints?: { lat: number; lon: number }[];
   routeSteps?: RouteStep[];
   matrixDurations?: number[][];
   matrixDistances?: number[][];
@@ -243,6 +246,27 @@ async function calcularRotaOsrm(coordenadas: { lat: number; lon: number }[]) {
   return res.json();
 }
 
+async function persistClientCoords(clientId: number | null, coord: { lat: number; lon: number }) {
+  if (!clientId) return;
+  try {
+    console.log(`💾 Salvando coords do cliente ${clientId}:`, coord);
+    const res = await fetch(`/api/clients/${clientId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      body: JSON.stringify({ lat: coord.lat, lng: coord.lon }),
+    });
+    if (!res.ok) {
+      const msg = await res.text();
+      console.warn("⚠️ Falha ao salvar coords:", res.status, msg.slice(0, 200));
+    } else {
+      console.log("✅ Coords salvas para cliente", clientId);
+    }
+  } catch (e) {
+    console.warn("⚠️ Erro ao salvar coords:", e);
+  }
+}
+
+
 export default function Routes() {
   const [selectedAppointments, setSelectedAppointments] = useState<number[]>(
     [],
@@ -263,6 +287,9 @@ export default function Routes() {
   const [terminarNoPontoInicial, setTerminarNoPontoInicial] =
     useState<boolean>(false);
   const { toast } = useToast();
+  const [savedInfo, setSavedInfo] = useState<{ id: string; displayNumber: number } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
 
   // Monitor fullscreen changes and DOM state
   useEffect(() => {
@@ -695,22 +722,20 @@ export default function Routes() {
 
       // 7. Geocodificar todos os destinos com logs detalhados
       console.log("🌍 Geocodificando destinos...");
-      const coordenadasDestino = [];
+      const coordenadasDestino: Array<{ lat: number; lon: number }> = [];
       for (let i = 0; i < enderecosDestino.length; i++) {
         const endereco = enderecosDestino[i];
         const cliente = getClient(selecionados[i].clientId);
 
-        console.log(`📍 Endereço para geocodificação:`, endereco);
-
         try {
           const coord = await geocodeEndereco(endereco);
           coordenadasDestino.push(coord);
-          console.log(`✅ Coordenada encontrada:`, endereco, coord);
-          console.log(
-            `✅ Destino ${i + 1} (${cliente?.name || "Desconhecido"}) geocodificado:`,
-            coord,
-          );
+          console.log(`✅ Destino ${i + 1} (${cliente?.name || "Desconhecido"}) geocodificado:`, coord);
+
+          // 💾 SALVA no banco (PUT /api/clients/:id)
+          await persistClientCoords(selecionados[i].clientId, coord);
         } catch (error: any) {
+          console.warn(`❌ Geocodificação FALHOU para:`, endereco);
           console.warn(`❌ Geocodificação FALHOU para:`, endereco);
           console.error(
             `❌ Erro ao geocodificar destino ${i + 1} (${cliente?.name || "Desconhecido"}):`,
@@ -880,12 +905,29 @@ export default function Routes() {
         `- Distância total: ${totalDistanceFormatted} km (${totalDistance}m)`,
       );
 
+      // Monta coords na ordem ótima (início + paradas)
+      const coordsOrdenadas = [coordenadaInicio, ...tspOrder.slice(1).map((idx: number) => {
+        const d = coordenadasDestino[idx - 1]; // idx 1..N => destino[0..N-1]
+        return { lat: d.lat, lon: d.lon };
+      })];
+
+      // Pede ao OSRM a linha (GeoJSON) para desenhar no mapa
+      let routeGeoJson: any = null;
+      try {
+        const osrmRes = await calcularRotaOsrm(coordsOrdenadas);
+        routeGeoJson = osrmRes?.routes?.[0]?.geometry || null; // LineString
+      } catch (e) {
+        console.warn("⚠️ Falha ao obter geometria da rota OSRM:", e);
+      }
+
+      
       // 15. Atualize a tela com a rota otimizada!
       setOptimizedRoute({
         optimizedOrder: agendamentosOtimizados,
         totalDistance: parseFloat(totalDistanceFormatted),
         estimatedTime: Math.round(totalTime / 60), // em minutos
-        geojson: null,
+        geojson: routeGeoJson,              // << AGORA VEM DO OSRM
+        waypoints: coordsOrdenadas,         // << PONTOS P/ MARCADORES
         routeSteps: routeSteps,
         matrixDurations: matrixDurations,
         matrixDistances: matrixDistances,
@@ -894,6 +936,7 @@ export default function Routes() {
         startToFirstDistance: startToFirstDistance,
         startToFirstDuration: startToFirstDuration,
       });
+      setSavedInfo(null); // ao recalcular a rota, volta para preview (habilita "Salvar")
 
       toast({
         title: "Rota otimizada com sucesso!",
@@ -913,6 +956,94 @@ export default function Routes() {
     }
   };
 
+  const handleSaveRoute = async () => {
+    if (!optimizedRoute) {
+      toast({
+        title: "Nada para salvar",
+        description: "Otimize a rota primeiro.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (isSaving || savedInfo?.id) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const title =
+        optimizedRoute?.title ||
+        `Rota ${new Date().toLocaleDateString("pt-BR")}`;
+
+      const res = await fetch("/api/routes/optimize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({
+          appointmentIds: selectedAppointments,       // 👈 usa os IDs da Roteirização
+          endAtStart: terminarNoPontoInicial,         // 👈 seu checkbox “Terminar no ponto inicial”
+          title,
+          preview: false,                             // 👈 salvar de verdade
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Falha ao salvar rota");
+      }
+
+      const data = await res.json();
+      setSavedInfo({
+        id: data?.route?.id,
+        displayNumber: data?.route?.displayNumber,
+      });
+
+      toast({
+        title: `Rota salva com sucesso — ID #${data?.route?.displayNumber}`,
+        description: "A rota foi salva no histórico.",
+      });
+    } catch (e: any) {
+      console.error("❌ [ROUTE] Erro ao salvar:", e);
+      toast({
+        title: "Erro ao salvar rota",
+        description: e?.message || "Erro interno do servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Abre Google Maps com origem, paradas e destino na ordem já otimizada.
+  // roundTrip = terminarNoPontoInicial: se true, fecha voltando ao ponto inicial.
+  const openInGoogleMaps = (waypoints: { lat: number; lon: number }[], roundTrip: boolean) => {
+    if (!waypoints || waypoints.length < 2) {
+      toast({
+        title: "Rota insuficiente",
+        description: "É preciso ter ao menos início e um destino.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Se precisa terminar no ponto inicial, adiciona o primeiro ponto ao final
+    const pts = roundTrip ? [...waypoints, waypoints[0]] : [...waypoints];
+
+    const origin = `${pts[0].lat},${pts[0].lon}`;
+    const destination = `${pts[pts.length - 1].lat},${pts[pts.length - 1].lon}`;
+    const mids = pts.slice(1, -1).map(p => `${p.lat},${p.lon}`).join("|");
+
+    // &dir_action=navigate tenta abrir direto o modo navegação no mobile
+    const url =
+      `https://www.google.com/maps/dir/?api=1` +
+      `&origin=${encodeURIComponent(origin)}` +
+      `&destination=${encodeURIComponent(destination)}` +
+      (mids ? `&waypoints=${encodeURIComponent(mids)}` : "") +
+      `&travelmode=driving&dir_action=navigate`;
+
+    window.open(url, "_blank");
+  };
+
+  
   const getClient = (clientId: number | null) =>
     clientId ? clients.find((c: Client) => c.id === clientId) : null;
   const getService = (serviceId: number) =>
@@ -1212,8 +1343,8 @@ export default function Routes() {
 
       <div
         className="flex gap-6 items-stretch max-h-[1000px]">
-        {/* Appointments Selection */}
-        <Card className="flex flex-col flex-1 w-1/2 max-h-[1000px]">
+        {/* Bloco de Selecionar atendimentos */}
+        <Card className="flex flex-col flex-none w-[30%] max-h-[1000px]">
           <CardHeader className="border-b border-gray-100 flex-shrink-0">
             <CardTitle className="flex items-center">
               <MapPin className="h-5 w-5 mr-2 text-burnt-yellow" />
@@ -1267,12 +1398,7 @@ export default function Routes() {
                                   technician?.name || "Técnico não encontrado",
                                 type: "technician",
                               };
-                              console.log(
-                                `👤 [DEBUG] Card ${appointment.id} - Técnico:`,
-                                technician?.name,
-                                "ID:",
-                                appointment.technicianId,
-                              );
+                    
                             } else if (appointment.teamId) {
                               const team = teams.find(
                                 (t: any) => t.id === appointment.teamId,
@@ -1281,12 +1407,7 @@ export default function Routes() {
                                 name: team?.name || "Equipe não encontrada",
                                 type: "team",
                               };
-                              console.log(
-                                `👥 [DEBUG] Card ${appointment.id} - Equipe:`,
-                                team?.name,
-                                "ID:",
-                                appointment.teamId,
-                              );
+                          
                             }
 
                             const { time } = formatDateTime(
@@ -1413,8 +1534,8 @@ export default function Routes() {
           </CardContent>
         </Card>
 
-        {/* Optimized Route */}
-        <Card className="flex flex-col flex-1 w-1/2 max-h-[1000px]">
+        {/* Bloco Rota Otimizada */}
+        <Card className="flex flex-col flex-none w-[70%] max-h-[1000px]">
           <CardHeader className="border-b border-gray-100 flex-shrink-0">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center">
@@ -1458,16 +1579,11 @@ export default function Routes() {
             ) : optimizedRoute ? (
               <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Map Placeholder */}
-                <div className="bg-gray-100 rounded-lg h-48 flex items-center justify-center mb-4 flex-shrink-0">
-                  <div className="text-center">
-                    <MapPin className="h-10 w-10 text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-600 font-medium text-sm">
-                      Mapa da rota otimizada
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Integração com Google Maps
-                    </p>
-                  </div>
+                <div className="mb-4 flex-shrink-0">
+                  <OptimizedRouteMap
+                    routeGeoJson={optimizedRoute.geojson}
+                    waypoints={optimizedRoute.waypoints}
+                  />
                 </div>
 
                 {/* Route Steps - Container com scroll */}
@@ -1478,27 +1594,22 @@ export default function Routes() {
                       Sequência da Rota
                     </h4>
 
-                  {/* Card de início da rota */}
-                  {optimizedRoute.startAddress && (
-                    <div className="flex items-start space-x-4 border-b border-gray-100 pb-4">
-                      <div className="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center text-white font-medium text-sm flex-shrink-0">
-                        📍
-                      </div>
-                      <div className="flex-1">
-                        <h5 className="font-medium text-gray-900">
-                          Início da rota
-                        </h5>
-                        <p className="text-sm text-gray-600">
-                          {optimizedRoute.startAddress}
-                        </p>
-                        <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
-                          <span>—</span>
-                          <span className="text-gray-400">—</span>
-                          <span className="text-gray-400">—</span>
+                    {/* Card de início da rota */}
+                    {optimizedRoute.startAddress && (
+                      <div className="flex items-start space-x-4 border-b border-gray-100 pb-4">
+                        <div className="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center flex-shrink-0">
+                          <img src="/brand/rotafacil-pin.png" alt="Início" className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1">
+                          <h5 className="font-medium text-gray-900">Início da rota</h5>
+                          <p className="text-sm text-gray-600">{optimizedRoute.startAddress}</p>
+                          <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                            <span>—</span><span className="text-gray-400">—</span><span className="text-gray-400">—</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+
 
                   {optimizedRoute.optimizedOrder.map((appointment, index) => {
                     const client = getClient(appointment.clientId);
@@ -1551,36 +1662,80 @@ export default function Routes() {
                     );
                   })}
                   
-                  {/* Route Summary */}
-                  <div className="mt-6 pt-6 border-t border-gray-200">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600">
-                          Tempo total estimado:
-                        </span>
-                        <span className="font-medium text-green-600">
-                          {optimizedRoute.estimatedTime > 60
-                            ? `${Math.floor(optimizedRoute.estimatedTime / 60)}h ${optimizedRoute.estimatedTime % 60}min`
-                            : `${optimizedRoute.estimatedTime}min`}
-                        </span>
+                    {/* Route Summary */}
+                    <div className="mt-6 pt-6 border-t border-gray-200">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">Tempo total estimado:</span>
+                          <span className="font-medium text-green-600">
+                            {optimizedRoute.estimatedTime > 60
+                              ? `${Math.floor(optimizedRoute.estimatedTime / 60)}h ${optimizedRoute.estimatedTime % 60}min`
+                              : `${optimizedRoute.estimatedTime}min`}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">Distância total:</span>
+                          <span className="font-medium text-blue-600">
+                            {optimizedRoute.totalDistance} km
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between sm:col-span-2">
+                          <span className="text-gray-600">Economia de combustível:</span>
+                          <span className="font-medium text-green-600 flex items-center">
+                            <TrendingUp className="h-3 w-3 mr-1" />
+                            Rota otimizada
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600">Distância total:</span>
-                        <span className="font-medium text-blue-600">
-                          {optimizedRoute.totalDistance} km
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between sm:col-span-2">
-                        <span className="text-gray-600">
-                          Economia de combustível:
-                        </span>
-                        <span className="font-medium text-green-600 flex items-center">
-                          <TrendingUp className="h-3 w-3 mr-1" />
-                          Rota otimizada
-                        </span>
+
+                      {/* --- AÇÕES ABAIXO DO RESUMO --- */}
+                      <div className="mt-6 space-y-3">
+                        {/* Botão de salvar aparece somente enquanto ainda não foi salvo */}
+                        {!savedInfo?.id && (
+                          <Button
+                            className="w-full bg-green-600 hover:bg-green-700 text-white"
+                            onClick={handleSaveRoute}
+                            disabled={isSaving}
+                          >
+                            {isSaving ? "Salvando..." : "Salvar Rota"}
+                          </Button>
+                        )}
+
+                        <Button
+                          className="w-full bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                          type="button"
+                          onClick={() => openInGoogleMaps(optimizedRoute?.waypoints || [], terminarNoPontoInicial)}
+                        >
+                          Iniciar Navegação
+                        </Button>
+
+                        <Button variant="outline" className="w-full" type="button">
+                          Exportar Rota
+                        </Button>
+
+                        {/* Mensagem de sucesso + link para o histórico */}
+                        {savedInfo?.id && (
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            <div className="text-sm">
+                              <span className="font-medium">Rota salva com sucesso</span>
+                              <span className="ml-1">ID #{savedInfo.displayNumber}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="px-3 py-2 rounded-xl bg-[#DAA520] text-black hover:bg-[#B8860B] transition"
+                              onClick={() =>
+                                window.open(
+                                  `/routes-history?open=${savedInfo.id}&id=${savedInfo.displayNumber}`,
+                                  "_blank",
+                                )
+                              }
+                            >
+                              Ver no Histórico
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </div>
                 </div>
               </div>
             </div>
