@@ -1120,7 +1120,7 @@ export default function RoutesHistoryPage() {
                           .slice()
                           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-                        // 2) Waypoints das paradas
+                        // 2) Waypoints das paradas (apenas as paradas!)
                         const stopWps = orderedStops.map((s) => ({
                           lat: Number(s.lat),
                           lon: Number(s.lng),
@@ -1129,25 +1129,28 @@ export default function RoutesHistoryPage() {
                         // 3) Tenta pegar coordenadas de início (técnico/equipe/empresa)
                         const startWp = getStartCoords(routeDetail.route);
 
-                        // 4) GeoJSON vindo do backend (se existir)
-                        const rawBackendGeoJson =
+                        // 4) GeoJSON vindo do backend (pode vir string → parse)
+                        let rawBackendGeoJson: any =
                           (routeDetail.route as any)?.polylineGeoJson ??
                           (routeDetail.route as any)?.routeGeoJson ??
                           (routeDetail.route as any)?.geojson ??
                           null;
 
-                        // 5) O GeoJSON que vamos desenhar (se não existir backend, usamos fallback com as paradas)
+                        if (typeof rawBackendGeoJson === "string") {
+                          try { rawBackendGeoJson = JSON.parse(rawBackendGeoJson); } catch {}
+                        }
+
+                        // 5) GeoJSON para desenhar (fallback simples se não vier do back)
                         const routeGeoJson =
                           rawBackendGeoJson ??
                           (stopWps.length >= 2
                             ? { type: "LineString", coordinates: stopWps.map((w) => [w.lon, w.lat]) }
                             : null);
 
-                        // 6) Se NÃO temos startWp, mas TEMOS polyline do backend, usa o 1º ponto do polyline como início
+                        // 6) Se NÃO temos startWp, tenta inferir do GeoJSON (primeiro ponto da linha)
                         const startFromGeo: { lat: number; lon: number } | null =
-                          !startWp && rawBackendGeoJson && routeGeoJson
+                          !startWp && routeGeoJson
                             ? (() => {
-                                // aceita LineString puro, Feature ou Feature<LineString>
                                 const geom =
                                   routeGeoJson?.type === "LineString"
                                     ? routeGeoJson
@@ -1156,7 +1159,6 @@ export default function RoutesHistoryPage() {
                                     : routeGeoJson?.geometry?.type === "LineString"
                                     ? routeGeoJson.geometry
                                     : null;
-
                                 const c = geom?.coordinates?.[0];
                                 if (Array.isArray(c) && c.length >= 2) {
                                   const [lon, lat] = c;
@@ -1168,16 +1170,14 @@ export default function RoutesHistoryPage() {
                               })()
                             : null;
 
-                        // 7) Monta o array final de waypoints (índice 0 é SEMPRE o início)
-                        const allWps =
-                          startWp ? [startWp, ...stopWps]
-                          : startFromGeo ? [startFromGeo, ...stopWps]
-                          : stopWps;
+                        // 7) Ponto inicial definitivo para o pin verde
+                        const startPoint = startWp || startFromGeo || null;
 
                         return (
                           <OptimizedRouteMap
                             routeGeoJson={routeGeoJson}
-                            waypoints={allWps}
+                            waypoints={stopWps}           // apenas paradas numeradas
+                            startWaypoint={startPoint}    // pin de início
                           />
                         );
                       })()}
@@ -1195,7 +1195,7 @@ export default function RoutesHistoryPage() {
 
             {/* Rodapé fixo (ações) */}
             <div className="border-t px-4 py-3 bg-white">
-              <div className="flex flex-col sm:flex-flex-row gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <Button
                   onClick={handleStartNavigation}
                   className="flex-1"
