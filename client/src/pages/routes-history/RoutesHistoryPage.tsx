@@ -1120,64 +1120,68 @@ export default function RoutesHistoryPage() {
                           .slice()
                           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-                        // 2) Waypoints das paradas (apenas as paradas!)
+                        // 2) Waypoints das paradas (apenas stops)
                         const stopWps = orderedStops.map((s) => ({
                           lat: Number(s.lat),
                           lon: Number(s.lng),
                         }));
 
-                        // 3) Tenta pegar coordenadas de início (técnico/equipe/empresa)
-                        const startWp = getStartCoords(routeDetail.route);
+                        // 3) Início (técnico/equipe/empresa ou a partir do geojson)
+                        const startPoint = getStartCoords(routeDetail.route) ?? (() => {
+                          const raw = (routeDetail.route as any)?.polylineGeoJson
+                                  ?? (routeDetail.route as any)?.routeGeoJson
+                                  ?? (routeDetail.route as any)?.geojson
+                                  ?? null;
+                          
+                          if (typeof raw === "string") {
+                            try { 
+                              const parsed = JSON.parse(raw);
+                              const geom =
+                                parsed?.type === "LineString" ? parsed
+                                : parsed?.type === "Feature" ? parsed.geometry
+                                : parsed?.geometry?.type === "LineString" ? parsed.geometry
+                                : null;
+                              const c = geom?.coordinates?.[0];
+                              return Array.isArray(c) && c.length >= 2
+                                ? { lat: Number(c[1]), lon: Number(c[0]) }
+                                : null;
+                            } catch {}
+                          }
+                          
+                          const geom =
+                            raw?.type === "LineString" ? raw
+                            : raw?.type === "Feature" ? raw.geometry
+                            : raw?.geometry?.type === "LineString" ? raw.geometry
+                            : null;
+                          const c = geom?.coordinates?.[0];
+                          return Array.isArray(c) && c.length >= 2
+                            ? { lat: Number(c[1]), lon: Number(c[0]) }
+                            : null;
+                        })();
 
-                        // 4) GeoJSON vindo do backend (pode vir string → parse)
-                        let rawBackendGeoJson: any =
-                          (routeDetail.route as any)?.polylineGeoJson ??
-                          (routeDetail.route as any)?.routeGeoJson ??
-                          (routeDetail.route as any)?.geojson ??
-                          null;
+                        // 4) GeoJSON para desenhar
+                        let routeGeoJson = (routeDetail.route as any)?.polylineGeoJson
+                          ?? (routeDetail.route as any)?.routeGeoJson
+                          ?? (routeDetail.route as any)?.geojson
+                          ?? null;
 
-                        if (typeof rawBackendGeoJson === "string") {
-                          try { rawBackendGeoJson = JSON.parse(rawBackendGeoJson); } catch {}
+                        if (typeof routeGeoJson === "string") {
+                          try { routeGeoJson = JSON.parse(routeGeoJson); } catch {}
                         }
 
-                        // 5) GeoJSON para desenhar (fallback simples se não vier do back)
-                        const routeGeoJson =
-                          rawBackendGeoJson ??
-                          (stopWps.length >= 2
-                            ? { type: "LineString", coordinates: stopWps.map((w) => [w.lon, w.lat]) }
-                            : null);
-
-                        // 6) Se NÃO temos startWp, tenta inferir do GeoJSON (primeiro ponto da linha)
-                        const startFromGeo: { lat: number; lon: number } | null =
-                          !startWp && routeGeoJson
-                            ? (() => {
-                                const geom =
-                                  routeGeoJson?.type === "LineString"
-                                    ? routeGeoJson
-                                    : routeGeoJson?.type === "Feature"
-                                    ? routeGeoJson.geometry
-                                    : routeGeoJson?.geometry?.type === "LineString"
-                                    ? routeGeoJson.geometry
-                                    : null;
-                                const c = geom?.coordinates?.[0];
-                                if (Array.isArray(c) && c.length >= 2) {
-                                  const [lon, lat] = c;
-                                  if (Number.isFinite(lat) && Number.isFinite(lon)) {
-                                    return { lat: Number(lat), lon: Number(lon) };
-                                  }
-                                }
-                                return null;
-                              })()
-                            : null;
-
-                        // 7) Ponto inicial definitivo para o pin verde
-                        const startPoint = startWp || startFromGeo || null;
+                        // Fallback simples se não vier do back
+                        if (!routeGeoJson && stopWps.length >= 2) {
+                          routeGeoJson = { 
+                            type: "LineString", 
+                            coordinates: stopWps.map((w) => [w.lon, w.lat]) 
+                          };
+                        }
 
                         return (
                           <OptimizedRouteMap
                             routeGeoJson={routeGeoJson}
-                            waypoints={stopWps}           // apenas paradas numeradas
-                            startWaypoint={startPoint}    // pin de início
+                            waypoints={stopWps}           // só as paradas
+                            startWaypoint={startPoint}    // início separado → sempre visível
                           />
                         );
                       })()}

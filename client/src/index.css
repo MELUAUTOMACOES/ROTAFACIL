@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* CSS para marcadores numerados das paradas */
+.rf-stop-marker .rf-stop {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: #d4a72c;
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
 /* React Big Calendar Custom Styles */
 .rbc-calendar {
   background-color: white;
