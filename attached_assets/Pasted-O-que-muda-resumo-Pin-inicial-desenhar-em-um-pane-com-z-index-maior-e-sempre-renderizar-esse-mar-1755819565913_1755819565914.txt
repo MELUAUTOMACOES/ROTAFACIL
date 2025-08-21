@@ -1,0 +1,180 @@
+O que muda (resumo)
+
+Pin inicial: desenhar em um pane com z-index maior e sempre renderizar esse marcador separado da lista de paradas.
+
+Paradas com mesma coordenada: aplicar um “jitter” (espalhar levemente) quando houver pontos idênticos, para que os números não fiquem um em cima do outro.
+
+1) Atualize OptimizedRouteMap.tsx
+
+Cole este componente (ou adapte o seu). Ele aceita startWaypoint (opcional), mantém a polyline que você já passa e resolve o overlap:
+
+import { MapContainer, TileLayer, Marker, Pane, GeoJSON } from "react-leaflet";
+import L from "leaflet";
+import { useMemo } from "react";
+
+type LatLon = { lat: number; lon: number };
+
+type Props = {
+  routeGeoJson?: any;
+  waypoints: LatLon[];            // somente as PARADAS, em ordem
+  startWaypoint?: LatLon | null;  // NOVO: ponto inicial (empresa/técnico)
+};
+
+// Ícone do pin inicial (RotaFácil)
+const startIcon = L.icon({
+  iconUrl: "/brand/rotafacil-pin.png",
+  iconSize: [34, 34],
+  iconAnchor: [17, 33],
+  popupAnchor: [0, -28],
+});
+
+// Ícone numerado para as paradas
+const numberedIcon = (n: number) =>
+  L.divIcon({
+    className: "rf-stop-marker",
+    html: `<div class="rf-stop">${n}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+  });
+
+// Espalha pontos com mesma lat/lon ~8–9m ao redor
+function spreadOverlapping(points: LatLon[], radiusDeg = 0.00008): LatLon[] {
+  const groups = new Map<string, number[]>();
+  points.forEach((p, i) => {
+    const key = `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
+    const arr = groups.get(key) || [];
+    arr.push(i);
+    groups.set(key, arr);
+  });
+
+  const out = points.slice();
+  groups.forEach((idxs) => {
+    if (idxs.length > 1) {
+      idxs.forEach((idx, k) => {
+        const angle = (2 * Math.PI * k) / idxs.length;
+        out[idx] = {
+          lat: points[idx].lat + radiusDeg * Math.sin(angle),
+          lon: points[idx].lon + radiusDeg * Math.cos(angle),
+        };
+      });
+    }
+  });
+  return out;
+}
+
+export default function OptimizedRouteMap({
+  routeGeoJson,
+  waypoints,
+  startWaypoint,
+}: Props) {
+  // aplica spread apenas nas PARADAS (não mexe no pin inicial)
+  const spreadStops = useMemo(() => spreadOverlapping(waypoints), [waypoints]);
+
+  // bounds para encaixar tudo
+  const bounds = useMemo(() => {
+    const pts: [number, number][] = [];
+    if (startWaypoint) pts.push([startWaypoint.lat, startWaypoint.lon]);
+    spreadStops.forEach((p) => pts.push([p.lat, p.lon]));
+    if (pts.length < 1) return undefined;
+    return L.latLngBounds(pts);
+  }, [startWaypoint, spreadStops]);
+
+  return (
+    <MapContainer
+      style={{ width: "100%", height: "100%" }}
+      bounds={bounds}
+      scrollWheelZoom
+    >
+      <TileLayer
+        attribution='&copy; OpenStreetMap'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+
+      {routeGeoJson && (
+        <GeoJSON data={routeGeoJson as any} />
+      )}
+
+      {/* PIN INICIAL: sempre por cima */}
+      <Pane name="rf-start-pin" style={{ zIndex: 650 }}>
+        {startWaypoint && (
+          <Marker
+            position={[startWaypoint.lat, startWaypoint.lon]}
+            icon={startIcon}
+            zIndexOffset={1000}
+          />
+        )}
+      </Pane>
+
+      {/* PARADAS (numeradas) — com spread */}
+      <Pane name="rf-stops" style={{ zIndex: 600 }}>
+        {spreadStops.map((p, i) => (
+          <Marker
+            key={`${p.lat}-${p.lon}-${i}`}
+            position={[p.lat, p.lon]}
+            icon={numberedIcon(i + 1)}
+            zIndexOffset={500}
+          />
+        ))}
+      </Pane>
+    </MapContainer>
+  );
+}
+
+CSS (global) para o marcador numerado
+
+Coloque em um CSS global (ex.: index.css):
+
+.rf-stop-marker .rf-stop{
+  width:28px;height:28px;border-radius:9999px;
+  background:#d4a72c;color:#fff;font-weight:700;font-size:12px;
+  display:flex;align-items:center;justify-content:center;
+  border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.35);
+}
+
+2) Ajuste a chamada em RoutesHistoryPage.tsx
+
+No trecho onde você monta os dados do mapa, passe as paradas como waypoints e o início separado em startWaypoint:
+
+// 1) Paradas ordenadas
+const orderedStops = (routeDetail.stops || [])
+  .slice()
+  .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+// 2) Waypoints das paradas (apenas stops)
+const stopWps = orderedStops.map((s) => ({
+  lat: Number(s.lat),
+  lon: Number(s.lng),
+}));
+
+// 3) Início (técnico/equipe/empresa ou a partir do geojson)
+const startPoint = getStartCoords(routeDetail.route) ?? (() => {
+  const raw = (routeDetail.route as any)?.polylineGeoJson
+          ?? (routeDetail.route as any)?.routeGeoJson
+          ?? (routeDetail.route as any)?.geojson
+          ?? null;
+  const geom =
+    raw?.type === "LineString" ? raw
+    : raw?.type === "Feature" ? raw.geometry
+    : raw?.geometry?.type === "LineString" ? raw.geometry
+    : null;
+  const c = geom?.coordinates?.[0];
+  return Array.isArray(c) && c.length >= 2
+    ? { lat: Number(c[1]), lon: Number(c[0]) }
+    : null;
+})();
+
+// 4) Render
+<OptimizedRouteMap
+  routeGeoJson={(routeDetail.route as any)?.polylineGeoJson
+    ?? (routeDetail.route as any)?.routeGeoJson
+    ?? (routeDetail.route as any)?.geojson
+    ?? null}
+  waypoints={stopWps}           // só as paradas
+  startWaypoint={startPoint}    // início separado → sempre visível
+/>
+
+Resultado
+
+(1) Pin inicial sempre visível: ele é desenhado em um pane com zIndex maior e não compete com os marcadores numerados — inclusive no caso “1 e 2 na mesma coordenada”.
+
+(2) Paradas sobrepostas separadas: o spreadOverlapping desloca poucos metros cada uma em volta do ponto original; os números ficam lado a lado e todos aparecem.
