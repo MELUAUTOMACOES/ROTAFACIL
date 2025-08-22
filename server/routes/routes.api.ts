@@ -1436,6 +1436,116 @@ export function registerRoutesAPI(app: Express) {
     },
   );
 
+  // POST /api/routes/:routeId/stops/restore - Restaurar parada removida (para UNDO)
+  app.post(
+    "/api/routes/:routeId/stops/restore",
+    authenticateToken,
+    async (req: any, res: Response) => {
+      try {
+        const { routeId } = req.params;
+        const { appointmentId } = req.body;
+
+        if (!appointmentId) {
+          return res.status(400).json({ message: 'appointmentId é obrigatório' });
+        }
+
+        console.log(`🔄 Restaurando agendamento ${appointmentId} na rota ${routeId}`);
+
+        // Verificar se a rota existe
+        const [route] = await db
+          .select({ id: routesTbl.id })
+          .from(routesTbl)
+          .where(eq(routesTbl.id, routeId))
+          .limit(1);
+
+        if (!route) {
+          return res.status(404).json({ message: 'Rota não encontrada' });
+        }
+
+        // Buscar o agendamento para obter dados necessários
+        const [appointment] = await db
+          .select({
+            id: appointments.id,
+            clientId: appointments.clientId,
+            cep: appointments.cep,
+            logradouro: appointments.logradouro,
+            numero: appointments.numero,
+            bairro: appointments.bairro,
+            cidade: appointments.cidade,
+          })
+          .from(appointments)
+          .where(eq(appointments.id, Number(appointmentId)))
+          .limit(1);
+
+        if (!appointment) {
+          return res.status(404).json({ message: 'Agendamento não encontrado' });
+        }
+
+        // Buscar dados do cliente para coordenadas
+        const [client] = await db
+          .select({
+            lat: clients.lat,
+            lng: clients.lng,
+          })
+          .from(clients)
+          .where(eq(clients.id, appointment.clientId!))
+          .limit(1);
+
+        if (!client || !Number.isFinite(client.lat) || !Number.isFinite(client.lng)) {
+          return res.status(400).json({ message: 'Cliente sem coordenadas válidas' });
+        }
+
+        // Determinar próxima ordem
+        const [maxOrderResult] = await db
+          .select({
+            maxOrder: sql<number>`COALESCE(MAX(${stopsTbl.order}), 0)`,
+          })
+          .from(stopsTbl)
+          .where(eq(stopsTbl.routeId, routeId));
+
+        const nextOrder = (maxOrderResult?.maxOrder ?? 0) + 1;
+
+        // Montar endereço
+        const address = [
+          appointment.logradouro,
+          appointment.numero,
+          appointment.bairro,
+          appointment.cidade,
+          appointment.cep,
+          "Brasil",
+        ]
+          .filter(Boolean)
+          .join(", ");
+
+        // Inserir a parada restaurada
+        await db.insert(stopsTbl).values({
+          routeId: routeId,
+          appointmentId: numberToUUID(Number(appointmentId)),
+          order: nextOrder,
+          lat: Number(client.lat),
+          lng: Number(client.lng),
+          address: address,
+        });
+
+        // Atualizar contador da rota
+        await db
+          .update(routesTbl)
+          .set({ 
+            stopsCount: sql`${routesTbl.stopsCount} + 1`,
+            updatedAt: sql`CURRENT_TIMESTAMP`
+          })
+          .where(eq(routesTbl.id, routeId));
+
+        console.log(`✅ Agendamento ${appointmentId} restaurado na rota ${routeId}`);
+
+        return res.json({ ok: true, appointmentId, routeId, order: nextOrder });
+      } catch (e: any) {
+        console.error('[restore stop] error:', e);
+        return res.status(500).json({ message: 'Falha ao restaurar parada' });
+      }
+    },
+  );
+
   // PATCH /api/routes/:id/status - Atualizar status da rota
   app.patch(
     "/api/routes/:id/status",

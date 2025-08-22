@@ -366,6 +366,37 @@ export default function RoutesHistoryPage() {
     },
   });
 
+  // mutation para restaurar parada removida (UNDO)
+  const restoreStopMutation = useMutation({
+    mutationFn: async ({ routeId, appointmentId }: { routeId: string; appointmentId: number }) => {
+      const response = await apiRequest("POST", `/api/routes/${routeId}/stops/restore`, {
+        appointmentId,
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Erro ao restaurar parada");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Parada restaurada",
+        description: "O agendamento foi adicionado de volta à rota.",
+      });
+      setLastRemoved(null); // limpa a memória
+      // Recarrega detalhe e lista
+      queryClient.invalidateQueries({ queryKey: ["/api/routes", selectedRoute] });
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erro ao restaurar parada",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // mutation para otimizar rota
   const optimizeRouteMutation = useMutation({
     mutationFn: async (routeId: string) => {
@@ -502,16 +533,18 @@ export default function RoutesHistoryPage() {
 
   // Função para desfazer remoção
   const undoRemove = () => {
-    if (!lastRemoved?.routeId || !lastRemoved?.appointmentId) return;
+    if (!lastRemoved?.routeId || !lastRemoved?.appointmentId) {
+      console.log("❌ Não há parada para desfazer ou dados incompletos:", lastRemoved);
+      return;
+    }
 
-    // re-adiciona o agendamento removido
-    addStopsMutation.mutate({
+    console.log("🔄 Executando UNDO para:", lastRemoved);
+    
+    // usa o endpoint específico para restaurar
+    restoreStopMutation.mutate({
       routeId: lastRemoved.routeId,
-      appointmentIds: [String(lastRemoved.appointmentId)],
+      appointmentId: lastRemoved.appointmentId,
     });
-
-    // limpa memória local para não reaproveitar indevidamente
-    setLastRemoved(null);
   };
 
   const { data: teams = [] } = useQuery({
