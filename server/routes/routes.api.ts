@@ -1317,6 +1317,78 @@ export function registerRoutesAPI(app: Express) {
     },
   );
 
+  // DELETE /api/routes/:routeId/stops/:stopId - Remover parada da rota
+  app.delete(
+    "/api/routes/:routeId/stops/:stopId",
+    authenticateToken,
+    async (req: any, res: Response) => {
+      try {
+        const { routeId, stopId } = req.params;
+
+        console.log(`🗑️ Tentando remover parada ${stopId} da rota ${routeId}`);
+
+        // 1) Garante que a parada existe e pertence à rota
+        const [stopRow] = await db
+          .select({
+            id: stopsTbl.id,
+            routeId: stopsTbl.routeId,
+            order: stopsTbl.order,
+          })
+          .from(stopsTbl)
+          .where(eq(stopsTbl.id, stopId))
+          .limit(1);
+
+        if (!stopRow) {
+          console.log("❌ Parada não encontrada:", stopId);
+          return res.status(404).json({ message: "Parada não encontrada" });
+        }
+
+        if (String(stopRow.routeId) !== String(routeId)) {
+          console.log("❌ Parada não pertence à rota:", stopRow.routeId, "vs", routeId);
+          return res.status(400).json({ message: "Parada não pertence à rota informada" });
+        }
+
+        // 2) Remove a parada
+        await db.delete(stopsTbl).where(eq(stopsTbl.id, stopId));
+        console.log("✅ Parada removida:", stopId);
+
+        // 3) Reordena as demais paradas (1..n)
+        const remainingStops = await db
+          .select({ id: stopsTbl.id, order: stopsTbl.order })
+          .from(stopsTbl)
+          .where(eq(stopsTbl.routeId, routeId))
+          .orderBy(asc(stopsTbl.order));
+
+        for (let i = 0; i < remainingStops.length; i++) {
+          const newOrder = i + 1;
+          if (remainingStops[i].order !== newOrder) {
+            await db
+              .update(stopsTbl)
+              .set({ order: newOrder })
+              .where(eq(stopsTbl.id, remainingStops[i].id));
+          }
+        }
+
+        // 4) Atualiza contador da rota
+        await db
+          .update(routesTbl)
+          .set({ 
+            stopsCount: remainingStops.length,
+            updatedAt: sql`CURRENT_TIMESTAMP`
+          })
+          .where(eq(routesTbl.id, routeId));
+
+        console.log(`✅ Rota ${routeId} atualizada com ${remainingStops.length} paradas`);
+
+        // 5) Sempre responde JSON
+        return res.json({ ok: true, stopsCount: remainingStops.length });
+      } catch (e: any) {
+        console.error("[DELETE /stops] Erro:", e);
+        return res.status(500).json({ message: e?.message || "Erro ao remover parada" });
+      }
+    },
+  );
+
   // PATCH /api/routes/:id/status - Atualizar status da rota
   app.patch(
     "/api/routes/:id/status",

@@ -380,25 +380,31 @@ export default function RoutesHistoryPage() {
     },
   });
 
+  // Estados para modal de remoção
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [stopToRemove, setStopToRemove] = useState<{ id: string; clientName?: string } | null>(null);
+
   // mutation para remover parada
   const removeStopMutation = useMutation({
     mutationFn: async ({ routeId, stopId }: { routeId: string; stopId: string }) => {
-      const res = await apiRequest("DELETE", `/api/routes/${routeId}/stops/${stopId}`);
+      const res = await fetch(`/api/routes/${routeId}/stops/${stopId}`, { method: "DELETE" });
+      const contentType = res.headers.get("content-type") || "";
+      const payload = contentType.includes("application/json") ? await res.json() : await res.text();
+      
       if (!res.ok) {
-        let msg = "Erro ao remover parada";
-        try {
-          const j = await res.json();
-          msg = j?.message || msg;
-        } catch {}
+        const msg = typeof payload === "string" ? payload : payload?.message || "Falha ao remover";
         throw new Error(msg);
       }
-      return res.json();
+      
+      return payload;
     },
     onSuccess: () => {
       toast({
         title: "Parada removida",
-        description: "O agendamento foi retirado da rota.",
+        description: "A rota foi atualizada.",
       });
+      setRemoveOpen(false);
+      setStopToRemove(null);
       // recarrega detalhe da rota e listagem
       queryClient.invalidateQueries({ queryKey: ["/api/routes", selectedRoute] });
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
@@ -411,16 +417,6 @@ export default function RoutesHistoryPage() {
       });
     },
   });
-
-  const handleRemoveStop = (stop: any) => {
-    if (!routeDetail?.route?.id || !stop?.id) return;
-
-    const nome = stop?.clientName || `Agendamento #${stop.appointmentId}`;
-    const ok = window.confirm(`Remover ${nome} desta rota?`);
-    if (!ok) return;
-
-    removeStopMutation.mutate({ routeId: routeDetail.route.id, stopId: stop.id });
-  };
 
 
   const { data: teams = [] } = useQuery({
@@ -1149,8 +1145,13 @@ export default function RoutesHistoryPage() {
                             </div>
                             {/* Botão remover */}
                             <button
-                              onClick={() => handleRemoveStop(stop)}
-                              disabled={removeStopMutation.isPending}
+                              onClick={() => {
+                                setStopToRemove({ 
+                                  id: stop.id, 
+                                  clientName: stop.clientName || undefined 
+                                });
+                                setRemoveOpen(true);
+                              }}
                               className="ml-2 rounded-md p-1 text-gray-500 hover:text-red-600 hover:bg-red-50"
                               title="Remover da rota"
                               aria-label="Remover da rota"
@@ -1268,6 +1269,37 @@ export default function RoutesHistoryPage() {
                 </Button>
               </div>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de confirmação para remoção de paradas */}
+      <Dialog open={removeOpen} onOpenChange={setRemoveOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Remover {stopToRemove?.clientName || "parada"} da rota?
+            </DialogTitle>
+            <DialogDescription>
+              Isso remove o agendamento <strong>apenas da rota</strong>. O agendamento continua existindo na agenda.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setRemoveOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              className="bg-red-600 text-white hover:bg-red-700"
+              disabled={removeStopMutation.isPending || !stopToRemove || !routeDetail?.route?.id}
+              onClick={() =>
+                stopToRemove &&
+                routeDetail?.route?.id &&
+                removeStopMutation.mutate({ routeId: routeDetail.route.id, stopId: stopToRemove.id })
+              }
+            >
+              {removeStopMutation.isPending ? "Removendo..." : "Remover"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
