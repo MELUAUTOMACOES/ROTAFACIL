@@ -1389,6 +1389,53 @@ export function registerRoutesAPI(app: Express) {
     },
   );
 
+  // PATCH /api/routes/:routeId/stops/reorder - Reordenar paradas
+  app.patch(
+    "/api/routes/:routeId/stops/reorder",
+    authenticateToken,
+    async (req: any, res: Response) => {
+      try {
+        const { routeId } = req.params;
+        const { stopIds } = req.body;
+
+        if (!Array.isArray(stopIds) || stopIds.length === 0) {
+          return res.status(400).json({ message: 'stopIds (array) é obrigatório' });
+        }
+
+        console.log(`🔄 Reordenando paradas da rota ${routeId}:`, stopIds);
+
+        // Verificar se todos os stopIds pertencem à rota
+        const existingStops = await db
+          .select({ id: stopsTbl.id })
+          .from(stopsTbl)
+          .where(eq(stopsTbl.routeId, routeId));
+
+        const existingIds = new Set(existingStops.map(s => s.id));
+
+        for (const stopId of stopIds) {
+          if (!existingIds.has(stopId)) {
+            return res.status(400).json({ message: `Stop ${stopId} não pertence a esta rota` });
+          }
+        }
+
+        // Atualizar a ordem das paradas
+        for (let i = 0; i < stopIds.length; i++) {
+          await db
+            .update(stopsTbl)
+            .set({ order: i + 1 })
+            .where(eq(stopsTbl.id, stopIds[i]));
+        }
+
+        console.log(`✅ Paradas reordenadas com sucesso`);
+
+        return res.json({ ok: true, routeId, stopIds });
+      } catch (e: any) {
+        console.error('[reorder stops] error:', e);
+        return res.status(500).json({ message: 'Falha ao reordenar paradas' });
+      }
+    },
+  );
+
   // PATCH /api/routes/:id/status - Atualizar status da rota
   app.patch(
     "/api/routes/:id/status",

@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient"; // você já usa no VehicleForm
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,8 +28,25 @@ import {
   Download,
   Eye,
   Wand2, // Adicionado
-  X
+  X,
+  GripVertical
 } from 'lucide-react';
+
+// dnd-kit
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 
 interface RouteFilters {
@@ -384,9 +402,33 @@ export default function RoutesHistoryPage() {
   const [removeOpen, setRemoveOpen] = useState(false);
   const [stopToRemove, setStopToRemove] = useState<{ id: string; clientName?: string } | null>(null);
 
+  // Guarda a última parada removida para permitir "Desfazer"
+  const [lastRemoved, setLastRemoved] = useState<null | {
+    routeId: string;
+    stopId: string;
+    appointmentId?: number;
+    clientName?: string | null;
+  }>(null);
+
+  // Lista local (UI) para ordenar sem esperar round-trip
+  const [stopsUI, setStopsUI] = useState<RouteDetail["stops"]>([]);
+
+  // sempre que routeDetail mudar, sincroniza a UI (ordenado por "order")
+  useEffect(() => {
+    const sorted = (routeDetail?.stops || [])
+      .slice()
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    setStopsUI(sorted);
+  }, [routeDetail?.stops]);
+
   // mutation para remover parada
   const removeStopMutation = useMutation({
-    mutationFn: async ({ routeId, stopId }: { routeId: string; stopId: string }) => {
+    mutationFn: async ({ routeId, stopId, appointmentId, clientName }: { 
+      routeId: string; 
+      stopId: string;
+      appointmentId?: number;
+      clientName?: string | null;
+    }) => {
       const res = await fetch(`/api/routes/${routeId}/stops/${stopId}`, { method: "DELETE" });
       const contentType = res.headers.get("content-type") || "";
       const payload = contentType.includes("application/json") ? await res.json() : await res.text();
@@ -396,13 +438,27 @@ export default function RoutesHistoryPage() {
         throw new Error(msg);
       }
       
-      return payload;
+      return { ...payload, routeId, stopId, appointmentId, clientName };
     },
-    onSuccess: () => {
+    onSuccess: (payload) => {
+      // guarda infos para UNDO
+      setLastRemoved({
+        routeId: payload.routeId,
+        stopId: payload.stopId,
+        appointmentId: payload.appointmentId,
+        clientName: payload.clientName,
+      });
+
       toast({
         title: "Parada removida",
-        description: "A rota foi atualizada.",
+        description: `${payload.clientName || "Agendamento"} foi removido da rota.`,
+        action: (
+          <ToastAction altText="Desfazer" onClick={() => undoRemove()}>
+            Desfazer
+          </ToastAction>
+        ),
       });
+
       setRemoveOpen(false);
       setStopToRemove(null);
       // recarrega detalhe da rota e listagem
@@ -418,6 +474,45 @@ export default function RoutesHistoryPage() {
     },
   });
 
+
+  // Mutation para reordenar paradas
+  const reorderStopsMutation = useMutation({
+    mutationFn: async ({ routeId, stopIds }: { routeId: string; stopIds: string[] }) => {
+      const res = await apiRequest("PATCH", `/api/routes/${routeId}/stops/reorder`, { stopIds });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.message || "Falha ao reordenar");
+      }
+      return res.json();
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Erro ao reordenar",
+        description: e?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+      // volta estado local (refetch)
+      queryClient.invalidateQueries({ queryKey: ['/api/routes', selectedRoute] });
+    },
+    onSuccess: () => {
+      // garantia de sincronismo
+      queryClient.invalidateQueries({ queryKey: ['/api/routes', selectedRoute] });
+    },
+  });
+
+  // Função para desfazer remoção
+  const undoRemove = () => {
+    if (!lastRemoved?.routeId || !lastRemoved?.appointmentId) return;
+
+    // re-adiciona o agendamento removido
+    addStopsMutation.mutate({
+      routeId: lastRemoved.routeId,
+      appointmentIds: [String(lastRemoved.appointmentId)],
+    });
+
+    // limpa memória local para não reaproveitar indevidamente
+    setLastRemoved(null);
+  };
 
   const { data: teams = [] } = useQuery({
     queryKey: ['/api/teams'],
@@ -626,6 +721,34 @@ export default function RoutesHistoryPage() {
     console.log('📤 Exportar rota:', selectedRoute);
   };
 
+  // Sensores DnD e handler
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = stopsUI.findIndex(s => s.id === active.id);
+    const newIndex = stopsUI.findIndex(s => s.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const newList = arrayMove(stopsUI, oldIndex, newIndex).map((s, idx) => ({
+      ...s,
+      order: idx + 1
+    }));
+    setStopsUI(newList);
+
+    // persiste no back
+    if (routeDetail?.route?.id) {
+      reorderStopsMutation.mutate({
+        routeId: routeDetail.route.id,
+        stopIds: newList.map(s => s.id),
+      });
+    }
+  };
+
   console.log('📋 [ROUTES HISTORY] Componente montado/atualizado');
 
   const getStartAddressText = (route?: Route) => {
@@ -682,6 +805,51 @@ export default function RoutesHistoryPage() {
     return "";
   };
 
+
+  // Componente para item sortável com handle
+  function SortableStopItem({
+    stop,
+    children,
+  }: {
+    stop: { id: string };
+    children: React.ReactNode;
+  }) {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      setActivatorNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({ id: stop.id });
+
+    const style: React.CSSProperties = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+    };
+
+    return (
+      <div ref={setNodeRef} style={style} className={isDragging ? "opacity-50" : ""}>
+        <div className="flex items-start gap-2">
+          {/* Handle de arraste */}
+          <button
+            className="cursor-grab p-1 rounded hover:bg-gray-100 mt-2"
+            ref={setActivatorNodeRef}
+            {...attributes}
+            {...listeners}
+            aria-label="Arrastar"
+            title="Arrastar para reordenar"
+          >
+            <GripVertical className="w-4 h-4 text-gray-400" />
+          </button>
+          <div className="flex-1">
+            {children}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -1124,42 +1292,51 @@ export default function RoutesHistoryPage() {
                         </div>
                       </div>
 
-
-                      {/* Paradas (ordenadas) */}
-                      {routeDetail.stops
-                        ?.slice()
-                        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-                        .map((stop) => (
-                          <div key={stop.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                            <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-bold">
-                              {stop.order}
-                            </div>
-                            <div className="flex-1">
-                              <div className="font-medium text-sm">
-                                {stop.clientName ? stop.clientName : `Agendamento #${stop.appointmentId}`}
+                      {/* === Drag & Drop só nas paradas (stopsUI) === */}
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <SortableContext
+                          items={stopsUI.map((s) => s.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          {stopsUI.map((stop) => (
+                            <SortableStopItem key={stop.id} stop={stop}>
+                              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                                <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-bold">
+                                  {stop.order}
+                                </div>
+                                <div className="flex-1">
+                                  <div className="font-medium text-sm">
+                                    {stop.clientName ? stop.clientName : `Agendamento #${stop.appointmentId}`}
+                                  </div>
+                                  <div className="text-xs sm:text-sm text-gray-600 mt-1">{stop.address}</div>
+                                  <div className="text-[11px] text-gray-500 mt-1">
+                                    {stop.lat.toFixed(6)}, {stop.lng.toFixed(6)}
+                                  </div>
+                                </div>
+                                {/* Botão remover */}
+                                <button
+                                  onClick={() => {
+                                    setStopToRemove({ 
+                                      id: stop.id, 
+                                      clientName: stop.clientName || undefined 
+                                    });
+                                    setRemoveOpen(true);
+                                  }}
+                                  className="ml-2 rounded-md p-1 text-gray-500 hover:text-red-600 hover:bg-red-50"
+                                  title="Remover da rota"
+                                  aria-label="Remover da rota"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
                               </div>
-                              <div className="text-xs sm:text-sm text-gray-600 mt-1">{stop.address}</div>
-                              <div className="text-[11px] text-gray-500 mt-1">
-                                {stop.lat.toFixed(6)}, {stop.lng.toFixed(6)}
-                              </div>
-                            </div>
-                            {/* Botão remover */}
-                            <button
-                              onClick={() => {
-                                setStopToRemove({ 
-                                  id: stop.id, 
-                                  clientName: stop.clientName || undefined 
-                                });
-                                setRemoveOpen(true);
-                              }}
-                              className="ml-2 rounded-md p-1 text-gray-500 hover:text-red-600 hover:bg-red-50"
-                              title="Remover da rota"
-                              aria-label="Remover da rota"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ))}
+                            </SortableStopItem>
+                          ))}
+                        </SortableContext>
+                      </DndContext>
                     </div>
                   </div>
                 </div>
@@ -1292,11 +1469,17 @@ export default function RoutesHistoryPage() {
             <Button
               className="bg-red-600 text-white hover:bg-red-700"
               disabled={removeStopMutation.isPending || !stopToRemove || !routeDetail?.route?.id}
-              onClick={() =>
-                stopToRemove &&
-                routeDetail?.route?.id &&
-                removeStopMutation.mutate({ routeId: routeDetail.route.id, stopId: stopToRemove.id })
-              }
+              onClick={() => {
+                if (stopToRemove && routeDetail?.route?.id) {
+                  const stop = routeDetail.stops.find(s => s.id === stopToRemove.id);
+                  removeStopMutation.mutate({ 
+                    routeId: routeDetail.route.id, 
+                    stopId: stopToRemove.id,
+                    appointmentId: Number(stop?.appointmentNumericId ?? stop?.appointmentId),
+                    clientName: stopToRemove.clientName
+                  });
+                }
+              }}
             >
               {removeStopMutation.isPending ? "Removendo..." : "Remover"}
             </Button>
