@@ -373,9 +373,7 @@ export default function RoutesHistoryPage() {
         "POST",
         `/api/routes/${routeId}/optimize`,
         {
-          terminarNoPontoInicial:
-            // se existir, manda como preferir; senão, false
-            (routeDetail?.route as any)?.end_at_start ?? false,
+          terminarNoPontoInicial: !!routeDetail?.route?.endAtStart,
         }
       );
       return res.json();
@@ -1406,11 +1404,12 @@ export default function RoutesHistoryPage() {
 
                         return (
                           <OptimizedRouteMap
-                            routeGeoJson={routeGeoJson}
-                            waypoints={stopWps}           // apenas paradas numeradas
-                            startWaypoint={startPoint}    // pin de início
+                            routeGeoJson={routeGeoJson}   // o que você calculou acima
+                            waypoints={stopWps}           // só as paradas (lat/lon)
+                            startWaypoint={startPoint}    // pode vir de getStartCoords ou inferido do geojson
                           />
                         );
+
                       })()}
 
                     </div>

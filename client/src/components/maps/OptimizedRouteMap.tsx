@@ -14,15 +14,51 @@ L.Marker.prototype.options.icon = DefaultIcon;
 
 // Ícone do ponto inicial (pin do RotaFácil) — arquivo em client/public/brand/rotafacil-pin.png
 const StartIcon = L.icon({
-  iconUrl: "/brand/rotafacil-pin.png",
-  iconSize: [28, 28],   // ajuste fino se quiser maior/menor
-  iconAnchor: [14, 28], // centro da base do pin
+  iconUrl: `${import.meta.env.BASE_URL}brand/rotafacil-pin.png`,
+  iconSize: [28, 28],
+  iconAnchor: [14, 28],
 });
 
 
-type Waypoint = { lat: number; lon: number; label?: string };
 
-function FitToData({ geojson, waypoints, startWaypoint }: { geojson?: any; waypoints?: Waypoint[]; startWaypoint?: { lat: number; lon: number } | null }) {
+type Waypoint = { lat: number; lon?: number; lng?: number; label?: string };
+
+// usa lon se existir, senão lng
+const getLon = (o: { lon?: number; lng?: number } | undefined | null) =>
+  (typeof o?.lon === "number" ? o!.lon : o?.lng) as number | undefined;
+
+// extrai o primeiro ponto do GeoJSON como início (LineString ou Feature)
+const getStartFromGeo = (geojson?: any): { lat: number; lon: number } | null => {
+  if (!geojson) return null;
+  const geom =
+    geojson?.type === "LineString"
+      ? geojson
+      : geojson?.type === "Feature"
+      ? geojson.geometry
+      : geojson?.geometry?.type === "LineString"
+      ? geojson.geometry
+      : null;
+  const c = geom?.coordinates?.[0];
+  if (Array.isArray(c) && c.length >= 2) {
+    const [lon, lat] = c;
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      return { lat: Number(lat), lon: Number(lon) };
+    }
+  }
+  return null;
+};
+
+
+
+function FitToData({
+  geojson,
+  waypoints,
+  startWaypoint,
+}: {
+  geojson?: any;
+  waypoints?: Waypoint[];
+  startWaypoint?: { lat: number; lon?: number; lng?: number } | null;
+}) {
   const map = useMap();
 
   // Garante que o Leaflet recalcule o tamanho quando o componente for mostrado
@@ -48,14 +84,28 @@ function FitToData({ geojson, waypoints, startWaypoint }: { geojson?: any; waypo
 
     // 2) Se não tiver geojson, ajusta pelos waypoints + startWaypoint
     const allPoints: L.LatLngExpression[] = [];
-    if (startWaypoint) allPoints.push([startWaypoint.lat, startWaypoint.lon]);
-    if (waypoints?.length) allPoints.push(...waypoints.map((w) => [w.lat, w.lon]));
-    
+
+    const swLon = getLon(startWaypoint as any);
+    if (startWaypoint && Number.isFinite(swLon)) {
+      allPoints.push([startWaypoint.lat, swLon as number]);
+    }
+
+    if (waypoints?.length) {
+      allPoints.push(
+        ...waypoints
+          .map((w) => {
+            const wLon = getLon(w);
+            return Number.isFinite(wLon) ? [w.lat, wLon as number] : null;
+          })
+          .filter(Boolean) as L.LatLngExpression[]
+      );
+    }
+
     if (allPoints.length > 0) {
       const bounds = L.latLngBounds(allPoints as LatLngBoundsExpression);
       if (bounds.isValid()) map.fitBounds(bounds.pad(0.2));
     }
-  }, [geojson, waypoints, map]);
+  }, [geojson, waypoints, startWaypoint, map]);
 
   return null;
 }
@@ -65,9 +115,9 @@ export default function OptimizedRouteMap({
   waypoints,
   startWaypoint,
 }: {
-  routeGeoJson?: any;      // LineString ou Feature
-  waypoints?: Waypoint[];  // paradas numeradas
-  startWaypoint?: { lat: number; lon: number } | null; // ponto inicial separado
+  routeGeoJson?: any;                   // LineString ou Feature
+  waypoints?: Waypoint[];               // paradas numeradas
+  startWaypoint?: { lat: number; lon?: number; lng?: number } | null; // ponto inicial separado
 }) {
   const numberedIcon = (n: number) =>
     new DivIcon({
@@ -81,8 +131,48 @@ export default function OptimizedRouteMap({
       iconAnchor: [14, 28],
     });
 
+  // extrai o primeiro ponto do GeoJSON como início (LineString ou Feature)
+  const getStartFromGeo = (geojson?: any): { lat: number; lon: number } | null => {
+    if (!geojson) return null;
+    const geom =
+      geojson?.type === "LineString"
+        ? geojson
+        : geojson?.type === "Feature"
+        ? geojson.geometry
+        : geojson?.geometry?.type === "LineString"
+        ? geojson.geometry
+        : null;
+    const c = geom?.coordinates?.[0];
+    if (Array.isArray(c) && c.length >= 2) {
+      const [lon, lat] = c;
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        return { lat: Number(lat), lon: Number(lon) };
+      }
+    }
+    return null;
+  };
+
+  // considera lon|lng e tolera pequenas diferenças decimais
+  const samePoint = (
+    a?: { lat: number; lon?: number; lng?: number } | null,
+    b?: { lat: number; lon?: number; lng?: number } | null
+  ) => {
+    if (!a || !b) return false;
+    const ax = a.lat, ay = getLon(a);
+    const bx = b.lat, by = getLon(b);
+    if (!Number.isFinite(ay) || !Number.isFinite(by)) return false;
+    const EPS = 1e-5;
+    return Math.abs(ax - bx) < EPS && Math.abs((ay as number) - (by as number)) < EPS;
+  };
+
+  // início efetivo: usa o que veio por prop, ou extrai do geojson
+  const derivedStart = startWaypoint || getStartFromGeo(routeGeoJson);
+
+  // lista final numerada (sem o início)
+  const numberedStops = (waypoints || []).filter((w) => !samePoint(w, derivedStart));
+
   return (
-    // ⬇️ Altura agora herda do pai (preencha o container externo)
+    // ⬇️ Altura herda do pai (preencha o container externo)
     <div className="w-full h-full min-h-[300px]">
       <MapContainer
         center={[-25.43, -49.27]}
@@ -106,29 +196,36 @@ export default function OptimizedRouteMap({
           />
         )}
 
-        {/* Pin de início (verde) */}
-        {startWaypoint && (
-          <Marker
-            key={`start-${startWaypoint.lat},${startWaypoint.lon}`}
-            position={[startWaypoint.lat, startWaypoint.lon]}
-            icon={StartIcon}
-          >
-            <Popup>Início da rota</Popup>
-          </Marker>
-        )}
+        {/* Pin de início */}
+        {(() => {
+          const swLon = getLon(derivedStart as any);
+          return derivedStart && Number.isFinite(swLon) ? (
+            <Marker
+              key={`start-${derivedStart.lat},${swLon}`}
+              position={[derivedStart.lat, swLon as number]}
+              icon={StartIcon}
+            >
+              <Popup>Início da rota</Popup>
+            </Marker>
+          ) : null;
+        })()}
 
         {/* Paradas numeradas */}
-        {waypoints?.map((w, i) => (
-          <Marker
-            key={`${w.lat},${w.lon},${i}`}
-            position={[w.lat, w.lon]}
-            icon={numberedIcon(i + 1)} // começa do 1
-          >
-            <Popup>Parada {i + 1}</Popup>
-          </Marker>
-        ))}
+        {numberedStops.map((w, i) => {
+          const wLon = getLon(w);
+          if (!Number.isFinite(wLon)) return null;
+          return (
+            <Marker
+              key={`${w.lat},${wLon},${i}`}
+              position={[w.lat, wLon as number]}
+              icon={numberedIcon(i + 1)} // 1,2,3... só para as entregas
+            >
+              <Popup>Parada {i + 1}</Popup>
+            </Marker>
+          );
+        })}
 
-        <FitToData geojson={routeGeoJson} waypoints={waypoints} startWaypoint={startWaypoint} />
+        <FitToData geojson={routeGeoJson} waypoints={numberedStops} startWaypoint={derivedStart} />
       </MapContainer>
     </div>
   );

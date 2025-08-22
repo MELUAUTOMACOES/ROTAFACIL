@@ -49,6 +49,112 @@ function numberToUUID(num: number): string {
   ].join("-");
 }
 
+async function resolveStartForRoute(
+  userId: number,
+  responsibleType: "technician" | "team",
+  responsibleId: string | number
+): Promise<{ lat: number; lng: number; address: string }> {
+  // 1) tenta endereço do técnico/equipe; 2) cai para endereço da empresa (businessRules); 3) fallback Curitiba
+  type EntityAddr = {
+    enderecoInicioCep?: string | null;
+    enderecoInicioLogradouro?: string | null;
+    enderecoInicioNumero?: string | null;
+    enderecoInicioComplemento?: string | null;
+    enderecoInicioBairro?: string | null;
+    enderecoInicioCidade?: string | null;
+    enderecoInicioEstado?: string | null;
+  };
+
+  const buildTentativas = (addr: {
+    logradouro?: string | null; numero?: string | null; complemento?: string | null;
+    bairro?: string | null; cidade?: string | null; cep?: string | null; estado?: string | null;
+  }) => {
+    const checa = (s?: string | null) => (s && `${s}`.trim().length ? s.trim() : null);
+    const logradouro = checa(addr.logradouro);
+    const numero = checa(addr.numero);
+    const complemento = checa(addr.complemento);
+    const bairro = checa(addr.bairro);
+    const cidade = checa(addr.cidade);
+    const cep = checa(addr.cep);
+    const estado = checa(addr.estado);
+
+    const full = [logradouro, numero, complemento, bairro, cidade, cep, estado, "Brasil"].filter(Boolean).join(", ");
+    const semNumero = [logradouro, bairro, cidade, cep, estado, "Brasil"].filter(Boolean).join(", ");
+    const soCepCidade = [cep, cidade, estado, "Brasil"].filter(Boolean).join(", ");
+    return [full, semNumero, soCepCidade].filter((s) => s && s.length >= 8) as string[];
+  };
+
+  let tentativas: string[] = [];
+
+  if (responsibleType === "technician") {
+    const [t] = await db
+      .select({
+        enderecoInicioCep: technicians.enderecoInicioCep,
+        enderecoInicioLogradouro: technicians.enderecoInicioLogradouro,
+        enderecoInicioNumero: technicians.enderecoInicioNumero,
+        enderecoInicioComplemento: technicians.enderecoInicioComplemento,
+        enderecoInicioBairro: technicians.enderecoInicioBairro,
+        enderecoInicioCidade: technicians.enderecoInicioCidade,
+        enderecoInicioEstado: technicians.enderecoInicioEstado,
+      })
+      .from(technicians)
+      .where(and(eq(technicians.id, Number(responsibleId)), eq(technicians.userId, userId)))
+      .limit(1);
+
+    if (t?.enderecoInicioCidade && (t.enderecoInicioCep || t.enderecoInicioLogradouro)) {
+      tentativas = buildTentativas({
+        logradouro: t.enderecoInicioLogradouro, numero: t.enderecoInicioNumero,
+        complemento: t.enderecoInicioComplemento, bairro: t.enderecoInicioBairro,
+        cidade: t.enderecoInicioCidade, cep: t.enderecoInicioCep, estado: t.enderecoInicioEstado,
+      });
+    }
+  } else {
+    const [tm] = await db
+      .select({
+        enderecoInicioCep: teams.enderecoInicioCep,
+        enderecoInicioLogradouro: teams.enderecoInicioLogradouro,
+        enderecoInicioNumero: teams.enderecoInicioNumero,
+        enderecoInicioComplemento: teams.enderecoInicioComplemento,
+        enderecoInicioBairro: teams.enderecoInicioBairro,
+        enderecoInicioCidade: teams.enderecoInicioCidade,
+        enderecoInicioEstado: teams.enderecoInicioEstado,
+      })
+      .from(teams)
+      .where(and(eq(teams.id, Number(responsibleId)), eq(teams.userId, userId)))
+      .limit(1);
+
+    if (tm?.enderecoInicioCidade && (tm.enderecoInicioCep || tm.enderecoInicioLogradouro)) {
+      tentativas = buildTentativas({
+        logradouro: tm.enderecoInicioLogradouro, numero: tm.enderecoInicioNumero,
+        complemento: tm.enderecoInicioComplemento, bairro: tm.enderecoInicioBairro,
+        cidade: tm.enderecoInicioCidade, cep: tm.enderecoInicioCep, estado: tm.enderecoInicioEstado,
+      });
+    }
+  }
+
+  if (!tentativas.length) {
+    const brs = await db.select().from(businessRules).where(eq(businessRules.userId, userId)).limit(1);
+    if (brs.length) {
+      const br = brs[0];
+      tentativas = buildTentativas({
+        logradouro: br.enderecoEmpresaLogradouro, numero: br.enderecoEmpresaNumero,
+        complemento: br.enderecoEmpresaComplemento ?? null, bairro: br.enderecoEmpresaBairro,
+        cidade: br.enderecoEmpresaCidade, cep: br.enderecoEmpresaCep, estado: br.enderecoEmpresaEstado,
+      });
+    }
+  }
+
+  // geocodifica na ordem, com fallback Curitiba
+  for (const end of tentativas) {
+    try {
+      const r = await geocodeEnderecoServer(end);
+      return { lat: Number(r.lat), lng: Number(r.lon), address: end };
+    } catch { /* tenta próximo */ }
+  }
+
+  return { lat: -25.4284, lng: -49.2654, address: "Curitiba - PR, Brasil" };
+}
+
 // Helper inverso: UUID "fake" -> número (remove hifens, tira zeros à esquerda)
 function uuidToNumber(uuidStr: string): number | null {
   if (!uuidStr || typeof uuidStr !== "string") return null;
@@ -1302,10 +1408,19 @@ export function registerRoutesAPI(app: Express) {
           "paradas (enriquecidas com clientName)",
         );
 
+        // calcula início com base no responsável da rota
+        const start = await resolveStartForRoute(
+          (req as any).user.userId,
+          route.responsibleType as "technician" | "team",
+          route.responsibleId
+        );
+
         res.json({
           route,
           stops,
+          start, // { lat, lng, address }
         });
+
       } catch (error: any) {
         console.log("❌ ERRO na busca:");
         console.log("Mensagem:", error.message);
@@ -1317,6 +1432,174 @@ export function registerRoutesAPI(app: Express) {
     },
   );
 
+  // POST /api/routes/:routeId/stops - adiciona agendamentos como paradas
+  app.post(
+    "/api/routes/:routeId/stops",
+    authenticateToken,
+    async (req: any, res: Response) => {
+      try {
+        const { routeId } = req.params;
+        const { appointmentIds } = req.body as { appointmentIds: (string|number)[] };
+
+        if (!Array.isArray(appointmentIds) || appointmentIds.length === 0) {
+          return res.status(400).json({ message: "appointmentIds (array) é obrigatório" });
+        }
+
+        // rota existe?
+        const [route] = await db
+          .select({ id: routesTbl.id })
+          .from(routesTbl)
+          .where(eq(routesTbl.id, routeId))
+          .limit(1);
+        if (!route) return res.status(404).json({ message: "Rota não encontrada" });
+
+        // normaliza ids -> número e remove inválidos/duplicados
+        const idsNum = Array.from(
+          new Set(
+            appointmentIds
+              .map((v) => Number(v))
+              .filter((n) => Number.isFinite(n))
+          )
+        );
+        if (idsNum.length === 0) {
+          return res.status(400).json({ message: "IDs de agendamento inválidos" });
+        }
+
+        // evita re-inserir agendamentos já existentes como paradas
+        const already = await db
+          .select({ appointmentId: stopsTbl.appointmentId })
+          .from(stopsTbl)
+          .where(eq(stopsTbl.routeId, routeId));
+        const alreadyNums = new Set(
+          already
+            .map((s) => uuidToNumber(String(s.appointmentId)))
+            .filter((n): n is number => typeof n === "number")
+        );
+        const toInsertNums = idsNum.filter((n) => !alreadyNums.has(n));
+        if (toInsertNums.length === 0) {
+          return res.json({ ok: true, inserted: 0, skipped: idsNum.length });
+        }
+
+        // busca dados dos agendamentos + cliente
+        const rows = await db
+          .select({
+            id: appointments.id,
+            clientId: appointments.clientId,
+
+            // endereço do agendamento (prioritário para exibir)
+            aptCep: appointments.cep,
+            aptLogradouro: appointments.logradouro,
+            aptNumero: appointments.numero,
+            aptComplemento: appointments.complemento,
+            aptBairro: appointments.bairro,
+            aptCidade: appointments.cidade,
+
+            // cliente
+            clientName: clients.name,
+            clientLat: clients.lat,
+            clientLng: clients.lng,
+            clientCep: clients.cep,
+            clientLogradouro: clients.logradouro,
+            clientNumero: clients.numero,
+            clientComplemento: clients.complemento,
+            clientBairro: clients.bairro,
+            clientCidade: clients.cidade,
+          })
+          .from(appointments)
+          .leftJoin(clients, eq(appointments.clientId, clients.id))
+          .where(and(
+            eq(appointments.userId, req.user.userId),
+            inArray(appointments.id, toInsertNums),
+          ));
+
+        if (rows.length === 0) {
+          return res.status(404).json({ message: "Agendamentos não encontrados" });
+        }
+
+        // próxima ordem
+        const [mx] = await db
+          .select({ maxOrder: sql<number>`COALESCE(MAX(${stopsTbl.order}), 0)` })
+          .from(stopsTbl)
+          .where(eq(stopsTbl.routeId, routeId));
+        let nextOrder = (mx?.maxOrder ?? 0) + 1;
+
+        // helper de endereço amigável
+        const buildAddress = (r: any) => {
+          const log = r.aptLogradouro || r.clientLogradouro;
+          const num = r.aptNumero || r.clientNumero;
+          const bai = r.aptBairro || r.clientBairro;
+          const cid = r.aptCidade || r.clientCidade;
+          const cep = r.aptCep || r.clientCep;
+          return [log, num, bai, cid, cep, "Brasil"].filter(Boolean).join(", ");
+        };
+
+        // monta inserts (geocodifica se faltou lat/lng do cliente)
+        const inserts: Array<typeof stopsTbl.$inferInsert> = [];
+        for (const r of rows) {
+          let lat = Number(r.clientLat);
+          let lng = Number(r.clientLng);
+          const address = buildAddress(r);
+
+          if (!(Number.isFinite(lat) && Number.isFinite(lng))) {
+            // tenta geocodificar
+            try {
+              const g = await geocodeEnderecoServer(address);
+              lat = Number(g.lat);
+              lng = Number(g.lon);
+
+              // opcional: persiste no cliente se existir
+              if (r.clientId) {
+                await db.update(clients)
+                  .set({
+                    lat: Number(lat.toFixed(6)),
+                    lng: Number(lng.toFixed(6)),
+                  })
+                  .where(eq(clients.id, r.clientId));
+              }
+            } catch (e: any) {
+              return res.status(400).json({
+                message: `Não foi possível obter coordenadas para o agendamento ${r.id}`,
+                details: e?.message || String(e),
+              });
+            }
+          }
+
+          inserts.push({
+            routeId,
+            appointmentId: numberToUUID(r.id),
+            order: nextOrder++,
+            lat: Number(lat.toFixed(6)),
+            lng: Number(lng.toFixed(6)),
+            address,
+          });
+        }
+
+        if (inserts.length > 0) {
+          await db.insert(stopsTbl).values(inserts);
+
+          // atualiza contador
+          const [{ cnt }] = await db
+            .select({ cnt: sql<number>`COUNT(*)` })
+            .from(stopsTbl)
+            .where(eq(stopsTbl.routeId, routeId));
+          await db
+            .update(routesTbl)
+            .set({ 
+              stopsCount: Number(cnt),
+              updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .where(eq(routesTbl.id, routeId));
+        }
+
+        return res.json({ ok: true, inserted: inserts.length, skipped: idsNum.length - inserts.length });
+      } catch (e: any) {
+        console.error("[POST /routes/:routeId/stops] Erro:", e);
+        return res.status(500).json({ message: e?.message || "Erro ao adicionar paradas" });
+      }
+    },
+  );
+
+  
   // DELETE /api/routes/:routeId/stops/:stopId - Remover parada da rota
   app.delete(
     "/api/routes/:routeId/stops/:stopId",
