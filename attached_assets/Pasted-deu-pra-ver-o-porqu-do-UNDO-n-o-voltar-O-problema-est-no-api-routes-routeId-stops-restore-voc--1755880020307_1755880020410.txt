@@ -1,0 +1,194 @@
+deu pra ver o porquê do UNDO não voltar. O problema está no /api/routes/:routeId/stops/restore: você checa Number.isFinite(client.lat) e client.lng sem converter pra número. Em Postgres (e no Drizzle), numeric/decimal costuma vir como string, então a checagem falha e o endpoint retorna “Cliente sem coordenadas válidas”, mesmo tendo lat/lng válidos.
+
+Além disso, é bom ter fallback: se o cliente não tiver coordenadas, geocodificar o endereço do agendamento (e, se necessário, o endereço do cliente).
+
+Abaixo vai um patch direto, pronto pra colar. Ele:
+
+Converte lat/lng pra number antes de validar
+
+Faz fallback de geocodificação pelo endereço do agendamento (e depois pelo do cliente)
+
+Monta o address direitinho
+
+Insere a parada e atualiza o contador
+
+✅ Patch no backend (server/routes/routes.api.ts)
+
+Substitua TODO o endpoint /stops/restore pelo abaixo:
+
+// POST /api/routes/:routeId/stops/restore - Restaurar parada removida (para UNDO)
+app.post(
+  "/api/routes/:routeId/stops/restore",
+  authenticateToken,
+  async (req: any, res: Response) => {
+    try {
+      const { routeId } = req.params;
+      const { appointmentId } = req.body;
+
+      if (appointmentId == null) {
+        return res.status(400).json({ message: "appointmentId é obrigatório" });
+      }
+
+      const apptIdNum = Number(appointmentId);
+      if (!Number.isFinite(apptIdNum)) {
+        return res.status(400).json({ message: "appointmentId inválido" });
+      }
+
+      console.log(`🔄 Restaurando agendamento ${apptIdNum} na rota ${routeId}`);
+
+      // Verificar se a rota existe
+      const [route] = await db
+        .select({ id: routesTbl.id })
+        .from(routesTbl)
+        .where(eq(routesTbl.id, routeId))
+        .limit(1);
+
+      if (!route) {
+        return res.status(404).json({ message: "Rota não encontrada" });
+      }
+
+      // Buscar o agendamento (inclui endereço)
+      const [appt] = await db
+        .select({
+          id: appointments.id,
+          clientId: appointments.clientId,
+          cep: appointments.cep,
+          logradouro: appointments.logradouro,
+          numero: appointments.numero,
+          complemento: appointments.complemento,
+          bairro: appointments.bairro,
+          cidade: appointments.cidade,
+        })
+        .from(appointments)
+        .where(eq(appointments.id, apptIdNum))
+        .limit(1);
+
+      if (!appt) {
+        return res.status(404).json({ message: "Agendamento não encontrado" });
+      }
+
+      // Buscar cliente (p/ lat/lng e endereço fallback)
+      const [cli] = await db
+        .select({
+          id: clients.id,
+          lat: clients.lat,
+          lng: clients.lng,
+          cep: clients.cep,
+          logradouro: clients.logradouro,
+          numero: clients.numero,
+          complemento: clients.complemento,
+          bairro: clients.bairro,
+          cidade: clients.cidade,
+        })
+        .from(clients)
+        .where(eq(clients.id, appt.clientId!))
+        .limit(1);
+
+      // ⚠️ Converter lat/lng retornados do DB para number
+      let lat = cli?.lat != null ? Number(cli.lat) : NaN;
+      let lng = cli?.lng != null ? Number(cli.lng) : NaN;
+
+      // Endereços “bonitinhos”
+      const addrFromAppt = [appt.logradouro, appt.numero, appt.bairro, appt.cidade, appt.cep, "Brasil"]
+        .filter(Boolean)
+        .join(", ");
+
+      const addrFromClient = [cli?.logradouro, cli?.numero, cli?.bairro, cli?.cidade, cli?.cep, "Brasil"]
+        .filter(Boolean)
+        .join(", ");
+
+      // Se cliente não tem coordenadas válidas, geocodifica (1) endereço do agendamento; (2) endereço do cliente
+      if (!(Number.isFinite(lat) && Number.isFinite(lng))) {
+        try {
+          if (addrFromAppt) {
+            const g1 = await geocodeEnderecoServer(addrFromAppt);
+            lat = Number(g1.lat);
+            lng = Number(g1.lon);
+            console.log("📌 Geocodificado via endereço do agendamento:", addrFromAppt, lat, lng);
+          }
+        } catch (e: any) {
+          console.warn("⚠️ Geocodificação pelo agendamento falhou:", e.message);
+        }
+
+        if (!(Number.isFinite(lat) && Number.isFinite(lng)) && addrFromClient) {
+          try {
+            const g2 = await geocodeEnderecoServer(addrFromClient);
+            lat = Number(g2.lat);
+            lng = Number(g2.lon);
+            console.log("📌 Geocodificado via endereço do cliente:", addrFromClient, lat, lng);
+          } catch (e: any) {
+            console.warn("⚠️ Geocodificação pelo cliente falhou:", e.message);
+          }
+        }
+      }
+
+      if (!(Number.isFinite(lat) && Number.isFinite(lng))) {
+        return res.status(400).json({ message: "Sem coordenadas válidas para restaurar a parada" });
+      }
+
+      // Próxima ordem
+      const [maxOrderResult] = await db
+        .select({ maxOrder: sql<number>`COALESCE(MAX(${stopsTbl.order}), 0)` })
+        .from(stopsTbl)
+        .where(eq(stopsTbl.routeId, routeId));
+
+      const nextOrder = (maxOrderResult?.maxOrder ?? 0) + 1;
+
+      // Endereço a salvar na parada → priorize o do agendamento (foi o usado na roteirização)
+      const addressToSave = addrFromAppt || addrFromClient;
+
+      // Inserir a parada
+      await db.insert(stopsTbl).values({
+        routeId,
+        appointmentId: numberToUUID(apptIdNum),
+        order: nextOrder,
+        lat: Number(lat.toFixed(6)),
+        lng: Number(lng.toFixed(6)),
+        address: addressToSave,
+      });
+
+      // Atualizar contador
+      await db
+        .update(routesTbl)
+        .set({
+          stopsCount: sql`${routesTbl.stopsCount} + 1`,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(eq(routesTbl.id, routeId));
+
+      console.log(`✅ Agendamento ${apptIdNum} restaurado na rota ${routeId} (ordem ${nextOrder})`);
+
+      return res.json({ ok: true, appointmentId: apptIdNum, routeId, order: nextOrder });
+    } catch (e: any) {
+      console.error("[restore stop] error:", e);
+      return res.status(500).json({ message: "Falha ao restaurar parada" });
+    }
+  },
+);
+
+
+Observação: eu mantive sua função geocodeEnderecoServer e o util numberToUUID. Sem eles o patch não compila.
+
+✅ Conferência rápida no frontend
+
+Seu front já está OK, só garanta que o appointmentId está indo como número no UNDO (você já faz isso ao salvar lastRemoved). Confere o trecho:
+
+// onde dispara a remoção (no clique do botão Remover)
+const stop = routeDetail.stops.find(s => s.id === stopToRemove.id);
+removeStopMutation.mutate({
+  routeId: routeDetail.route.id,
+  stopId: stopToRemove.id,
+  appointmentId: Number(stop?.appointmentNumericId ?? stop?.appointmentId), // ✅ número
+  clientName: stopToRemove.clientName
+});
+
+
+E a mutation do UNDO:
+
+restoreStopMutation.mutate({
+  routeId: lastRemoved.routeId,
+  appointmentId: lastRemoved.appointmentId!, // já é number
+});
+
+
+Se quiser logar a resposta do servidor, dá pra colocar um console.log no onSuccess do restoreStopMutation.
