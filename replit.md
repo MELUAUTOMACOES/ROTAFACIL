@@ -92,6 +92,69 @@ O aplicativo é construído com uma arquitetura moderna e escalável, utilizando
 
 **Resultado**: Sistema completo de otimização backend pronto para integração com interface de histórico e automação
 
+## 🗺️ Guia de Uso — OptimizedRouteMap
+
+O componente `OptimizedRouteMap` é o único ponto central para renderizar rotas no mapa. Ele já trata pin de início, numeração sequencial de paradas e ajuste automático de zoom.
+
+### 📦 Importação
+```typescript
+import OptimizedRouteMap from "@/components/maps/OptimizedRouteMap";
+```
+
+### ⚙️ Props esperadas
+```tsx
+<OptimizedRouteMap
+  routeGeoJson={polyline ?? undefined}   // GeoJSON da rota (LineString ou Feature)
+  waypoints={routeWaypoints ?? undefined} // Lista de paradas (clientes)
+  startWaypoint={startPoint ?? null}      // Ponto inicial (empresa/equipe/técnico)
+/>
+```
+
+#### 1. routeGeoJson
+- Vem direto do backend (`polylineGeoJson`)
+- Usado para desenhar a linha amarela no mapa
+- Se não tiver, o mapa ajusta o zoom só com os waypoints
+
+#### 2. waypoints
+- Array de objetos `{ lat, lon|lng, label? }`
+- Cada item gera um marcador numerado (1,2,3…)
+- O `OptimizedRouteMap` automaticamente remove o ponto inicial dessa lista (para não numerar como "1")
+
+#### 3. startWaypoint
+- Objeto `{ lat, lon|lng }`
+- Mostrado sempre com o pin verde do RotaFácil (`/public/brand/rotafacil-pin.png`)
+- Se não for passado, o componente tenta inferir o início a partir do `routeGeoJson`
+
+### 🧭 Regras de Padrão
+
+1. **Consistência**: Todas as telas (Roteirização, Agendamentos, Histórico) usam `OptimizedRouteMap` exatamente igual. Apenas muda a forma de montar as props (polyline, stops, start).
+
+2. **Numeração**: O ponto inicial nunca é numerado. Ele só aparece com o pin verde. As entregas começam no número 1.
+
+3. **Zoom automático**: O ajuste de zoom (`FitToData`) sempre considera:
+   - `routeGeoJson` (se existir), ou
+   - `startWaypoint` + `waypoints`
+
+4. **Container**: Containers de mapa precisam ter altura fixa. Exemplo usado no projeto:
+```tsx
+<div className="relative w-full h-[420px] md:h-[480px] rounded-lg overflow-hidden border">
+  <div className="absolute inset-0">
+    <OptimizedRouteMap
+      key={`${Boolean(polyline)}-${routeWaypoints?.length ?? 0}`}
+      routeGeoJson={polyline ?? undefined}
+      waypoints={routeWaypoints ?? undefined}
+      startWaypoint={startPoint ?? null}
+    />
+  </div>
+</div>
+```
+
+### ✅ Benefícios
+- Pin inicial sempre correto
+- Paradas numeradas de forma consistente
+- Evita duplicar lógica em cada tela
+- Padrão visual entre todas as telas com mapa
+
 ### 12 de agosto de 2025 - Implementação de DisplayNumber Sequencial
 
 **Funcionalidade implementada**: Sistema de numeração sequencial para rotas com campo `displayNumber`
