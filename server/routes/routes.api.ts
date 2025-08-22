@@ -1122,9 +1122,6 @@ export function registerRoutesAPI(app: Express) {
         });
       }
     });
-  },
-  "/"
-);
   // GET /api/routes - Listar rotas com filtros
   app.get("/api/routes", authenticateToken, async (req: any, res: Response) => {
     console.log("==== LOG INÍCIO: /api/routes ====");
