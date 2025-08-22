@@ -1114,16 +1114,17 @@ export function registerRoutesAPI(app: Express) {
         res.json(responseData);
       } catch (error: any) {
         console.log("❌ ERRO na otimização:");
-        console.log("Mensagem:", error.message);
-        console.log("Stack:", error.stack);
-        console.log("==== LOG FIM: /api/routes/optimize (EXCEÇÃO) ====");
-        res
-          .status(500)
-          .json({ error: "Erro interno do servidor", details: error.message });
-      }
-    },
-  );
 
+        console.error(error);
+        console.log("==== LOG FIM: /api/routes/optimize (ERRO) ====");
+        res.status(500).json({ 
+          message: error?.message || "Erro interno na otimização da rota" 
+        });
+      }
+    });
+  },
+  "/"
+);
   // GET /api/routes - Listar rotas com filtros
   app.get("/api/routes", authenticateToken, async (req: any, res: Response) => {
     console.log("==== LOG INÍCIO: /api/routes ====");

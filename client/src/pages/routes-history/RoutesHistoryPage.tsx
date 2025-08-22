@@ -26,7 +26,8 @@ import {
   Navigation,
   Download,
   Eye,
-  Wand2 // Adicionado
+  Wand2, // Adicionado
+  X
 } from 'lucide-react';
 
 
@@ -378,6 +379,48 @@ export default function RoutesHistoryPage() {
       });
     },
   });
+
+  // mutation para remover parada
+  const removeStopMutation = useMutation({
+    mutationFn: async ({ routeId, stopId }: { routeId: string; stopId: string }) => {
+      const res = await apiRequest("DELETE", `/api/routes/${routeId}/stops/${stopId}`);
+      if (!res.ok) {
+        let msg = "Erro ao remover parada";
+        try {
+          const j = await res.json();
+          msg = j?.message || msg;
+        } catch {}
+        throw new Error(msg);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Parada removida",
+        description: "O agendamento foi retirado da rota.",
+      });
+      // recarrega detalhe da rota e listagem
+      queryClient.invalidateQueries({ queryKey: ["/api/routes", selectedRoute] });
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Não foi possível remover",
+        description: err?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleRemoveStop = (stop: any) => {
+    if (!routeDetail?.route?.id || !stop?.id) return;
+
+    const nome = stop?.clientName || `Agendamento #${stop.appointmentId}`;
+    const ok = window.confirm(`Remover ${nome} desta rota?`);
+    if (!ok) return;
+
+    removeStopMutation.mutate({ routeId: routeDetail.route.id, stopId: stop.id });
+  };
 
 
   const { data: teams = [] } = useQuery({
@@ -1104,6 +1147,16 @@ export default function RoutesHistoryPage() {
                                 {stop.lat.toFixed(6)}, {stop.lng.toFixed(6)}
                               </div>
                             </div>
+                            {/* Botão remover */}
+                            <button
+                              onClick={() => handleRemoveStop(stop)}
+                              disabled={removeStopMutation.isPending}
+                              className="ml-2 rounded-md p-1 text-gray-500 hover:text-red-600 hover:bg-red-50"
+                              title="Remover da rota"
+                              aria-label="Remover da rota"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
                           </div>
                         ))}
                     </div>
