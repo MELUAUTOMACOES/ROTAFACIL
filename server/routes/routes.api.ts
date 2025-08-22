@@ -1445,11 +1445,16 @@ export function registerRoutesAPI(app: Express) {
         const { routeId } = req.params;
         const { appointmentId } = req.body;
 
-        if (!appointmentId) {
-          return res.status(400).json({ message: 'appointmentId é obrigatório' });
+        if (appointmentId == null) {
+          return res.status(400).json({ message: "appointmentId é obrigatório" });
         }
 
-        console.log(`🔄 Restaurando agendamento ${appointmentId} na rota ${routeId}`);
+        const apptIdNum = Number(appointmentId);
+        if (!Number.isFinite(apptIdNum)) {
+          return res.status(400).json({ message: "appointmentId inválido" });
+        }
+
+        console.log(`🔄 Restaurando agendamento ${apptIdNum} na rota ${routeId}`);
 
         // Verificar se a rota existe
         const [route] = await db
@@ -1459,89 +1464,124 @@ export function registerRoutesAPI(app: Express) {
           .limit(1);
 
         if (!route) {
-          return res.status(404).json({ message: 'Rota não encontrada' });
+          return res.status(404).json({ message: "Rota não encontrada" });
         }
 
-        // Buscar o agendamento para obter dados necessários
-        const [appointment] = await db
+        // Buscar o agendamento (inclui endereço)
+        const [appt] = await db
           .select({
             id: appointments.id,
             clientId: appointments.clientId,
             cep: appointments.cep,
             logradouro: appointments.logradouro,
             numero: appointments.numero,
+            complemento: appointments.complemento,
             bairro: appointments.bairro,
             cidade: appointments.cidade,
           })
           .from(appointments)
-          .where(eq(appointments.id, Number(appointmentId)))
+          .where(eq(appointments.id, apptIdNum))
           .limit(1);
 
-        if (!appointment) {
-          return res.status(404).json({ message: 'Agendamento não encontrado' });
+        if (!appt) {
+          return res.status(404).json({ message: "Agendamento não encontrado" });
         }
 
-        // Buscar dados do cliente para coordenadas
-        const [client] = await db
+        // Buscar cliente (p/ lat/lng e endereço fallback)
+        const [cli] = await db
           .select({
+            id: clients.id,
             lat: clients.lat,
             lng: clients.lng,
+            cep: clients.cep,
+            logradouro: clients.logradouro,
+            numero: clients.numero,
+            complemento: clients.complemento,
+            bairro: clients.bairro,
+            cidade: clients.cidade,
           })
           .from(clients)
-          .where(eq(clients.id, appointment.clientId!))
+          .where(eq(clients.id, appt.clientId!))
           .limit(1);
 
-        if (!client || !Number.isFinite(client.lat) || !Number.isFinite(client.lng)) {
-          return res.status(400).json({ message: 'Cliente sem coordenadas válidas' });
+        // ⚠️ Converter lat/lng retornados do DB para number
+        let lat = cli?.lat != null ? Number(cli.lat) : NaN;
+        let lng = cli?.lng != null ? Number(cli.lng) : NaN;
+
+        // Endereços "bonitinhos"
+        const addrFromAppt = [appt.logradouro, appt.numero, appt.bairro, appt.cidade, appt.cep, "Brasil"]
+          .filter(Boolean)
+          .join(", ");
+
+        const addrFromClient = [cli?.logradouro, cli?.numero, cli?.bairro, cli?.cidade, cli?.cep, "Brasil"]
+          .filter(Boolean)
+          .join(", ");
+
+        // Se cliente não tem coordenadas válidas, geocodifica (1) endereço do agendamento; (2) endereço do cliente
+        if (!(Number.isFinite(lat) && Number.isFinite(lng))) {
+          try {
+            if (addrFromAppt) {
+              const g1 = await geocodeEnderecoServer(addrFromAppt);
+              lat = Number(g1.lat);
+              lng = Number(g1.lon);
+              console.log("📌 Geocodificado via endereço do agendamento:", addrFromAppt, lat, lng);
+            }
+          } catch (e: any) {
+            console.warn("⚠️ Geocodificação pelo agendamento falhou:", e.message);
+          }
+
+          if (!(Number.isFinite(lat) && Number.isFinite(lng)) && addrFromClient) {
+            try {
+              const g2 = await geocodeEnderecoServer(addrFromClient);
+              lat = Number(g2.lat);
+              lng = Number(g2.lon);
+              console.log("📌 Geocodificado via endereço do cliente:", addrFromClient, lat, lng);
+            } catch (e: any) {
+              console.warn("⚠️ Geocodificação pelo cliente falhou:", e.message);
+            }
+          }
         }
 
-        // Determinar próxima ordem
+        if (!(Number.isFinite(lat) && Number.isFinite(lng))) {
+          return res.status(400).json({ message: "Sem coordenadas válidas para restaurar a parada" });
+        }
+
+        // Próxima ordem
         const [maxOrderResult] = await db
-          .select({
-            maxOrder: sql<number>`COALESCE(MAX(${stopsTbl.order}), 0)`,
-          })
+          .select({ maxOrder: sql<number>`COALESCE(MAX(${stopsTbl.order}), 0)` })
           .from(stopsTbl)
           .where(eq(stopsTbl.routeId, routeId));
 
         const nextOrder = (maxOrderResult?.maxOrder ?? 0) + 1;
 
-        // Montar endereço
-        const address = [
-          appointment.logradouro,
-          appointment.numero,
-          appointment.bairro,
-          appointment.cidade,
-          appointment.cep,
-          "Brasil",
-        ]
-          .filter(Boolean)
-          .join(", ");
+        // Endereço a salvar na parada → priorize o do agendamento (foi o usado na roteirização)
+        const addressToSave = addrFromAppt || addrFromClient;
 
-        // Inserir a parada restaurada
+        // Inserir a parada
         await db.insert(stopsTbl).values({
-          routeId: routeId,
-          appointmentId: numberToUUID(Number(appointmentId)),
+          routeId,
+          appointmentId: numberToUUID(apptIdNum),
           order: nextOrder,
-          lat: Number(client.lat),
-          lng: Number(client.lng),
-          address: address,
+          lat: Number(lat.toFixed(6)),
+          lng: Number(lng.toFixed(6)),
+          address: addressToSave,
         });
 
-        // Atualizar contador da rota
+        // Atualizar contador
         await db
           .update(routesTbl)
-          .set({ 
+          .set({
             stopsCount: sql`${routesTbl.stopsCount} + 1`,
-            updatedAt: sql`CURRENT_TIMESTAMP`
+            updatedAt: sql`CURRENT_TIMESTAMP`,
           })
           .where(eq(routesTbl.id, routeId));
 
-        console.log(`✅ Agendamento ${appointmentId} restaurado na rota ${routeId}`);
+        console.log(`✅ Agendamento ${apptIdNum} restaurado na rota ${routeId} (ordem ${nextOrder})`);
 
-        return res.json({ ok: true, appointmentId, routeId, order: nextOrder });
+        return res.json({ ok: true, appointmentId: apptIdNum, routeId, order: nextOrder });
       } catch (e: any) {
-        console.error('[restore stop] error:', e);
-        return res.status(500).json({ message: 'Falha ao restaurar parada' });
+        console.error("[restore stop] error:", e);
+        return res.status(500).json({ message: "Falha ao restaurar parada" });
       }
     },
   );
