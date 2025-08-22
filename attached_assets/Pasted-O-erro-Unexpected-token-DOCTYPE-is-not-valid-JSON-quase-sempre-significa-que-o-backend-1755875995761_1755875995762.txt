@@ -1,0 +1,173 @@
+O erro “Unexpected token ‘<’, ‘<!DOCTYPE…’ is not valid JSON” quase sempre significa que o **backend não tem a rota** que você chamou (ou ela quebrou) e o Vite devolveu o `index.html` (HTML ⇒ começa com `<!DOCTYPE>), e o front tentou fazer res.json()`.
+Vamos resolver 2 coisas:
+
+1) Backend — criar a rota de remover parada (JSON sempre)
+
+Adicione no seu routes.api.ts (ou onde você registra as rotas de “routes/*”) antes de exportar registerRoutesAPI:
+
+// DELETE /api/routes/:routeId/stops/:stopId  -> remove uma parada da rota
+app.delete("/api/routes/:routeId/stops/:stopId", authenticateToken, async (req, res) => {
+  try {
+    const { routeId, stopId } = req.params;
+
+    // 1) Garante que a parada existe e pertence à rota
+    const stopRow = await db.query.routeStops.findFirst({
+      where: eq(routeStops.id, stopId),
+      columns: { id: true, routeId: true, order: true },
+    });
+
+    if (!stopRow) {
+      return res.status(404).json({ message: "Parada não encontrada" });
+    }
+    if (String(stopRow.routeId) !== String(routeId)) {
+      return res.status(400).json({ message: "Parada não pertence à rota informada" });
+    }
+
+    // 2) Remove
+    await db.delete(routeStops).where(eq(routeStops.id, stopId));
+
+    // 3) Reordena as demais (1..n)
+    const rest = await db
+      .select({ id: routeStops.id, order: routeStops.order })
+      .from(routeStops)
+      .where(eq(routeStops.routeId, routeId))
+      .orderBy(routeStops.order);
+
+    for (let i = 0; i < rest.length; i++) {
+      const newOrder = i + 1;
+      if (rest[i].order !== newOrder) {
+        await db.update(routeStops)
+          .set({ order: newOrder })
+          .where(eq(routeStops.id, rest[i].id));
+      }
+    }
+
+    // 4) Atualiza contador da rota
+    await db.update(routes)
+      .set({ stopsCount: rest.length, updatedAt: sql`now()` })
+      .where(eq(routes.id, routeId));
+
+    // 5) Sempre responda JSON (nada de HTML)
+    return res.json({ ok: true, stopsCount: rest.length });
+  } catch (e: any) {
+    console.error("[DELETE /stops] Erro:", e);
+    return res.status(500).json({ message: e?.message || "Erro ao remover parada" });
+  }
+});
+
+
+Dica: certifique-se de que /api está proxyado pro Express (porta 5000) no vite.config.ts. Algo como:
+
+server: { proxy: { '/api': { target: 'http://localhost:5000', changeOrigin: true } } }
+
+2) Front — trocar o confirm() por Dialog + mutation segura
+
+No RoutesHistoryPage.tsx:
+
+(a) Estado do modal de remover
+
+Logo junto com os outros states do detalhe:
+
+import { X, Wand2 } from "lucide-react"; // já está o Wand2; importe o X também
+
+const [removeOpen, setRemoveOpen] = useState(false);
+const [stopToRemove, setStopToRemove] = useState<{ id: string; clientName?: string } | null>(null);
+
+(b) Mutation de remover parada
+
+Coloque próximo das outras mutations:
+
+const removeStopMutation = useMutation({
+  mutationFn: async ({ routeId, stopId }: { routeId: string; stopId: string }) => {
+    const res = await fetch(`/api/routes/${routeId}/stops/${stopId}`, { method: "DELETE" });
+    const ctype = res.headers.get("content-type") || "";
+    const payload = ctype.includes("application/json") ? await res.json() : await res.text();
+    if (!res.ok) {
+      const msg = typeof payload === "string" ? payload : payload?.message || "Falha ao remover";
+      throw new Error(msg);
+    }
+    return payload;
+  },
+  onSuccess: () => {
+    toast({ title: "Parada removida", description: "A rota foi atualizada." });
+    setRemoveOpen(false);
+    setStopToRemove(null);
+    queryClient.invalidateQueries({ queryKey: ["/api/routes", selectedRoute] });
+    queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+  },
+  onError: (err: any) => {
+    toast({ title: "Não foi possível remover", description: err.message, variant: "destructive" });
+  },
+});
+
+(c) Botão “X” em cada parada
+
+Dentro do .map((stop) => ( ... )) que renderiza as paradas, adicione o botão à direita:
+
+<div key={stop.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+  <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-bold">
+    {stop.order}
+  </div>
+
+  <div className="flex-1">
+    <div className="font-medium text-sm">
+      {stop.clientName ? stop.clientName : `Agendamento #${stop.appointmentId}`}
+    </div>
+    <div className="text-xs sm:text-sm text-gray-600 mt-1">{stop.address}</div>
+    <div className="text-[11px] text-gray-500 mt-1">
+      {stop.lat.toFixed(6)}, {stop.lng.toFixed(6)}
+    </div>
+  </div>
+
+  {/* Botão X */}
+  <button
+    className="ml-2 text-gray-400 hover:text-red-600"
+    aria-label="Remover parada"
+    onClick={() => {
+      setStopToRemove({ id: stop.id, clientName: stop.clientName || undefined });
+      setRemoveOpen(true);
+    }}
+  >
+    <X className="h-4 w-4" />
+  </button>
+</div>
+
+(d) Modal bonitinho (Dialog)
+
+Coloque o Dialog no final do DialogContent grande (mesmo nível do footer):
+
+<Dialog open={removeOpen} onOpenChange={setRemoveOpen}>
+  <DialogContent className="sm:max-w-md">
+    <DialogHeader>
+      <DialogTitle>Remover {stopToRemove?.clientName || "parada"} da rota?</DialogTitle>
+      <DialogDescription>
+        Isso remove o agendamento **apenas da rota**. O agendamento continua existindo na agenda.
+      </DialogDescription>
+    </DialogHeader>
+
+    <div className="flex justify-end gap-2">
+      <Button variant="outline" onClick={() => setRemoveOpen(false)}>
+        Cancelar
+      </Button>
+      <Button
+        className="bg-red-600 text-white hover:bg-red-700"
+        disabled={removeStopMutation.isPending || !stopToRemove || !routeDetail?.route?.id}
+        onClick={() =>
+          stopToRemove &&
+          routeDetail?.route?.id &&
+          removeStopMutation.mutate({ routeId: routeDetail.route.id, stopId: stopToRemove.id })
+        }
+      >
+        {removeStopMutation.isPending ? "Removendo..." : "Remover"}
+      </Button>
+    </div>
+  </DialogContent>
+</Dialog>
+
+Por que isso corrige o erro?
+
+Se a rota /api/routes/:routeId/stops/:stopId não existir, o Vite devolve HTML (<!DOCTYPE>), e o res.json() quebra. Criando a rota e sempre retornando JSON, o front não tentará parsear HTML.
+
+Mesmo que dê erro 500, a resposta agora vem em JSON com { message }, e o toast mostra certinho.
+
+O confirm() nativo do browser some; usamos Dialog (shadcn) com visual consistente.
