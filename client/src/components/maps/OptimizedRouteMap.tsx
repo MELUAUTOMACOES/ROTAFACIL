@@ -13,10 +13,11 @@ const DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 // Ícone do ponto inicial (pin do RotaFácil) — arquivo em client/public/brand/rotafacil-pin.png
+// Tamanho aumentado significativamente para maior destaque (dobro do tamanho original)
 const StartIcon = L.icon({
   iconUrl: `${import.meta.env.BASE_URL}brand/rotafacil-pin.png`,
-  iconSize: [28, 28],
-  iconAnchor: [14, 28],
+  iconSize: [56, 56],
+  iconAnchor: [28, 56],
 });
 
 
@@ -102,7 +103,7 @@ function FitToData({
     }
 
     if (allPoints.length > 0) {
-      const bounds = L.latLngBounds(allPoints as LatLngBoundsExpression);
+      const bounds = L.latLngBounds(allPoints);
       if (bounds.isValid()) map.fitBounds(bounds.pad(0.2));
     }
   }, [geojson, waypoints, startWaypoint, map]);
@@ -119,6 +120,15 @@ export default function OptimizedRouteMap({
   waypoints?: Waypoint[];               // paradas numeradas
   startWaypoint?: { lat: number; lon?: number; lng?: number } | null; // ponto inicial separado
 }) {
+  // 🔍 Debug: Log dos dados recebidos
+  console.log("🗺️ [OptimizedRouteMap] Renderizando mapa com:", {
+    startWaypoint,
+    waypointsCount: waypoints?.length,
+    waypoints: waypoints?.slice(0, 2), // Log primeiros 2 para não poluir
+    hasGeoJson: !!routeGeoJson,
+    geoJsonType: routeGeoJson?.type,
+  });
+
   const numberedIcon = (n: number) =>
     new DivIcon({
       className: "rounded-full",
@@ -146,6 +156,7 @@ export default function OptimizedRouteMap({
     if (Array.isArray(c) && c.length >= 2) {
       const [lon, lat] = c;
       if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        console.log("🎯 Extraído do GeoJSON:", { lat: Number(lat), lon: Number(lon) });
         return { lat: Number(lat), lon: Number(lon) };
       }
     }
@@ -165,11 +176,23 @@ export default function OptimizedRouteMap({
     return Math.abs(ax - bx) < EPS && Math.abs((ay as number) - (by as number)) < EPS;
   };
 
-  // início efetivo: usa o que veio por prop, ou extrai do geojson
-  const derivedStart = startWaypoint || getStartFromGeo(routeGeoJson);
+  // início efetivo: PRIORIZA o que veio por prop (se válido), ou extrai do geojson
+  const hasValidStartProp = startWaypoint && 
+    Number.isFinite(startWaypoint.lat) && 
+    Number.isFinite(getLon(startWaypoint));
+  
+  const derivedStart = hasValidStartProp ? startWaypoint : getStartFromGeo(routeGeoJson);
+  
+  console.log("📍 Pin inicial será colocado em:", {
+    hasValidStartProp,
+    derivedStart,
+    usandoGeoJson: !hasValidStartProp && !!derivedStart,
+  });
 
   // lista final numerada (sem o início)
   const numberedStops = (waypoints || []).filter((w) => !samePoint(w, derivedStart));
+  
+  console.log("🔢 Paradas numeradas (excluindo início):", numberedStops.length);
 
   return (
     // ⬇️ Altura herda do pai (preencha o container externo)
@@ -177,6 +200,7 @@ export default function OptimizedRouteMap({
       <MapContainer
         center={[-25.43, -49.27]}
         zoom={12}
+        zoomAnimation={false}
         className="w-full h-full"
         style={{ width: "100%", height: "100%" }} // redundante, mas ajuda
       >

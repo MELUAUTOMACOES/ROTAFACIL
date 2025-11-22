@@ -14,7 +14,11 @@ import {
   Eye, 
   EyeOff,
   Menu,
-  X
+  X,
+  Clock,
+  Shield,
+  Zap,
+  AlertCircle
 } from "lucide-react";
 import logoImg from "@assets/SEM FUNDO_1750819798590.png";
 
@@ -23,6 +27,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
   const [formData, setFormData] = useState({
     name: "",
     username: "",
@@ -36,9 +41,74 @@ export default function Login() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
+  const getErrorMessage = (error: any): { title: string; description: string } => {
+    // Parse error message from API
+    const errorMessage = error.message || "";
+    
+    // Network errors
+    if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
+      return {
+        title: "Erro de Conexão",
+        description: "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.",
+      };
+    }
+    
+    // 404 - Servidor não encontrado ou rota inexistente
+    if (errorMessage.includes("404")) {
+      return {
+        title: "Servidor Indisponível",
+        description: "O servidor não está respondendo. Certifique-se de que o backend está rodando (pnpm dev ou pnpm dev:api).",
+      };
+    }
+    
+    // 401/403 - Credenciais inválidas
+    if (errorMessage.includes("401") || errorMessage.includes("403") || 
+        errorMessage.toLowerCase().includes("credenciais") ||
+        errorMessage.toLowerCase().includes("usuário") ||
+        errorMessage.toLowerCase().includes("senha")) {
+      return {
+        title: "Credenciais Inválidas",
+        description: "Email ou senha incorretos. Verifique seus dados e tente novamente.",
+      };
+    }
+    
+    // Database errors
+    if (errorMessage.toLowerCase().includes("database") || 
+        errorMessage.toLowerCase().includes("connection") ||
+        errorMessage.toLowerCase().includes("banco")) {
+      return {
+        title: "Erro no Banco de Dados",
+        description: "Não foi possível conectar ao banco de dados. Verifique se o Supabase está ativo e se a DATABASE_URL está correta.",
+      };
+    }
+    
+    // 500 - Server error
+    if (errorMessage.includes("500")) {
+      return {
+        title: "Erro no Servidor",
+        description: "Ocorreu um erro interno no servidor. Tente novamente em alguns instantes.",
+      };
+    }
+    
+    // Password mismatch (for registration)
+    if (errorMessage.includes("senha") && errorMessage.includes("coincidem")) {
+      return {
+        title: "Senhas não coincidem",
+        description: "As senhas digitadas não são iguais. Por favor, verifique e tente novamente.",
+      };
+    }
+    
+    // Generic error
+    return {
+      title: "Erro",
+      description: errorMessage || "Ocorreu um erro inesperado. Tente novamente.",
+    };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setErrorMessage(""); // Limpar mensagem de erro anterior
 
     try {
       if (isLogin) {
@@ -69,11 +139,47 @@ export default function Login() {
         setLocation("/dashboard");
       }
     } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error.message || "Ocorreu um erro inesperado",
-        variant: "destructive",
-      });
+      const { title, description } = getErrorMessage(error);
+
+      let backendMessage: string | undefined;
+
+      // 1) Tenta pegar diretamente de error.response.data.message (caso o wrapper exponha isso)
+      if (error?.response?.data?.message && typeof error.response.data.message === "string") {
+        backendMessage = error.response.data.message;
+      } else {
+        // 2) Se error.message vier como "403: {\"message\":...}", tentar extrair o JSON e pegar o campo message
+        const raw = (error?.message ?? "") as string;
+        const jsonStart = raw.indexOf("{");
+        if (jsonStart !== -1) {
+          const jsonPart = raw.slice(jsonStart);
+          try {
+            const parsed = JSON.parse(jsonPart);
+            if (parsed && typeof parsed.message === "string") {
+              backendMessage = parsed.message;
+            }
+          } catch {
+            // Se não conseguir fazer parse, ignora e cai no fallback abaixo
+          }
+        }
+      }
+
+      if (!backendMessage) {
+        backendMessage = description;
+      }
+
+      const normalized = backendMessage.toLowerCase();
+
+      // Se for erro de horário, mostrar mensagem inline com a mensagem "limpa" do backend
+      if (normalized.includes("horário") || normalized.includes("horario")) {
+        setErrorMessage(backendMessage);
+      } else {
+        // Outros erros continuam como toast
+        toast({
+          title,
+          description,
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -88,7 +194,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white flex flex-col">
       {/* Barra superior de navegação - adicionada para permitir navegação entre páginas */}
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -151,7 +257,7 @@ export default function Login() {
         </div>
       </nav>
 
-      <div className="flex">
+      <div className="flex flex-1">
         {/* Left Side - Branding */}
         <div className="hidden lg:flex lg:w-1/2 bg-black text-white flex-col justify-center items-center p-12">
           <div className="max-w-md text-center">
@@ -161,28 +267,52 @@ export default function Login() {
                 Rota<span className="text-burnt-yellow">Fácil</span>
               </h1>
             </div>
-            <p className="text-xl text-gray-300 mb-8">
-              Simplifique o agendamento e roteirização dos seus atendimentos técnicos
+            <p className="text-xl text-gray-300 mb-12 leading-relaxed">
+              A plataforma completa para gestão de equipes técnicas e otimização de rotas
             </p>
-            <div className="space-y-4 text-left">
-              <div className="flex items-center space-x-3">
-                <RouteIcon className="text-burnt-yellow h-6 w-6" />
-                <span>Roteirização otimizada</span>
+            <div className="space-y-6 text-left">
+              <div className="flex items-start space-x-4">
+                <div className="bg-burnt-yellow bg-opacity-20 p-3 rounded-lg">
+                  <RouteIcon className="text-burnt-yellow h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg mb-1">Roteirização Inteligente</h3>
+                  <p className="text-gray-400 text-sm">Otimize suas rotas automaticamente com algoritmos avançados</p>
+                </div>
               </div>
-              <div className="flex items-center space-x-3">
-                <Calendar className="text-burnt-yellow h-6 w-6" />
-                <span>Agendamentos inteligentes</span>
+              <div className="flex items-start space-x-4">
+                <div className="bg-burnt-yellow bg-opacity-20 p-3 rounded-lg">
+                  <Calendar className="text-burnt-yellow h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg mb-1">Agendamentos Simplificados</h3>
+                  <p className="text-gray-400 text-sm">Gerencie todos os seus compromissos em um só lugar</p>
+                </div>
               </div>
-              <div className="flex items-center space-x-3">
-                <Users className="text-burnt-yellow h-6 w-6" />
-                <span>Gestão completa de equipe</span>
+              <div className="flex items-start space-x-4">
+                <div className="bg-burnt-yellow bg-opacity-20 p-3 rounded-lg">
+                  <Users className="text-burnt-yellow h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg mb-1">Gestão de Equipes</h3>
+                  <p className="text-gray-400 text-sm">Controle total sobre técnicos, veículos e disponibilidade</p>
+                </div>
+              </div>
+              <div className="flex items-start space-x-4">
+                <div className="bg-burnt-yellow bg-opacity-20 p-3 rounded-lg">
+                  <Clock className="text-burnt-yellow h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg mb-1">Controle de Acesso</h3>
+                  <p className="text-gray-400 text-sm">Defina horários e permissões personalizadas</p>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
         {/* Right Side - Login/Register Form */}
-        <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
+        <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-gradient-to-br from-gray-50 to-white">
           <div className="max-w-md w-full space-y-8">
             <div className="text-center lg:hidden mb-8">
               <Link href="/">
@@ -192,21 +322,31 @@ export default function Login() {
               </Link>
             </div>
             
-            <Card>
-              <CardHeader>
+            <Card className="shadow-xl border-0">
+              <CardHeader className="space-y-2 pb-6">
                 <CardTitle className="text-3xl font-bold text-gray-900">
-                  {isLogin ? "Entrar na sua conta" : "Criar nova conta"}
+                  {isLogin ? "Bem-vindo de volta!" : "Criar nova conta"}
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-base">
                   {isLogin 
-                    ? "Bem-vindo de volta! Faça login para continuar." 
-                    : "Crie sua conta e comece a usar o RotaFácil hoje mesmo."
+                    ? "Entre com suas credenciais para acessar sua conta" 
+                    : "Preencha os dados abaixo para criar sua conta"
                   }
                 </CardDescription>
               </CardHeader>
               
               <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-6">
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  {/* Mensagem de erro inline para restrição de horário */}
+                  {errorMessage && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start space-x-3">
+                      <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <h4 className="text-sm font-semibold text-red-900 mb-1">Acesso Restrito</h4>
+                        <p className="text-sm text-red-700">{errorMessage}</p>
+                      </div>
+                    </div>
+                  )}
                   {!isLogin && (
                     <>
                       <div>
@@ -316,28 +456,57 @@ export default function Login() {
 
                   <Button
                     type="submit"
-                    className="w-full bg-gray-900 hover:bg-gray-800 text-white"
+                    className="w-full bg-gradient-to-r from-gray-900 to-gray-800 hover:from-gray-800 hover:to-gray-700 text-white h-11 text-base font-semibold shadow-lg transition-all duration-200"
                     disabled={isLoading}
                   >
                     {isLoading 
-                      ? "Aguarde..." 
+                      ? (
+                        <div className="flex items-center space-x-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <span>Aguarde...</span>
+                        </div>
+                      )
                       : isLogin 
-                        ? "Entrar" 
-                        : "Criar conta"
+                        ? "Entrar na conta" 
+                        : "Criar minha conta"
                     }
                   </Button>
                 </form>
                 
+                {isLogin && (
+                  <div className="text-center mt-4">
+                    <Link href="/forgot-password">
+                      <Button
+                        variant="link"
+                        className="text-sm text-gray-600 hover:text-burnt-yellow p-0"
+                      >
+                        Esqueceu sua senha?
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+                
                 <div className="text-center mt-6">
                   <p className="text-sm text-gray-600">
                     {isLogin ? "Não tem uma conta?" : "Já tem uma conta?"}{" "}
-                    <Button
-                      variant="link"
-                      className="font-medium text-burnt-yellow hover:text-burnt-yellow-dark p-0"
-                      onClick={() => setIsLogin(!isLogin)}
-                    >
-                      {isLogin ? "Cadastre-se grátis" : "Faça login"}
-                    </Button>
+                    {isLogin ? (
+                      <Link href="/signup-company">
+                        <Button
+                          variant="link"
+                          className="font-medium text-burnt-yellow hover:text-burnt-yellow-dark p-0"
+                        >
+                          Cadastre-se grátis
+                        </Button>
+                      </Link>
+                    ) : (
+                      <Button
+                        variant="link"
+                        className="font-medium text-burnt-yellow hover:text-burnt-yellow-dark p-0"
+                        onClick={() => setIsLogin(true)}
+                      >
+                        Faça login
+                      </Button>
+                    )}
                   </p>
                 </div>
               </CardContent>

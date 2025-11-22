@@ -8,6 +8,7 @@ interface AuthContextType {
   register: (userData: { name: string; email: string; password: string; username: string }) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
+  requirePasswordChange: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -72,8 +73,10 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
     setUser(null);
   };
 
+  const requirePasswordChange = user?.requirePasswordChange || false;
+
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isLoading, requirePasswordChange }}>
       {children}
     </AuthContext.Provider>
   );

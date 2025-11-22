@@ -430,31 +430,31 @@ export default function Home() {
               <tbody>
                 <tr className="border-b border-gray-100">
                   <td className="py-4 px-6 text-gray-700">Nº de Roteirização</td>
-                  <td className="text-center py-4 px-6 text-gray-600">até 150 requisições/mês</td>
-                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">até 800 requisições/mês</td>
-                  <td className="text-center py-4 px-6 text-gray-900">até 5000 requisições/mês</td>
+                  <td className="text-center py-4 px-6 text-gray-600">até 50 requisições/mês</td>
+                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">até 200 requisições/mês</td>
+                  <td className="text-center py-4 px-6 text-gray-900">até 500 requisições/mês</td>
                   <td className="text-center py-4 px-6 text-gray-900">Sob consulta</td>
                 </tr>
                 {/* Nova linha adicionada como segunda linha conforme solicitado */}
                 <tr className="border-b border-gray-100">
                   <td className="py-4 px-6 text-gray-700">Número de endereços por rota</td>
                   <td className="text-center py-4 px-6 text-gray-600">10</td>
-                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">25</td>
-                  <td className="text-center py-4 px-6 text-gray-900">60</td>
+                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">20</td>
+                  <td className="text-center py-4 px-6 text-gray-900">50</td>
                   <td className="text-center py-4 px-6 text-gray-900">Sob consulta</td>
                 </tr>
                 <tr className="border-b border-gray-100">
                   <td className="py-4 px-6 text-gray-700">Número de veículos</td>
-                  <td className="text-center py-4 px-6 text-gray-600">até 5 veículos</td>
-                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">até 12 veículos</td>
+                  <td className="text-center py-4 px-6 text-gray-600">até 3 veículos</td>
+                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">até 10 veículos</td>
                   <td className="text-center py-4 px-6 text-gray-900">até 30 veículos</td>
                   <td className="text-center py-4 px-6 text-gray-900">Sob consulta</td>
                 </tr>
                 <tr className="border-b border-gray-100">
                   <td className="py-4 px-6 text-gray-700">Número de técnicos</td>
-                  <td className="text-center py-4 px-6 text-gray-600">até 5 técnicos</td>
-                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">até 12 técnicos</td>
-                  <td className="text-center py-4 px-6 text-gray-900">até 30 técnicos</td>
+                  <td className="text-center py-4 px-6 text-gray-600">até 6 técnicos</td>
+                  <td className="text-center py-4 px-6 bg-yellow-50 text-gray-900">até 20 técnicos</td>
+                  <td className="text-center py-4 px-6 text-gray-900">até 60 técnicos</td>
                   <td className="text-center py-4 px-6 text-gray-900">Sob consulta</td>
                 </tr>
                 <tr className="border-b border-gray-100">
@@ -514,7 +514,7 @@ export default function Home() {
                 <ul className="space-y-3 mb-8">
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Até 150 requisições/mês
+                    Até 50 requisições/mês
                   </li>
                   {/* Adicionada nova informação sobre endereços por rota */}
                   <li className="flex items-center text-gray-700">
@@ -523,11 +523,11 @@ export default function Home() {
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Até 5 veículos
+                    Até 3 veículos
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Até 5 técnicos
+                    Até 6 técnicos
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
@@ -570,20 +570,20 @@ export default function Home() {
                 <ul className="space-y-3 mb-8">
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Até 800 requisições/mês
+                    Até 200 requisições/mês
                   </li>
                   {/* Adicionada nova informação sobre endereços por rota para plano Profissional */}
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    25 endereços por rota
+                    20 endereços por rota
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Até 12 veículos
+                    Até 10 veículos
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Até 12 técnicos
+                    Até 20 técnicos
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
@@ -621,12 +621,12 @@ export default function Home() {
                 <ul className="space-y-3 mb-8">
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Até 5000 requisições/mês
+                    Até 500 requisições/mês
                   </li>
                   {/* Adicionada nova informação sobre endereços por rota para plano Empresarial */}
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    60 endereços por rota
+                    50 endereços por rota
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
@@ -634,7 +634,7 @@ export default function Home() {
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                    Até 30 técnicos
+                    Até 60 técnicos
                   </li>
                   <li className="flex items-center text-gray-700">
                     <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>

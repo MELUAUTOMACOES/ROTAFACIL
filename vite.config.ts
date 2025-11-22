@@ -34,7 +34,14 @@ export default defineConfig({
       deny: ["**/.*"],
     },
     hmr: {
-      overlay: false,  // ADICIONE ESTA LINHA
+      overlay: false,
+    },
+    proxy: {
+      "/api": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
 });

@@ -229,6 +229,7 @@ export default function Vehicles() {
             vehicle={selectedVehicle}
             technicians={technicians}
             teams={teams}
+            vehicles={vehicles}
             onClose={handleFormClose}
           />
         </DialogContent>

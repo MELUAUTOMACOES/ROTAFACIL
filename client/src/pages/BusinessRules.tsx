@@ -28,11 +28,11 @@ export default function BusinessRules() {
     resolver: zodResolver(insertBusinessRulesSchema),
     defaultValues: {
       maximoParadasPorRota: 10,
-      horarioInicioTrabalho: "08:00",
-      horarioFimTrabalho: "18:00",
       tempoDeslocamentoBuffer: 15,
       minutosEntreParadas: 30,
       distanciaMaximaEntrePontos: "50.00",
+      distanciaMaximaAtendida: "100.00",
+      distanciaMaximaEntrePontosDinamico: "50.00",
       enderecoEmpresaCep: "",
       enderecoEmpresaLogradouro: "",
       enderecoEmpresaNumero: "",
@@ -48,11 +48,11 @@ export default function BusinessRules() {
     if (businessRules) {
       form.reset({
         maximoParadasPorRota: businessRules.maximoParadasPorRota,
-        horarioInicioTrabalho: businessRules.horarioInicioTrabalho,
-        horarioFimTrabalho: businessRules.horarioFimTrabalho,
         tempoDeslocamentoBuffer: businessRules.tempoDeslocamentoBuffer,
         minutosEntreParadas: businessRules.minutosEntreParadas,
         distanciaMaximaEntrePontos: businessRules.distanciaMaximaEntrePontos,
+        distanciaMaximaAtendida: businessRules.distanciaMaximaAtendida,
+        distanciaMaximaEntrePontosDinamico: businessRules.distanciaMaximaEntrePontosDinamico,
         enderecoEmpresaCep: businessRules.enderecoEmpresaCep,
         enderecoEmpresaLogradouro: businessRules.enderecoEmpresaLogradouro,
         enderecoEmpresaNumero: businessRules.enderecoEmpresaNumero,
@@ -204,6 +204,46 @@ export default function BusinessRules() {
 
                 <FormField
                   control={form.control}
+                  name="distanciaMaximaAtendida"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Distância máxima atendida (km)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="1"
+                          max="500"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="distanciaMaximaEntrePontosDinamico"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Distância máxima entre pontos dinâmico (km)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="1"
+                          max="200"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
                   name="tempoDeslocamentoBuffer"
                   render={({ field }) => (
                     <FormItem>
@@ -221,50 +261,6 @@ export default function BusinessRules() {
                     </FormItem>
                   )}
                 />
-              </CardContent>
-            </Card>
-
-            {/* Horário de Trabalho */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
-                  Horário de Trabalho
-                </CardTitle>
-                <CardDescription>
-                  Configure os horários de funcionamento
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="horarioInicioTrabalho"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Horário de início</FormLabel>
-                      <FormControl>
-                        <Input type="time" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="horarioFimTrabalho"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Horário de fim</FormLabel>
-                      <FormControl>
-                        <Input type="time" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-
               </CardContent>
             </Card>
           </div>

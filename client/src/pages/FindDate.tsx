@@ -14,50 +14,62 @@ import { apiRequest } from "@/lib/queryClient";
 import { Service, Technician, BusinessRules, Client, Team } from "@shared/schema";
 import { useLocation } from "wouter";
 import { ClientSearch } from "@/components/ui/client-search";
+import { buscarEnderecoPorCep } from "@/lib/cep";
+import { useToast } from "@/hooks/use-toast";
 
 // Schema para validação do formulário de busca
 const findDateSchema = z.object({
   clientId: z.number().optional(),
   cep: z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no formato XXXXX-XXX"),
+  logradouro: z.string().optional(),
+  bairro: z.string().optional(),
+  cidade: z.string().optional(),
+  estado: z.string().optional(),
   numero: z.string().min(1, "Número é obrigatório").regex(/^\d+$/, "Digite apenas números"),
   serviceId: z.number({ required_error: "Selecione um serviço" }),
   technicianId: z.number().optional(),
   teamId: z.number().optional(),
+  startDate: z.string().optional(), // Data inicial da busca
 });
 
 type FindDateFormData = z.infer<typeof findDateSchema>;
 
 interface AvailableDate {
   date: string;
-  technician: string;
-  technicianId?: number;
-  teamId?: number;
-  routeIncrease: number;
-  totalDistance: number;
+  responsibleType: 'technician' | 'team';
+  responsibleId: number;
+  responsibleName: string;
+  availableMinutes: number;
+  totalMinutes: number;
+  usedMinutes: number;
+  distance: number;
+  distanceType: 'between_points' | 'from_base';
 }
 
 export default function FindDate() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [searchResults, setSearchResults] = useState<AvailableDate[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isFetchingCep, setIsFetchingCep] = useState(false);
 
   // Buscar clientes
-  const { data: clients = [] } = useQuery<Client[]>({
+  const { data: clients = [], isLoading: isLoadingClients, error: errorClients } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
   });
 
   // Buscar serviços
-  const { data: services = [] } = useQuery<Service[]>({
+  const { data: services = [], isLoading: isLoadingServices, error: errorServices } = useQuery<Service[]>({
     queryKey: ["/api/services"],
   });
 
   // Buscar técnicos
-  const { data: technicians = [] } = useQuery<Technician[]>({
+  const { data: technicians = [], isLoading: isLoadingTechnicians, error: errorTechnicians } = useQuery<Technician[]>({
     queryKey: ["/api/technicians"],
   });
 
   // Buscar equipes
-  const { data: teams = [] } = useQuery<Team[]>({
+  const { data: teams = [], isLoading: isLoadingTeams, error: errorTeams } = useQuery<Team[]>({
     queryKey: ["/api/teams"],
   });
 
@@ -66,14 +78,26 @@ export default function FindDate() {
     queryKey: ["/api/business-rules"],
   });
 
+  // Debug detalhado
+  console.log("🔍 [FIND-DATE] Status das queries:");
+  console.log("  - Clientes:", { count: clients.length, loading: isLoadingClients, error: errorClients?.message });
+  console.log("  - Serviços:", { count: services.length, loading: isLoadingServices, error: errorServices?.message });
+  console.log("  - Técnicos:", { count: technicians.length, loading: isLoadingTechnicians, error: errorTechnicians?.message });
+  console.log("  - Equipes:", { count: teams.length, loading: isLoadingTeams, error: errorTeams?.message });
+
   const form = useForm<FindDateFormData>({
     resolver: zodResolver(findDateSchema),
     defaultValues: {
       clientId: undefined,
       cep: "",
+      logradouro: "",
+      bairro: "",
+      cidade: "",
+      estado: "",
       numero: "",
       technicianId: undefined,
       teamId: undefined,
+      startDate: new Date().toISOString().split('T')[0], // Data de hoje por padrão
     },
   });
 
@@ -84,6 +108,33 @@ export default function FindDate() {
       return digits;
     }
     return digits.replace(/(\d{5})(\d{1,3})/, "$1-$2");
+  };
+
+  // Buscar endereço quando CEP for preenchido
+  const handleCepBlur = async () => {
+    const cep = form.watch("cep");
+    if (!cep || cep.replace(/\D/g, "").length !== 8) return;
+
+    setIsFetchingCep(true);
+    try {
+      const data = await buscarEnderecoPorCep(cep);
+      form.setValue("logradouro", data.logradouro || "");
+      form.setValue("bairro", data.bairro || "");
+      form.setValue("cidade", data.localidade || "");
+      form.setValue("estado", data.uf || "");
+      toast({
+        title: "CEP encontrado!",
+        description: `${data.logradouro}, ${data.bairro} - ${data.localidade}/${data.uf}`,
+      });
+    } catch (error) {
+      toast({
+        title: "CEP não encontrado",
+        description: "Verifique o CEP digitado e tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsFetchingCep(false);
+    }
   };
 
   const handleCepChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,88 +168,94 @@ export default function FindDate() {
     }
   };
 
-  // Mutação para buscar datas disponíveis
-  const searchDatesMutation = useMutation({
-    mutationFn: async (data: FindDateFormData) => {
-      setIsSearching(true);
-      
-      // Simular busca de datas disponíveis
-      // Em um cenário real, isso seria um endpoint da API
-      const mockResults: AvailableDate[] = [];
-      
-      // Filtrar técnicos e equipes com base na seleção
-      const availableTechnicians = data.technicianId 
-        ? technicians.filter(t => t.id === data.technicianId)
-        : technicians;
-      
-      const availableTeams = data.teamId 
-        ? teams.filter(t => t.id === data.teamId)
-        : teams;
+  // Função para buscar datas com streaming (Server-Sent Events)
+  const searchDatesWithStreaming = async (data: FindDateFormData) => {
+    setIsSearching(true);
+    setSearchResults([]); // Limpar resultados anteriores
+    
+    const token = localStorage.getItem("token");
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
 
-      // Gerar datas disponíveis para os próximos 30 dias
-      const today = new Date();
-      for (let i = 1; i <= 30; i++) {
-        const date = new Date(today);
-        date.setDate(today.getDate() + i);
-        
-        // Pular fins de semana
-        if (date.getDay() === 0 || date.getDay() === 6) continue;
-        
-        // Adicionar técnicos
-        availableTechnicians.forEach(technician => {
-          // Simular distâncias baseadas no CEP
-          const baseDistance = Math.random() * 50 + 5; // 5-55 km
-          const routeIncrease = Math.random() * 15 + 2; // 2-17 km
-          
-          // Filtrar por distância máxima se definida nas regras de negócio
-          const maxDistance = businessRules?.distanciaMaximaEntrePontos ? parseFloat(businessRules.distanciaMaximaEntrePontos) : 50;
-          if (baseDistance <= maxDistance) {
-            mockResults.push({
-              date: date.toISOString().split('T')[0],
-              technician: `👤 ${technician.name}`,
-              technicianId: technician.id,
-              routeIncrease: routeIncrease,
-              totalDistance: baseDistance + routeIncrease,
-            });
-          }
-        });
+    try {
+      const response = await fetch("/api/scheduling/find-available-dates", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          clientId: data.clientId,
+          cep: data.cep,
+          numero: data.numero,
+          logradouro: data.logradouro,
+          bairro: data.bairro,
+          cidade: data.cidade,
+          estado: data.estado,
+          serviceId: data.serviceId,
+          technicianId: data.technicianId,
+          teamId: data.teamId,
+          startDate: data.startDate || new Date().toISOString(),
+        }),
+      });
 
-        // Adicionar equipes
-        availableTeams.forEach(team => {
-          // Simular distâncias baseadas no CEP
-          const baseDistance = Math.random() * 50 + 5; // 5-55 km
-          const routeIncrease = Math.random() * 15 + 2; // 2-17 km
-          
-          // Filtrar por distância máxima se definida nas regras de negócio
-          const maxDistance = businessRules?.distanciaMaximaEntrePontos ? parseFloat(businessRules.distanciaMaximaEntrePontos) : 50;
-          if (baseDistance <= maxDistance) {
-            mockResults.push({
-              date: date.toISOString().split('T')[0],
-              technician: `👥 ${team.name}`,
-              teamId: team.id,
-              routeIncrease: routeIncrease,
-              totalDistance: baseDistance + routeIncrease,
-            });
-          }
-        });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Ordenar por data e depois por distância total
-      return mockResults.sort((a, b) => {
-        const dateCompare = a.date.localeCompare(b.date);
-        if (dateCompare === 0) {
-          return a.totalDistance - b.totalDistance;
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error("Response body is null");
+      }
+
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          setIsSearching(false);
+          break;
         }
-        return dateCompare;
-      });
-    },
-    onSuccess: (results) => {
-      setSearchResults(results);
-      setIsSearching(false);
-    },
-    onError: () => {
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        
+        // Manter a última linha incompleta no buffer
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const jsonStr = line.substring(6);
+            try {
+              const event = JSON.parse(jsonStr);
+              
+              if (event.done) {
+                console.log("✅ Busca concluída!");
+                setIsSearching(false);
+              } else if (event.error) {
+                console.error("❌ Erro:", event.error);
+                setIsSearching(false);
+              } else {
+                // Adicionar novo candidato aos resultados
+                console.log("📥 Novo candidato recebido:", event);
+                setSearchResults((prev) => [...prev, event]);
+              }
+            } catch (e) {
+              console.warn("Erro ao parsear evento:", e);
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error("❌ Erro ao buscar datas:", error);
       setIsSearching(false);
     }
+  };
+
+  const searchDatesMutation = useMutation({
+    mutationFn: searchDatesWithStreaming,
   });
 
   const onSubmit = (data: FindDateFormData) => {
@@ -224,12 +281,12 @@ export default function FindDate() {
     }
 
     // Adicionar technicianId ou teamId dependendo do tipo
-    if (result.technicianId) {
-      params.append("technicianId", result.technicianId.toString());
-      console.log("🔄 [DEBUG] Adicionando technicianId:", result.technicianId);
-    } else if (result.teamId) {
-      params.append("teamId", result.teamId.toString());
-      console.log("🔄 [DEBUG] Adicionando teamId:", result.teamId);
+    if (result.responsibleType === 'technician') {
+      params.append("technicianId", result.responsibleId.toString());
+      console.log("🔄 [DEBUG] Adicionando technicianId:", result.responsibleId);
+    } else if (result.responsibleType === 'team') {
+      params.append("teamId", result.responsibleId.toString());
+      console.log("🔄 [DEBUG] Adicionando teamId:", result.responsibleId);
     }
     
     console.log("🔄 [DEBUG] Parâmetros finais:", params.toString());
@@ -237,7 +294,9 @@ export default function FindDate() {
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    // Forçar interpretação como UTC para evitar problemas de timezone
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('pt-BR', {
       weekday: 'long',
       year: 'numeric',
@@ -274,7 +333,7 @@ export default function FindDate() {
               />
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="cep">CEP</Label>
                 <Input
@@ -282,13 +341,26 @@ export default function FindDate() {
                   placeholder="00000-000"
                   value={form.watch("cep")}
                   onChange={handleCepChange}
+                  onBlur={handleCepBlur}
                   maxLength={9}
-                  disabled={!!form.watch("clientId")}
+                  disabled={!!form.watch("clientId") || isFetchingCep}
                   className={form.formState.errors.cep ? "border-red-500" : ""}
                 />
+                {isFetchingCep && <p className="text-sm text-gray-500">Buscando CEP...</p>}
                 {form.formState.errors.cep && (
                   <p className="text-sm text-red-500">{form.formState.errors.cep.message}</p>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="logradouro">Logradouro</Label>
+                <Input
+                  id="logradouro"
+                  placeholder="Rua, Avenida..."
+                  value={form.watch("logradouro")}
+                  disabled
+                  className="bg-gray-50"
+                />
               </div>
 
               <div className="space-y-2">
@@ -307,25 +379,97 @@ export default function FindDate() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="bairro">Bairro</Label>
+                <Input
+                  id="bairro"
+                  placeholder="Bairro"
+                  value={form.watch("bairro")}
+                  disabled
+                  className="bg-gray-50"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cidade">Cidade</Label>
+                <Input
+                  id="cidade"
+                  placeholder="Cidade"
+                  value={form.watch("cidade")}
+                  disabled
+                  className="bg-gray-50"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="estado">Estado</Label>
+                <Input
+                  id="estado"
+                  placeholder="UF"
+                  value={form.watch("estado")}
+                  disabled
+                  className="bg-gray-50"
+                  maxLength={2}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              <div className="space-y-2">
                 <Label htmlFor="service">Serviço</Label>
                 <Select
                   value={form.watch("serviceId")?.toString() || ""}
                   onValueChange={(value) => form.setValue("serviceId", parseInt(value))}
+                  disabled={isLoadingServices}
                 >
                   <SelectTrigger className={form.formState.errors.serviceId ? "border-red-500" : ""}>
-                    <SelectValue placeholder="Selecione um serviço" />
+                    <SelectValue placeholder={
+                      isLoadingServices ? "Carregando serviços..." :
+                      errorServices ? "Erro ao carregar serviços" :
+                      "Selecione um serviço"
+                    } />
                   </SelectTrigger>
                   <SelectContent>
-                    {services.map((service) => (
-                      <SelectItem key={service.id} value={service.id.toString()}>
-                        {service.name}
+                    {isLoadingServices ? (
+                      <SelectItem value="loading" disabled>
+                        Carregando...
                       </SelectItem>
-                    ))}
+                    ) : errorServices ? (
+                      <SelectItem value="error" disabled>
+                        Erro: {errorServices.message}
+                      </SelectItem>
+                    ) : services.length === 0 ? (
+                      <SelectItem value="0" disabled>
+                        Nenhum serviço cadastrado
+                      </SelectItem>
+                    ) : (
+                      services.map((service) => (
+                        <SelectItem key={service.id} value={service.id.toString()}>
+                          {service.name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
                 {form.formState.errors.serviceId && (
                   <p className="text-sm text-red-500">{form.formState.errors.serviceId.message}</p>
                 )}
+                {errorServices && (
+                  <p className="text-sm text-red-500">Erro ao carregar serviços. Verifique sua conexão.</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="startDate">Data inicial da busca</Label>
+                <Input
+                  id="startDate"
+                  type="date"
+                  value={form.watch("startDate")}
+                  onChange={(e) => form.setValue("startDate", e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  className=""
+                />
+                <p className="text-xs text-gray-500">Buscar datas a partir de</p>
               </div>
 
               <div className="space-y-2">
@@ -357,24 +501,49 @@ export default function FindDate() {
                       form.setValue("technicianId", undefined);
                     }
                   }}
+                  disabled={isLoadingTechnicians || isLoadingTeams}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Qualquer técnico/equipe" />
+                    <SelectValue placeholder={
+                      (isLoadingTechnicians || isLoadingTeams) ? "Carregando..." :
+                      (errorTechnicians || errorTeams) ? "Erro ao carregar" :
+                      "Qualquer técnico/equipe"
+                    } />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="0">Qualquer técnico/equipe</SelectItem>
-                    {technicians.map((technician) => (
-                      <SelectItem key={`tech-${technician.id}`} value={`tech-${technician.id}`}>
-                        👤 {technician.name}
+                    {(isLoadingTechnicians || isLoadingTeams) ? (
+                      <SelectItem value="loading" disabled>
+                        Carregando...
                       </SelectItem>
-                    ))}
-                    {teams.map((team) => (
-                      <SelectItem key={`team-${team.id}`} value={`team-${team.id}`}>
-                        👥 {team.name}
+                    ) : (errorTechnicians || errorTeams) ? (
+                      <SelectItem value="error" disabled>
+                        Erro ao carregar dados
                       </SelectItem>
-                    ))}
+                    ) : (
+                      <>
+                        <SelectItem value="0">Qualquer técnico/equipe</SelectItem>
+                        {technicians.map((technician) => (
+                          <SelectItem key={`tech-${technician.id}`} value={`tech-${technician.id}`}>
+                            👤 {technician.name}
+                          </SelectItem>
+                        ))}
+                        {teams.map((team) => (
+                          <SelectItem key={`team-${team.id}`} value={`team-${team.id}`}>
+                            👥 {team.name}
+                          </SelectItem>
+                        ))}
+                        {technicians.length === 0 && teams.length === 0 && (
+                          <SelectItem value="none" disabled>
+                            Nenhum técnico ou equipe cadastrado
+                          </SelectItem>
+                        )}
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
+                {(errorTechnicians || errorTeams) && (
+                  <p className="text-sm text-red-500">Erro ao carregar técnicos/equipes.</p>
+                )}
               </div>
             </div>
 
@@ -404,9 +573,9 @@ export default function FindDate() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Data</TableHead>
-                    <TableHead>Técnico</TableHead>
-                    <TableHead>Distância de aumento</TableHead>
-                    <TableHead>Distância total do dia</TableHead>
+                    <TableHead>Responsável</TableHead>
+                    <TableHead>Tempo Disponível</TableHead>
+                    <TableHead>Distância</TableHead>
                     <TableHead>Ação</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -416,9 +585,17 @@ export default function FindDate() {
                       <TableCell className="font-medium">
                         {formatDate(result.date)}
                       </TableCell>
-                      <TableCell>{result.technician}</TableCell>
-                      <TableCell>{result.routeIncrease.toFixed(1)} km</TableCell>
-                      <TableCell>{result.totalDistance.toFixed(1)} km</TableCell>
+                      <TableCell>
+                        {result.responsibleType === 'technician' ? '👤 ' : '👥 '}
+                        {result.responsibleName}
+                      </TableCell>
+                      <TableCell>
+                        {Math.floor(result.availableMinutes / 60)}h {result.availableMinutes % 60}min disponíveis
+                      </TableCell>
+                      <TableCell>
+                        {result.distance.toFixed(1)} km
+                        {result.distanceType === 'from_base' ? ' (da base)' : ' (entre pontos)'}
+                      </TableCell>
                       <TableCell>
                         <Button
                           size="sm"

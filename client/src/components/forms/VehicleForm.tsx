@@ -29,6 +29,7 @@ interface VehicleFormProps {
   vehicle?: Vehicle | null;
   technicians: Technician[];
   teams: Team[];
+  vehicles: Vehicle[];
   onClose: () => void;
 }
 
@@ -36,6 +37,7 @@ export default function VehicleForm({
   vehicle,
   technicians,
   teams,
+  vehicles,
   onClose,
 }: VehicleFormProps) {
   const { toast } = useToast();
@@ -283,7 +285,19 @@ export default function VehicleForm({
                 </SelectTrigger>
                 <SelectContent>
                   {technicians
-                    .filter((t) => t.isActive)
+                    .filter((t) => {
+                      // Filtrar técnicos ativos
+                      if (!t.isActive) return false;
+                      
+                      // Se estiver editando, permitir o técnico atual
+                      if (vehicle?.technicianId === t.id) return true;
+                      
+                      // Filtrar técnicos já vinculados a outros veículos
+                      const isLinked = vehicles.some(
+                        (v) => v.technicianId === t.id && v.id !== vehicle?.id
+                      );
+                      return !isLinked;
+                    })
                     .map((technician) => (
                       <SelectItem
                         key={technician.id}
@@ -313,11 +327,22 @@ export default function VehicleForm({
                   <SelectValue placeholder="Selecione uma equipe" />
                 </SelectTrigger>
                 <SelectContent>
-                  {teams.map((team) => (
-                    <SelectItem key={team.id} value={team.id.toString()}>
-                      {team.name}
-                    </SelectItem>
-                  ))}
+                  {teams
+                    .filter((team) => {
+                      // Se estiver editando, permitir a equipe atual
+                      if (vehicle?.teamId === team.id) return true;
+                      
+                      // Filtrar equipes já vinculadas a outros veículos
+                      const isLinked = vehicles.some(
+                        (v) => v.teamId === team.id && v.id !== vehicle?.id
+                      );
+                      return !isLinked;
+                    })
+                    .map((team) => (
+                      <SelectItem key={team.id} value={team.id.toString()}>
+                        {team.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               {form.formState.errors.teamId && (

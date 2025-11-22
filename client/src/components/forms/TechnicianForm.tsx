@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { UserCog, Mail, Phone, Wrench, MapPin, FileText } from "lucide-react";
+import { UserCog, Mail, Phone, Wrench, MapPin, FileText, Clock as ClockIcon } from "lucide-react";
 
 // Função para buscar endereço por CEP - igual ao cadastro de cliente
 async function buscarEnderecoPorCep(cep: string) {
@@ -58,6 +58,11 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
       enderecoInicioBairro: technician.enderecoInicioBairro || "",
       enderecoInicioCidade: technician.enderecoInicioCidade || "",
       enderecoInicioEstado: technician.enderecoInicioEstado || "",
+      // Horários de trabalho
+      horarioInicioTrabalho: technician.horarioInicioTrabalho || "08:00",
+      horarioFimTrabalho: technician.horarioFimTrabalho || "18:00",
+      horarioAlmocoMinutos: technician.horarioAlmocoMinutos || 60,
+      diasTrabalho: technician.diasTrabalho || ['segunda', 'terca', 'quarta', 'quinta', 'sexta'],
       isActive: technician.isActive,
     } : {
       name: "",
@@ -82,6 +87,11 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
       enderecoInicioBairro: "",
       enderecoInicioCidade: "",
       enderecoInicioEstado: "",
+      // Horários de trabalho
+      horarioInicioTrabalho: "08:00",
+      horarioFimTrabalho: "18:00",
+      horarioAlmocoMinutos: 60,
+      diasTrabalho: ['segunda', 'terca', 'quarta', 'quinta', 'sexta'],
       isActive: true,
     },
   });
@@ -597,6 +607,122 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                 )}
               />
             </div>
+          </div>
+
+          {/* Horários de Trabalho */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <ClockIcon className="h-5 w-5 text-green-500" />
+              <h3 className="text-lg font-medium">Horários de Trabalho</h3>
+            </div>
+            <p className="text-sm text-gray-500">
+              Defina os horários e dias de trabalho do técnico. Estes horários serão usados para calcular a disponibilidade.
+            </p>
+            
+            <div className="grid gap-4 md:grid-cols-3">
+              <FormField
+                control={form.control}
+                name="horarioInicioTrabalho"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Horário de Início</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="time"
+                        {...field}
+                        value={field.value || "08:00"}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="horarioFimTrabalho"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Horário de Término</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="time"
+                        {...field}
+                        value={field.value || "18:00"}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="horarioAlmocoMinutos"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tempo de Almoço (minutos)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="180"
+                        placeholder="60"
+                        {...field}
+                        value={field.value || 60}
+                        onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="diasTrabalho"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Dias de Trabalho</FormLabel>
+                  <div className="border rounded-lg p-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                        { value: 'segunda', label: 'Segunda' },
+                        { value: 'terca', label: 'Terça' },
+                        { value: 'quarta', label: 'Quarta' },
+                        { value: 'quinta', label: 'Quinta' },
+                        { value: 'sexta', label: 'Sexta' },
+                        { value: 'sabado', label: 'Sábado' },
+                        { value: 'domingo', label: 'Domingo' },
+                      ].map((day) => (
+                        <div key={day.value} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`day-${day.value}`}
+                            checked={field.value?.includes(day.value) || false}
+                            onCheckedChange={(checked) => {
+                              const currentDays = field.value || [];
+                              if (checked) {
+                                field.onChange([...currentDays, day.value]);
+                              } else {
+                                field.onChange(currentDays.filter(d => d !== day.value));
+                              }
+                            }}
+                          />
+                          <label
+                            htmlFor={`day-${day.value}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                          >
+                            {day.label}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
 
           <FormField

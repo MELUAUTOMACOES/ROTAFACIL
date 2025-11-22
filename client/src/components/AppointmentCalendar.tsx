@@ -10,7 +10,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import AppointmentForm from "@/components/forms/AppointmentForm";
-import type { Appointment, Client, Service, Technician, Team } from "@shared/schema";
+import type { Appointment, Client, Service, Technician, Team, DateRestriction } from "@shared/schema";
 
 // Create DnD Calendar
 const DnDCalendar = withDragAndDrop(Calendar);
@@ -49,16 +49,21 @@ interface AppointmentCalendarProps {
   services: Service[];
   technicians: Technician[];
   teams: Team[];
+  dateRestrictions: DateRestriction[];
 }
 
 // Custom Month Event Component for better appointment display
 const MonthEvent = ({ event }: { event: CalendarEvent }) => {
   const responsible = event.responsible;
   const responsibleIcon = responsible.type === 'team' ? '👥' : responsible.type === 'technician' ? '👤' : '❌';
+  const isAllDay = event.allDay && event.appointment; // All-day mas não restrição
   
   return (
     <div className="text-xs leading-tight cursor-pointer hover:opacity-80 transition-opacity p-1 rounded w-full h-full">
       <div className="font-semibold truncate">{event.title.split(' - ')[0]}</div>
+      {isAllDay && (
+        <div className="text-[10px] font-bold text-white/90 mb-1">📅 DIA INTEIRO</div>
+      )}
       <div className="flex items-center gap-1">
         <span>{responsibleIcon}</span>
         <span className="truncate text-xs opacity-90">{responsible.name}</span>
@@ -71,10 +76,14 @@ const MonthEvent = ({ event }: { event: CalendarEvent }) => {
 const TimeEvent = ({ event }: { event: CalendarEvent }) => {
   const responsible = event.responsible;
   const responsibleIcon = responsible.type === 'team' ? '👥' : responsible.type === 'technician' ? '👤' : '❌';
+  const isAllDay = event.allDay && event.appointment; // All-day mas não restrição
   
   return (
     <div className="text-xs p-1 cursor-pointer hover:opacity-80 transition-opacity w-full h-full">
       <div className="font-bold truncate mb-1">{event.title.split(' - ')[0]}</div>
+      {isAllDay && (
+        <div className="text-[10px] font-bold text-white/90 mb-1">📅 DIA INTEIRO</div>
+      )}
       <div className="text-xs opacity-90 truncate">{event.title.split(' - ')[1]}</div>
       <div className="flex items-center gap-1 mt-1">
         <span>{responsibleIcon}</span>
@@ -89,7 +98,8 @@ export default function AppointmentCalendar({
   clients, 
   services, 
   technicians, 
-  teams 
+  teams,
+  dateRestrictions,
 }: AppointmentCalendarProps) {
   const [view, setView] = useState<keyof typeof Views>(Views.MONTH);
   const [date, setDate] = useState(new Date());
@@ -179,7 +189,39 @@ export default function AppointmentCalendar({
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     console.log('🔄 [CALENDAR] Processando agendamentos para o calendário:', appointments.length);
     
-    const events = appointments.map((appointment) => {
+    const events: CalendarEvent[] = [];
+
+    // Eventos de restrição de data (all-day) por técnico/equipe
+    dateRestrictions.forEach((r) => {
+      const date = new Date(r.date);
+      if (isNaN(date.getTime())) return;
+
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+
+      const isTeam = r.responsibleType === 'team';
+      const responsible = isTeam
+        ? getTeam(r.responsibleId) || { id: r.responsibleId, name: `Equipe #${r.responsibleId}` }
+        : getTechnician(r.responsibleId) || { id: r.responsibleId, name: `Técnico #${r.responsibleId}` };
+
+      events.push({
+        id: `restriction-${r.id}` as any,
+        title: `[RESTRIÇÃO] ${responsible.name} - ${r.title}`,
+        start,
+        end,
+        allDay: true,
+        appointment: null as any,
+        responsible: {
+          type: isTeam ? 'team' : 'technician',
+          id: r.responsibleId,
+          name: responsible.name,
+        },
+      });
+    });
+
+    const appointmentEvents = appointments.map((appointment) => {
       const client = getClient(appointment.clientId);
       const service = getService(appointment.serviceId);
       const responsible = getResponsibleInfo(appointment);
@@ -238,6 +280,8 @@ export default function AppointmentCalendar({
       return event;
     }).filter(Boolean) as CalendarEvent[];
     
+    events.push(...appointmentEvents);
+    
     console.log('🎯 [CALENDAR] Total de eventos processados:', events.length);
     
     // TESTE: Adiciona evento mock para garantir que funciona
@@ -289,8 +333,13 @@ export default function AppointmentCalendar({
   const eventStyleGetter = useCallback((event: CalendarEvent) => {
     const responsible = event.responsible;
     let backgroundColor = '#6b7280'; // default gray
-    
-    if (responsible.type !== 'none' && responsible.id) {
+
+    // Eventos de restrição (sem appointment real) em vermelho
+    const isRestrictionEvent = !event.appointment;
+
+    if (isRestrictionEvent) {
+      backgroundColor = '#fecaca'; // vermelho claro
+    } else if (responsible.type !== 'none' && responsible.id) {
       const colorKey = `${responsible.type}-${responsible.id}`;
       backgroundColor = responsibleColors.get(colorKey) || '#6b7280';
     }
@@ -300,13 +349,13 @@ export default function AppointmentCalendar({
         backgroundColor,
         borderRadius: '4px',
         opacity: 0.9,
-        color: 'white',
+        color: isRestrictionEvent ? '#b91c1c' : 'white',
         border: '0px',
         display: 'block',
         fontSize: '12px',
         fontWeight: 'bold',
-        cursor: 'pointer',
-        userSelect: 'none'
+        cursor: isRestrictionEvent ? 'default' : 'pointer',
+        userSelect: 'none',
       }
     };
   }, [responsibleColors]);
@@ -319,6 +368,11 @@ export default function AppointmentCalendar({
       return;
     }
     
+    // Ignorar eventos de restrição (não abrimos formulário)
+    if (!event.appointment) {
+      return;
+    }
+
     // Only open edit dialog in week/day view, not in month view
     if (view === Views.WEEK || view === Views.DAY || view === Views.AGENDA) {
       console.log(`🖱️ [CALENDAR] Evento selecionado:`, event.appointment);
@@ -336,6 +390,11 @@ export default function AppointmentCalendar({
     }
     
     const draggedEvent = event as CalendarEvent;
+
+    // Não permitir drag de eventos de restrição
+    if (!draggedEvent.appointment) {
+      return;
+    }
     
     console.log(`🎯 [CALENDAR] Arrastando agendamento ${draggedEvent.appointment?.id} para ${start.toISOString()}`);
 

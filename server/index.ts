@@ -37,6 +37,21 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // 🔒 Verificar configuração de segurança
+  if (process.env.DEV_MODE === 'true') {
+    console.error('');
+    console.error('═══════════════════════════════════════════════════════════');
+    console.error('🚨 ALERTA CRÍTICO DE SEGURANÇA: DEV_MODE ATIVO! 🚨');
+    console.error('═══════════════════════════════════════════════════════════');
+    console.error('⚠️  Autenticação desativada - TODOS viram admin!');
+    console.error('⚠️  NUNCA use em produção ou com banco de dados real!');
+    console.error('⚠️  Para desativar: DEV_MODE=false no arquivo .env');
+    console.error('═══════════════════════════════════════════════════════════');
+    console.error('');
+  } else {
+    console.log('✅ Modo de segurança: PRODUÇÃO (autenticação ativa)');
+  }
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -57,6 +57,11 @@ export default function AppointmentForm({
   const isFromFindDate = !!prefilledData && !appointment;
   console.log("📝 [DEBUG] AppointmentForm - isFromFindDate:", isFromFindDate);
 
+  // Verificar se o agendamento está em romaneio confirmado/finalizado
+  const routeInfo = (appointment as any)?.routeInfo;
+  const isInConfirmedRoute = routeInfo && (routeInfo.status === 'confirmado' || routeInfo.status === 'finalizado');
+  const isReadOnly = isInConfirmedRoute || false;
+
   const form = useForm<InsertAppointment>({
     resolver: zodResolver(extendedInsertAppointmentSchema),
     defaultValues: appointment ? {
@@ -114,6 +119,8 @@ export default function AppointmentForm({
     },
   });
   
+  const selectedServiceId = form.watch("serviceId");
+  const selectedService = services.find((s) => s.id === selectedServiceId);
   
   // Effect to update address fields whenever the selected client changes or clients data is updated
   useEffect(() => {
@@ -204,6 +211,55 @@ export default function AppointmentForm({
       });
     },
   });
+
+  // Validar se a data selecionada está nos dias de trabalho do técnico/equipe
+  const workScheduleWarning = useMemo(() => {
+    const scheduledDate = form.watch('scheduledDate');
+    const technicianId = form.watch('technicianId');
+    const teamId = form.watch('teamId');
+    
+    if (!scheduledDate) return null;
+    
+    const date = new Date(scheduledDate);
+    const dayOfWeek = date.getDay(); // 0 = domingo, 1 = segunda, ..., 6 = sábado
+    const dayNames = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+    const dayName = dayNames[dayOfWeek];
+    const dayNameDisplay = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+    
+    // Verificar técnico
+    if (technicianId) {
+      const technician = technicians.find(t => t.id === technicianId);
+      if (technician) {
+        const workDays = technician.diasTrabalho || ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
+        if (!workDays.includes(dayName)) {
+          return {
+            type: 'technician',
+            name: technician.name,
+            dayName: dayNameDisplay,
+            workDays: workDays.join(', ')
+          };
+        }
+      }
+    }
+    
+    // Verificar equipe
+    if (teamId) {
+      const team = teams.find(t => t.id === teamId);
+      if (team) {
+        const workDays = team.diasTrabalho || ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
+        if (!workDays.includes(dayName)) {
+          return {
+            type: 'team',
+            name: team.name,
+            dayName: dayNameDisplay,
+            workDays: workDays.join(', ')
+          };
+        }
+      }
+    }
+    
+    return null;
+  }, [form.watch('scheduledDate'), form.watch('technicianId'), form.watch('teamId'), technicians, teams]);
 
   const onSubmit = (data: InsertAppointment) => {
     console.log("📝 [DEBUG] onSubmit - Dados recebidos do form:", data);
@@ -338,15 +394,29 @@ export default function AppointmentForm({
         </DialogTitle>
       </DialogHeader>
 
+      {/* Alerta de Romaneio Confirmado/Finalizado */}
+      {isInConfirmedRoute && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <h4 className="font-semibold text-orange-900 mb-1">
+              🚚 Romaneio {routeInfo.status === 'confirmado' ? 'Confirmado' : 'Finalizado'} #{routeInfo.displayNumber}
+            </h4>
+            <p className="text-sm text-orange-800">
+              Este agendamento está em um romaneio {routeInfo.status === 'confirmado' ? 'confirmado' : 'finalizado'} e não pode ser editado.
+              Para alterar este agendamento, você precisa ir na tela de <strong>Romaneios - Histórico de Rotas</strong> e alterar o status do romaneio.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-2 mb-4">
         <NewClientDialog onClientCreated={handleClientCreated}>
-          <Button variant="outline" size="sm" className="text-green-600 border-green-600 hover:bg-green-50">
+          <Button variant="outline" size="sm" className="text-green-600 border-green-600 hover:bg-green-50" disabled={isReadOnly}>
             <UserPlus className="h-4 w-4 mr-2" />
             Novo Cliente
           </Button>
         </NewClientDialog>
-
-
       </div>
 
       <Form {...form}>
@@ -362,7 +432,7 @@ export default function AppointmentForm({
                   <ClientSearch
                     value={field.value}
                     onValueChange={(value) => {
-                      if (!isFromFindDate) {
+                      if (!isFromFindDate && !isReadOnly) {
                         field.onChange(value ?? undefined);
                         if (value) {
                           handleClientChange(value.toString());
@@ -370,7 +440,7 @@ export default function AppointmentForm({
                       }
                     }}
                     placeholder="Pesquisar por nome ou CPF"
-                    disabled={isFromFindDate}
+                    disabled={isFromFindDate || isReadOnly}
                   />
                 </FormControl>
                 {isFromFindDate && (
@@ -391,12 +461,12 @@ export default function AppointmentForm({
                   <FormLabel>Serviço *</FormLabel>
                   <Select 
                     onValueChange={(value) => {
-                      if (!isFromFindDate) {
+                      if (!isFromFindDate && !isReadOnly) {
                         field.onChange(parseInt(value));
                       }
                     }} 
                     value={field.value?.toString()}
-                    disabled={isFromFindDate}
+                    disabled={isFromFindDate || isReadOnly}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -414,6 +484,12 @@ export default function AppointmentForm({
                   {isFromFindDate && (
                     <p className="text-sm text-blue-600">Serviço selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
                   )}
+                  {selectedService && (
+                    <p className="text-base font-semibold text-gray-700 flex items-center gap-1 mt-1">
+                      <Clock className="h-3 w-3" />
+                      <span>Duração: {selectedService.duration} min</span>
+                    </p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -427,7 +503,7 @@ export default function AppointmentForm({
                   <FormLabel>Técnico/Equipe *</FormLabel>
                   <Select 
                     onValueChange={(value) => {
-                      if (!isFromFindDate) {
+                      if (!isFromFindDate && !isReadOnly) {
                         console.log("Seleção alterada para:", value);
                         
                         if (value.startsWith('tech-')) {
@@ -451,7 +527,7 @@ export default function AppointmentForm({
                       field.value ? `tech-${field.value}` : 
                       form.getValues("teamId") ? `team-${form.getValues("teamId")}` : ""
                     }
-                    disabled={isFromFindDate}
+                    disabled={isFromFindDate || isReadOnly}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -498,11 +574,23 @@ export default function AppointmentForm({
                           new Date(field.value.getTime() - field.value.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
                         ) : ""}
                       onChange={(e) => field.onChange(new Date(e.target.value))}
-                      disabled={!!prefilledData?.date}
+                      disabled={!!prefilledData?.date || isReadOnly}
                     />
                   </FormControl>
                   {prefilledData?.date && (
                     <p className="text-sm text-blue-600">Data selecionada a partir da busca "Ache uma data" - não pode ser alterada</p>
+                  )}
+                  {workScheduleWarning && (
+                    <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                      <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div className="text-sm text-amber-800">
+                        <p className="font-semibold">Atenção: Dia não disponível</p>
+                        <p>
+                          {workScheduleWarning.type === 'technician' ? 'O técnico' : 'A equipe'} <strong>{workScheduleWarning.name}</strong> não trabalha em <strong>{workScheduleWarning.dayName}</strong>.
+                        </p>
+                        <p className="text-xs mt-1">Dias de trabalho: {workScheduleWarning.workDays}</p>
+                      </div>
+                    </div>
                   )}
                   <FormMessage />
                 </FormItem>
@@ -525,6 +613,7 @@ export default function AppointmentForm({
                         setIsAllDay(checked);
                       }}
                       className="mt-1"
+                      disabled={isReadOnly}
                     />
                   </FormControl>
                   <div className="space-y-1 leading-none">
@@ -647,9 +736,9 @@ export default function AppointmentForm({
                         placeholder="Rua das Flores" 
                         {...field} 
                         onClick={appointment ? handleAddressFieldClick : undefined}
-                        disabled={isFromFindDate || !!appointment}
-                        readOnly={!!appointment}
-                        className={appointment ? "bg-gray-50 cursor-not-allowed" : ""}
+                        disabled={isFromFindDate || !!appointment || isReadOnly}
+                        readOnly={!!appointment || isReadOnly}
+                        className={(appointment || isReadOnly) ? "bg-gray-50 cursor-not-allowed" : ""}
                       />
                     </FormControl>
                     {isFromFindDate && (
@@ -672,9 +761,9 @@ export default function AppointmentForm({
                         {...field} 
                         value={field.value || ""} 
                         onClick={appointment ? handleAddressFieldClick : undefined}
-                        disabled={isFromFindDate || !!appointment}
-                        readOnly={!!appointment}
-                        className={appointment ? "bg-gray-50 cursor-not-allowed" : ""}
+                        disabled={isFromFindDate || !!appointment || isReadOnly}
+                        readOnly={!!appointment || isReadOnly}
+                        className={(appointment || isReadOnly) ? "bg-gray-50 cursor-not-allowed" : ""}
                       />
                     </FormControl>
                     {isFromFindDate && (
@@ -697,9 +786,9 @@ export default function AppointmentForm({
                         {...field} 
                         value={field.value || ""} 
                         onClick={appointment ? handleAddressFieldClick : undefined}
-                        disabled={isFromFindDate || !!appointment}
-                        readOnly={!!appointment}
-                        className={appointment ? "bg-gray-50 cursor-not-allowed" : ""}
+                        disabled={isFromFindDate || !!appointment || isReadOnly}
+                        readOnly={!!appointment || isReadOnly}
+                        className={(appointment || isReadOnly) ? "bg-gray-50 cursor-not-allowed" : ""}
                       />
                     </FormControl>
                     {isFromFindDate && (
@@ -722,9 +811,9 @@ export default function AppointmentForm({
                         {...field} 
                         value={field.value || ""} 
                         onClick={appointment ? handleAddressFieldClick : undefined}
-                        disabled={isFromFindDate || !!appointment}
-                        readOnly={!!appointment}
-                        className={appointment ? "bg-gray-50 cursor-not-allowed" : ""}
+                        disabled={isFromFindDate || !!appointment || isReadOnly}
+                        readOnly={!!appointment || isReadOnly}
+                        className={(appointment || isReadOnly) ? "bg-gray-50 cursor-not-allowed" : ""}
                       />
                     </FormControl>
                     {isFromFindDate && (
@@ -745,7 +834,7 @@ export default function AppointmentForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Status</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value} disabled={isReadOnly}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue />
@@ -769,7 +858,7 @@ export default function AppointmentForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Prioridade</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value} disabled={isReadOnly}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue />
@@ -799,6 +888,7 @@ export default function AppointmentForm({
                     className="min-h-[80px]"
                     {...field}
                     value={field.value || ""}
+                    disabled={isReadOnly}
                   />
                 </FormControl>
                 <FormMessage />
@@ -812,7 +902,7 @@ export default function AppointmentForm({
             </Button>
             <Button
               type="submit"
-              disabled={createMutation.isPending || updateMutation.isPending}
+              disabled={createMutation.isPending || updateMutation.isPending || isReadOnly}
               className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
             >
               {(createMutation.isPending || updateMutation.isPending) && (

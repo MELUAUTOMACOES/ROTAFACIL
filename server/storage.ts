@@ -9,10 +9,17 @@ import {
   type BusinessRules, type InsertBusinessRules,
   type Team, type InsertTeam,
   type TeamMember, type InsertTeamMember,
-  users, clients, services, technicians, vehicles, appointments, checklists, businessRules, teams, teamMembers
+  type AccessSchedule, type InsertAccessSchedule,
+  type Company, type InsertCompany,
+  type Membership, type InsertMembership,
+  type Invitation, type InsertInvitation,
+  type DateRestriction, type InsertDateRestriction,
+  users, clients, services, technicians, vehicles, appointments, checklists, businessRules, teams, teamMembers, accessSchedules,
+  companies, memberships, invitations,
+  dateRestrictions,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, ilike } from "drizzle-orm";
+import { eq, and, or, ilike, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export interface IStorage {
@@ -20,7 +27,19 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserById(id: number): Promise<User | undefined>;
+  getUserByVerificationToken(token: string): Promise<User | undefined>;
   validateUser(email: string, password: string): Promise<User | null>;
+  updateLastLogin(userId: number): Promise<void>;
+
+  // User Management (Admin)
+  getAllUsers(createdBy?: number): Promise<User[]>;
+  createUserByAdmin(userData: any, adminId: number): Promise<User>;
+  updateUserByAdmin(userId: number, userData: any): Promise<User>;
+  deleteUser(userId: number): Promise<boolean>;
+  setEmailVerificationToken(userId: number, token: string, expiry: Date): Promise<void>;
+  verifyEmail(token: string): Promise<User | null>;
+  updatePassword(userId: number, newPassword: string): Promise<void>;
+  setRequirePasswordChange(userId: number, require: boolean): Promise<void>;
 
   // Clients
   getClients(userId: number): Promise<Client[]>;
@@ -79,11 +98,46 @@ export interface IStorage {
   updateTeam(id: number, team: Partial<InsertTeam>, userId: number): Promise<Team>;
   deleteTeam(id: number, userId: number): Promise<boolean>;
   getTeamMembers(teamId: number, userId: number): Promise<TeamMember[]>;
-  addTeamMember(teamMember: InsertTeamMember, userId: number): Promise<TeamMember>;
-  removeTeamMember(id: number, userId: number): Promise<boolean>;
+  getAllTeamMembers(userId: number): Promise<TeamMember[]>;
+  createTeamMember(teamMember: InsertTeamMember, userId: number): Promise<TeamMember>;
+  deleteTeamMember(id: number, userId: number): Promise<boolean>;
 
   // Route optimization
   optimizeRoute(appointmentIds: number[], userId: number): Promise<{ optimizedOrder: Appointment[], totalDistance: number, estimatedTime: number }>;
+
+  // Access Schedules
+  getAccessSchedules(userId: number): Promise<AccessSchedule[]>;
+  getAccessSchedule(id: number, userId: number): Promise<AccessSchedule | undefined>;
+  getAccessScheduleById(id: number): Promise<AccessSchedule | undefined>; // Busca apenas por ID (para validação)
+  createAccessSchedule(schedule: InsertAccessSchedule, userId: number): Promise<AccessSchedule>;
+  updateAccessSchedule(id: number, schedule: Partial<InsertAccessSchedule>, userId: number): Promise<AccessSchedule>;
+  deleteAccessSchedule(id: number, userId: number): Promise<boolean>;
+
+  // Date Restrictions (feriados / indisponibilidades por técnico/equipe)
+  getDateRestrictions(userId: number, start?: Date, end?: Date): Promise<DateRestriction[]>;
+  createDateRestriction(data: InsertDateRestriction, userId: number): Promise<DateRestriction>;
+  deleteDateRestriction(id: number, userId: number): Promise<boolean>;
+
+  // Companies (Multiempresa)
+  createCompany(company: InsertCompany): Promise<Company>;
+  getCompanyById(id: number): Promise<Company | undefined>;
+  getCompanyByCnpj(cnpj: string): Promise<Company | undefined>;
+  updateCompany(id: number, company: Partial<InsertCompany>): Promise<Company>;
+
+  // Memberships
+  createMembership(membership: InsertMembership): Promise<Membership>;
+  getMembershipsByUserId(userId: number): Promise<Membership[]>;
+  getMembershipsByCompanyId(companyId: number): Promise<Membership[]>;
+  getMembership(userId: number, companyId: number): Promise<Membership | undefined>;
+  updateMembershipRole(userId: number, companyId: number, role: string): Promise<Membership>;
+  deleteMembership(userId: number, companyId: number): Promise<boolean>;
+
+  // Invitations
+  createInvitation(invitation: InsertInvitation): Promise<Invitation>;
+  getInvitationByToken(token: string): Promise<Invitation | undefined>;
+  getInvitationsByCompanyId(companyId: number): Promise<Invitation[]>;
+  updateInvitationStatus(id: number, status: string): Promise<Invitation>;
+  deleteInvitation(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -113,6 +167,165 @@ export class DatabaseStorage implements IStorage {
       return user;
     }
     return null;
+  }
+
+  async getUserByVerificationToken(token: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.emailVerificationToken, token));
+    return user || undefined;
+  }
+
+  async updateLastLogin(userId: number): Promise<void> {
+    await db.update(users)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(users.id, userId));
+  }
+
+  // User Management (Admin)
+  async getAllUsers(createdBy?: number): Promise<User[]> {
+    // Se createdBy for fornecido, filtrar apenas usuários criados por esse admin
+    if (createdBy) {
+      return await db.select().from(users).where(eq(users.createdBy, createdBy));
+    }
+    // Caso contrário, retornar todos (apenas para compatibilidade, não deve ser usado)
+    return await db.select().from(users);
+  }
+
+  async createUserByAdmin(userData: any, adminId: number): Promise<User> {
+    const tempPassword = Math.random().toString(36).slice(-12);
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+    const [user] = await db.insert(users).values({
+      name: userData.name,
+      email: userData.email,
+      username: userData.username,
+      password: hashedPassword,
+      role: userData.role,
+      plan: 'basic', // Plano sempre básico no cadastro
+      phone: userData.phone || null,
+      cep: userData.cep || null,
+      logradouro: userData.logradouro || null,
+      numero: userData.numero || null,
+      complemento: userData.complemento || null,
+      bairro: userData.bairro || null,
+      cidade: userData.cidade || null,
+      estado: userData.estado || null,
+      emailVerified: false,
+      requirePasswordChange: true,
+      isActive: true,
+      createdBy: adminId,
+    }).returning();
+
+    return user;
+  }
+
+  async updateUserByAdmin(userId: number, userData: any): Promise<User> {
+    const [user] = await db.update(users)
+      .set(userData)
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
+  async deleteUser(userId: number): Promise<boolean> {
+    const result = await db.delete(users).where(eq(users.id, userId));
+    return (result.rowCount || 0) > 0;
+  }
+
+  async setEmailVerificationToken(userId: number, token: string, expiry: Date): Promise<void> {
+    await db.update(users)
+      .set({
+        emailVerificationToken: token,
+        emailVerificationExpiry: expiry,
+      })
+      .where(eq(users.id, userId));
+  }
+
+  async verifyEmail(token: string): Promise<User | null> {
+    const user = await this.getUserByVerificationToken(token);
+
+    if (!user) {
+      return null;
+    }
+
+    // Verificar se o token expirou
+    if (user.emailVerificationExpiry && user.emailVerificationExpiry < new Date()) {
+      return null;
+    }
+
+    // Marcar email como verificado MAS MANTER O TOKEN
+    // O token será limpo apenas após definir a senha em set-first-password
+    const [updatedUser] = await db.update(users)
+      .set({
+        emailVerified: true,
+        // NÃO limpar token aqui - ainda será necessário para definir senha
+        // emailVerificationToken: null,
+        // emailVerificationExpiry: null,
+      })
+      .where(eq(users.id, user.id))
+      .returning();
+
+    return updatedUser;
+  }
+
+  async updatePassword(userId: number, newPassword: string): Promise<void> {
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await db.update(users)
+      .set({
+        password: hashedPassword,
+        passwordChangedAt: new Date() // Registra quando senha foi alterada
+      })
+      .where(eq(users.id, userId));
+  }
+
+  async setRequirePasswordChange(userId: number, require: boolean): Promise<void> {
+    await db.update(users)
+      .set({ requirePasswordChange: require })
+      .where(eq(users.id, userId));
+  }
+
+  // Password Reset
+  async setPasswordResetToken(userId: number, token: string, expiry: Date): Promise<void> {
+    await db.update(users)
+      .set({
+        passwordResetToken: token,
+        passwordResetExpiry: expiry,
+      })
+      .where(eq(users.id, userId));
+  }
+
+  async getUserByPasswordResetToken(token: string): Promise<User | null> {
+    const [user] = await db.select()
+      .from(users)
+      .where(eq(users.passwordResetToken, token));
+    return user || null;
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<User | null> {
+    const user = await this.getUserByPasswordResetToken(token);
+
+    if (!user) {
+      return null;
+    }
+
+    // Verificar se o token expirou
+    if (user.passwordResetExpiry && user.passwordResetExpiry < new Date()) {
+      return null;
+    }
+
+    // Atualizar senha, limpar token e registrar data de alteração
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const [updatedUser] = await db.update(users)
+      .set({
+        password: hashedPassword,
+        passwordResetToken: null,
+        passwordResetExpiry: null,
+        passwordChangedAt: new Date(), // Registra quando senha foi alterada
+        requirePasswordChange: false,
+      })
+      .where(eq(users.id, user.id))
+      .returning();
+
+    return updatedUser;
   }
 
   // Clients
@@ -157,7 +370,7 @@ export class DatabaseStorage implements IStorage {
   async searchClients(query: string, userId: number): Promise<Client[]> {
     console.log("Busca cliente - input:", query);
     const searchTerm = `%${query}%`;
-    
+
     const results = await db
       .select()
       .from(clients)
@@ -171,7 +384,7 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .limit(5);
-    
+
     console.log("Resultados encontrados:", results);
     return results;
   }
@@ -255,6 +468,41 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createVehicle(insertVehicle: InsertVehicle, userId: number): Promise<Vehicle> {
+    // 🔒 Validar unicidade: apenas 1 veículo por técnico/equipe
+    if (insertVehicle.technicianId) {
+      const [existing] = await db
+        .select()
+        .from(vehicles)
+        .where(
+          and(
+            eq(vehicles.technicianId, insertVehicle.technicianId),
+            eq(vehicles.userId, userId)
+          )
+        )
+        .limit(1);
+
+      if (existing) {
+        throw new Error(`Este técnico já está vinculado ao veículo: ${existing.plate}`);
+      }
+    }
+
+    if (insertVehicle.teamId) {
+      const [existing] = await db
+        .select()
+        .from(vehicles)
+        .where(
+          and(
+            eq(vehicles.teamId, insertVehicle.teamId),
+            eq(vehicles.userId, userId)
+          )
+        )
+        .limit(1);
+
+      if (existing) {
+        throw new Error(`Esta equipe já está vinculada ao veículo: ${existing.plate}`);
+      }
+    }
+
     const [vehicle] = await db
       .insert(vehicles)
       .values({ ...insertVehicle, userId })
@@ -263,6 +511,43 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateVehicle(id: number, vehicleData: Partial<InsertVehicle>, userId: number): Promise<Vehicle> {
+    // 🔒 Validar unicidade: apenas 1 veículo por técnico/equipe
+    if (vehicleData.technicianId) {
+      const [existing] = await db
+        .select()
+        .from(vehicles)
+        .where(
+          and(
+            eq(vehicles.technicianId, vehicleData.technicianId),
+            eq(vehicles.userId, userId)
+          )
+        )
+        .limit(1);
+
+      // Permitir se for o mesmo veículo sendo atualizado
+      if (existing && existing.id !== id) {
+        throw new Error(`Este técnico já está vinculado ao veículo: ${existing.plate}`);
+      }
+    }
+
+    if (vehicleData.teamId) {
+      const [existing] = await db
+        .select()
+        .from(vehicles)
+        .where(
+          and(
+            eq(vehicles.teamId, vehicleData.teamId),
+            eq(vehicles.userId, userId)
+          )
+        )
+        .limit(1);
+
+      // Permitir se for o mesmo veículo sendo atualizado
+      if (existing && existing.id !== id) {
+        throw new Error(`Esta equipe já está vinculada ao veículo: ${existing.plate}`);
+      }
+    }
+
     const [vehicle] = await db
       .update(vehicles)
       .set(vehicleData)
@@ -298,12 +583,12 @@ export class DatabaseStorage implements IStorage {
 
   async updateAppointment(id: number, appointmentData: Partial<InsertAppointment>, userId: number): Promise<Appointment> {
     console.log(`🔧 [STORAGE] Dados recebidos para atualização:`, appointmentData);
-    
+
     // Processar scheduledDate se presente
     const processedData = { ...appointmentData };
     if (processedData.scheduledDate) {
       console.log(`📅 [STORAGE] Processando scheduledDate:`, processedData.scheduledDate);
-      
+
       // Garantir que scheduledDate seja uma string ISO válida ou Date
       if (typeof processedData.scheduledDate === 'string') {
         // Verificar se é uma string ISO válida
@@ -318,15 +603,15 @@ export class DatabaseStorage implements IStorage {
         throw new Error(`Tipo de data inválido no storage: ${typeof processedData.scheduledDate}`);
       }
     }
-    
+
     console.log(`🔄 [STORAGE] Dados processados:`, processedData);
-    
+
     const [appointment] = await db
       .update(appointments)
       .set(processedData)
       .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
       .returning();
-      
+
     console.log(`✅ [STORAGE] Agendamento atualizado no banco: ${appointment.id}`);
     return appointment;
   }
@@ -438,7 +723,7 @@ export class DatabaseStorage implements IStorage {
   async deleteTeam(id: number, userId: number): Promise<boolean> {
     // Remove membros da equipe primeiro
     await db.delete(teamMembers).where(and(eq(teamMembers.teamId, id), eq(teamMembers.userId, userId)));
-    
+
     const result = await db.delete(teams).where(and(eq(teams.id, id), eq(teams.userId, userId)));
     return (result.rowCount || 0) > 0;
   }
@@ -447,13 +732,201 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
   }
 
-  async addTeamMember(insertTeamMember: InsertTeamMember, userId: number): Promise<TeamMember> {
+  async getAllTeamMembers(userId: number): Promise<TeamMember[]> {
+    return await db.select().from(teamMembers).where(eq(teamMembers.userId, userId));
+  }
+
+  async createTeamMember(insertTeamMember: InsertTeamMember, userId: number): Promise<TeamMember> {
     const [teamMember] = await db.insert(teamMembers).values({ ...insertTeamMember, userId }).returning();
     return teamMember;
   }
 
-  async removeTeamMember(id: number, userId: number): Promise<boolean> {
+  async deleteTeamMember(id: number, userId: number): Promise<boolean> {
     const result = await db.delete(teamMembers).where(and(eq(teamMembers.id, id), eq(teamMembers.userId, userId)));
+    return (result.rowCount || 0) > 0;
+  }
+
+  // Access Schedules - Implementação para controle de horário de acesso
+  async getAccessSchedules(userId: number): Promise<AccessSchedule[]> {
+    // Filtrar por userId para garantir isolamento entre empresas/usuários
+    return await db.select().from(accessSchedules).where(eq(accessSchedules.userId, userId));
+  }
+
+  async getAccessSchedule(id: number, userId: number): Promise<AccessSchedule | undefined> {
+    // Buscar apenas por ID (userId ignorado para permitir que qualquer admin acesse)
+    const [schedule] = await db.select().from(accessSchedules).where(eq(accessSchedules.id, id));
+    return schedule || undefined;
+  }
+
+  // Busca tabela de horário apenas por ID (sem filtrar por userId)
+  // Usado para validação de acesso de usuários que referenciam a tabela
+  async getAccessScheduleById(id: number): Promise<AccessSchedule | undefined> {
+    const [schedule] = await db.select().from(accessSchedules).where(eq(accessSchedules.id, id));
+    return schedule || undefined;
+  }
+
+  async createAccessSchedule(insertSchedule: InsertAccessSchedule, userId: number): Promise<AccessSchedule> {
+    const [schedule] = await db.insert(accessSchedules).values({ ...insertSchedule, userId }).returning();
+    return schedule;
+  }
+
+  async updateAccessSchedule(id: number, scheduleData: Partial<InsertAccessSchedule>, userId: number): Promise<AccessSchedule> {
+    // Atualizar apenas por ID (userId ignorado) para permitir edição por qualquer admin
+    const [schedule] = await db.update(accessSchedules)
+      .set(scheduleData)
+      .where(eq(accessSchedules.id, id))
+      .returning();
+    return schedule;
+  }
+
+  async deleteAccessSchedule(id: number, userId: number): Promise<boolean> {
+    // Antes de deletar, remover referências em usuários
+    await db.update(users)
+      .set({ accessScheduleId: null })
+      .where(eq(users.accessScheduleId, id));
+
+    // Remover tabela apenas por ID (userId ignorado) para permitir deleção por qualquer admin
+    const result = await db.delete(accessSchedules).where(eq(accessSchedules.id, id));
+    return (result.rowCount || 0) > 0;
+  }
+
+  // Companies (Multiempresa)
+  async createCompany(insertCompany: InsertCompany): Promise<Company> {
+    const [company] = await db.insert(companies).values(insertCompany).returning();
+    return company;
+  }
+
+  async getCompanyById(id: number): Promise<Company | undefined> {
+    const [company] = await db.select().from(companies).where(eq(companies.id, id));
+    return company || undefined;
+  }
+
+  async getCompanyByCnpj(cnpj: string): Promise<Company | undefined> {
+    const [company] = await db.select().from(companies).where(eq(companies.cnpj, cnpj));
+    return company || undefined;
+  }
+
+  async updateCompany(id: number, companyData: Partial<InsertCompany>): Promise<Company> {
+    const [company] = await db.update(companies)
+      .set(companyData)
+      .where(eq(companies.id, id))
+      .returning();
+    return company;
+  }
+
+  // Memberships
+  async createMembership(insertMembership: InsertMembership): Promise<Membership> {
+    const [membership] = await db.insert(memberships).values(insertMembership).returning();
+    return membership;
+  }
+
+  async getMembershipsByUserId(userId: number): Promise<Membership[]> {
+    return await db.select().from(memberships)
+      .where(and(eq(memberships.userId, userId), eq(memberships.isActive, true)));
+  }
+
+  async getMembershipsByCompanyId(companyId: number): Promise<Membership[]> {
+    return await db.select().from(memberships)
+      .where(and(eq(memberships.companyId, companyId), eq(memberships.isActive, true)));
+  }
+
+  async getMembership(userId: number, companyId: number): Promise<Membership | undefined> {
+    const [membership] = await db.select().from(memberships)
+      .where(and(
+        eq(memberships.userId, userId),
+        eq(memberships.companyId, companyId),
+        eq(memberships.isActive, true)
+      ));
+    return membership || undefined;
+  }
+
+  async updateMembershipRole(userId: number, companyId: number, role: string): Promise<Membership> {
+    const [membership] = await db.update(memberships)
+      .set({ role })
+      .where(and(
+        eq(memberships.userId, userId),
+        eq(memberships.companyId, companyId)
+      ))
+      .returning();
+    return membership;
+  }
+
+  async deleteMembership(userId: number, companyId: number): Promise<boolean> {
+    const result = await db.delete(memberships)
+      .where(and(
+        eq(memberships.userId, userId),
+        eq(memberships.companyId, companyId)
+      ));
+    return (result.rowCount || 0) > 0;
+  }
+
+  // Date Restrictions (feriados / indisponibilidades por técnico/equipe)
+  async getDateRestrictions(userId: number, start?: Date, end?: Date): Promise<DateRestriction[]> {
+    const baseWhere = eq(dateRestrictions.userId, userId);
+
+    if (!start && !end) {
+      return await db.select().from(dateRestrictions).where(baseWhere);
+    }
+
+    const conditions: any[] = [baseWhere];
+
+    if (start) {
+      const startOfDay = new Date(start);
+      startOfDay.setHours(0, 0, 0, 0);
+      conditions.push(sql`${dateRestrictions.date} >= ${startOfDay.toISOString()}`);
+    }
+
+    if (end) {
+      const endOfDay = new Date(end);
+      endOfDay.setHours(23, 59, 59, 999);
+      conditions.push(sql`${dateRestrictions.date} <= ${endOfDay.toISOString()}`);
+    }
+
+    return await db.select().from(dateRestrictions).where(and(...conditions));
+  }
+
+  async createDateRestriction(insertRestriction: InsertDateRestriction, userId: number): Promise<DateRestriction> {
+    const [restriction] = await db
+      .insert(dateRestrictions)
+      .values({ ...insertRestriction, userId })
+      .returning();
+    return restriction;
+  }
+
+  async deleteDateRestriction(id: number, userId: number): Promise<boolean> {
+    const result = await db
+      .delete(dateRestrictions)
+      .where(and(eq(dateRestrictions.id, id), eq(dateRestrictions.userId, userId)));
+    return (result.rowCount || 0) > 0;
+  }
+
+  // Invitations
+  async createInvitation(insertInvitation: InsertInvitation): Promise<Invitation> {
+    const [invitation] = await db.insert(invitations).values(insertInvitation).returning();
+    return invitation;
+  }
+
+  async getInvitationByToken(token: string): Promise<Invitation | undefined> {
+    const [invitation] = await db.select().from(invitations)
+      .where(eq(invitations.token, token));
+    return invitation || undefined;
+  }
+
+  async getInvitationsByCompanyId(companyId: number): Promise<Invitation[]> {
+    return await db.select().from(invitations)
+      .where(eq(invitations.companyId, companyId));
+  }
+
+  async updateInvitationStatus(id: number, status: string): Promise<Invitation> {
+    const [invitation] = await db.update(invitations)
+      .set({ status })
+      .where(eq(invitations.id, id))
+      .returning();
+    return invitation;
+  }
+
+  async deleteInvitation(id: number): Promise<boolean> {
+    const result = await db.delete(invitations).where(eq(invitations.id, id));
     return (result.rowCount || 0) > 0;
   }
 }

@@ -7,7 +7,6 @@ import {
   Car,
   Users,
   Settings,
-  MapPin,
   LayoutDashboard,
   UserCog,
   Wrench,
@@ -15,7 +14,9 @@ import {
   X,
   FileText,
   Search,
-  History
+  History,
+  Shield,
+  Clock
 } from "lucide-react";
 
 interface SidebarProps {
@@ -27,8 +28,7 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Agendamentos", href: "/appointments", icon: Calendar },
   { name: "Ache uma data", href: "/find-date", icon: Search },
-  { name: "Roteirização", href: "/routes", icon: MapPin },
-  { name: "Histórico de Rotas", href: "/routes-history", icon: History },
+  { name: "Romaneios - Histórico de Rotas", href: "/routes-history", icon: History },
   { name: "Clientes", href: "/clients", icon: Users },
   { name: "Técnicos/Equipes", href: "/technicians", icon: UserCog },
   { name: "Veículos", href: "/vehicles", icon: Car },
@@ -46,6 +46,15 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     }
     return location === href;
   };
+
+  // Adicionar gestão de usuários e tabelas de horário apenas para admins
+  const navItems = user?.role === 'admin'
+    ? [
+        ...navigation,
+        { name: "Gestão de Usuários", href: "/users", icon: Shield },
+        { name: "Tabelas de Horário", href: "/access-schedules", icon: Clock }
+      ]
+    : navigation;
 
   return (
     <>
@@ -85,7 +94,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* Navigation */}
         <nav className="mt-8 px-4">
           <ul className="space-y-2">
-            {navigation.map((item) => {
+            {navItems.map((item) => {
               const Icon = item.icon;
               const active = isActive(item.href);
               

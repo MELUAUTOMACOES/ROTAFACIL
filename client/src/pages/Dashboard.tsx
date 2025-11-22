@@ -17,6 +17,7 @@ import {
   Clock,
   TrendingUp
 } from "lucide-react";
+import type { Appointment, Client, Technician } from "@shared/schema";
 
 interface DashboardStats {
   todayAppointments: number;
@@ -38,26 +39,26 @@ interface TodayAppointment {
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   
-  const { data: appointments = [] } = useQuery({
+  const { data: appointments = [] } = useQuery<Appointment[]>({
     queryKey: ["/api/appointments"],
   });
 
-  const { data: clients = [] } = useQuery({
+  const { data: clients = [] } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
   });
 
-  const { data: technicians = [] } = useQuery({
+  const { data: technicians = [] } = useQuery<Technician[]>({
     queryKey: ["/api/technicians"],
   });
 
   // Calculate stats
   const today = new Date().toDateString();
-  const todayAppointments = appointments.filter((apt: any) => 
+  const todayAppointments = appointments.filter((apt: Appointment) => 
     new Date(apt.scheduledDate).toDateString() === today
   );
   
-  const activeTechnicians = technicians.filter((tech: any) => tech.isActive);
-  const completedAppointments = appointments.filter((apt: any) => apt.status === "completed");
+  const activeTechnicians = technicians.filter((tech: Technician) => tech.isActive);
+  const completedAppointments = appointments.filter((apt: Appointment) => apt.status === "completed");
   const completionRate = appointments.length > 0 
     ? Math.round((completedAppointments.length / appointments.length) * 100)
     : 0;
@@ -95,8 +96,11 @@ export default function Dashboard() {
     }
   };
 
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString('pt-BR', {
+  const formatTime = (dateInput: string | Date) => {
+    const date = (typeof dateInput === 'string' || typeof dateInput === 'number')
+      ? new Date(dateInput)
+      : dateInput;
+    return date.toLocaleTimeString('pt-BR', {
       hour: '2-digit',
       minute: '2-digit'
     });
@@ -138,8 +142,8 @@ export default function Dashboard() {
             </div>
             <div className="mt-4 flex items-center">
               <span className="text-gray-600 text-sm">
-                {activeTechnicians.filter((t: any) => 
-                  todayAppointments.some((a: any) => a.technicianId === t.id)
+                {activeTechnicians.filter((t: Technician) => 
+                  todayAppointments.some((a: Appointment) => a.technicianId === t.id)
                 ).length} em campo agora
               </span>
             </div>
@@ -205,9 +209,16 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="space-y-4">
-                {todayAppointments.slice(0, 3).map((appointment: any) => {
-                  const client = clients.find((c: any) => c.id === appointment.clientId);
-                  const technician = technicians.find((t: any) => t.id === appointment.technicianId);
+                {todayAppointments.slice(0, 3).map((appointment: Appointment) => {
+                  const client = clients.find((c: Client) => c.id === appointment.clientId);
+                  const technician = technicians.find((t: Technician) => t.id === appointment.technicianId);
+                  const addressText = [
+                    appointment.logradouro,
+                    appointment.numero,
+                    appointment.bairro,
+                    appointment.cidade,
+                    appointment.cep,
+                  ].filter(Boolean).join(', ');
                   
                   return (
                     <div key={appointment.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
@@ -219,7 +230,7 @@ export default function Dashboard() {
                       <div className="flex-1">
                         <h4 className="font-medium text-gray-900">{client?.name || "Cliente"}</h4>
                         <p className="text-sm text-gray-600">{appointment.notes || "Serviço"}</p>
-                        <p className="text-xs text-gray-500">{appointment.address}</p>
+                        <p className="text-xs text-gray-500">{addressText}</p>
                       </div>
                       <div className="text-right">
                         <Badge className={getStatusColor(appointment.status)}>
@@ -259,7 +270,7 @@ export default function Dashboard() {
               <Button
                 variant="outline"
                 className="flex items-center justify-start p-4 h-auto border-gray-200 hover:bg-gray-50"
-                onClick={() => setLocation("/routes")}
+                onClick={() => setLocation("/appointments")}
               >
                 <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center mr-4">
                   <Route className="text-white h-5 w-5" />
@@ -315,9 +326,9 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="space-y-4">
-              {appointments.slice(0, 4).map((activity: any) => {
-                const client = clients.find((c: any) => c.id === activity.clientId);
-                const technician = technicians.find((t: any) => t.id === activity.technicianId);
+              {appointments.slice(0, 4).map((activity: Appointment) => {
+                const client = clients.find((c: Client) => c.id === activity.clientId);
+                const technician = technicians.find((t: Technician) => t.id === activity.technicianId);
                 
                 return (
                   <div key={activity.id} className="flex items-start space-x-4">

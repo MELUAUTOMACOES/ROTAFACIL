@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
@@ -6,10 +7,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import AppointmentForm from "@/components/forms/AppointmentForm";
 import AppointmentCalendar from "@/components/AppointmentCalendar";
+import AvailabilityCalendar from "@/components/AvailabilityCalendar";
+import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
 import {
   Plus,
   Calendar,
@@ -28,6 +37,8 @@ import {
   Navigation,
   CheckCircle2,
   Repeat2,
+  ChevronDown,
+  Wrench,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -51,6 +62,7 @@ import type {
   Service,
   Technician,
   Team,
+  DateRestriction,
 } from "@shared/schema";
 import OptimizedRouteMap from "@/components/maps/OptimizedRouteMap";
 
@@ -66,9 +78,29 @@ export default function Appointments() {
   const [selectedService, setSelectedService] = useState<string>("all");
   const [selectedTechnician, setSelectedTechnician] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [inRouteFilter, setInRouteFilter] = useState<string>("no"); // "all", "yes", "no"
 
-  // Estado para controlar visualização (lista ou calendário)
-  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  // Estado para controlar visualização (lista, calendário ou disponibilidade)
+  const [viewMode, setViewMode] = useState<"list" | "calendar" | "availability">("list");
+
+  // Estado para data de navegação na visualização de disponibilidade
+  const [availabilityDate, setAvailabilityDate] = useState<Date>(new Date());
+
+  // Estado para modal de restrição de data
+  const [isRestrictionModalOpen, setIsRestrictionModalOpen] = useState(false);
+  const [restrictionStartDate, setRestrictionStartDate] = useState<string>("");
+  const [restrictionEndDate, setRestrictionEndDate] = useState<string>("");
+  const [restrictionTitle, setRestrictionTitle] = useState<string>("");
+  const [selectedRestrictionResponsibles, setSelectedRestrictionResponsibles] = useState<string[]>([]);
+  const [restrictionError, setRestrictionError] = useState<string | null>(null);
+
+  // Estado para paginação
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const itemsPerPage = 20;
+
+  // Estado para modal de confirmação de exclusão
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [appointmentToDelete, setAppointmentToDelete] = useState<Appointment | null>(null);
 
   // Estados para seleção de agendamentos e otimização de rotas
   const [selectedAppointmentIds, setSelectedAppointmentIds] = useState<
@@ -77,14 +109,18 @@ export default function Appointments() {
   const [isRouteDrawerOpen, setIsRouteDrawerOpen] = useState(false);
   const [endAtStart, setEndAtStart] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isViewing, setIsViewing] = useState(false);
   const [optimizedRoute, setOptimizedRoute] = useState<{
     route?: any;
     stops?: any[];
     appointments?: Appointment[];
     totalDistance?: number;
     totalDuration?: number;
+    start?: { lat: number; lon: number; address: string } | null;
   } | null>(null);
+  const [isRouteOptimized, setIsRouteOptimized] = useState(false);
   const [polyline, setPolyline] = useState<any>(null);
+  const [startWaypoint, setStartWaypoint] = useState<{ lat: number; lon: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedInfo, setSavedInfo] = useState<null | {
     id: string;
@@ -93,6 +129,26 @@ export default function Appointments() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const handleRestrictionModalClose = () => {
+    setIsRestrictionModalOpen(false);
+    setRestrictionStartDate("");
+    setRestrictionEndDate("");
+    setRestrictionTitle("");
+    setSelectedRestrictionResponsibles([]);
+    setRestrictionError(null);
+  };
+
+  const handleRestrictionModalOpenChange = (open: boolean) => {
+    if (!open) {
+      setRestrictionStartDate("");
+      setRestrictionEndDate("");
+      setRestrictionTitle("");
+      setSelectedRestrictionResponsibles([]);
+      setRestrictionError(null);
+    }
+    setIsRestrictionModalOpen(open);
+  };
 
   //Mapa
   const [routeWaypoints, setRouteWaypoints] = useState<{ lat: number; lon: number }[] | null>(null);
@@ -124,7 +180,7 @@ export default function Appointments() {
     ],
     calendars: [
       {
-        isVisible: viewMode === "calendar",
+        isVisible: viewMode === "calendar" || viewMode === "availability",
       },
     ],
   });
@@ -162,7 +218,7 @@ export default function Appointments() {
     }
   }, []);
 
-  
+
   // Limpar estados ao alterar a seleção, MAS só se o drawer NÃO estiver aberto
   useEffect(() => {
     if (!isRouteDrawerOpen) {
@@ -181,6 +237,7 @@ export default function Appointments() {
       selectedService,
       selectedTechnician,
       selectedStatus,
+      inRouteFilter,
     });
   }, [
     selectedDate,
@@ -188,6 +245,7 @@ export default function Appointments() {
     selectedService,
     selectedTechnician,
     selectedStatus,
+    inRouteFilter,
   ]);
 
   // Verificar parâmetros da URL ao carregar a página
@@ -252,11 +310,18 @@ export default function Appointments() {
       const response = await fetch("/api/appointments", {
         headers: getAuthHeaders(),
       });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+      if (!response.ok) throw new Error("Failed to fetch appointments");
       const data = await response.json();
-      return Array.isArray(data) ? data : [];
+
+      // Log para debug de romaneios
+      const withRouteInfo = data.filter((apt: any) => apt.routeInfo);
+      if (withRouteInfo.length > 0) {
+        console.log(`🚚 [APPOINTMENTS] ${withRouteInfo.length} agendamentos com romaneio:`,
+          withRouteInfo.map((apt: any) => `#${apt.id} -> Romaneio ${apt.routeInfo.status} #${apt.routeInfo.displayNumber}`)
+        );
+      }
+
+      return data;
     },
   });
 
@@ -268,6 +333,41 @@ export default function Appointments() {
       });
       return response.json();
     },
+  });
+
+  // Restrições de data para o mês atual na aba de disponibilidade
+  const monthStart = useMemo(() => {
+    const d = new Date(availabilityDate);
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, [availabilityDate]);
+
+  const monthEnd = useMemo(() => {
+    const d = new Date(availabilityDate);
+    d.setMonth(d.getMonth() + 1, 0);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }, [availabilityDate]);
+
+  const { data: dateRestrictions = [] } = useQuery<DateRestriction[]>({
+    queryKey: [
+      "/api/date-restrictions",
+      monthStart.toISOString(),
+      monthEnd.toISOString(),
+    ],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        start: monthStart.toISOString(),
+        end: monthEnd.toISOString(),
+      });
+      const response = await fetch(`/api/date-restrictions?${params.toString()}`, {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) throw new Error("Failed to fetch date restrictions");
+      return response.json();
+    },
+    enabled: viewMode === "availability" || viewMode === "calendar",
   });
 
   const { data: services = [] } = useQuery({
@@ -300,6 +400,161 @@ export default function Appointments() {
     },
   });
 
+  const { data: businessRules } = useQuery({
+    queryKey: ["/api/business-rules"],
+    queryFn: async () => {
+      const response = await fetch("/api/business-rules", {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) return null;
+      return response.json();
+    },
+  });
+
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ["/api/team-members"],
+    queryFn: async () => {
+      const response = await fetch("/api/team-members", {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) return [];
+      return response.json();
+    },
+  });
+
+  // Mutations para restrições de data
+  const createDateRestrictionMutation = useMutation({
+    mutationFn: async () => {
+      setRestrictionError(null);
+      // Validações em ordem de prioridade para mensagens mais claras
+      if (!restrictionTitle.trim()) {
+        throw new Error("Informe o motivo da restrição.");
+      }
+      if (!restrictionStartDate) {
+        throw new Error("Selecione a data inicial.");
+      }
+      if (selectedRestrictionResponsibles.length === 0) {
+        throw new Error("Selecione pelo menos um técnico ou equipe.");
+      }
+
+      const start = new Date(restrictionStartDate);
+      const end = restrictionEndDate ? new Date(restrictionEndDate) : new Date(restrictionStartDate);
+
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        throw new Error("Datas inválidas.");
+      }
+
+      const startDate = start < end ? start : end;
+      const endDate = end > start ? end : start;
+
+      // Aviso se houver agendamentos existentes nos dias/responsáveis selecionados
+      const conflictMessages: string[] = [];
+
+      for (const resp of selectedRestrictionResponsibles) {
+        const [type, idStr] = resp.split("-");
+        const responsibleType = type === "team" ? "team" : "technician";
+        const responsibleId = parseInt(idStr, 10);
+        if (!responsibleId) continue;
+
+        const responsibleName = responsibleType === "team"
+          ? teams.find((t: Team) => t.id === responsibleId)?.name || `Equipe #${responsibleId}`
+          : technicians.find((t: Technician) => t.id === responsibleId)?.name || `Técnico #${responsibleId}`;
+
+        const current = new Date(startDate);
+        current.setHours(0, 0, 0, 0);
+
+        while (current <= endDate) {
+          const dayYear = current.getFullYear();
+          const dayMonth = current.getMonth();
+          const dayDate = current.getDate();
+
+          const hasAppointment = appointments.some((apt: Appointment) => {
+            if (responsibleType === "team" ? apt.teamId !== responsibleId : apt.technicianId !== responsibleId) {
+              return false;
+            }
+            const aptDate = new Date(apt.scheduledDate);
+            return (
+              aptDate.getFullYear() === dayYear &&
+              aptDate.getMonth() === dayMonth &&
+              aptDate.getDate() === dayDate
+            );
+          });
+
+          if (hasAppointment) {
+            const displayDate = current.toLocaleDateString("pt-BR");
+            conflictMessages.push(`${displayDate} - ${responsibleName}`);
+          }
+
+          current.setDate(current.getDate() + 1);
+          current.setHours(0, 0, 0, 0);
+        }
+      }
+
+      if (conflictMessages.length > 0) {
+        const details = conflictMessages.join("; ");
+        throw new Error(
+          `Existem agendamentos nas seguintes datas/responsáveis: ${details}. ` +
+          "Remova esses agendamentos antes de criar a restrição de data.",
+        );
+      }
+
+      // Criar efetivamente as restrições
+      for (const resp of selectedRestrictionResponsibles) {
+        const [type, idStr] = resp.split("-");
+        const responsibleType = type === "team" ? "team" : "technician";
+        const responsibleId = parseInt(idStr, 10);
+        if (!responsibleId) continue;
+
+        const current = new Date(startDate);
+        current.setHours(0, 0, 0, 0);
+
+        while (current <= endDate) {
+          await apiRequest("POST", "/api/date-restrictions", {
+            date: current.toISOString(),
+            responsibleType,
+            responsibleId,
+            title: restrictionTitle.trim(),
+          });
+
+          current.setDate(current.getDate() + 1);
+          current.setHours(0, 0, 0, 0);
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/date-restrictions"] });
+      handleRestrictionModalClose();
+      setRestrictionError(null);
+      toast({
+        title: "Restrição criada",
+        description: "As restrições de data foram aplicadas com sucesso.",
+      });
+    },
+    onError: (error: any) => {
+      setRestrictionError(error.message || "Erro ao criar restrição de data.");
+    },
+  });
+
+  const deleteDateRestrictionMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/date-restrictions/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/date-restrictions"] });
+      toast({
+        title: "Restrição removida",
+        description: "Restrição de data removida com sucesso.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao remover restrição de data.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteAppointmentMutation = useMutation({
     mutationFn: async (id: number) => {
       await apiRequest("DELETE", `/api/appointments/${id}`);
@@ -320,14 +575,49 @@ export default function Appointments() {
     },
   });
 
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const response = await fetch(`/api/appointments/${id}`, {
+        method: "PATCH",
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) throw new Error("Erro ao atualizar status");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
+      toast({
+        title: "Sucesso",
+        description: "Status atualizado com sucesso",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao atualizar status",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleEdit = (appointment: Appointment) => {
     setSelectedAppointment(appointment);
     setIsFormOpen(true);
   };
 
   const handleDelete = async (appointment: Appointment) => {
-    if (confirm("Tem certeza que deseja excluir este agendamento?")) {
-      deleteAppointmentMutation.mutate(appointment.id);
+    setAppointmentToDelete(appointment);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (appointmentToDelete) {
+      deleteAppointmentMutation.mutate(appointmentToDelete.id);
+      setAppointmentToDelete(null);
     }
   };
 
@@ -375,9 +665,161 @@ export default function Appointments() {
 
   const handleSelectAll = (isSelected: boolean) => {
     if (isSelected) {
-      setSelectedAppointmentIds(filteredAppointments.map((apt) => apt.id));
+      // Selecionar apenas agendamentos que não estão em romaneio confirmado/finalizado
+      const selectableAppointments = filteredAppointments.filter(
+        (apt: Appointment) => !((apt as any).routeInfo)
+      );
+      setSelectedAppointmentIds(selectableAppointments.map((apt: Appointment) => apt.id));
     } else {
       setSelectedAppointmentIds([]);
+    }
+  };
+
+  // Nova função para visualizar rota SEM otimizar (na ordem dos agendamentos selecionados)
+  const handleViewRoute = async () => {
+    if (selectedAppointmentIds.length < 2) {
+      toast({
+        title: "Selecione ao menos 2 agendamentos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // ✅ Responsável único (mesmo técnico OU mesma equipe)
+    const selected = filteredAppointments.filter((apt: Appointment) =>
+      selectedAppointmentIds.includes(apt.id),
+    );
+    const keys = selected
+      .map((apt: Appointment) =>
+        apt.technicianId
+          ? `technician-${apt.technicianId}`
+          : apt.teamId
+            ? `team-${apt.teamId}`
+            : null,
+      )
+      .filter(Boolean);
+    const uniqueKeys = Array.from(new Set(keys));
+    if (uniqueKeys.length !== 1) {
+      toast({
+        title: "Seleção inválida",
+        description:
+          "Não é possível visualizar rota com técnicos/equipes diferentes. Selecione do mesmo responsável.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Abrir drawer com loading
+      setIsViewing(true);
+      setIsRouteDrawerOpen(true);
+
+      // Limpar estados
+      setSavedInfo(null);
+      setError(null);
+      setIsOptimizing(false);
+      setOptimizedRoute(null);
+      setPolyline(null);
+      setStartWaypoint(null);
+      setIsRouteOptimized(false);
+
+      console.log("🗺️ [ROUTE] Visualizando rota na ordem dos agendamentos selecionados");
+
+      // Ordenar agendamentos pela ordem em que foram selecionados
+      const orderedAppointments = selectedAppointmentIds
+        .map(id => filteredAppointments.find((apt: Appointment) => apt.id === id))
+        .filter(Boolean) as Appointment[];
+
+      // Chamar API do backend para obter rota SEM otimização (mas com polyline calculada)
+      console.log("🗺️ [ROUTE] Chamando API do backend para gerar rota sem otimização...");
+
+      const res = await fetch("/api/routes/optimize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appointmentIds: selectedAppointmentIds,
+          endAtStart,
+          title: `Rota ${new Date().toLocaleDateString()}`,
+          preview: true,
+          skipOptimization: true, // NÃO otimizar, manter ordem
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Falha ao visualizar rota");
+      }
+
+      const data = await res.json();
+      console.log("✅ [ROUTE] Rota recebida do backend:", data);
+
+      // Marcar se a rota foi otimizada ou não
+      setIsRouteOptimized(data.route?.isOptimized ?? false);
+
+      // Extrair polyline do backend (igual na otimização)
+      const backendGeo =
+        data?.route?.polylineGeoJson ??
+        data?.route?.routeGeoJson ??
+        data?.route?.geojson ??
+        data?.polylineGeoJson ??
+        data?.routeGeoJson ??
+        data?.geojson ??
+        null;
+
+      console.log("🗺️ [ROUTE] Polyline do backend:", {
+        hasPolyline: !!backendGeo,
+        type: backendGeo?.type,
+      });
+
+      // Extrair ponto inicial e paradas (igual na otimização)
+      const asNum = (v: any) => (v === undefined || v === null ? undefined : Number(v));
+
+      let startWp: { lat: number; lon: number } | null = null;
+      const sLat =
+        asNum(data?.start?.lat) ??
+        asNum(data?.start?.latitude) ??
+        asNum(data?.route?.startLat) ??
+        (Array.isArray(data?.route?.start) ? asNum(data.route.start[1]) : undefined);
+      const sLon =
+        asNum(data?.start?.lon) ??
+        asNum(data?.start?.lng) ??
+        asNum(data?.start?.longitude) ??
+        asNum(data?.route?.startLng) ??
+        (Array.isArray(data?.route?.start) ? asNum(data.route.start[0]) : undefined);
+      if (Number.isFinite(sLat) && Number.isFinite(sLon)) startWp = { lat: sLat!, lon: sLon! };
+
+      let stopWps: { lat: number; lon: number }[] = [];
+      if (Array.isArray(data?.stops) && data.stops.length) {
+        stopWps = data.stops
+          .map((s: any) => ({
+            lat: asNum(s.lat ?? s.latitude ?? s.coords?.lat),
+            lon: asNum(s.lon ?? s.lng ?? s.longitude ?? s.coords?.lng),
+          }))
+          .filter((p: any) => Number.isFinite(p.lat) && Number.isFinite(p.lon)) as any;
+      }
+
+      const allWps = startWp ? [startWp, ...stopWps] : stopWps;
+
+      setOptimizedRoute(data);
+      setRouteWaypoints(allWps.length >= 2 ? allWps : null);
+      setPolyline(backendGeo);
+      setStartWaypoint(startWp);
+      setIsRouteOptimized(data.route?.isOptimized ?? true); // Por padrão, otimização é true
+
+      toast({
+        title: "Rota visualizada",
+        description: `${data.stops?.length || 0} paradas na ordem selecionada`,
+      });
+    } catch (err: any) {
+      console.error("❌ [ROUTE] Erro ao visualizar rota:", err);
+      setError(err.message || "Erro ao visualizar rota");
+      toast({
+        title: "Erro ao visualizar rota",
+        description: err.message || "Erro interno do servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setIsViewing(false);
     }
   };
 
@@ -391,11 +833,11 @@ export default function Appointments() {
     }
 
     // ✅ Responsável único (mesmo técnico OU mesma equipe)
-    const selected = filteredAppointments.filter((apt) =>
+    const selected = filteredAppointments.filter((apt: Appointment) =>
       selectedAppointmentIds.includes(apt.id),
     );
     const keys = selected
-      .map((apt) =>
+      .map((apt: Appointment) =>
         apt.technicianId
           ? `technician-${apt.technicianId}`
           : apt.teamId
@@ -421,7 +863,10 @@ export default function Appointments() {
       setPolyline(null);
       setError(null);
       setIsOptimizing(true);
-      setIsRouteDrawerOpen(true);
+      // NÃO fechar o drawer se já estiver aberto
+      if (!isRouteDrawerOpen) {
+        setIsRouteDrawerOpen(true);
+      }
 
       console.log("🗺️ [ROUTE] Otimizando rotas com configuração:", {
         appointmentIds: selectedAppointmentIds,
@@ -511,13 +956,13 @@ export default function Appointments() {
             lat: asNum(s.lat ?? s.latitude ?? s.coords?.lat),
             lon: asNum(s.lon ?? s.lng ?? s.longitude ?? s.coords?.lng),
           }))
-          .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon)) as any;
+          .filter((p: any) => Number.isFinite(p.lat) && Number.isFinite(p.lon)) as any;
       } else {
-        const selected = filteredAppointments.filter((apt) =>
+        const selected = filteredAppointments.filter((apt: Appointment) =>
           selectedAppointmentIds.includes(apt.id),
         );
         stopWps = selected
-          .map((apt) => {
+          .map((apt: Appointment) => {
             const client = getClient(apt.clientId) as any;
             const lat = asNum((apt as any).lat ?? (apt as any).latitude ?? client?.lat);
             const lon =
@@ -534,10 +979,10 @@ export default function Appointments() {
             backendGeo?.type === "LineString"
               ? backendGeo
               : backendGeo?.type === "Feature"
-              ? backendGeo.geometry
-              : backendGeo?.geometry?.type === "LineString"
-              ? backendGeo.geometry
-              : null;
+                ? backendGeo.geometry
+                : backendGeo?.geometry?.type === "LineString"
+                  ? backendGeo.geometry
+                  : null;
           const first = geom?.coordinates?.[0];
           if (Array.isArray(first) && first.length >= 2) {
             const [lon, lat] = first;
@@ -545,7 +990,7 @@ export default function Appointments() {
               startWp = { lat: Number(lat), lon: Number(lon) };
             }
           }
-        } catch {}
+        } catch { }
       }
 
       // Waypoints finais (índice 0 é sempre o início quando existir)
@@ -556,19 +1001,18 @@ export default function Appointments() {
       setRouteWaypoints(allWps.length >= 2 ? allWps : null);
       setPolyline(
         backendGeo ??
-          (allWps.length >= 2
-            ? { type: "LineString", coordinates: allWps.map((w) => [w.lon, w.lat]) }
-            : null),
+        (allWps.length >= 2
+          ? { type: "LineString", coordinates: allWps.map((w) => [w.lon, w.lat]) }
+          : null),
       );
-
-
-
+      setStartWaypoint(startWp);
+      setIsRouteOptimized(true); // Marca como otimizado após otimização
 
       toast({
         title: "Rota otimizada com sucesso!",
         description: `${data.stops?.length || 0} paradas organizadas`,
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("❌ [ROUTE] Erro ao otimizar:", err);
       setError(err.message || "Erro interno do servidor");
       toast({
@@ -610,7 +1054,7 @@ export default function Appointments() {
     window.open(url, "_blank");
   };
 
-  
+
   const handleSaveRoute = async () => {
     if (!optimizedRoute?.route || optimizedRoute.route.id) {
       toast({
@@ -622,6 +1066,11 @@ export default function Appointments() {
     }
 
     try {
+      // Se a rota NÃO foi otimizada, salva na ordem atual
+      // Se foi otimizada, chama a API de otimização para salvar
+
+      console.log("💾 [ROUTE] Salvando rota:", { isOptimized: isRouteOptimized, appointmentIds: selectedAppointmentIds });
+
       const res = await fetch("/api/routes/optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -630,6 +1079,8 @@ export default function Appointments() {
           endAtStart,
           title: optimizedRoute.route.title,
           preview: false,
+          // Se não foi otimizado, mantém a ordem original (não otimiza)
+          skipOptimization: !isRouteOptimized,
         }),
       });
 
@@ -651,7 +1102,7 @@ export default function Appointments() {
         title: `Rota salva com sucesso — ID #${data.route.displayNumber}`,
         description: "A rota foi salva no histórico",
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("❌ [ROUTE] Erro ao salvar:", err);
       toast({
         title: "Erro ao salvar rota",
@@ -671,6 +1122,8 @@ export default function Appointments() {
         return "bg-blue-100 text-blue-800";
       case "cancelled":
         return "bg-red-100 text-red-800";
+      case "rescheduled":
+        return "bg-purple-100 text-purple-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -686,6 +1139,8 @@ export default function Appointments() {
         return "Agendado";
       case "cancelled":
         return "Cancelado";
+      case "rescheduled":
+        return "Remarcado";
       default:
         return status;
     }
@@ -855,6 +1310,17 @@ export default function Appointments() {
         }
       }
 
+      // Filter by route (em romaneio)
+      if (inRouteFilter !== "all") {
+        const hasRoute = !!(apt as any).routeInfo;
+        if (inRouteFilter === "yes" && !hasRoute) {
+          return false;
+        }
+        if (inRouteFilter === "no" && hasRoute) {
+          return false;
+        }
+      }
+
       return true;
     });
 
@@ -869,14 +1335,79 @@ export default function Appointments() {
     selectedService,
     selectedTechnician,
     selectedStatus,
+    inRouteFilter,
     clients,
     services,
     technicians,
     teams,
   ]);
 
+  // Agrupar agendamentos por data e ordenar cronologicamente
+  const groupedAppointments = useMemo(() => {
+    // Primeiro, ordenar por data (mais antigo para mais recente)
+    const sorted = [...filteredAppointments].sort((a, b) => {
+      return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+    });
+
+    // Agrupar por data
+    const grouped: { [key: string]: Appointment[] } = {};
+    sorted.forEach((apt) => {
+      const dateKey = new Date(apt.scheduledDate).toLocaleDateString("pt-BR");
+      if (!grouped[dateKey]) {
+        grouped[dateKey] = [];
+      }
+      grouped[dateKey].push(apt);
+    });
+
+    // Converter para array de objetos {date, appointments} e ordenar as datas
+    return Object.entries(grouped)
+      .map(([date, appointments]) => ({
+        date,
+        dateObj: new Date(appointments[0].scheduledDate),
+        appointments,
+      }))
+      .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+  }, [filteredAppointments]);
+
+  // Paginação
+  const totalPages = Math.ceil(filteredAppointments.length / itemsPerPage);
+  const paginatedAppointments = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredAppointments.slice(startIndex, endIndex);
+  }, [filteredAppointments, currentPage, itemsPerPage]);
+
+  // Reagrupar agendamentos paginados por data
+  const paginatedGroupedAppointments = useMemo(() => {
+    const sorted = [...paginatedAppointments].sort((a, b) => {
+      return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+    });
+
+    const grouped: { [key: string]: Appointment[] } = {};
+    sorted.forEach((apt) => {
+      const dateKey = new Date(apt.scheduledDate).toLocaleDateString("pt-BR");
+      if (!grouped[dateKey]) {
+        grouped[dateKey] = [];
+      }
+      grouped[dateKey].push(apt);
+    });
+
+    return Object.entries(grouped)
+      .map(([date, appointments]) => ({
+        date,
+        dateObj: new Date(appointments[0].scheduledDate),
+        appointments,
+      }))
+      .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+  }, [paginatedAppointments]);
+
+  // Resetar para página 1 quando os filtros mudarem
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedDate, searchTerm, selectedService, selectedTechnician, selectedStatus, inRouteFilter]);
+
   // Computed values for route optimization
-  const selectedAppointments = filteredAppointments.filter((apt) =>
+  const selectedAppointments = filteredAppointments.filter((apt: Appointment) =>
     selectedAppointmentIds.includes(apt.id),
   );
   const isAllSelected =
@@ -926,9 +1457,9 @@ export default function Appointments() {
       if (data.errors > 0) {
         const errorMessage = data.detailedErrors
           ? data.detailedErrors.slice(0, 2).join("\n") +
-            (data.detailedErrors.length > 2
-              ? `\n... e mais ${data.detailedErrors.length - 2} erros`
-              : "")
+          (data.detailedErrors.length > 2
+            ? `\n... e mais ${data.detailedErrors.length - 2} erros`
+            : "")
           : `${data.errors} erros encontrados`;
 
         toast({
@@ -1303,11 +1834,13 @@ export default function Appointments() {
                   concluido: "completed",
                   concluído: "completed",
                   cancelado: "cancelled",
+                  remarcado: "rescheduled",
                   // Manter compatibilidade com inglês
                   scheduled: "scheduled",
                   in_progress: "in_progress",
                   completed: "completed",
                   cancelled: "cancelled",
+                  rescheduled: "rescheduled",
                 };
 
                 if (statusMap[statusLower]) {
@@ -1317,7 +1850,7 @@ export default function Appointments() {
                   );
                 } else {
                   errors.push(
-                    `Linha ${i + 1}: Status "${statusInput}" inválido. Valores aceitos: Agendado, Em Andamento, Concluído, Cancelado`,
+                    `Linha ${i + 1}: Status "${statusInput}" inválido. Valores aceitos: Agendado, Em Andamento, Concluído, Cancelado, Remarcado`,
                   );
                   console.log(
                     `❌ [CSV IMPORT] Status inválido na linha ${i + 1}: "${statusInput}"`,
@@ -1828,6 +2361,28 @@ export default function Appointments() {
                       <SelectItem value="in_progress">Em Andamento</SelectItem>
                       <SelectItem value="completed">Concluído</SelectItem>
                       <SelectItem value="cancelled">Cancelado</SelectItem>
+                      <SelectItem value="rescheduled">Remarcado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Em romaneio
+                  </label>
+                  <Select
+                    value={inRouteFilter}
+                    onValueChange={(value) => {
+                      setInRouteFilter(value);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filtrar por romaneio" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="yes">Sim</SelectItem>
+                      <SelectItem value="no">Não</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1844,46 +2399,67 @@ export default function Appointments() {
                     <Tabs
                       value={viewMode}
                       onValueChange={(value) =>
-                        setViewMode(value as "list" | "calendar")
+                        setViewMode(value as "list" | "calendar" | "availability")
                       }
                       className="w-full"
                     >
-                      <TabsList className="grid w-full grid-cols-2 h-auto sm:h-8 bg-gray-50 p-0 gap-1 sm:gap-0">
+                      <TabsList className="grid w-full grid-cols-3 h-auto sm:h-8 bg-gray-50 p-0 gap-1 sm:gap-0">
                         <TabsTrigger
                           value="list"
-                          className="flex items-center justify-center gap-2 py-2 px-3 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
+                          className="flex items-center justify-center gap-2 py-2 px-2 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
                         >
                           <List className="h-4 w-4" />
                           <span className="text-sm sm:text-xs">Lista</span>
                         </TabsTrigger>
                         <TabsTrigger
                           value="calendar"
-                          className="flex items-center justify-center gap-2 py-2 px-3 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
+                          className="flex items-center justify-center gap-2 py-2 px-2 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
                         >
                           <Calendar className="h-4 w-4" />
                           <span className="text-sm sm:text-xs">Calendário</span>
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="availability"
+                          className="flex items-center justify-center gap-2 py-2 px-2 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
+                        >
+                          <Clock className="h-4 w-4" />
+                          <span className="text-sm sm:text-xs">Disponibilidade</span>
                         </TabsTrigger>
                       </TabsList>
                     </Tabs>
                   </div>
                 </div>
 
-                {/* Clear Filters Button */}
-                <Button
-                  onClick={() => {
-                    console.log("🔍 [FILTER] Limpando todos os filtros");
-                    setSelectedDate("");
-                    setSearchTerm("");
-                    setSelectedService("all");
-                    setSelectedTechnician("all");
-                    setSelectedStatus("all");
-                  }}
-                  variant="outline"
-                  className="w-full sm:w-auto"
-                  type="button"
-                >
-                  Limpar Filtros
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  {/* Botão de restrição de data */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full sm:w-auto border-red-500 text-red-600 hover:bg-red-50"
+                    onClick={() => setIsRestrictionModalOpen(true)}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Restrição de data
+                  </Button>
+
+                  {/* Clear Filters Button */}
+                  <Button
+                    onClick={() => {
+                      console.log("🔍 [FILTER] Limpando todos os filtros");
+                      setSelectedDate("");
+                      setSearchTerm("");
+                      setSelectedService("all");
+                      setSelectedTechnician("all");
+                      setSelectedStatus("all");
+                      setInRouteFilter("no");
+                    }}
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    type="button"
+                  >
+                    Limpar Filtros
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -1951,167 +2527,279 @@ export default function Appointments() {
                 )}
               </div>
 
-              {selectedAppointmentIds.length > 1 && (
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-[14px] font-medium text-[#B8860B]">
-                    <input
-                      type="checkbox"
-                      checked={endAtStart}
-                      onChange={(e) => setEndAtStart(e.target.checked)}
-                      className="h-4 w-4 rounded border-[#DAA520] text-[#DAA520] focus:ring-[#DAA520]"
-                    />
-                    Terminar no ponto inicial
-                  </label>
-                  <Button
-                    onClick={handleOptimizeRoute}
-                    className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                  >
-                    <Route className="h-4 w-4 mr-2" />
-                    Otimizar Rotas
-                  </Button>
-                </div>
-              )}
             </div>
 
-            {/* Appointments List */}
-            <div className="grid gap-4">
-              {filteredAppointments.map((appointment: Appointment) => {
-                const client = getClient(appointment.clientId);
-                const service = getService(appointment.serviceId);
-                const responsible = getResponsibleInfo(appointment);
-                const { date, time } = formatDateTime(appointment.scheduledDate.toString());
-                const isSelected = selectedAppointmentIds.includes(appointment.id);
+            {/* Appointments List - Agrupado por Data */}
+            <div className="space-y-6">
+              {paginatedGroupedAppointments.map((group) => (
+                <div key={group.date} className="space-y-4">
+                  {/* Linha de separação com a data */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1 border-t border-gray-300"></div>
+                    <div className="px-4 py-2 bg-burnt-yellow text-white font-semibold rounded-lg shadow-sm">
+                      {group.date}
+                    </div>
+                    <div className="flex-1 border-t border-gray-300"></div>
+                  </div>
 
-                // helper para alternar seleção
-                const toggleSelection = () =>
-                  handleAppointmentSelection(appointment.id, !isSelected);
+                  {/* Agendamentos do dia */}
+                  <div className="grid gap-4">
+                    {group.appointments.map((appointment: Appointment) => {
+                      const client = getClient(appointment.clientId);
+                      const service = getService(appointment.serviceId);
+                      const responsible = getResponsibleInfo(appointment);
+                      const { date, time } = formatDateTime(appointment.scheduledDate.toString());
+                      const isSelected = selectedAppointmentIds.includes(appointment.id);
 
-                // evita que cliques em elementos internos (checkbox/botões) propaguem
-                const stop = (e: React.MouseEvent | React.KeyboardEvent) => e.stopPropagation();
+                      // helper para alternar seleção
+                      const toggleSelection = () =>
+                        handleAppointmentSelection(appointment.id, !isSelected);
 
-                return (
-                  <Card
-                    key={appointment.id}
-                    onClick={toggleSelection}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        stop(e);
-                        toggleSelection();
-                      }
-                    }}
-                    role="checkbox"
-                    aria-checked={isSelected}
-                    tabIndex={0}
-                    className={`cursor-pointer select-none hover:shadow-md transition-shadow ${
-                      isSelected ? "ring-2 ring-burnt-yellow" : ""
-                    }`}
-                  >
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start space-x-3">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onClick={stop}
-                            onChange={(e) =>
-                              handleAppointmentSelection(appointment.id, e.target.checked)
+                      // evita que cliques em elementos internos (checkbox/botões) propaguem
+                      const stop = (e: React.MouseEvent | React.KeyboardEvent) => e.stopPropagation();
+
+                      return (
+                        <Card
+                          key={appointment.id}
+                          onClick={(appointment as any).routeInfo ? undefined : toggleSelection}
+                          onKeyDown={(e) => {
+                            if (!(appointment as any).routeInfo && (e.key === "Enter" || e.key === " ")) {
+                              stop(e);
+                              toggleSelection();
                             }
-                            className="w-4 h-4 text-burnt-yellow bg-gray-100 border-gray-300 rounded focus:ring-burnt-yellow focus:ring-2 mt-1"
-                          />
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-3 mb-3">
-                              <h3 className="text-lg font-semibold text-gray-900">
-                                {client?.name || "Cliente não encontrado"}
-                              </h3>
-                              <Badge className={getStatusColor(appointment.status)}>
-                                {getStatusText(appointment.status)}
-                              </Badge>
-                              <Badge className={getPriorityColor(appointment.priority)}>
-                                {getPriorityText(appointment.priority)}
-                              </Badge>
-                            </div>
+                          }}
+                          role="checkbox"
+                          aria-checked={isSelected}
+                          tabIndex={(appointment as any).routeInfo ? -1 : 0}
+                          className={`select-none transition-shadow ${(appointment as any).routeInfo
+                            ? "opacity-75 cursor-not-allowed"
+                            : "cursor-pointer hover:shadow-md"
+                            } ${isSelected ? "ring-2 ring-burnt-yellow" : ""
+                            }`}
+                        >
+                          <CardContent className="p-6">
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-start space-x-3">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  disabled={(appointment as any).routeInfo !== null && (appointment as any).routeInfo !== undefined}
+                                  onClick={stop}
+                                  onChange={(e) =>
+                                    handleAppointmentSelection(appointment.id, e.target.checked)
+                                  }
+                                  className="w-4 h-4 text-burnt-yellow bg-gray-100 border-gray-300 rounded focus:ring-burnt-yellow focus:ring-2 mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                />
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-3 mb-3">
+                                    <h3 className="text-lg font-semibold text-gray-900">
+                                      {client?.name || "Cliente não encontrado"}
+                                      <span className="ml-2 text-sm font-normal text-gray-500">#{appointment.id}</span>
+                                    </h3>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                              <div className="flex items-center space-x-2">
-                                <Calendar className="h-4 w-4" />
-                                <span>
-                                  {date} às {time}
-                                </span>
-                              </div>
+                                    {/* Dropdown de Status */}
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <button
+                                          onClick={stop}
+                                          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium transition-colors hover:opacity-80 ${getStatusColor(appointment.status)}`}
+                                        >
+                                          {getStatusText(appointment.status)}
+                                          <ChevronDown className="h-3 w-3" />
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent onClick={stop}>
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            updateStatusMutation.mutate({
+                                              id: appointment.id,
+                                              status: "scheduled",
+                                            })
+                                          }
+                                        >
+                                          Agendado
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            updateStatusMutation.mutate({
+                                              id: appointment.id,
+                                              status: "in_progress",
+                                            })
+                                          }
+                                        >
+                                          Em Andamento
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            updateStatusMutation.mutate({
+                                              id: appointment.id,
+                                              status: "completed",
+                                            })
+                                          }
+                                        >
+                                          Concluído
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            updateStatusMutation.mutate({
+                                              id: appointment.id,
+                                              status: "cancelled",
+                                            })
+                                          }
+                                        >
+                                          Cancelado
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            updateStatusMutation.mutate({
+                                              id: appointment.id,
+                                              status: "rescheduled",
+                                            })
+                                          }
+                                        >
+                                          Remarcado
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
 
-                              <div className="flex items-center space-x-2">
-                                <User className="h-4 w-4" />
-                                <span>{responsible.displayName}</span>
-                              </div>
+                                    <Badge className={getPriorityColor(appointment.priority)}>
+                                      {getPriorityText(appointment.priority)}
+                                    </Badge>
 
-                              <div className="flex items-center space-x-2">
-                                <MapPin className="h-4 w-4" />
-                                <span>
-                                  {client ? (
-                                    <>
-                                      {client.logradouro || "Logradouro não informado"}
-                                      {client.numero ? `, ${client.numero}` : ""}
-                                      {client.bairro ? `, ${client.bairro}` : ""}
-                                      {client.cidade ? `, ${client.cidade}` : ""}
-                                      {client.cep ? ` - ${client.cep}` : ""}
-                                      {client.complemento
-                                        ? `, ${client.complemento.toUpperCase()}`
-                                        : ""}
-                                    </>
-                                  ) : (
-                                    <span style={{ color: "red" }}>
-                                      Cliente não encontrado
-                                    </span>
+                                    {/* Badge de Romaneio Confirmado/Finalizado */}
+                                    {(appointment as any).routeInfo && (
+                                      <Link href={`/routes-history/${(appointment as any).routeInfo.displayNumber}`}>
+                                        <Badge className="bg-orange-100 text-orange-800 border border-orange-300 hover:bg-orange-200 cursor-pointer">
+                                          🚚 Romaneio {(appointment as any).routeInfo.status === 'confirmado' ? 'Confirmado' : 'Finalizado'} #{(appointment as any).routeInfo.displayNumber}
+                                        </Badge>
+                                      </Link>
+                                    )}
+                                  </div>
+
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                                    <div className="flex items-center space-x-2">
+                                      <Calendar className="h-4 w-4" />
+                                      {appointment.allDay ? (
+                                        <span className="font-semibold text-red-700">
+                                          📅 {date} - DIA INTEIRO
+                                        </span>
+                                      ) : (
+                                        <span>
+                                          {date} às {time}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="flex items-center space-x-2">
+                                      <User className="h-4 w-4" />
+                                      <span>{responsible.displayName}</span>
+                                    </div>
+
+                                    <div className="flex items-center space-x-2">
+                                      <MapPin className="h-4 w-4" />
+                                      <span>
+                                        {client ? (
+                                          <>
+                                            {client.logradouro || "Logradouro não informado"}
+                                            {client.numero ? `, ${client.numero}` : ""}
+                                            {client.bairro ? `, ${client.bairro}` : ""}
+                                            {client.cidade ? `, ${client.cidade}` : ""}
+                                            {client.cep ? ` - ${client.cep}` : ""}
+                                            {client.complemento
+                                              ? `, ${client.complemento.toUpperCase()}`
+                                              : ""}
+                                          </>
+                                        ) : (
+                                          <span style={{ color: "red" }}>
+                                            Cliente não encontrado
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+
+                                    <div className="flex items-center space-x-2">
+                                      <Clock className="h-4 w-4" />
+                                      <span>
+                                        {service?.duration ? `${service.duration} min` : "Tempo não informado"}
+                                      </span>
+                                    </div>
+
+                                    <div className="flex items-center space-x-2">
+                                      <Wrench className="h-4 w-4" />
+                                      <span>{service?.name || "Serviço não encontrado"}</span>
+                                    </div>
+                                  </div>
+
+                                  {appointment.notes && (
+                                    <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                                      <p className="text-sm text-gray-700">{appointment.notes}</p>
+                                    </div>
                                   )}
-                                </span>
+                                </div>
                               </div>
 
-                              <div className="flex items-center space-x-2">
-                                <Clock className="h-4 w-4" />
-                                <span>{service?.name || "Serviço não encontrado"}</span>
+                              <div className="flex space-x-2 ml-4">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    stop(e);
+                                    handleEdit(appointment);
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    stop(e);
+                                    handleDelete(appointment);
+                                  }}
+                                  className="text-red-600 hover:text-red-700 hover:border-red-300"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
                             </div>
-
-                            {appointment.notes && (
-                              <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                                <p className="text-sm text-gray-700">{appointment.notes}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex space-x-2 ml-4">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => {
-                              stop(e);
-                              handleEdit(appointment);
-                            }}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => {
-                              stop(e);
-                              handleDelete(appointment);
-                            }}
-                            className="text-red-600 hover:text-red-700 hover:border-red-300"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
+
+            {/* Paginação */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-4 mt-8 pb-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                >
+                  ← Anterior
+                </Button>
+
+                <span className="text-sm font-medium text-gray-700">
+                  Página {currentPage} de {totalPages} ({filteredAppointments.length} agendamentos)
+                </span>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                >
+                  Próxima →
+                </Button>
+              </div>
+            )}
           </div>
         )
-      ) : (
+      ) : viewMode === "calendar" ? (
         /* Calendar View */
         <Card>
           <CardContent className="p-6">
@@ -2147,8 +2835,26 @@ export default function Appointments() {
                 services={services}
                 technicians={technicians}
                 teams={teams}
+                dateRestrictions={dateRestrictions}
               />
             )}
+          </CardContent>
+        </Card>
+      ) : (
+        /* Availability View */
+        <Card>
+          <CardContent className="p-6">
+            <AvailabilityCalendar
+              appointments={appointments}
+              services={services}
+              technicians={technicians}
+              teams={teams}
+              teamMembers={teamMembers}
+              businessRules={businessRules}
+              currentDate={availabilityDate}
+              onDateChange={setAvailabilityDate}
+              dateRestrictions={dateRestrictions}
+            />
           </CardContent>
         </Card>
       )}
@@ -2165,6 +2871,183 @@ export default function Appointments() {
             teams={teams}
             prefilledData={prefilledData}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Restrição de Data */}
+      <Dialog open={isRestrictionModalOpen} onOpenChange={handleRestrictionModalOpenChange}>
+        <DialogContent className="w-[95vw] md:w-[80vw] max-w-5xl max-h-[90vh] overflow-y-auto">
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Restrição de data
+              </h2>
+              <p className="text-sm text-gray-600">
+                Selecione o intervalo de datas, os técnicos/equipes afetados e o motivo. Esses dias ficarão indisponíveis para novos agendamentos.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Data inicial</label>
+                <Input
+                  type="date"
+                  value={restrictionStartDate}
+                  onChange={(e) => setRestrictionStartDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Data final (opcional)</label>
+                <Input
+                  type="date"
+                  value={restrictionEndDate}
+                  onChange={(e) => setRestrictionEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">Motivo</label>
+              <Input
+                placeholder="Ex.: Feriado municipal, treinamento interno, manutenção de sistema..."
+                value={restrictionTitle}
+                onChange={(e) => setRestrictionTitle(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium block">
+                Técnicos e equipes afetados
+              </label>
+              <p className="text-xs text-gray-500 mb-1">
+                Marque um ou mais responsáveis. A mesma restrição será aplicada a todos os selecionados.
+              </p>
+              <div className="max-h-52 overflow-y-auto border rounded-md p-3 space-y-2">
+                {technicians.map((technician: Technician) => {
+                  const key = `technician-${technician.id}`;
+                  const checked = selectedRestrictionResponsibles.includes(key);
+                  return (
+                    <label
+                      key={key}
+                      className="flex items-center gap-2 text-sm cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) => {
+                          setSelectedRestrictionResponsibles((prev) =>
+                            value
+                              ? [...prev, key]
+                              : prev.filter((k) => k !== key),
+                          );
+                        }}
+                      />
+                      <span>👤 {technician.name}</span>
+                    </label>
+                  );
+                })}
+                {teams.map((team: Team) => {
+                  const key = `team-${team.id}`;
+                  const checked = selectedRestrictionResponsibles.includes(key);
+                  return (
+                    <label
+                      key={key}
+                      className="flex items-center gap-2 text-sm cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) => {
+                          setSelectedRestrictionResponsibles((prev) =>
+                            value
+                              ? [...prev, key]
+                              : prev.filter((k) => k !== key),
+                          );
+                        }}
+                      />
+                      <span>👥 {team.name}</span>
+                    </label>
+                  );
+                })}
+                {technicians.length === 0 && teams.length === 0 && (
+                  <p className="text-xs text-gray-500">
+                    Cadastre técnicos e equipes para aplicar restrições de data.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Lista simples de restrições do mês atual */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Restrições deste mês</span>
+              </div>
+              {dateRestrictions.length === 0 ? (
+                <p className="text-xs text-gray-500">
+                  Nenhuma restrição de data cadastrada neste mês.
+                </p>
+              ) : (
+                <div className="max-h-40 overflow-y-auto border rounded-md divide-y text-sm">
+                  {dateRestrictions.map((r: DateRestriction) => {
+                    const d = new Date(r.date);
+                    const dateLabel = d.toLocaleDateString("pt-BR");
+                    const isTeam = r.responsibleType === "team";
+                    const responsibleName = isTeam
+                      ? teams.find((t: Team) => t.id === r.responsibleId)?.name || `Equipe #${r.responsibleId}`
+                      : technicians.find((t: Technician) => t.id === r.responsibleId)?.name || `Técnico #${r.responsibleId}`;
+
+                    return (
+                      <div
+                        key={r.id}
+                        className="flex items-center justify-between px-2 py-1.5"
+                      >
+                        <div className="min-w-0 mr-2">
+                          <div className="text-xs text-gray-500">{dateLabel}</div>
+                          <div className="flex items-center gap-1 text-xs">
+                            <span>{isTeam ? "👥" : "👤"}</span>
+                            <span className="truncate">{responsibleName}</span>
+                          </div>
+                          <div className="text-xs text-gray-700 truncate">
+                            {r.title}
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 text-red-600 border-red-300 hover:bg-red-50"
+                          onClick={() => deleteDateRestrictionMutation.mutate(r.id)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {restrictionError && (
+              <div className="text-sm text-red-600 border border-red-200 bg-red-50 rounded-md px-3 py-2">
+                {restrictionError}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleRestrictionModalClose}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="bg-red-600 hover:bg-red-700 text-white"
+                onClick={() => createDateRestrictionMutation.mutate()}
+              >
+                Salvar restrições
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -2191,7 +3074,7 @@ export default function Appointments() {
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center">
                   <Navigation className="h-5 w-5 mr-2 text-burnt-yellow" />
-                  Rota Otimizada
+                  {optimizedRoute?.route?.id || savedInfo ? "Rota Otimizada" : "Visualização de Rota"}
                 </h2>
                 <button
                   onClick={() => setIsRouteDrawerOpen(false)}
@@ -2201,191 +3084,241 @@ export default function Appointments() {
                 </button>
               </div>
 
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6">
-                  {isOptimizing && (
-                    <div className="p-4 text-sm text-gray-600 flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#DAA520] mr-3"></div>
-                      Otimizando rota, aguarde...
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6">
+                {(isOptimizing || isViewing) && (
+                  <div className="p-4 text-sm text-gray-600 flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#DAA520] mr-3"></div>
+                    {isOptimizing ? "Otimizando rota, aguarde..." : "Carregando, aguarde..."}
+                  </div>
+                )}
+
+                {!isOptimizing && !isViewing && optimizedRoute && (
+                  <div className="space-y-6">
+                    {/* Mapa com altura garantida para evitar 0px */}
+                    <div className="relative w-full h-[420px] md:h-[480px] rounded-lg overflow-hidden border">
+                      <div className="absolute inset-0">
+                        <OptimizedRouteMap
+                          key={`${Boolean(polyline)}-${routeWaypoints?.length ?? 0}-${isRouteDrawerOpen ? 'open' : 'closed'}`}
+                          routeGeoJson={polyline ?? undefined}
+                          waypoints={routeWaypoints ?? undefined}
+                          startWaypoint={startWaypoint}
+                        />
+                      </div>
                     </div>
-                  )}
 
-                  {!isOptimizing && optimizedRoute && (
-                    <div className="space-y-6">
-                      {/* Mapa com altura garantida para evitar 0px */}
-                      <div className="relative w-full h-[420px] md:h-[480px] rounded-lg overflow-hidden border">
-                        <div className="absolute inset-0">
-                          <OptimizedRouteMap
-                            key={`${Boolean(polyline)}-${routeWaypoints?.length ?? 0}-${isRouteDrawerOpen ? 'open' : 'closed'}`}
-                            routeGeoJson={polyline ?? undefined}
-                            waypoints={routeWaypoints ?? undefined}
-                          />
+                    {/* Summary */}
+                    <div className="bg-[#DAA520]/10 rounded-lg p-4">
+                      <h3 className="font-semibold text-gray-900 mb-2">
+                        Resumo da Rota
+                      </h3>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span>Paradas:</span>
+                          <span className="font-medium">
+                            {optimizedRoute.route?.stopsCount ??
+                              optimizedRoute.stops?.length ??
+                              0}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Distância Total:</span>
+                          <span className="font-medium text-blue-600">
+                            {optimizedRoute.route?.distanceTotal
+                              ? `${(optimizedRoute.route.distanceTotal / 1000).toFixed(1)} km`
+                              : "N/A"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Tempo Estimado:</span>
+                          <span className="font-medium text-green-600">
+                            {optimizedRoute.route?.durationTotal
+                              ? `${Math.round(optimizedRoute.route.durationTotal / 60)} min`
+                              : "N/A"}
+                          </span>
                         </div>
                       </div>
+                    </div>
 
-                      {/* Summary */}
-                      <div className="bg-[#DAA520]/10 rounded-lg p-4">
-                        <h3 className="font-semibold text-gray-900 mb-2">
-                          Resumo da Rota
-                        </h3>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span>Paradas:</span>
-                            <span className="font-medium">
-                              {optimizedRoute.route?.stopsCount ??
-                                optimizedRoute.stops?.length ??
-                                0}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Distância Total:</span>
-                            <span className="font-medium text-blue-600">
-                              {optimizedRoute.route?.distanceTotal
-                                ? `${(optimizedRoute.route.distanceTotal / 1000).toFixed(1)} km`
-                                : "N/A"}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Tempo Estimado:</span>
-                            <span className="font-medium text-green-600">
-                              {optimizedRoute.route?.durationTotal
-                                ? `${Math.round(optimizedRoute.route.durationTotal / 60)} min`
-                                : "N/A"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                    {/* Ordem Otimizada */}
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-4">
+                        Ordem Otimizada
+                      </h3>
 
-                      {/* Ordem Otimizada */}
-                      <div>
-                        <h3 className="font-semibold text-gray-900 mb-4">
-                          Ordem Otimizada
-                        </h3>
-
-                        {/* Início da rota (endereço da empresa) */}
-                        {optimizedRoute.start && (
-                          <div className="bg-gray-50 rounded-lg p-4 mb-3">
-                            <div className="flex items-start space-x-3">
-                              <div className="flex-shrink-0 w-6 h-6 bg-gray-400 text-white rounded-full flex items-center justify-center">
-                                <img src="/brand/rotafacil-pin.png" alt="Início" className="w-3.5 h-3.5" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-medium text-gray-900 truncate">Início da rota</h4>
-                                <p className="text-sm text-gray-600 truncate">{optimizedRoute.start.address}</p>
-                              </div>
+                      {/* Início da rota (endereço da empresa) */}
+                      {optimizedRoute.start && (
+                        <div className="bg-gray-50 rounded-lg p-4 mb-3">
+                          <div className="flex items-start space-x-3">
+                            <div className="flex-shrink-0 w-6 h-6 bg-gray-400 text-white rounded-full flex items-center justify-center">
+                              <img src="/brand/rotafacil-pin.png" alt="Início" className="w-3.5 h-3.5" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-medium text-gray-900 truncate">Início da rota</h4>
+                              <p className="text-sm text-gray-600 truncate">{optimizedRoute.start.address}</p>
                             </div>
                           </div>
-                        )}
-
-                        <div className="space-y-3">
-                          {optimizedRoute.stops?.map(
-                            (stop: any, index: number) => {
-                              const dt = stop.scheduledDate
-                                ? new Date(stop.scheduledDate)
-                                : null;
-                              const date = dt
-                                ? dt.toLocaleDateString("pt-BR")
-                                : null;
-                              const time = dt
-                                ? dt.toLocaleTimeString("pt-BR", {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })
-                                : null;
-
-                              return (
-                                <div
-                                  key={`${stop.appointmentId}-${index}`}
-                                  className="bg-gray-50 rounded-lg p-4"
-                                >
-                                  <div className="flex items-start space-x-3">
-                                    <div className="flex-shrink-0 w-6 h-6 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-medium">
-                                      {index + 1}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <h4 className="font-medium text-gray-900 truncate">
-                                        {stop.clientName || "Cliente"}
-                                      </h4>
-                                      {stop.serviceName && (
-                                        <p className="text-sm text-gray-600 truncate">
-                                          {stop.serviceName}
-                                        </p>
-                                      )}
-                                      {dt && (
-                                        <p className="text-sm text-gray-500">
-                                          {date} às {time}
-                                        </p>
-                                      )}
-                                      <p className="text-sm text-gray-500 truncate">
-                                        {stop.address}
-                                      </p>
-                                    </div>
-                                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                                  </div>
-                                </div>
-                              );
-                            },
-                          )}
                         </div>
-                      </div>
+                      )}
 
-                      {/* Action Buttons */}
                       <div className="space-y-3">
-                        {/* Botão de salvar aparece apenas se é preview (sem ID) */}
-                        {!optimizedRoute.route?.id && (
-                          <Button
-                            className="w-full bg-green-600 hover:bg-green-700 text-white"
-                            onClick={handleSaveRoute}
-                          >
-                            Salvar Rota
-                          </Button>
-                        )}
+                        {optimizedRoute.stops?.map(
+                          (stop: any, index: number) => {
+                            const dt = stop.scheduledDate
+                              ? new Date(stop.scheduledDate)
+                              : null;
+                            const date = dt
+                              ? dt.toLocaleDateString("pt-BR")
+                              : null;
+                            const time = dt
+                              ? dt.toLocaleTimeString("pt-BR", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                              : null;
 
-                        {/* Botões padrão */}
+                            return (
+                              <div
+                                key={`${stop.appointmentId}-${index}`}
+                                className="bg-gray-50 rounded-lg p-4"
+                              >
+                                <div className="flex items-start space-x-3">
+                                  <div className="flex-shrink-0 w-6 h-6 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-medium">
+                                    {index + 1}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <h4 className="font-medium text-gray-900 truncate">
+                                      {stop.clientName || "Cliente"}
+                                    </h4>
+                                    {stop.serviceName && (
+                                      <p className="text-sm text-gray-600 truncate">
+                                        {stop.serviceName}
+                                      </p>
+                                    )}
+                                    {dt && (
+                                      <p className="text-sm text-gray-500">
+                                        {date} às {time}
+                                      </p>
+                                    )}
+                                    <p className="text-sm text-gray-500 truncate">
+                                      {stop.address}
+                                    </p>
+                                  </div>
+                                  <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                </div>
+                              </div>
+                            );
+                          },
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="space-y-3">
+                      {/* Botão de otimizar (aparece apenas se ainda não foi otimizado) */}
+                      {!optimizedRoute.route?.id && !savedInfo && !isRouteOptimized && (
                         <Button
                           className="w-full bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                          onClick={() => openInGoogleMaps(routeWaypoints, endAtStart)}
-                          disabled={!routeWaypoints || routeWaypoints.length < 2}
+                          onClick={handleOptimizeRoute}
+                          disabled={isOptimizing}
                         >
-                          Iniciar Navegação
+                          {isOptimizing ? "Otimizando..." : "Otimizar Rota"}
                         </Button>
-                        <Button variant="outline" className="w-full">
-                          Exportar Rota
-                        </Button>
+                      )}
 
-                        {/* Aviso de rota salva + botão Ver no Histórico */}
-                        {savedInfo && (
-                          <div className="mt-3 flex items-center justify-between gap-2">
-                            <div className="text-sm">
-                              <span className="font-medium">
-                                Rota salva com sucesso
-                              </span>
-                              <span className="ml-1">
-                                ID #{savedInfo.displayNumber}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              className="px-3 py-2 rounded-xl bg-[#DAA520] text-black hover:bg-[#B8860B] transition"
-                              onClick={() =>
-                                window.open(
-                                  `/routes-history?open=${savedInfo.id}&id=${savedInfo.displayNumber}`,
-                                  "_blank",
-                                )
-                              }
-                            >
-                              Ver no Histórico
-                            </button>
+                      {/* Botão de salvar aparece sempre (tanto otimizado quanto não otimizado) */}
+                      {!optimizedRoute.route?.id && !savedInfo && (
+                        <Button
+                          className="w-full bg-green-600 hover:bg-green-700 text-white"
+                          onClick={handleSaveRoute}
+                          disabled={isOptimizing}
+                        >
+                          Salvar Rota {!isRouteOptimized && "(na ordem atual)"}
+                        </Button>
+                      )}
+
+                      {/* Botões padrão */}
+                      <Button
+                        className="w-full bg-black hover:bg-gray-800 text-white"
+                        onClick={() => openInGoogleMaps(routeWaypoints, endAtStart)}
+                        disabled={!routeWaypoints || routeWaypoints.length < 2}
+                      >
+                        Iniciar Navegação
+                      </Button>
+                      <Button variant="outline" className="w-full">
+                        Exportar Rota
+                      </Button>
+
+                      {/* Aviso de rota salva + botão Ver no Histórico */}
+                      {savedInfo && (
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <div className="text-sm">
+                            <span className="font-medium">
+                              Rota salva com sucesso
+                            </span>
+                            <span className="ml-1">
+                              ID #{savedInfo.displayNumber}
+                            </span>
                           </div>
-                        )}
-                      </div>
+                          <button
+                            type="button"
+                            className="px-3 py-2 rounded-xl bg-[#DAA520] text-black hover:bg-[#B8860B] transition"
+                            onClick={() =>
+                              window.open(
+                                `/routes-history?open=${savedInfo.id}&id=${savedInfo.displayNumber}`,
+                                "_blank",
+                              )
+                            }
+                          >
+                            Ver no Histórico
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
-            </section>
-          </div>
+            </div>
+          </section>
+        </div>
       )}
+
+      {/* Botão flutuante para otimizar rotas */}
+      {selectedAppointmentIds.length > 1 && (
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+          {/* Checkbox "Terminar no ponto inicial" - Mobile: ícone, Desktop: com texto */}
+          <label className="flex items-center gap-2 bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-[#B8860B] border border-[#DAA520] cursor-pointer hover:bg-gray-50">
+            <input
+              type="checkbox"
+              checked={endAtStart}
+              onChange={(e) => setEndAtStart(e.target.checked)}
+              className="h-4 w-4 rounded border-[#DAA520] text-[#DAA520] focus:ring-[#DAA520]"
+            />
+            <span className="hidden sm:inline">Terminar no início</span>
+            <span className="sm:hidden">↩️</span>
+          </label>
+
+          {/* Botão principal de visualizar rota */}
+          <Button
+            onClick={handleViewRoute}
+            className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white shadow-lg hover:shadow-xl transition-all"
+            size="lg"
+          >
+            <Route className="h-5 w-5 sm:mr-2" />
+            <span className="hidden sm:inline">Visualizar Rota</span>
+            <span className="sm:hidden text-xs">({selectedAppointmentIds.length})</span>
+          </Button>
+        </div>
+      )}
+
+      {/* Modal de confirmação de exclusão */}
+      <DeleteConfirmationDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={confirmDelete}
+        title="Excluir Agendamento"
+        description="Tem certeza que deseja excluir este agendamento?"
+      />
     </div>
   );
 }

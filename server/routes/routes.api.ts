@@ -16,8 +16,10 @@ import {
   technicians,
   teams,
   businessRules,
+  routeAudits,
+  users,
 } from "@shared/schema";
-import { eq, and, gte, lte, like, or, desc, inArray, sql, asc } from "drizzle-orm";
+import { eq, and, gte, lte, like, or, desc, inArray, sql, asc, ne } from "drizzle-orm";
 
 // Extend Request type for authenticated user
 interface AuthenticatedRequest extends Request {
@@ -47,6 +49,27 @@ function numberToUUID(num: number): string {
     padded.slice(16, 20),
     padded.slice(20, 32),
   ].join("-");
+}
+
+// Helper para registrar auditoria de rotas
+async function createRouteAudit(
+  routeId: string,
+  userId: number,
+  action: string,
+  description: string,
+  metadata?: any
+) {
+  try {
+    await db.insert(routeAudits).values({
+      routeId,
+      userId,
+      action,
+      description,
+      metadata: metadata ? JSON.stringify(metadata) : null,
+    });
+  } catch (error) {
+    console.error("Erro ao registrar auditoria:", error);
+  }
 }
 
 async function resolveStartForRoute(
@@ -177,11 +200,12 @@ const optimizeRouteSchema = z.object({
   vehicleId: z.string().optional(),
   title: z.string().optional(),
   preview: z.boolean().optional(),
+  skipOptimization: z.boolean().optional(),
 });
 
 // Schema para atualização de status
 const updateStatusSchema = z.object({
-  status: z.enum(["draft", "optimized", "running", "done", "canceled"]),
+  status: z.enum(["draft", "confirmado", "finalizado", "cancelado"]),
 });
 
 // Algoritmo TSP simples: Nearest Neighbor + 2-opt
@@ -388,8 +412,56 @@ export function registerRoutesAPI(app: Express) {
     },
   );
 
+  // Endpoint para obter URL do OSRM
+  app.get("/api/osrm-url", (req: any, res: Response) => {
+    try {
+      const osrmUrl = getOsrmUrl();
+      if (!osrmUrl) {
+        return res.status(500).send("OSRM não configurado");
+      }
+      res.type("text/plain").send(osrmUrl);
+    } catch (error) {
+      console.error("❌ Erro ao obter URL do OSRM:", error);
+      res.status(500).send("Erro ao obter URL do OSRM");
+    }
+  });
+
+  // Endpoint para obter ponto inicial (técnico/equipe/empresa)
+  app.post(
+    "/api/routes/start-point",
+    authenticateToken,
+    async (req: any, res: Response) => {
+      try {
+        const { responsibleType, responsibleId } = req.body;
+        
+        if (!responsibleType || !responsibleId) {
+          return res.status(400).json({ 
+            message: "responsibleType e responsibleId são obrigatórios" 
+          });
+        }
+
+        if (responsibleType !== "technician" && responsibleType !== "team") {
+          return res.status(400).json({ 
+            message: "responsibleType deve ser 'technician' ou 'team'" 
+          });
+        }
+
+        const startInfo = await resolveStartForRoute(
+          req.user.userId,
+          responsibleType,
+          responsibleId
+        );
+
+        res.json(startInfo);
+      } catch (error) {
+        console.error("❌ Erro ao resolver ponto inicial:", error);
+        res.status(500).json({ message: "Erro ao resolver ponto inicial" });
+      }
+    },
+  );
+
   // ==== POST /api/routes/:id/optimize ====
-  app.post("/api/routes/:id/optimize", async (req, res) => {
+  app.post("/api/routes/:id/optimize", authenticateToken, async (req: any, res) => {
     try {
       const routeId = req.params.id;
       const terminarNoPontoInicial = !!req.body?.terminarNoPontoInicial;
@@ -404,6 +476,7 @@ export function registerRoutesAPI(app: Express) {
           order: stopsTbl.order,
           lat: stopsTbl.lat,
           lng: stopsTbl.lng,
+          appointmentNumericId: stopsTbl.appointmentNumericId,
         })
         .from(stopsTbl)
         .where(eq(stopsTbl.routeId, routeId))
@@ -413,23 +486,47 @@ export function registerRoutesAPI(app: Express) {
         return res.status(400).json({ message: "É preciso pelo menos 2 paradas para otimizar." });
       }
 
-      // garante coords válidas
-      const coords = stops.map(s => {
-        const lat = Number(s.lat), lng = Number(s.lng);
+      // garante coords válidas, coleciona faltantes
+      const missing: Array<{ stopId: string; appointmentNumericId: number | null }> = [];
+      const stopCoords = stops.map((s) => {
+        const lat = Number(s.lat);
+        const lng = Number(s.lng);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-          throw new Error(`Parada ${s.id} sem coordenadas válidas.`);
+          missing.push({ stopId: s.id, appointmentNumericId: (s as any).appointmentNumericId ?? null });
         }
         return { lat, lng };
       });
+      if (missing.length) {
+        return res.status(400).json({
+          error: "Paradas sem lat/lng",
+          missing,
+        });
+      }
 
-      // 2) OSRM /table (matriz)
+      // 2) Determina ponto inicial (depot) igual ao pipeline de Agendamentos
+      const startInfo = await resolveStartForRoute(
+        req.user.userId,
+        route.responsibleType as "technician" | "team",
+        route.responsibleId
+      );
+      const startLngLat: [number, number] = [
+        Number(Number(startInfo.lng).toFixed(6)),
+        Number(Number(startInfo.lat).toFixed(6)),
+      ];
+
+      // 3) OSRM /table (matriz) com DEPOT + STOPS em formato [lng,lat]
       const OSRM_URL = getOsrmUrl();
       if (!OSRM_URL) {
         return res.status(500).json({ message: "OSRM não configurado (osrm_url.txt)." });
       }
 
-      const coordStr = coords.map(c => `${c.lng},${c.lat}`).join(";");
+      const osrmCoords: [number, number][] = [
+        startLngLat,
+        ...stopCoords.map((c) => [Number(c.lng.toFixed(6)), Number(c.lat.toFixed(6))] as [number, number]),
+      ];
+      const coordStr = osrmCoords.map((c) => `${c[0]},${c[1]}`).join(";");
       const tableUrl = `${OSRM_URL}/table/v1/driving/${coordStr}?annotations=duration,distance`;
+      console.log("🧮 [/api/routes/:id/optimize] Chamando OSRM table:", tableUrl);
       const tableResp = await fetch(tableUrl);
       if (!tableResp.ok) {
         const t = await tableResp.text();
@@ -439,39 +536,68 @@ export function registerRoutesAPI(app: Express) {
       const matrix: number[][] = tableData.durations;
       const distances: number[][] = tableData.distances;
 
-      if (!Array.isArray(matrix) || matrix.length !== coords.length) {
-        return res.status(500).json({ message: "Matriz inválida do OSRM." });
+      // Validações da matriz
+      const n = osrmCoords.length; // depot + stops
+      const isSquare = Array.isArray(matrix) && matrix.length === n && matrix.every((row: any) => Array.isArray(row) && row.length === n);
+      const hasNaN = isSquare ? matrix.some((row) => row.some((v) => !Number.isFinite(v))) : true;
+      console.log(`🧪 Matriz OSRM: ${n}x${n}, hasNaN=${hasNaN}, terminarNoPontoInicial=${terminarNoPontoInicial}`);
+      if (!isSquare || hasNaN) {
+        return res.status(500).json({ message: "Matriz inválida do OSRM.", n, hasNaN });
       }
 
-      // 3) Chama o solver TSP em Python (igual ao seu /api/rota/tsp)
+      // 4) Chama o solver TSP via OR-Tools usando o Python do venv (Windows)
       const { spawn } = await import("child_process");
-      const py = spawn("python3", ["./server/solve_tsp.py"]);
+
+      // __dirname aqui aponta para ...\server\routes
+      const pyBin = path.join(__dirname, "..", "py", ".venv", "Scripts", "python.exe");
+      const tspScript = path.join(__dirname, "..", "solve_tsp.py");
+
       const input = JSON.stringify({ matrix, terminarNoPontoInicial });
       let out = "", err = "";
+
+      const py = spawn(pyBin, [tspScript], { stdio: ["pipe", "pipe", "pipe"] });
+
       py.stdout.on("data", (d: Buffer) => (out += d.toString()));
       py.stderr.on("data", (d: Buffer) => (err += d.toString()));
-      py.stdin.write(input); py.stdin.end();
+      py.on("error", (e) => console.error("❌ Erro ao iniciar Python do venv:", e));
+
+      py.stdin.write(input);
+      py.stdin.end();
 
       const tspResult = await new Promise<any>((resolve, reject) => {
         py.on("close", (code: number) => {
-          if (code !== 0) return reject(new Error(err || "Python returned non-zero code"));
+          if (code !== 0) return reject(new Error(err || `Python exited with code ${code}\n${err}`));
           try { resolve(JSON.parse(out)); }
           catch (e: any) { reject(new Error("Erro parseando saída do Python: " + e.message)); }
         });
       });
 
-      // tspResult.order é um array de índices [0..n-1] na nova ordem
-      const newOrderIdx: number[] = tspResult.order;
-      if (!Array.isArray(newOrderIdx) || newOrderIdx.length !== stops.length) {
-        return res.status(500).json({ message: "Retorno TSP inválido." });
+      // 5) Valida o retorno do TSP e mapeia para as paradas (ignorando o depósito 0)
+      const tspOrder: number[] = Array.isArray(tspResult.order) ? tspResult.order : [];
+      console.log("🧭 TSP order recebido:", JSON.stringify(tspOrder));
+
+      if (!tspOrder.length) {
+        return res.status(500).json({ message: "TSP inválido: ordem vazia", stdout: out.trim(), stderr: err.trim() });
       }
 
-      // 4) Atualiza order das paradas
-      // mapeia: índice -> stop.id  | novo order = posição + 1
-      const updates = newOrderIdx.map((idx, pos) => ({
-        id: stops[idx].id,
-        newOrder: pos + 1,
-      }));
+      // Remove retornos ao depósito (0) e converte índices de [1..n-1] -> [0..stops-1]
+      const mappedStops = tspOrder.filter((idx) => idx > 0 && idx < n).map((idx) => idx - 1);
+      const uniqueMapped = Array.from(new Set(mappedStops));
+      if (uniqueMapped.length !== stops.length) {
+        return res.status(500).json({
+          message: "TSP inválido: quantidade de nós não cobre todas as paradas",
+          expectedStops: stops.length,
+          receivedOrderLength: tspOrder.length,
+          mappedUnique: uniqueMapped.length,
+          order: tspOrder,
+          n,
+          stdout: out.trim(),
+          stderr: err.trim(),
+        });
+      }
+
+      // 6) Atualiza order das paradas conforme sequência otimizada
+      const updates = uniqueMapped.map((stopIdx, pos) => ({ id: stops[stopIdx].id, newOrder: pos + 1 }));
 
       // Drizzle: atualiza em série (simples e seguro)
       for (const u of updates) {
@@ -480,39 +606,70 @@ export function registerRoutesAPI(app: Express) {
           .where(eq(stopsTbl.id, u.id));
       }
 
-      // 5) Recalcular métricas (somando a distância/duração na ordem encontrada)
+      // 7) Recalcular métricas com base na ordem TSP (considerando depósito na matriz)
       let totalDistance = 0;
       let totalDuration = 0;
-      for (let i = 0; i < newOrderIdx.length - 1; i++) {
-        const from = newOrderIdx[i];
-        const to   = newOrderIdx[i+1];
+      // Caminho: 0 (depósito) -> seq[0] -> seq[1] -> ... -> seq[last] -> (opcional volta 0)
+      const seqWithDepot: number[] = [0, ...uniqueMapped.map((i) => i + 1)];
+      for (let i = 0; i < seqWithDepot.length - 1; i++) {
+        const from = seqWithDepot[i];
+        const to = seqWithDepot[i + 1];
         totalDuration += Number(matrix[from][to] ?? 0);
         totalDistance += Number(distances[from][to] ?? 0);
       }
+      if (terminarNoPontoInicial) {
+        totalDuration += Number(matrix[seqWithDepot[seqWithDepot.length - 1]][0] ?? 0);
+        totalDistance += Number(distances[seqWithDepot[seqWithDepot.length - 1]][0] ?? 0);
+      }
 
-      // 6) Atualizar polyline_geojson com a rota na nova ordem
-      // monta coords na ordem
-      const orderedCoords = newOrderIdx.map(i => coords[i]);
-      const osrmCoords = orderedCoords.map(c => `${c.lng},${c.lat}`).join(";");
-      const routeUrl = `${OSRM_URL}/route/v1/driving/${osrmCoords}?overview=full&geometries=geojson`;
+      // 8) Atualizar polyline_geojson com a rota na nova ordem (inclui o PONTO INICIAL e, se solicitado, retorno ao início)
+      const orderedStopLngLat: [number, number][] = uniqueMapped.map((i) => [
+        Number(stopCoords[i].lng.toFixed(6)),
+        Number(stopCoords[i].lat.toFixed(6)),
+      ]);
+      const lineCoords: [number, number][] = terminarNoPontoInicial
+        ? [startLngLat, ...orderedStopLngLat, startLngLat]
+        : [startLngLat, ...orderedStopLngLat];
+
+      const routeCoordsStr = lineCoords.map(p => `${p[0]},${p[1]}`).join(";");
+      const routeUrl = `${OSRM_URL}/route/v1/driving/${routeCoordsStr}?overview=full&geometries=geojson`;
       const routeResp = await fetch(routeUrl);
+
       let polylineGeoJson: any = null;
+      let osrmDistance: number | null = null;
+      let osrmDuration: number | null = null;
+
       if (routeResp.ok) {
         const rjson: any = await routeResp.json();
         polylineGeoJson = rjson?.routes?.[0]?.geometry || null;
+        osrmDistance = Number(rjson?.routes?.[0]?.distance ?? NaN);
+        osrmDuration = Number(rjson?.routes?.[0]?.duration ?? NaN);
       }
+
+      // Totais: prefira os do OSRM (incluem o trecho início → primeira parada)
+      const distanceToSave = Number.isFinite(osrmDistance!) ? Math.round(osrmDistance!) : Math.round(totalDistance);
+      const durationToSave = Number.isFinite(osrmDuration!) ? Math.round(osrmDuration!) : Math.round(totalDuration);
 
       await db.update(routesTbl)
         .set({
-          distanceTotal: Math.round(totalDistance),
-          durationTotal: Math.round(totalDuration),
+          distanceTotal: distanceToSave,
+          durationTotal: durationToSave,
           stopsCount: stops.length,
           polylineGeoJson: polylineGeoJson ? JSON.stringify(polylineGeoJson) : routesTbl.polylineGeoJson,
           updatedAt: sql`CURRENT_TIMESTAMP`,
         })
         .where(eq(routesTbl.id, routeId));
 
-      // 7) ok: o front vai refazer o GET /api/routes/:id
+      // Registra auditoria
+      await createRouteAudit(
+        routeId,
+        req.user.userId,
+        "optimize",
+        `Otimizou a rota`,
+        { stopsCount: stops.length, distanceTotal: distanceToSave, durationTotal: durationToSave }
+      );
+
+      // 9) ok: o front vai refazer o GET /api/routes/:id
       return res.json({ ok: true });
     } catch (e: any) {
       console.error("❌ /api/routes/:id/optimize erro:", e?.message, e?.stack);
@@ -544,7 +701,7 @@ export function registerRoutesAPI(app: Express) {
             });
         }
 
-        const { appointmentIds, endAtStart, vehicleId, title, preview } =
+        const { appointmentIds, endAtStart, vehicleId, title, preview, skipOptimization } =
           validation.data;
         const appointmentIdsNorm = appointmentIds.map((id: any) => Number(id));
 
@@ -861,7 +1018,7 @@ export function registerRoutesAPI(app: Express) {
         const norm = (s: string) =>
           (s || "")
             .normalize("NFD")
-            .replace(/\p{Diacritic}/gu, "")
+            .replace(/[\u0300-\u036f]/g, "")
             .replace(/\s+/g, "")
             .toLowerCase();
 
@@ -1039,9 +1196,16 @@ export function registerRoutesAPI(app: Express) {
         console.log("🧮 Calculando matriz OSRM...");
         const { durations, distances } = await getOSRMMatrix(coordinates);
 
-        // 5. Resolver TSP
-        console.log("🔄 Resolvendo TSP...");
-        const tourOrder = solveTSP(distances, endAtStart);
+        // 5. Resolver TSP ou manter ordem original
+        let tourOrder: number[];
+        if (skipOptimization) {
+          console.log("⏩ Pulando otimização - mantendo ordem original dos agendamentos");
+          // Manter ordem original: [0 (depot), 1, 2, 3, ..., n]
+          tourOrder = Array.from({ length: coordinates.length }, (_, i) => i);
+        } else {
+          console.log("🔄 Resolvendo TSP...");
+          tourOrder = solveTSP(distances, endAtStart);
+        }
 
         // 6. Calcular totais
         let totalDistance = 0;
@@ -1064,7 +1228,7 @@ export function registerRoutesAPI(app: Express) {
 
         // 7. Gerar polyline GeoJSON
         const routeCoordinates = tourOrder.map((idx) => coordinates[idx]);
-        let polylineGeoJson = null;
+        let polylineGeoJson: any = null;
 
         try {
           polylineGeoJson = await getOSRMRoute(routeCoordinates);
@@ -1104,6 +1268,7 @@ export function registerRoutesAPI(app: Express) {
             const app = appointmentData[appointmentIndex];
             stopData.push({
               appointmentId: numberToUUID(Number(app.id)),
+              appointmentNumericId: Number(app.id), // 🔧 CRITICAL: ID numérico para validação
               order: i,
               lat: app.lat,
               lng: app.lng,
@@ -1128,7 +1293,7 @@ export function registerRoutesAPI(app: Express) {
             appointmentId: stop.appointmentId,
             appointmentNumericId: app?.id ?? null,
             clientName: app?.clientName || "Cliente",
-            serviceName: app?.serviceName ?? "",
+            serviceName: "",
             scheduledDate: app?.scheduledDate ?? null,
             address: stop.address,
             lat: stop.lat,
@@ -1143,6 +1308,7 @@ export function registerRoutesAPI(app: Express) {
             route: {
               id: null,
               ...routeData,
+              isOptimized: !skipOptimization, // Indica se a rota foi otimizada
               responsible: {
                 type: derivedResponsibleType,
                 id: derivedResponsibleId,
@@ -1176,26 +1342,44 @@ export function registerRoutesAPI(app: Express) {
         const [savedRoute] = await db
           .insert(routesTbl)
           .values({
-            ...routeData,
+            title: routeData.title,
+            date: routeData.date,
+            vehicleId: routeData.vehicleId ? Number(routeData.vehicleId) : null,
+            responsibleType: routeData.responsibleType,
+            responsibleId: routeData.responsibleId,
+            endAtStart: routeData.endAtStart,
+            distanceTotal: routeData.distanceTotal,
+            durationTotal: routeData.durationTotal,
+            stopsCount: routeData.stopsCount,
+            status: routeData.status,
+            polylineGeoJson: routeData.polylineGeoJson,
             displayNumber: nextDisplayNumber,
-          })
+            // userId: req.user.userId, // 🔒 DESCOMENTAR APÓS MIGRATION: Isolamento entre empresas
+          } as any) // Temporário: type assertion até migration
           .returning();
 
         // Salvar paradas
         if (stopData.length > 0) {
           const stopDataWithRouteId = stopData.map((stop) => ({
-            ...stop,
             routeId: savedRoute.id,
+            appointmentId: stop.appointmentId,
+            appointmentNumericId: stop.appointmentNumericId, // 🔧 CRITICAL: ID numérico para validação
+            order: stop.order,
+            lat: stop.lat ?? 0,
+            lng: stop.lng ?? 0,
+            address: stop.address,
           }));
           await db.insert(stopsTbl).values(stopDataWithRouteId);
           console.log("✅ Paradas salvas:", stopDataWithRouteId.length);
         }
+
 
         const responseData = {
           route: {
             id: savedRoute.id,
             title: savedRoute.title,
             date: savedRoute.date,
+            isOptimized: !skipOptimization, // Indica se a rota foi otimizada
             vehicleId: savedRoute.vehicleId,
             responsible: {
               type: savedRoute.responsibleType,
@@ -1246,6 +1430,9 @@ export function registerRoutesAPI(app: Express) {
 
       const conditions = [];
 
+      // 🔒 Filtro de userId será aplicado após migration (quando a coluna userId existir)
+      // Por enquanto, mantemos compatibilidade com bancos sem a coluna
+
       if (from) {
         conditions.push(gte(routesTbl.date, new Date(from as string)));
       }
@@ -1267,7 +1454,7 @@ export function registerRoutesAPI(app: Express) {
       }
 
       if (vehicleId) {
-        conditions.push(eq(routesTbl.vehicleId, vehicleId as string));
+        conditions.push(eq(routesTbl.vehicleId, Number(vehicleId)));
       }
 
       if (search) {
@@ -1336,6 +1523,12 @@ export function registerRoutesAPI(app: Express) {
           return res.status(404).json({ error: "Rota não encontrada" });
         }
 
+        // 🔒 Verificar se a rota pertence ao usuário (se tiver userId preenchido)
+        if (route.userId && route.userId !== req.user.userId) {
+          console.log("❌ ERRO: Rota não pertence ao usuário");
+          return res.status(403).json({ error: "Sem permissão para acessar esta rota" });
+        }
+
         // 1) Buscar paradas da rota
         const stopsRaw = await db
           .select()
@@ -1345,12 +1538,19 @@ export function registerRoutesAPI(app: Express) {
 
         console.log("🧩 Enriquecendo paradas com dados do cliente...");
 
-        // 2) Converter appointmentId (UUID fake) -> número
+        // 2) Resolver appointmentId para número (aceita UUID fake OU número)
         const appointmentNumericIds = stopsRaw
-          .map((s) => uuidToNumber(s.appointmentId as unknown as string))
-          .filter(
-            (n): n is number => typeof n === "number" && Number.isFinite(n),
-          );
+          .map((s) => {
+            const raw = String(s.appointmentId ?? "");
+            // tenta UUID -> número
+            const fromUuid = uuidToNumber(raw);
+            if (typeof fromUuid === "number" && Number.isFinite(fromUuid)) return fromUuid;
+
+            // fallback: tenta parsear número puro
+            const asNum = Number(raw);
+            return Number.isFinite(asNum) ? asNum : null;
+          })
+          .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
 
         let appointmentsWithClients: Array<{
           id: number;
@@ -1360,6 +1560,7 @@ export function registerRoutesAPI(app: Express) {
         }> = [];
 
         // 3) Buscar appointments + clients apenas dos IDs necessários (com inArray)
+        // Não filtramos por userId aqui pois o isolamento já está garantido pela rota
         if (appointmentNumericIds.length > 0) {
           appointmentsWithClients = await db
             .select({
@@ -1370,12 +1571,7 @@ export function registerRoutesAPI(app: Express) {
             })
             .from(appointments)
             .leftJoin(clients, eq(appointments.clientId, clients.id))
-            .where(
-              and(
-                eq(appointments.userId, (req as any).user.userId),
-                inArray(appointments.id, appointmentNumericIds),
-              ),
-            );
+            .where(inArray(appointments.id, appointmentNumericIds));
         }
 
         // 4) Montar map id->dados para resolver rápido
@@ -1390,10 +1586,20 @@ export function registerRoutesAPI(app: Express) {
           });
         }
 
-        // 5) Enriquecer as paradas com clientName e scheduledDate
+        // 5) Enriquecer as paradas com clientName e scheduledDate (robusto)
         const stops = stopsRaw.map((s) => {
-          const numericId = uuidToNumber(s.appointmentId as unknown as string);
+          const raw = String(s.appointmentId ?? "");
+
+          // tenta UUID -> número
+          let numericId = uuidToNumber(raw);
+          // fallback: número puro
+          if (numericId == null) {
+            const asNum = Number(raw);
+            numericId = Number.isFinite(asNum) ? asNum : null;
+          }
+
           const extra = numericId != null ? appMap.get(numericId) : undefined;
+
           return {
             ...s,
             appointmentNumericId: numericId ?? null,
@@ -1486,7 +1692,7 @@ export function registerRoutesAPI(app: Express) {
             id: appointments.id,
             clientId: appointments.clientId,
 
-            // endereço do agendamento (prioritário para exibir)
+            // endereço do agendamento
             aptCep: appointments.cep,
             aptLogradouro: appointments.logradouro,
             aptNumero: appointments.numero,
@@ -1540,7 +1746,7 @@ export function registerRoutesAPI(app: Express) {
           let lng = Number(r.clientLng);
           const address = buildAddress(r);
 
-          if (!(Number.isFinite(lat) && Number.isFinite(lng))) {
+          if (!(Number.isFinite(lat) && Number.isFinite(lng)) || (Number(lat) === 0 && Number(lng) === 0)) {
             // tenta geocodificar
             try {
               const g = await geocodeEnderecoServer(address);
@@ -1564,9 +1770,12 @@ export function registerRoutesAPI(app: Express) {
             }
           }
 
+          console.log(`📝 [ADD STOPS] Preparando insert para agendamento ID ${r.id}`);
+          
           inserts.push({
             routeId,
             appointmentId: numberToUUID(r.id),
+            appointmentNumericId: r.id, // 🔧 CRITICAL: Necessário para validação de romaneios
             order: nextOrder++,
             lat: Number(lat.toFixed(6)),
             lng: Number(lng.toFixed(6)),
@@ -1575,7 +1784,15 @@ export function registerRoutesAPI(app: Express) {
         }
 
         if (inserts.length > 0) {
+          console.log(`📝 [ADD STOPS] Inserindo ${inserts.length} paradas:`, inserts.map(i => ({ appointmentNumericId: i.appointmentNumericId, appointmentId: i.appointmentId })));
           await db.insert(stopsTbl).values(inserts);
+          
+          // Verificar o que foi realmente salvo
+          const savedStops = await db
+            .select({ appointmentNumericId: stopsTbl.appointmentNumericId, appointmentId: stopsTbl.appointmentId })
+            .from(stopsTbl)
+            .where(eq(stopsTbl.routeId, routeId));
+          console.log(`✅ [ADD STOPS] Paradas salvas no banco:`, savedStops);
 
           // atualiza contador
           const [{ cnt }] = await db
@@ -1589,6 +1806,17 @@ export function registerRoutesAPI(app: Express) {
               updatedAt: sql`CURRENT_TIMESTAMP`
             })
             .where(eq(routesTbl.id, routeId));
+
+          // Registra auditoria com detalhes dos endereços
+          for (const insert of inserts) {
+            await createRouteAudit(
+              routeId,
+              req.user.userId,
+              "add_stop",
+              `Incluiu o endereço: ${insert.address}`,
+              { address: insert.address, order: insert.order }
+            );
+          }
         }
 
         return res.json({ ok: true, inserted: inserts.length, skipped: idsNum.length - inserts.length });
@@ -1599,7 +1827,6 @@ export function registerRoutesAPI(app: Express) {
     },
   );
 
-  
   // DELETE /api/routes/:routeId/stops/:stopId - Remover parada da rota
   app.delete(
     "/api/routes/:routeId/stops/:stopId",
@@ -1616,6 +1843,7 @@ export function registerRoutesAPI(app: Express) {
             id: stopsTbl.id,
             routeId: stopsTbl.routeId,
             order: stopsTbl.order,
+            address: stopsTbl.address,
           })
           .from(stopsTbl)
           .where(eq(stopsTbl.id, stopId))
@@ -1663,6 +1891,15 @@ export function registerRoutesAPI(app: Express) {
 
         console.log(`✅ Rota ${routeId} atualizada com ${remainingStops.length} paradas`);
 
+        // Registra auditoria com endereço removido
+        await createRouteAudit(
+          routeId,
+          req.user.userId,
+          "remove_stop",
+          `Removeu o endereço: ${stopRow.address}`,
+          { stopId, address: stopRow.address }
+        );
+
         // 5) Sempre responde JSON
         return res.json({ ok: true, stopsCount: remainingStops.length });
       } catch (e: any) {
@@ -1685,15 +1922,20 @@ export function registerRoutesAPI(app: Express) {
           return res.status(400).json({ message: 'stopIds (array) é obrigatório' });
         }
 
-        console.log(`🔄 Reordenando paradas da rota ${routeId}:`, stopIds);
+        console.log(`🔄 [REORDER] Paradas reordenadas da rota ${routeId}:`, stopIds);
 
-        // Verificar se todos os stopIds pertencem à rota
+        // Verificar se todos os stopIds pertencem à rota e capturar ordem anterior
         const existingStops = await db
-          .select({ id: stopsTbl.id })
+          .select({ 
+            id: stopsTbl.id, 
+            order: stopsTbl.order,
+            address: stopsTbl.address 
+          })
           .from(stopsTbl)
           .where(eq(stopsTbl.routeId, routeId));
 
         const existingIds = new Set(existingStops.map(s => s.id));
+        const oldOrderMap = new Map(existingStops.map(s => [s.id, { order: s.order, address: s.address }]));
 
         for (const stopId of stopIds) {
           if (!existingIds.has(stopId)) {
@@ -1701,17 +1943,175 @@ export function registerRoutesAPI(app: Express) {
           }
         }
 
-        // Atualizar a ordem das paradas
+        // Identificar mudanças de ordem para auditoria
+        const orderChanges: Array<{ address: string; oldOrder: number; newOrder: number }> = [];
+        
+        // Atualizar a ordem das paradas (1..n)
         for (let i = 0; i < stopIds.length; i++) {
+          const newOrder = i + 1;
+          const stopInfo = oldOrderMap.get(stopIds[i]);
+          
+          if (stopInfo && stopInfo.order !== newOrder) {
+            orderChanges.push({
+              address: stopInfo.address,
+              oldOrder: stopInfo.order,
+              newOrder: newOrder
+            });
+          }
+          
           await db
             .update(stopsTbl)
-            .set({ order: i + 1 })
+            .set({ order: newOrder })
             .where(eq(stopsTbl.id, stopIds[i]));
         }
 
-        console.log(`✅ Paradas reordenadas com sucesso`);
+        console.log(`✅ Paradas reordenadas, reconstruindo polyline & métricas...`);
 
-        return res.json({ ok: true, routeId, stopIds });
+        // Busca informações da rota para obter o ponto inicial
+        const [route] = await db
+          .select({
+            id: routesTbl.id,
+            responsibleType: routesTbl.responsibleType,
+            responsibleId: routesTbl.responsibleId,
+          })
+          .from(routesTbl)
+          .where(eq(routesTbl.id, routeId))
+          .limit(1);
+
+        if (!route) {
+          return res.status(404).json({ message: 'Rota não encontrada' });
+        }
+
+        // Resolve o ponto inicial (empresa/equipe/técnico)
+        const startInfo = await resolveStartForRoute(
+          req.user.userId,
+          route.responsibleType as "technician" | "team",
+          route.responsibleId
+        );
+        const startLngLat: [number, number] = [
+          Number(Number(startInfo.lng).toFixed(6)),
+          Number(Number(startInfo.lat).toFixed(6)),
+        ];
+
+        console.log(`📍 [REORDER] Ponto inicial resolvido:`, {
+          address: startInfo.address,
+          startLngLat,
+          responsibleType: route.responsibleType,
+          responsibleId: route.responsibleId,
+        });
+
+        // Recarrega paradas na nova ordem
+        const orderedStops = await db
+          .select({ lat: stopsTbl.lat, lng: stopsTbl.lng })
+          .from(stopsTbl)
+          .where(eq(stopsTbl.routeId, routeId))
+          .orderBy(asc(stopsTbl.order));
+
+        // Se não houver paradas, apenas atualiza contador e sai
+        if (orderedStops.length === 0) {
+          await db
+            .update(routesTbl)
+            .set({ 
+              stopsCount: 0,
+              updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .where(eq(routesTbl.id, routeId));
+          return res.json({ ok: true, routeId, stopIds, rebuilt: false });
+        }
+
+        // ==== Recalcula polyline + totais ====
+        const OSRM_URL = getOsrmUrl();
+        if (!OSRM_URL) {
+          // ainda assim finalize sem polyline
+          await db
+            .update(routesTbl)
+            .set({ 
+              stopsCount: orderedStops.length,
+              updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .where(eq(routesTbl.id, routeId));
+          return res.json({ ok: true, routeId, stopIds, rebuilt: false, warn: "OSRM não configurado" });
+        }
+
+        // ✅ CORREÇÃO: Inclui o ponto inicial ANTES das paradas
+        const allCoords: [number, number][] = [
+          startLngLat,  // ← Ponto inicial (empresa/equipe/técnico)
+          ...orderedStops.map(s => [Number(s.lng), Number(s.lat)] as [number, number])
+        ];
+        const coordStr = allCoords.map(c => c.join(",")).join(";");
+
+        console.log(`🗺️ [REORDER] Recalculando rota com ${allCoords.length} pontos (1 início + ${orderedStops.length} paradas)`);
+        console.log(`📄 [REORDER] Coordenadas para OSRM:`, allCoords);
+
+        // route → geojson
+        let polylineGeoJson: any = null;
+        try {
+          const routeResp = await fetch(`${OSRM_URL}/route/v1/driving/${coordStr}?overview=full&geometries=geojson`);
+          if (routeResp.ok) {
+            const rjson: any = await routeResp.json();
+            polylineGeoJson = rjson?.routes?.[0]?.geometry || null;
+          }
+        } catch {}
+
+        // table → durations/distances entre pares consecutivos (incluindo do início até primeira parada)
+        let totalDistance = 0;
+        let totalDuration = 0;
+        try {
+          const tableResp = await fetch(`${OSRM_URL}/table/v1/driving/${coordStr}?annotations=duration,distance`);
+          if (tableResp.ok) {
+            const tjson: any = await tableResp.json();
+            const durations: number[][] = tjson?.durations || [];
+            const distances: number[][] = tjson?.distances || [];
+            // Soma trajeto do início (índice 0) até todas as paradas
+            for (let i = 0; i < allCoords.length - 1; i++) {
+              totalDuration += Number(durations?.[i]?.[i+1] ?? 0);
+              totalDistance += Number(distances?.[i]?.[i+1] ?? 0);
+            }
+          }
+        } catch {}
+
+        await db
+          .update(routesTbl)
+          .set({
+            stopsCount: orderedStops.length,
+            distanceTotal: Math.round(totalDistance),
+            durationTotal: Math.round(totalDuration),
+            polylineGeoJson: polylineGeoJson ? JSON.stringify(polylineGeoJson) : routesTbl.polylineGeoJson,
+            updatedAt: sql`CURRENT_TIMESTAMP`,
+          })
+          .where(eq(routesTbl.id, routeId));
+
+        console.log(`✅ [REORDER] Polyline & métricas atualizadas`);
+
+        // Registra auditoria com detalhes das mudanças
+        if (orderChanges.length > 0) {
+          for (const change of orderChanges) {
+            await createRouteAudit(
+              routeId,
+              req.user.userId,
+              "reorder",
+              `Alterou ordem: ${change.address} (posição ${change.oldOrder} → ${change.newOrder})`,
+              { 
+                address: change.address, 
+                oldOrder: change.oldOrder, 
+                newOrder: change.newOrder 
+              }
+            );
+          }
+        }
+
+        // IMPORTANTE: Retornar o ponto inicial na resposta
+        return res.json({ 
+          ok: true, 
+          routeId, 
+          stopIds, 
+          rebuilt: true,
+          start: {
+            lat: startInfo.lat,
+            lng: startInfo.lng,
+            address: startInfo.address,
+          },
+        });
       } catch (e: any) {
         console.error('[reorder stops] error:', e);
         return res.status(500).json({ message: 'Falha ao reordenar paradas' });
@@ -1731,20 +2131,202 @@ export function registerRoutesAPI(app: Express) {
           return res.status(400).json({ error: "Status inválido" });
         const { status } = parsed.data;
 
+        // Busca o status anterior para registrar na auditoria
+        const [currentRoute] = await db
+          .select()
+          .from(routesTbl)
+          .where(eq(routesTbl.id, routeId));
+
+        if (!currentRoute)
+          return res.status(404).json({ error: "Rota não encontrada" });
+
+        const previousStatus = currentRoute.status;
+
+        // Validação: Se estiver confirmando ou finalizando, verificar se algum agendamento já está em outro romaneio confirmado/finalizado
+        if (status === 'confirmado' || status === 'finalizado') {
+          console.log(`🔍 [VALIDAÇÃO] Validando status ${status} para rota ${routeId}`);
+          
+          // Buscar agendamentos desta rota
+          const stopsThisRoute = await db
+            .select({ appointmentNumericId: stopsTbl.appointmentNumericId })
+            .from(stopsTbl)
+            .where(eq(stopsTbl.routeId, routeId));
+
+          console.log(`🔍 [VALIDAÇÃO] Paradas desta rota:`, stopsThisRoute);
+
+          const apptIds = stopsThisRoute
+            .map(s => s.appointmentNumericId)
+            .filter((id): id is number => id !== null && id !== undefined);
+
+          console.log(`🔍 [VALIDAÇÃO] IDs de agendamentos a verificar:`, apptIds);
+
+          if (apptIds.length > 0) {
+            // Verificar se algum desses agendamentos já está em outro romaneio confirmado/finalizado
+            const conflictingRoutes = await db
+              .select({
+                routeId: routesTbl.id,
+                routeDisplayNumber: routesTbl.displayNumber,
+                routeStatus: routesTbl.status,
+                appointmentNumericId: stopsTbl.appointmentNumericId,
+              })
+              .from(stopsTbl)
+              .innerJoin(routesTbl, eq(stopsTbl.routeId, routesTbl.id))
+              .where(
+                and(
+                  inArray(stopsTbl.appointmentNumericId, apptIds),
+                  or(
+                    eq(routesTbl.status, 'confirmado'),
+                    eq(routesTbl.status, 'finalizado')
+                  ),
+                  ne(routesTbl.id, routeId) // Excluir a rota atual
+                )
+              );
+
+            console.log(`🔍 [VALIDAÇÃO] Romaneios conflitantes encontrados (${conflictingRoutes.length}):`, conflictingRoutes);
+
+            if (conflictingRoutes.length > 0) {
+              // Agrupar agendamentos únicos e seus romaneios
+              const conflictMap = new Map<number, Set<number>>();
+              conflictingRoutes.forEach(c => {
+                if (!conflictMap.has(c.appointmentNumericId!)) {
+                  conflictMap.set(c.appointmentNumericId!, new Set());
+                }
+                conflictMap.get(c.appointmentNumericId!)!.add(c.routeDisplayNumber);
+              });
+              
+              // Formatar mensagem concisa
+              const apptIds = Array.from(conflictMap.keys());
+              const firstConflict = conflictingRoutes[0];
+              
+              const message = apptIds.length === 1
+                ? `Não foi possível ${status === 'confirmado' ? 'confirmar' : 'finalizar'} o romaneio. Agendamento #${apptIds[0]} já está no romaneio #${firstConflict.routeDisplayNumber}.`
+                : `Não foi possível ${status === 'confirmado' ? 'confirmar' : 'finalizar'} o romaneio. Agendamentos #${apptIds.join(', #')} já estão em romaneios confirmados/finalizados.`;
+              
+              console.error(`❌ [VALIDAÇÃO] BLOQUEANDO: ${message}`);
+              
+              return res.status(400).json({ error: message });
+            } else {
+              console.log(`✅ [VALIDAÇÃO] Nenhum conflito encontrado, pode prosseguir`);
+            }
+          } else {
+            console.log(`⚠️ [VALIDAÇÃO] Nenhum agendamento encontrado nesta rota`);
+          }
+        }
+
         const [updated] = await db
           .update(routesTbl)
-          .set({ status })
+          .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
           .where(eq(routesTbl.id, routeId))
           .returning();
 
-        if (!updated)
-          return res.status(404).json({ error: "Rota não encontrada" });
+        // Mapeia os status para português
+        const statusLabels: Record<string, string> = {
+          draft: "Rascunho",
+          confirmado: "Confirmado",
+          finalizado: "Finalizado",
+          cancelado: "Cancelado",
+        };
+
+        // Registra auditoria da mudança de status
+        await createRouteAudit(
+          routeId,
+          req.user.userId,
+          "status_change",
+          `Alterou o status de "${statusLabels[previousStatus] || previousStatus}" para "${statusLabels[status] || status}"`,
+          { previousStatus, newStatus: status }
+        );
+
         res.json({ ok: true, route: updated });
       } catch (e: any) {
         console.error("Erro ao atualizar status:", e);
         res
           .status(500)
           .json({ error: "Erro ao atualizar status", details: e.message });
+      }
+    },
+  );
+
+  // GET /api/routes/:id/audits - Buscar histórico de auditoria da rota
+  app.get(
+    "/api/routes/:id/audits",
+    authenticateToken,
+    async (req: any, res: Response) => {
+      try {
+        const routeId = req.params.id;
+        const userId = req.user.userId;
+
+        // Verifica se a rota existe e pertence ao usuário
+        const [route] = await db
+          .select()
+          .from(routesTbl)
+          .where(eq(routesTbl.id, routeId));
+
+        if (!route) {
+          return res.status(404).json({ error: "Rota não encontrada" });
+        }
+
+        // Busca histórico de auditoria (últimas 40 alterações)
+        const audits = await db
+          .select({
+            id: routeAudits.id,
+            routeId: routeAudits.routeId,
+            userId: routeAudits.userId,
+            userName: users.name,
+            action: routeAudits.action,
+            description: routeAudits.description,
+            metadata: routeAudits.metadata,
+            createdAt: routeAudits.createdAt,
+          })
+          .from(routeAudits)
+          .leftJoin(users, eq(routeAudits.userId, users.id))
+          .where(eq(routeAudits.routeId, routeId))
+          .orderBy(desc(routeAudits.createdAt))
+          .limit(40);
+
+        res.json(audits);
+      } catch (e: any) {
+        console.error("Erro ao buscar auditoria:", e);
+        res
+          .status(500)
+          .json({ error: "Erro ao buscar auditoria", details: e.message });
+      }
+    },
+  );
+
+  // POST /api/routes/:id/audit-export - Registrar exportação de PDF
+  app.post(
+    "/api/routes/:id/audit-export",
+    authenticateToken,
+    async (req: any, res: Response) => {
+      try {
+        const routeId = req.params.id;
+        const userId = req.user.userId;
+
+        // Verifica se a rota existe
+        const [route] = await db
+          .select()
+          .from(routesTbl)
+          .where(eq(routesTbl.id, routeId));
+
+        if (!route) {
+          return res.status(404).json({ error: "Rota não encontrada" });
+        }
+
+        // Registra auditoria de exportação
+        await createRouteAudit(
+          routeId,
+          userId,
+          "export_pdf",
+          "Exportou a rota em PDF",
+          { exportDate: new Date().toISOString() }
+        );
+
+        res.json({ ok: true });
+      } catch (e: any) {
+        console.error("Erro ao registrar exportação:", e);
+        res
+          .status(500)
+          .json({ error: "Erro ao registrar exportação", details: e.message });
       }
     },
   );

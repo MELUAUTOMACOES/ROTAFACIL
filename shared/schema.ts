@@ -3,6 +3,53 @@ import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Companies table - Empresas/Tenants do sistema multiempresa
+export const companies = pgTable("companies", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(), // Nome fantasia
+  cnpj: text("cnpj").notNull().unique(),
+  telefone: text("telefone").notNull(), // WhatsApp comercial
+  email: text("email").notNull(),
+  // Endereço da sede
+  cep: text("cep").notNull(),
+  logradouro: text("logradouro").notNull(),
+  numero: text("numero").notNull(),
+  cidade: text("cidade").notNull(),
+  estado: text("estado").notNull(),
+  // Segmento e marketing
+  segmento: text("segmento"), // Assistência técnica, Telecom/Fibra, Elétrica/Hidráulica, etc.
+  servicos: text("servicos").array(), // Instalação, Manutenção, Vistorias, Entregas/Coletas, etc.
+  comoConheceu: text("como_conheceu"), // Instagram, YouTube, Google, Indicação, WhatsApp, Outro
+  problemaPrincipal: text("problema_principal"), // Organização de agenda, Roteirização, Gestão de técnicos, etc.
+  // Plano e status
+  plan: text("plan").notNull().default("free"), // free, basic, professional, enterprise
+  statusAssinatura: text("status_assinatura").notNull().default("active"), // active, suspended, cancelled
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Memberships table - Ligação entre usuários e empresas com seus papéis
+export const memberships = pgTable("memberships", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  companyId: integer("company_id").notNull().references(() => companies.id, { onDelete: 'cascade' }),
+  role: text("role").notNull(), // ADMIN, ADMINISTRATIVO, OPERADOR
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Invitations table - Convites para usuários entrarem em empresas
+export const invitations = pgTable("invitations", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull().references(() => companies.id, { onDelete: 'cascade' }),
+  email: text("email").notNull(),
+  role: text("role").notNull(), // ADMIN, ADMINISTRATIVO, OPERADOR
+  token: text("token").notNull().unique(),
+  status: text("status").notNull().default("pending"), // pending, accepted, expired
+  expiresAt: timestamp("expires_at").notNull(),
+  invitedBy: integer("invited_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Users table
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -10,7 +57,38 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
-  plan: text("plan").notNull().default("basic"), // basic, professional
+  plan: text("plan").notNull().default("basic"), // basic, professional (herdado, pode ser descontinuado em favor de companies.plan)
+  role: text("role").notNull().default("user"), // admin, user, operador (compatibilidade, preferir memberships.role)
+  phone: text("phone"),
+  cep: text("cep"),
+  logradouro: text("logradouro"),
+  numero: text("numero"),
+  complemento: text("complemento"),
+  bairro: text("bairro"),
+  cidade: text("cidade"),
+  estado: text("estado"),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  emailVerificationToken: text("email_verification_token"),
+  emailVerificationExpiry: timestamp("email_verification_expiry"),
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpiry: timestamp("password_reset_expiry"),
+  passwordChangedAt: timestamp("password_changed_at"), // Para invalidar tokens antigos
+  requirePasswordChange: boolean("require_password_change").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  lastLoginAt: timestamp("last_login_at"),
+  accessScheduleId: integer("access_schedule_id"), // Tabela de horário de acesso (opcional) - referência adicionada depois
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: integer("created_by"), // ID do admin que criou (rastreabilidade LGPD)
+});
+
+// Access Schedules table - Tabelas de horário de acesso à plataforma
+export const accessSchedules = pgTable("access_schedules", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(), // Nome da tabela de horário (ex: "Comercial", "24/7", etc.)
+  // Horários por dia da semana (formato JSON com início e fim)
+  // Ex: { "monday": [{"start": "08:00", "end": "18:00"}], "tuesday": [...], ... }
+  schedules: jsonb("schedules").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -32,6 +110,7 @@ export const clients = pgTable("clients", {
   lat: doublePrecision("lat"),   // latitude (ex.: -25.4284)
   lng: doublePrecision("lng"),   // longitude (ex.: -49.2733)
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull()
 });
 
@@ -47,6 +126,7 @@ export const services = pgTable("services", {
   // Campo adicionado para pontos/remuneração conforme solicitado
   points: integer("points"), // Pontos/remuneração aceita apenas números
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -76,8 +156,14 @@ export const technicians = pgTable("technicians", {
   enderecoInicioBairro: text("endereco_inicio_bairro"),
   enderecoInicioCidade: text("endereco_inicio_cidade"),
   enderecoInicioEstado: text("endereco_inicio_estado"),
+  // Horários de trabalho individuais do técnico
+  horarioInicioTrabalho: text("horario_inicio_trabalho").default("08:00"),
+  horarioFimTrabalho: text("horario_fim_trabalho").default("18:00"),
+  horarioAlmocoMinutos: integer("horario_almoco_minutos").default(60), // Tempo de almoço em minutos
+  diasTrabalho: text("dias_trabalho").array().default(['segunda', 'terca', 'quarta', 'quinta', 'sexta']), // Dias da semana que trabalha
   isActive: boolean("is_active").default(true).notNull(),
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -91,6 +177,7 @@ export const vehicles = pgTable("vehicles", {
   technicianId: integer("technician_id").references(() => technicians.id),
   teamId: integer("team_id").references(() => teams.id),
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -103,7 +190,7 @@ export const appointments = pgTable("appointments", {
   teamId: integer("team_id").references(() => teams.id),
   scheduledDate: timestamp("scheduled_date").notNull(),
   allDay: boolean("all_day").default(false).notNull(), // Campo para eventos "dia todo"
-  status: text("status").notNull().default("scheduled"), // scheduled, in_progress, completed, cancelled
+  status: text("status").notNull().default("scheduled"), // scheduled, in_progress, completed, cancelled, rescheduled
   priority: text("priority").notNull().default("normal"), // normal, high, urgent
   notes: text("notes"),
   cep: text("cep").notNull(),
@@ -113,6 +200,7 @@ export const appointments = pgTable("appointments", {
   bairro: text("bairro").notNull().default("Não informado"),
   cidade: text("cidade").notNull().default("Não informado"),
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -137,6 +225,8 @@ export const businessRules = pgTable("business_rules", {
   tempoDeslocamentoBuffer: integer("tempo_deslocamento_buffer").notNull().default(15), // in minutes
   minutosEntreParadas: integer("minutos_entre_paradas").notNull().default(30),
   distanciaMaximaEntrePontos: decimal("distancia_maxima_entre_pontos", { precision: 8, scale: 2 }).notNull().default("50.00"), // in km
+  distanciaMaximaAtendida: decimal("distancia_maxima_atendida", { precision: 8, scale: 2 }).notNull().default("100.00"), // in km
+  distanciaMaximaEntrePontosDinamico: decimal("distancia_maxima_entre_pontos_dinamico", { precision: 8, scale: 2 }).notNull().default("50.00"), // in km
   enderecoEmpresaCep: text("endereco_empresa_cep").notNull(),
   enderecoEmpresaLogradouro: text("endereco_empresa_logradouro").notNull(),
   enderecoEmpresaNumero: text("endereco_empresa_numero").notNull(),
@@ -145,6 +235,7 @@ export const businessRules = pgTable("business_rules", {
   enderecoEmpresaCidade: text("endereco_empresa_cidade").notNull(),
   enderecoEmpresaEstado: text("endereco_empresa_estado").notNull(),
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -162,7 +253,13 @@ export const teams = pgTable("teams", {
   enderecoInicioBairro: text("endereco_inicio_bairro"),
   enderecoInicioCidade: text("endereco_inicio_cidade"),
   enderecoInicioEstado: text("endereco_inicio_estado"),
+  // Horários de trabalho individuais da equipe
+  horarioInicioTrabalho: text("horario_inicio_trabalho").default("08:00"),
+  horarioFimTrabalho: text("horario_fim_trabalho").default("18:00"),
+  horarioAlmocoMinutos: integer("horario_almoco_minutos").default(60), // Tempo de almoço em minutos
+  diasTrabalho: text("dias_trabalho").array().default(['segunda', 'terca', 'quarta', 'quinta', 'sexta']), // Dias da semana que trabalha
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -188,9 +285,10 @@ export const routes = pgTable("routes", {
   distanceTotal: integer("distance_total").notNull().default(0), // em metros
   durationTotal: integer("duration_total").notNull().default(0), // em segundos
   stopsCount: integer("stops_count").notNull().default(0),
-  status: varchar("status", { length: 24 }).notNull().default("optimized"), // draft|optimized|running|done|canceled
+  status: varchar("status", { length: 24 }).notNull().default("draft"), // draft|confirmado|finalizado|cancelado
   polylineGeoJson: jsonb("polyline_geojson"), // GeoJSON LineString
   displayNumber: integer("display_number").notNull().default(0),
+  userId: integer("user_id").references(() => users.id), // 🔒 Isolamento entre empresas (opcional até migration)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -205,6 +303,44 @@ export const routeStops = pgTable("route_stops", {
   lng: doublePrecision("lng").notNull(),
   address: text("address").notNull(),
   appointmentNumericId: integer("appointment_numeric_id"),
+});
+
+// Route audits table - Histórico de alterações nas rotas
+export const routeAudits = pgTable("route_audits", {
+  id: serial("id").primaryKey(),
+  routeId: uuid("route_id").references(() => routes.id).notNull(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  action: varchar("action", { length: 32 }).notNull(), // reorder, add_stop, remove_stop, optimize
+  description: text("description").notNull(), // Descrição legível da ação
+  metadata: jsonb("metadata"), // Dados extras opcionais (ex: endereços adicionados/removidos)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Daily availability table - Armazena disponibilidade calculada por dia/responsável
+export const dailyAvailability = pgTable("daily_availability", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  date: timestamp("date", { withTimezone: false }).notNull(), // Data do dia
+  responsibleType: varchar("responsible_type", { length: 16 }).notNull(), // 'technician' | 'team'
+  responsibleId: integer("responsible_id").notNull(), // ID do técnico ou equipe
+  totalMinutes: integer("total_minutes").notNull().default(0), // Total de minutos disponíveis no dia
+  usedMinutes: integer("used_minutes").notNull().default(0), // Minutos usados em agendamentos
+  availableMinutes: integer("available_minutes").notNull().default(0), // Minutos ainda disponíveis
+  appointmentCount: integer("appointment_count").notNull().default(0), // Número de agendamentos
+  status: varchar("status", { length: 16 }).notNull().default("available"), // available, partial, full, exceeded
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Date restrictions table - Restrições de datas (feriados/indisponibilidades) por técnico ou equipe
+export const dateRestrictions = pgTable("date_restrictions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  date: timestamp("date", { withTimezone: false }).notNull(), // Data afetada pela restrição (somente dia)
+  responsibleType: varchar("responsible_type", { length: 16 }).notNull(), // 'technician' | 'team'
+  responsibleId: integer("responsible_id").notNull(), // ID do técnico ou equipe
+  title: text("title").notNull(), // Motivo da restrição (feriado, treinamento, etc.)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // Relations
@@ -283,6 +419,29 @@ export const insertRouteStopSchema = createInsertSchema(routeStops).omit({
   id: true,
 });
 
+export const insertRouteAuditSchema = createInsertSchema(routeAudits).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertDailyAvailabilitySchema = createInsertSchema(dailyAvailability).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertDateRestrictionSchema = createInsertSchema(dateRestrictions).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+});
+
+export const insertAccessScheduleSchema = createInsertSchema(accessSchedules).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+});
+
 export const insertBusinessRulesSchema = createInsertSchema(businessRules).omit({
   id: true,
   userId: true,
@@ -296,8 +455,90 @@ export const insertBusinessRulesSchema = createInsertSchema(businessRules).omit(
 
 // Login schema
 export const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
+  email: z.string().email("Email inválido"),
+  password: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
+});
+
+// User management schemas (Admin)
+export const createUserByAdminSchema = z.object({
+  name: z.string().min(3, "Nome deve ter no mínimo 3 caracteres"),
+  email: z.string().email("Email inválido"),
+  username: z.string().min(3, "Username deve ter no mínimo 3 caracteres"),
+  role: z.enum(["admin", "user", "operador"]),
+  phone: z.string().optional(),
+  cep: z.string().optional(),
+  logradouro: z.string().optional(),
+  numero: z.string().optional(),
+  complemento: z.string().optional(),
+  bairro: z.string().optional(),
+  cidade: z.string().optional(),
+  estado: z.string().optional(),
+  accessScheduleId: z.number().optional().nullable(),
+});
+
+export const updateUserByAdminSchema = z.object({
+  name: z.string().min(3).optional(),
+  username: z.string().min(3).optional(),
+  role: z.enum(["admin", "user", "operador"]).optional(),
+  phone: z.string().optional(),
+  cep: z.string().optional(),
+  logradouro: z.string().optional(),
+  numero: z.string().optional(),
+  complemento: z.string().optional(),
+  bairro: z.string().optional(),
+  cidade: z.string().optional(),
+  estado: z.string().optional(),
+  isActive: z.boolean().optional(),
+  accessScheduleId: z.number().optional().nullable(),
+});
+
+// Email verification schema
+export const verifyEmailSchema = z.object({
+  token: z.string().min(1, "Token é obrigatório"),
+});
+
+// First password change schema
+export const setFirstPasswordSchema = z.object({
+  token: z.string().min(1, "Token é obrigatório"),
+  password: z.string().min(8, "Senha deve ter no mínimo 8 caracteres")
+    .regex(/[A-Z]/, "Senha deve conter pelo menos uma letra maiúscula")
+    .regex(/[a-z]/, "Senha deve conter pelo menos uma letra minúscula")
+    .regex(/[0-9]/, "Senha deve conter pelo menos um número"),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "As senhas não coincidem",
+  path: ["confirmPassword"],
+});
+
+// Change password schema
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Senha atual é obrigatória"),
+  newPassword: z.string().min(8, "Nova senha deve ter no mínimo 8 caracteres")
+    .regex(/[A-Z]/, "Senha deve conter pelo menos uma letra maiúscula")
+    .regex(/[a-z]/, "Senha deve conter pelo menos uma letra minúscula")
+    .regex(/[0-9]/, "Senha deve conter pelo menos um número"),
+  confirmPassword: z.string(),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "As senhas não coincidem",
+  path: ["confirmPassword"],
+});
+
+// Forgot password schema (solicitar recuperação)
+export const forgotPasswordSchema = z.object({
+  email: z.string().email("Email inválido"),
+});
+
+// Reset password schema (redefinir com token)
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Token é obrigatório"),
+  password: z.string().min(8, "Senha deve ter no mínimo 8 caracteres")
+    .regex(/[A-Z]/, "Senha deve conter pelo menos uma letra maiúscula")
+    .regex(/[a-z]/, "Senha deve conter pelo menos uma letra minúscula")
+    .regex(/[0-9]/, "Senha deve conter pelo menos um número"),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "As senhas não coincidem",
+  path: ["confirmPassword"],
 });
 
 // CEP validation schema
@@ -361,7 +602,89 @@ export const extendedInsertAppointmentSchema = insertAppointmentSchema.extend({
   path: ["technicianId"],
 });
 
+// Multiempresa schemas
+export const insertCompanySchema = createInsertSchema(companies).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMembershipSchema = createInsertSchema(memberships).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertInvitationSchema = createInsertSchema(invitations).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Roles enum para multiempresa
+export const roleEnum = z.enum(["ADMIN", "ADMINISTRATIVO", "OPERADOR"]);
+
+// Schema para cadastro de nova empresa + admin
+export const signupCompanySchema = z.object({
+  // Dados da empresa
+  company: z.object({
+    name: z.string().min(3, "Nome da empresa deve ter no mínimo 3 caracteres"),
+    cnpj: z.string().regex(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/, "CNPJ deve estar no formato XX.XXX.XXX/XXXX-XX"),
+    telefone: z.string().min(10, "Telefone é obrigatório"),
+    email: z.string().email("Email da empresa inválido"),
+    cep: z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no formato XXXXX-XXX"),
+    logradouro: z.string().min(3, "Logradouro é obrigatório"),
+    numero: z.string().min(1, "Número é obrigatório"),
+    cidade: z.string().min(2, "Cidade é obrigatória"),
+    estado: z.string().length(2, "Estado deve ter 2 caracteres"),
+    segmento: z.string().optional(),
+    servicos: z.array(z.string()).optional(),
+    comoConheceu: z.string().optional(),
+    problemaPrincipal: z.string().optional(),
+  }),
+  // Dados do administrador
+  admin: z.object({
+    name: z.string().min(3, "Nome do administrador deve ter no mínimo 3 caracteres"),
+    email: z.string().email("Email do administrador inválido"),
+    phone: z.string().min(10, "Telefone do administrador é obrigatório"),
+  }),
+});
+
+// Schema para criar convite
+export const createInvitationSchema = z.object({
+  email: z.string().email("Email inválido"),
+  role: roleEnum,
+});
+
+// Schema para aceitar convite (usuário novo)
+export const acceptInvitationNewUserSchema = z.object({
+  token: z.string().min(1, "Token é obrigatório"),
+  name: z.string().min(3, "Nome deve ter no mínimo 3 caracteres"),
+  password: z.string().min(8, "Senha deve ter no mínimo 8 caracteres")
+    .regex(/[A-Z]/, "Senha deve conter pelo menos uma letra maiúscula")
+    .regex(/[a-z]/, "Senha deve conter pelo menos uma letra minúscula")
+    .regex(/[0-9]/, "Senha deve conter pelo menos um número"),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "As senhas não coincidem",
+  path: ["confirmPassword"],
+});
+
+// Schema para aceitar convite (usuário existente)
+export const acceptInvitationExistingUserSchema = z.object({
+  token: z.string().min(1, "Token é obrigatório"),
+});
+
 // Types
+export type Company = typeof companies.$inferSelect;
+export type InsertCompany = z.infer<typeof insertCompanySchema>;
+export type Membership = typeof memberships.$inferSelect;
+export type InsertMembership = z.infer<typeof insertMembershipSchema>;
+export type Invitation = typeof invitations.$inferSelect;
+export type InsertInvitation = z.infer<typeof insertInvitationSchema>;
+export type SignupCompanyData = z.infer<typeof signupCompanySchema>;
+export type CreateInvitationData = z.infer<typeof createInvitationSchema>;
+export type AcceptInvitationNewUserData = z.infer<typeof acceptInvitationNewUserSchema>;
+export type AcceptInvitationExistingUserData = z.infer<typeof acceptInvitationExistingUserSchema>;
+export type RoleType = z.infer<typeof roleEnum>;
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Client = typeof clients.$inferSelect;
@@ -386,4 +709,17 @@ export type Route = typeof routes.$inferSelect;
 export type InsertRoute = z.infer<typeof insertRouteSchema>;
 export type RouteStop = typeof routeStops.$inferSelect;
 export type InsertRouteStop = z.infer<typeof insertRouteStopSchema>;
+export type RouteAudit = typeof routeAudits.$inferSelect;
+export type InsertRouteAudit = z.infer<typeof insertRouteAuditSchema>;
+export type DailyAvailability = typeof dailyAvailability.$inferSelect;
+export type InsertDailyAvailability = z.infer<typeof insertDailyAvailabilitySchema>;
+export type DateRestriction = typeof dateRestrictions.$inferSelect;
+export type InsertDateRestriction = z.infer<typeof insertDateRestrictionSchema>;
+export type AccessSchedule = typeof accessSchedules.$inferSelect;
+export type InsertAccessSchedule = z.infer<typeof insertAccessScheduleSchema>;
 export type LoginData = z.infer<typeof loginSchema>;
+export type CreateUserByAdmin = z.infer<typeof createUserByAdminSchema>;
+export type UpdateUserByAdmin = z.infer<typeof updateUserByAdminSchema>;
+export type VerifyEmailData = z.infer<typeof verifyEmailSchema>;
+export type SetFirstPasswordData = z.infer<typeof setFirstPasswordSchema>;
+export type ChangePasswordData = z.infer<typeof changePasswordSchema>;

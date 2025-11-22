@@ -1,17 +1,17 @@
 import { useState } from "react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
+import { useAccessScheduleMonitor } from "@/hooks/useAccessScheduleMonitor";
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
-export default function Layout({ children }: LayoutProps = {}) {
-  if (!children) {
-    console.warn("[Layout] Renderizado sem children!");
-    return <div>Erro: Layout renderizado sem conteúdo.</div>;
-  }
+export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // Monitorar horário de acesso do usuário
+  useAccessScheduleMonitor();
 
   return (
     <div className="min-h-screen bg-gray-50">

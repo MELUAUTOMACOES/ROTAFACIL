@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useLocation } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient"; // você já usa no VehicleForm
+import { getAuthHeaders } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import OptimizedRouteMap from "@/components/maps/OptimizedRouteMap";
+import RouteAuditModal from "@/components/RouteAuditModal";
 import { 
   History, 
   Search, 
@@ -29,8 +31,15 @@ import {
   Eye,
   Wand2, // Adicionado
   X,
-  GripVertical
+  GripVertical,
+  Loader2,
+  FileText
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import QRCode from 'qrcode';
+// @ts-ignore - dom-to-image-more não tem tipos TypeScript
+import domtoimage from 'dom-to-image-more';
 
 // dnd-kit
 import {
@@ -68,7 +77,7 @@ interface Route {
   distanceTotal: number;
   durationTotal: number;
   stopsCount: number;
-  status: 'draft' | 'optimized' | 'running' | 'done' | 'canceled';
+  status: 'draft' | 'confirmado' | 'finalizado' | 'cancelado';
   displayNumber: number;
   createdAt: string;
   updatedAt: string;
@@ -110,19 +119,62 @@ const joinParts = (...parts: (string | number | undefined | null)[]) =>
 
 const statusLabels = {
   draft: 'Rascunho',
-  optimized: 'Otimizada', 
-  running: 'Em execução',
-  done: 'Finalizada',
-  canceled: 'Cancelada'
+  confirmado: 'Confirmado', 
+  finalizado: 'Finalizado',
+  cancelado: 'Cancelado'
 };
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-800',
-  optimized: 'bg-blue-100 text-blue-800',
-  running: 'bg-yellow-100 text-yellow-800', 
-  done: 'bg-green-100 text-green-800',
-  canceled: 'bg-red-100 text-red-800'
+  confirmado: 'bg-blue-100 text-blue-800',
+  finalizado: 'bg-green-100 text-green-800',
+  cancelado: 'bg-red-100 text-red-800'
 };
+
+// uuid "0000-...-0026" -> 26 (versão de front)
+const uuidToNumberFront = (v?: string | null) => {
+  if (!v) return null;
+  const compact = v.replace(/-/g, "");
+  if (!/^[0-9a-fA-F]{32}$/.test(compact)) return null;
+  const numeric = compact.replace(/^0+/, "");
+  const n = Number(numeric);
+  return Number.isFinite(n) ? n : null;
+};
+
+// Mostrar nome do cliente mesmo se o back não tiver enviado clientName
+const displayStopName = (stop: any, appointments: any[], clients: any[]) => {
+  // tenta pelo appointmentNumericId (back já manda isso quando consegue)
+  let apptIdNum = Number(stop?.appointmentNumericId);
+  if (!Number.isFinite(apptIdNum)) {
+    // fallback: tenta extrair do UUID salvo em stop.appointmentId
+    apptIdNum = uuidToNumberFront(String(stop?.appointmentId)) ?? NaN;
+  }
+
+  let clientName = stop?.clientName && String(stop.clientName).trim() ? stop.clientName : null;
+
+  if (Number.isFinite(apptIdNum)) {
+    const appt = appointments.find(a => Number(a.id) === apptIdNum);
+    
+    if (appt) {
+      // a) já vem nome no appointment?
+      if (appt?.client?.name) clientName = appt.client.name;
+      else if (appt?.clientName) clientName = appt.clientName;
+      else {
+        // b) tenta achar cliente separado
+        const cli = clients.find((c: any) => String(c.id) === String(appt.clientId));
+        if (cli?.name) clientName = cli.name;
+      }
+      
+      // Retorna nome + ID do agendamento
+      if (clientName) return `${clientName} #${apptIdNum}`;
+    }
+  }
+
+  // fallback final (mas com label mais curta/legível)
+  const raw = String(stop?.appointmentId ?? "");
+  return `Agendamento #${raw.length > 12 ? `${raw.slice(0,8)}…${raw.slice(-4)}` : raw}`;
+};
+
 
 // Helpers seguros de formatação
 const fmtDateTime = (v?: string | number | Date | null) => {
@@ -160,6 +212,9 @@ export default function RoutesHistoryPage() {
   });
 
   const [, setLocation] = useLocation();
+  
+  // Capturar ID da rota da URL (/routes-history/:routeId)
+  const [match, params] = useRoute("/routes-history/:routeId");
 
   // Abre /appointments com responsável e data da rota pré-preenchidos
   const openNewAppointment = (route: Route) => {
@@ -192,16 +247,41 @@ export default function RoutesHistoryPage() {
       if (filters.selectedVehicle !== 'all') params.append('vehicleId', filters.selectedVehicle);
       if (filters.searchTerm.trim()) params.append('search', filters.searchTerm.trim());
 
-      const response = await fetch(`/api/routes?${params.toString()}`);
+      const response = await fetch(`/api/routes?${params.toString()}`, {
+        headers: getAuthHeaders(),
+      });
       if (!response.ok) throw new Error('Erro ao buscar rotas');
       return response.json();
     }
   });
 
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
+  const [auditRouteId, setAuditRouteId] = useState<string | null>(null);
 
   // Função para verificar URL params e abrir automaticamente a modal
   useEffect(() => {
+    // Prioridade 1: displayNumber na URL como parâmetro de rota (/routes-history/:routeId)
+    if (match && params?.routeId && routesData.length > 0) {
+      // Tentar converter para número (displayNumber)
+      const displayNum = Number(params.routeId);
+      
+      if (!isNaN(displayNum)) {
+        // Buscar rota pelo displayNumber
+        const routeExists = routesData.find(route => route.displayNumber === displayNum);
+        if (routeExists) {
+          setSelectedRoute(routeExists.id);
+        }
+      } else {
+        // Fallback: buscar pelo UUID (para compatibilidade)
+        const routeExists = routesData.find(route => route.id === params.routeId);
+        if (routeExists) {
+          setSelectedRoute(params.routeId);
+        }
+      }
+      return;
+    }
+    
+    // Prioridade 2: Query string (?open=routeId) - para compatibilidade
     const urlParams = new URLSearchParams(window.location.search);
     const openRouteId = urlParams.get('open');
     if (openRouteId && routesData.length > 0) {
@@ -213,7 +293,7 @@ export default function RoutesHistoryPage() {
         window.history.replaceState({}, '', newUrl);
       }
     }
-  }, [routesData]);
+  }, [routesData, match, params]);
 
   console.log('✅ Página Histórico de Rotas carregada');
   console.log('🔍 [ROUTES HISTORY] Aplicando filtros:', filters);
@@ -222,7 +302,9 @@ export default function RoutesHistoryPage() {
   const { data: routeDetail } = useQuery<RouteDetail>({
     queryKey: ['/api/routes', selectedRoute],
     queryFn: async () => {
-      const response = await fetch(`/api/routes/${selectedRoute}`);
+      const response = await fetch(`/api/routes/${selectedRoute}`, {
+        headers: getAuthHeaders(),
+      });
       if (!response.ok) throw new Error('Erro ao buscar detalhes da rota');
       return response.json();
     },
@@ -245,7 +327,9 @@ export default function RoutesHistoryPage() {
     enabled: !!selectedRoute && addStopsOpen, // só busca quando o modal abrir
     queryFn: async () => {
       if (!selectedRoute) return [];
-      const res = await fetch(`/api/routes/${selectedRoute}/available-appointments`);
+      const res = await fetch(`/api/routes/${selectedRoute}/available-appointments`, {
+        headers: getAuthHeaders(),
+      });
       if (!res.ok) return []; // deixa o fallback funcionar se o endpoint não existir
       return res.json();
     },
@@ -255,7 +339,9 @@ export default function RoutesHistoryPage() {
   const { data: appointments = [] } = useQuery({
     queryKey: ['/api/appointments'],
     queryFn: async () => {
-      const response = await fetch('/api/appointments');
+      const response = await fetch('/api/appointments', {
+        headers: getAuthHeaders(),
+      });
       if (!response.ok) throw new Error('Erro ao buscar agendamentos');
       return response.json();
     }
@@ -265,7 +351,9 @@ export default function RoutesHistoryPage() {
   const { data: clients = [] } = useQuery({
     queryKey: ['/api/clients'],
     queryFn: async () => {
-      const response = await fetch('/api/clients');
+      const response = await fetch('/api/clients', {
+        headers: getAuthHeaders(),
+      });
       if (!response.ok) throw new Error('Erro ao buscar clientes');
       return response.json();
     }
@@ -325,7 +413,9 @@ export default function RoutesHistoryPage() {
   const { data: technicians = [] } = useQuery({
     queryKey: ['/api/technicians'],
     queryFn: async () => {
-      const response = await fetch('/api/technicians');
+      const response = await fetch('/api/technicians', {
+        headers: getAuthHeaders(),
+      });
       if (!response.ok) throw new Error('Erro ao buscar técnicos');
       return response.json();
     }
@@ -373,7 +463,7 @@ export default function RoutesHistoryPage() {
         "POST",
         `/api/routes/${routeId}/optimize`,
         {
-          terminarNoPontoInicial: !!routeDetail?.route?.endAtStart,
+          terminarNoPontoInicial: false, // Por padrão não termina no ponto inicial
         }
       );
       return res.json();
@@ -395,6 +485,38 @@ export default function RoutesHistoryPage() {
       });
     },
   });
+
+  // mutation para atualizar status
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ routeId, status }: { routeId: string; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/routes/${routeId}/status`, { status });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Erro ao atualizar status");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Status atualizado",
+        description: "O status da rota foi alterado com sucesso.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/routes', selectedRoute] });
+      queryClient.invalidateQueries({ queryKey: ['/api/routes'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erro ao atualizar status",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Função helper para verificar se a rota é editável baseado no status
+  const isRouteEditable = (status: string) => {
+    return status === 'draft' || status === 'confirmado';
+  };
 
   // Estados para modal de remoção
   const [removeOpen, setRemoveOpen] = useState(false);
@@ -419,6 +541,99 @@ export default function RoutesHistoryPage() {
     setStopsUI(sorted);
   }, [routeDetail?.stops]);
 
+  // linha provisória desenhada no mapa enquanto o back recalcula
+  const [manualLine, setManualLine] = useState<any | null>(null);
+
+  // gera um LineString simples a partir da lista ordenada local
+  const buildLineFromStops = (stops: typeof stopsUI) => ({
+    type: "LineString",
+    coordinates: stops
+      .slice()
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      .map((s) => [Number(s.lng), Number(s.lat)]),
+  });
+
+  useEffect(() => {
+    setManualLine(null);
+  }, [routeDetail?.route?.updatedAt, routeDetail?.stops?.length]);
+
+  // start “fixo” da empresa/técnico (para o pin e para a linha manual)
+  const [localStart, setLocalStart] = useState<{ lat: number; lon: number } | null>(null);
+
+  // quando abrir/atualizar a rota, congela o start da empresa
+  useEffect(() => {
+    // Só atualiza se ainda não tem um localStart definido ou se mudou de rota
+    if (!routeDetail?.route?.id) return;
+    
+    const apiStart = (routeDetail as any)?.start;
+    let newStart = null;
+    
+    if (apiStart && Number.isFinite(Number(apiStart.lat)) && Number.isFinite(Number(apiStart.lng ?? apiStart.lon))) {
+      newStart = { lat: Number(apiStart.lat), lon: Number(apiStart.lng ?? apiStart.lon) };
+      console.log("🎯 [START UPDATE] Usando start do API:", newStart);
+    } else {
+      const s = getStartCoords(routeDetail?.route);
+      if (s && Number.isFinite(s.lat) && Number.isFinite(s.lon)) {
+        newStart = { lat: s.lat, lon: s.lon };
+        console.log("🎯 [START UPDATE] Usando start calculado:", newStart);
+      }
+    }
+    
+    // Só atualiza se realmente tem um novo valor válido
+    if (newStart) {
+      setLocalStart(newStart);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeDetail?.route?.id, (routeDetail as any)?.start]);
+
+  // Flag de ordenação local
+  const [isLocalReordered, setIsLocalReordered] = useState(false);
+  
+  // Estado de loading para reordenação - usando useRef para persistir entre re-renders
+  const [isReordering, setIsReordering] = useState(false);
+  const reorderingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isReorderingRef = useRef(false);
+
+  // já existia: mantém stopsUI em sincronia com o back
+  useEffect(() => {
+    // Não atualiza se está reordenando para evitar interrupções
+    if (isReorderingRef.current) {
+      console.log("⚠️ [BLOCK] Bloqueando atualização de stopsUI durante reordenação");
+      return;
+    }
+    
+    const sorted = (routeDetail?.stops || [])
+      .slice()
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    setStopsUI(sorted);
+    setIsLocalReordered(false); // <- sempre que vier algo do back (ex.: Otimizar), voltamos ao modo "servidor"
+  }, [routeDetail?.stops]);
+
+  useEffect(() => { 
+    if (!isReorderingRef.current) {
+      setIsLocalReordered(false);
+    }
+  }, [routeDetail?.route?.id]);
+  
+  // Força atualização quando a rota é atualizada no backend
+  useEffect(() => {
+    // Só atualiza se NÃO está reordenando
+    if (routeDetail?.route?.updatedAt && !isReorderingRef.current) {
+      console.log("🔄 [ROUTE UPDATE] Rota atualizada, forçando re-render");
+      setMapVersion((v) => v + 1);
+    }
+  }, [routeDetail?.route?.updatedAt]);
+  
+  // Limpa timeout ao desmontar
+  useEffect(() => {
+    return () => {
+      if (reorderingTimeoutRef.current) {
+        clearTimeout(reorderingTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  
   // mutation para remover parada
   const removeStopMutation = useMutation({
     mutationFn: async ({ routeId, stopId, appointmentId, clientName }: { 
@@ -427,7 +642,10 @@ export default function RoutesHistoryPage() {
       appointmentId?: number;
       clientName?: string | null;
     }) => {
-      const res = await fetch(`/api/routes/${routeId}/stops/${stopId}`, { method: "DELETE" });
+      const res = await fetch(`/api/routes/${routeId}/stops/${stopId}`, { 
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
       const contentType = res.headers.get("content-type") || "";
       const payload = contentType.includes("application/json") ? await res.json() : await res.text();
       
@@ -490,11 +708,45 @@ export default function RoutesHistoryPage() {
         variant: "destructive",
       });
       // volta estado local (refetch)
-      queryClient.invalidateQueries({ queryKey: ['/api/routes', selectedRoute] });
+      setIsLocalReordered(false);
+      // Delay no erro também para dar tempo de ver o loading
+      reorderingTimeoutRef.current = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['/api/routes', selectedRoute] });
+        isReorderingRef.current = false;
+        setIsReordering(false);
+        reorderingTimeoutRef.current = null;
+        console.log("🔴 [LOADING] Loading FINALIZADO (erro)");
+      }, 1000);
     },
-    onSuccess: () => {
-      // garantia de sincronismo
-      queryClient.invalidateQueries({ queryKey: ['/api/routes', selectedRoute] });
+    onSuccess: (data) => {
+      console.log("✨ [REORDER SUCCESS] Resposta do backend:", data);
+      
+      // Se o backend retornou o ponto inicial, atualizar o estado local
+      if (data?.start) {
+        setLocalStart({
+          lat: Number(data.start.lat),
+          lon: Number(data.start.lng ?? data.start.lon),
+        });
+        console.log("📍 [REORDER SUCCESS] Ponto inicial atualizado:", data.start);
+      }
+      
+      // força voltar ao modo "servidor" para usar dados corretos do backend
+      setIsLocalReordered(false);
+      
+      // Aguarda um pouco antes de invalidar para evitar multiplos re-renders
+      // TIMEOUT ÚNICO de 2500ms total
+      reorderingTimeoutRef.current = setTimeout(() => {
+        console.log("⏳ [LOADING] Iniciando finalização...");
+        // Invalida apenas uma vez
+        queryClient.invalidateQueries({ queryKey: ['/api/routes', selectedRoute] });
+        setMapVersion((v) => v + 1);
+        
+        // Remove o loading após garantir que tudo foi atualizado
+        isReorderingRef.current = false;
+        setIsReordering(false);
+        reorderingTimeoutRef.current = null;
+        console.log("✅ [LOADING] Loading FINALIZADO com sucesso após 2.5s");
+      }, 2500); // 2.5 segundos FIXO
     },
   });
 
@@ -515,7 +767,9 @@ export default function RoutesHistoryPage() {
   const { data: teams = [] } = useQuery({
     queryKey: ['/api/teams'],
     queryFn: async () => {
-      const response = await fetch('/api/teams');
+      const response = await fetch('/api/teams', {
+        headers: getAuthHeaders(),
+      });
       if (!response.ok) throw new Error('Erro ao buscar equipes');
       return response.json();
     }
@@ -525,7 +779,9 @@ export default function RoutesHistoryPage() {
   const { data: vehicles = [] } = useQuery({
     queryKey: ["/api/vehicles"],
     queryFn: async () => {
-      const response = await fetch("/api/vehicles"); // "fetch" = solicitar dados ao backend
+      const response = await fetch("/api/vehicles", {
+        headers: getAuthHeaders(),
+      }); // "fetch" = solicitar dados ao backend
       if (!response.ok) throw new Error("Erro ao buscar veículos");
       return response.json();
     },
@@ -558,7 +814,9 @@ export default function RoutesHistoryPage() {
   const { data: businessRules } = useQuery<BusinessRules | null>({
     queryKey: ['/api/business-rules'],
     queryFn: async () => {
-      const r = await fetch('/api/business-rules');
+      const r = await fetch('/api/business-rules', {
+        headers: getAuthHeaders(),
+      });
       return r.ok ? r.json() : null;
     }
   });
@@ -606,20 +864,14 @@ export default function RoutesHistoryPage() {
   };
 
   const getRouteVehicleName = (route: Route) => {
-    // Primeiro verifica se a rota tem veículo direto
-    if (route.vehicleId) {
-      return getVehicleName(route.vehicleId);
-    }
-
-    // Se não tem veículo direto, verifica se é uma equipe com veículo vinculado
-    if (route.responsibleType === 'team') {
-      const team = teams.find((t: any) => t.id.toString() === route.responsibleId);
-      if (team?.vehicleId) {
-        return getVehicleName(team.vehicleId.toString());
-      }
-    }
-
-    return '-';
+    // Busca veículo usando a mesma lógica da tabela (fallback)
+    const fallbackVehicleId =
+      route.vehicleId ??
+      (route.responsibleType === "team"
+        ? vehicles.find((v: any) => v.teamId === Number(route.responsibleId))?.id
+        : vehicles.find((v: any) => v.technicianId === Number(route.responsibleId))?.id);
+    
+    return formatVehicle(getVehicleById(fallbackVehicleId));
   };
 
   const handleStartNavigation = () => {
@@ -676,12 +928,22 @@ export default function RoutesHistoryPage() {
     window.open(url, "_blank");
   };
 
-  // Retorna coordenadas do ponto inicial da rota (quando existirem)
+  // Retorna SEMPRE o início da EMPRESA quando disponível.
+  // Só se não houver lat/lng da empresa é que caímos para rota/responsável.
   const getStartCoords = (route?: Route) => {
+    const br: any = businessRules;
+
+    // 1) Tenta empresa primeiro (garante pino fixo)
+    const companyLat = Number(br?.enderecoEmpresaLat);
+    const companyLng = Number(br?.enderecoEmpresaLng);
+    if (Number.isFinite(companyLat) && Number.isFinite(companyLng)) {
+      return { lat: companyLat, lon: companyLng };
+    }
+
+    // 2) Sem empresa? Tenta rota/responsável como antes
     if (!route) return null;
     const r: any = route;
 
-    // tentativas de campos comuns que podem vir do backend
     const candidates: Array<[any, any]> = [
       [r.startLat, r.startLng],
       [r.startLatitude, r.startLongitude],
@@ -690,7 +952,6 @@ export default function RoutesHistoryPage() {
       [r.start?.latitude, r.start?.longitude],
     ];
 
-    // Se o responsável tiver coordenadas de início
     if (route.responsibleType === "technician") {
       const tech: any = technicians.find((t: any) => t.id.toString() === route.responsibleId);
       candidates.push([tech?.enderecoInicioLat, tech?.enderecoInicioLng]);
@@ -699,30 +960,420 @@ export default function RoutesHistoryPage() {
       candidates.push([team?.enderecoInicioLat, team?.enderecoInicioLng]);
     }
 
-    // Coordenadas da empresa (se existirem nas regras)
-    candidates.push([
-      (businessRules as any)?.enderecoEmpresaLat,
-      (businessRules as any)?.enderecoEmpresaLng,
-    ]);
-
     for (const [lat, lng] of candidates) {
       if (Number.isFinite(lat) && Number.isFinite(lng)) {
         return { lat: Number(lat), lon: Number(lng) };
       }
     }
+
+    // 3) Sem nada? Loga para facilitar debug (apenas no dev)
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[ROUTES HISTORY] Start não encontrado: verifique business-rules (lat/lng) ou start da rota.");
+    }
     return null;
   };
 
 
-  const handleExportRoute = () => {
-    // TODO: Implementar exportação da rota
-    console.log('📤 Exportar rota:', selectedRoute);
+
+  const handleExportRoute = async () => {
+    if (!routeDetail) {
+      toast({
+        title: "Erro ao exportar",
+        description: "Nenhuma rota selecionada",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      toast({
+        title: "Gerando PDF...",
+        description: "Por favor, aguarde enquanto o PDF está sendo criado.",
+      });
+
+      // 1. Gerar link do Google Maps
+      const originText = getStartAddressText(routeDetail.route).trim();
+      const orderedStops = [...(routeDetail.stops || [])].sort(
+        (a, b) => (a.order ?? 0) - (b.order ?? 0)
+      );
+      
+      const stopAddresses = orderedStops
+        .map((s) => {
+          const addr = (s.address || "").trim();
+          if (addr) return addr;
+          if (Number.isFinite(s.lat) && Number.isFinite(s.lng)) {
+            return `${s.lat},${s.lng}`;
+          }
+          return "";
+        })
+        .filter(Boolean);
+
+      let googleMapsUrl = "";
+      if (originText && stopAddresses.length > 0) {
+        const waypoints = stopAddresses.slice(0, -1);
+        const destination = stopAddresses[stopAddresses.length - 1];
+        googleMapsUrl =
+          `https://www.google.com/maps/dir/?api=1&travelmode=driving` +
+          `&origin=${encodeURIComponent(originText)}` +
+          `&destination=${encodeURIComponent(destination)}` +
+          (waypoints.length
+            ? `&waypoints=${encodeURIComponent(waypoints.join("|"))}`
+            : "");
+      }
+
+      // 2. Gerar QR Code
+      let qrCodeDataUrl = "";
+      if (googleMapsUrl) {
+        qrCodeDataUrl = await QRCode.toDataURL(googleMapsUrl, {
+          width: 200,
+          margin: 1,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        });
+      }
+
+      // 3. Carregar logo
+      const logoUrl = '/brand/rotafacil-pin.png';
+      let logoDataUrl = "";
+      try {
+        const logoResponse = await fetch(logoUrl);
+        const logoBlob = await logoResponse.blob();
+        logoDataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(logoBlob);
+        });
+      } catch (e) {
+        console.warn('Logo não carregada:', e);
+      }
+
+      // 4. Capturar mapa como imagem - usando dom-to-image-more para melhor precisão
+      let mapImageDataUrl = "";
+      
+      const mapContainer = document.querySelector('.leaflet-container') as HTMLElement;
+      if (mapContainer) {
+        // Aguardar que todos os tiles e elementos do mapa estejam carregados
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Forçar invalidação do tamanho do mapa para garantir renderização correta
+        try {
+          const mapInstance = (mapContainer as any)._leaflet_map;
+          if (mapInstance) {
+            mapInstance.invalidateSize();
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        } catch (e) {
+          console.warn('Não foi possível invalidar o tamanho do mapa:', e);
+        }
+        
+        try {
+          // dom-to-image-more lida melhor com CSS transforms do Leaflet
+          const dataUrl = await domtoimage.toPng(mapContainer, {
+            quality: 1.0,
+            width: mapContainer.offsetWidth,
+            height: mapContainer.offsetHeight,
+            style: {
+              transform: 'none',
+            },
+            filter: (node: HTMLElement) => {
+              // Filtrar controles do Leaflet
+              if (node.classList) {
+                return !node.classList.contains('leaflet-control-container') &&
+                       !node.classList.contains('leaflet-control-attribution') &&
+                       !node.classList.contains('leaflet-control-zoom');
+              }
+              return true;
+            },
+          });
+          mapImageDataUrl = dataUrl;
+          
+          console.log('✅ Mapa capturado com sucesso usando dom-to-image-more');
+        } catch (error) {
+          console.error('Erro ao capturar mapa com dom-to-image-more, tentando html2canvas:', error);
+          
+          // Fallback para html2canvas se dom-to-image falhar
+          try {
+            const canvas = await html2canvas(mapContainer, {
+              useCORS: true,
+              allowTaint: false,
+              backgroundColor: '#ffffff',
+              scale: 2,
+              logging: false,
+              ignoreElements: (element) => {
+                return element.classList?.contains('leaflet-control-container') ||
+                       element.classList?.contains('leaflet-control-attribution');
+              },
+            });
+            mapImageDataUrl = canvas.toDataURL('image/png', 1.0);
+            console.log('✅ Mapa capturado com html2canvas (fallback)');
+          } catch (fallbackError) {
+            console.error('Erro ao capturar mapa com html2canvas:', fallbackError);
+            toast({
+              title: "Aviso",
+              description: "Não foi possível capturar o mapa. O PDF será gerado sem a visualização do mapa.",
+              variant: "default",
+            });
+          }
+        }
+      }
+
+      // 5. Criar PDF com design melhorado
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      let yPosition = margin;
+
+      // Cores do tema (definidas como tuplas para TypeScript)
+      const primaryColor: [number, number, number] = [200, 140, 0]; // burnt-yellow
+      const secondaryColor: [number, number, number] = [0, 100, 0]; // verde
+      const accentColor: [number, number, number] = [41, 128, 185]; // azul
+      const textColor: [number, number, number] = [50, 50, 50];
+      const lightGray: [number, number, number] = [240, 240, 240];
+
+      // Cabeçalho com fundo colorido
+      pdf.setFillColor(...primaryColor);
+      pdf.rect(0, 0, pageWidth, 35, 'F');
+
+      // Logo
+      if (logoDataUrl) {
+        const logoSize = 15;
+        pdf.addImage(logoDataUrl, 'PNG', margin, 8, logoSize, logoSize);
+      }
+
+      // Título no cabeçalho
+      pdf.setFontSize(24);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text('Rota Fácil', logoDataUrl ? margin + 20 : margin, 18);
+      
+      pdf.setFontSize(12);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text('Relatório de Rota', logoDataUrl ? margin + 20 : margin, 26);
+
+      yPosition = 45;
+
+      // Título da rota com fundo
+      pdf.setFillColor(...lightGray);
+      pdf.roundedRect(margin, yPosition - 5, pageWidth - 2 * margin, 12, 2, 2, 'F');
+      pdf.setFontSize(16);
+      pdf.setTextColor(...textColor);
+      pdf.text(`${routeDetail.route?.title || 'Sem título'}`, margin + 3, yPosition + 3);
+      yPosition += 15;
+
+      // Card de informações principais
+      pdf.setFillColor(250, 250, 250);
+      const cardHeight = 50;
+      pdf.roundedRect(margin, yPosition, pageWidth - 2 * margin, cardHeight, 3, 3, 'F');
+      
+      yPosition += 5;
+      const leftCol = margin + 5;
+      const rightCol = pageWidth / 2 + 5;
+      
+      // Coluna esquerda
+      pdf.setFontSize(10);
+      pdf.setTextColor(...primaryColor);
+      pdf.text('ID:', leftCol, yPosition);
+      pdf.setTextColor(...textColor);
+      pdf.text(`#${routeDetail.route.displayNumber}`, leftCol + 15, yPosition);
+      yPosition += 6;
+
+      pdf.setTextColor(...primaryColor);
+      pdf.text('Data:', leftCol, yPosition);
+      pdf.setTextColor(...textColor);
+      pdf.text(fmtDateList(routeDetail.route?.date), leftCol + 15, yPosition);
+      yPosition += 6;
+
+      pdf.setTextColor(...primaryColor);
+      pdf.text('Responsável:', leftCol, yPosition);
+      pdf.setTextColor(...textColor);
+      const respText = pdf.splitTextToSize(getResponsibleName(routeDetail.route), 60);
+      pdf.text(respText, leftCol + 25, yPosition);
+      yPosition += 6;
+
+      pdf.setTextColor(...primaryColor);
+      pdf.text('Veículo:', leftCol, yPosition);
+      pdf.setTextColor(...textColor);
+      const vehicleText = pdf.splitTextToSize(getRouteVehicleName(routeDetail.route), 60);
+      pdf.text(vehicleText, leftCol + 20, yPosition);
+
+      // Coluna direita
+      yPosition -= 18;
+      
+      pdf.setTextColor(...primaryColor);
+      pdf.text('Status:', rightCol, yPosition);
+      pdf.setTextColor(...textColor);
+      pdf.text(statusLabels[routeDetail.route?.status] || routeDetail.route?.status, rightCol + 15, yPosition);
+      yPosition += 6;
+
+      pdf.setTextColor(...accentColor);
+      pdf.text('Distância:', rightCol, yPosition);
+      pdf.setTextColor(...textColor);
+      pdf.text(fmtKm(routeDetail.route?.distanceTotal), rightCol + 22, yPosition);
+      yPosition += 6;
+
+      pdf.setTextColor(...secondaryColor);
+      pdf.text('Duração:', rightCol, yPosition);
+      pdf.setTextColor(...textColor);
+      pdf.text(fmtMin(routeDetail.route?.durationTotal), rightCol + 20, yPosition);
+      yPosition += 6;
+
+      pdf.setTextColor(...primaryColor);
+      pdf.text('Paradas:', rightCol, yPosition);
+      pdf.setTextColor(...textColor);
+      pdf.text(`${routeDetail.route?.stopsCount}`, rightCol + 18, yPosition);
+
+      yPosition += 25;
+
+      // Ponto inicial com ícone
+      pdf.setFillColor(...secondaryColor);
+      pdf.roundedRect(margin, yPosition, pageWidth - 2 * margin, 8, 2, 2, 'F');
+      pdf.setFontSize(12);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text('Ponto Inicial', margin + 3, yPosition + 5.5);
+      yPosition += 12;
+      
+      pdf.setFontSize(10);
+      pdf.setTextColor(...textColor);
+      const startAddress = getStartAddressText(routeDetail.route);
+      const startLines = pdf.splitTextToSize(startAddress, pageWidth - 2 * margin - 10);
+      pdf.text(startLines, margin + 5, yPosition);
+      yPosition += startLines.length * 5 + 8;
+
+      // Paradas com design melhorado
+      pdf.setFillColor(...primaryColor);
+      pdf.roundedRect(margin, yPosition, pageWidth - 2 * margin, 8, 2, 2, 'F');
+      pdf.setFontSize(12);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text('Paradas da Rota', margin + 3, yPosition + 5.5);
+      yPosition += 12;
+
+      orderedStops.forEach((stop, index) => {
+        // Verificar se precisa de nova página
+        if (yPosition > pageHeight - 35) {
+          pdf.addPage();
+          yPosition = margin;
+        }
+
+        // Número da parada com círculo
+        pdf.setFillColor(...primaryColor);
+        pdf.circle(margin + 5, yPosition + 2, 4, 'F');
+        pdf.setFontSize(10);
+        pdf.setTextColor(255, 255, 255);
+        pdf.text(`${stop.order}`, margin + 3.5, yPosition + 3.2);
+
+        // Nome do cliente
+        pdf.setFontSize(11);
+        pdf.setTextColor(...textColor);
+        pdf.text(displayStopName(stop, appointments, clients), margin + 12, yPosition + 3);
+        yPosition += 6;
+
+        // Endereço
+        pdf.setFontSize(9);
+        pdf.setTextColor(120, 120, 120);
+        const addressLines = pdf.splitTextToSize(stop.address, pageWidth - 2 * margin - 15);
+        pdf.text(addressLines, margin + 12, yPosition);
+        yPosition += addressLines.length * 4 + 5;
+      });
+
+      // Adicionar nova página para o mapa e QR code
+      pdf.addPage();
+      yPosition = margin;
+
+      // Cabeçalho da segunda página
+      pdf.setFillColor(...accentColor);
+      pdf.rect(0, 0, pageWidth, 20, 'F');
+      pdf.setFontSize(16);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text('Visualização e Navegação', margin, 13);
+      
+      yPosition = 30;
+
+      // Mapa com borda
+      if (mapImageDataUrl) {
+        pdf.setFillColor(...lightGray);
+        pdf.roundedRect(margin - 2, yPosition - 2, pageWidth - 2 * margin + 4, 124, 3, 3, 'F');
+        
+        const mapWidth = pageWidth - 2 * margin;
+        const mapHeight = 120;
+        pdf.addImage(mapImageDataUrl, 'PNG', margin, yPosition, mapWidth, mapHeight);
+        yPosition += mapHeight + 10;
+      }
+
+      // QR Code com card estilizado
+      if (qrCodeDataUrl) {
+        pdf.setFillColor(250, 250, 250);
+        pdf.roundedRect(margin, yPosition, pageWidth - 2 * margin, 70, 3, 3, 'F');
+        
+        yPosition += 8;
+        pdf.setFontSize(14);
+        pdf.setTextColor(...primaryColor);
+        pdf.text('Navegue pelo Google Maps', margin + 5, yPosition);
+        yPosition += 7;
+
+        pdf.setFontSize(9);
+        pdf.setTextColor(...textColor);
+        pdf.text('Escaneie o QR Code com seu celular para iniciar a navegação:', margin + 5, yPosition);
+        yPosition += 8;
+
+        const qrSize = 45;
+        const qrX = (pageWidth - qrSize) / 2;
+        pdf.addImage(qrCodeDataUrl, 'PNG', qrX, yPosition, qrSize, qrSize);
+      }
+
+      // Rodapé em todas as páginas
+      const totalPages = pdf.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setDrawColor(200, 200, 200);
+        pdf.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
+        pdf.setFontSize(8);
+        pdf.setTextColor(150, 150, 150);
+        const footerText = `Gerado em ${new Date().toLocaleString('pt-BR')} - Rota Fácil`;
+        pdf.text(footerText, margin, pageHeight - 8);
+        pdf.text(`Página ${i} de ${totalPages}`, pageWidth - margin - 20, pageHeight - 8);
+      }
+
+      // 6. Salvar PDF
+      const fileName = `rota_${routeDetail.route.displayNumber}_${routeDetail.route?.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+      pdf.save(fileName);
+
+      // Registrar auditoria de exportação
+      try {
+        await fetch(`/api/routes/${routeDetail.route.id}/audit-export`, {
+          method: 'POST',
+          headers: {
+            ...getAuthHeaders(),
+            'Content-Type': 'application/json',
+          },
+        });
+      } catch (error) {
+        console.error('Erro ao registrar auditoria de exportação:', error);
+      }
+
+      toast({
+        title: "PDF gerado com sucesso!",
+        description: `Arquivo ${fileName} foi baixado.`,
+      });
+
+    } catch (error) {
+      console.error('Erro ao exportar rota:', error);
+      toast({
+        title: "Erro ao gerar PDF",
+        description: "Ocorreu um erro ao criar o arquivo PDF. Tente novamente.",
+        variant: "destructive",
+      });
+    }
   };
 
   // Sensores DnD e handler
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
+
+  // Versão do mapa para forçar re-render durante DnD
+  const [mapVersion, setMapVersion] = useState(0);
 
   const handleDragEnd = (event: any) => {
     const { active, over } = event;
@@ -732,20 +1383,49 @@ export default function RoutesHistoryPage() {
     const newIndex = stopsUI.findIndex(s => s.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
 
+    // IMEDIATAMENTE mostra o loading ANTES de qualquer atualização
+    // Cancela timeout anterior se existir
+    if (reorderingTimeoutRef.current) {
+      clearTimeout(reorderingTimeoutRef.current);
+      reorderingTimeoutRef.current = null;
+    }
+    
+    // Define em ambos: state e ref
+    isReorderingRef.current = true;
+    setIsReordering(true);
+    console.log("🟡 [LOADING] Loading INICIADO");
+
+    console.log("🎯 [DRAG END] Reordenando:", {
+      movendoDe: oldIndex,
+      movendoPara: newIndex,
+      stopMovida: stopsUI[oldIndex],
+      totalStops: stopsUI.length,
+    });
+
     const newList = arrayMove(stopsUI, oldIndex, newIndex).map((s, idx) => ({
       ...s,
       order: idx + 1
     }));
-    setStopsUI(newList);
 
-    // persiste no back
-    if (routeDetail?.route?.id) {
-      reorderStopsMutation.mutate({
-        routeId: routeDetail.route.id,
-        stopIds: newList.map(s => s.id),
-      });
-    }
+    console.log("🔄 [DRAG END] Nova ordem:", newList.map(s => ({ id: s.id, order: s.order, address: s.address?.substring(0, 30) })));
+
+      // Pequeno delay para garantir que o loading apareça antes das mudanças
+    setTimeout(() => {
+      setStopsUI(newList);
+      setIsLocalReordered(true);
+      // Não força re-render aqui, deixa para quando terminar
+
+      if (routeDetail?.route?.id) {
+        console.log("📡 [DRAG END] Enviando para o backend reordenar...");
+        reorderStopsMutation.mutate({
+          routeId: routeDetail.route.id,
+          stopIds: newList.map(s => s.id),
+        });
+      }
+    }, 50); // 50ms é suficiente para o loading aparecer
   };
+
+
 
   console.log('📋 [ROUTES HISTORY] Componente montado/atualizado');
 
@@ -855,9 +1535,9 @@ export default function RoutesHistoryPage() {
       <div>
         <div className="flex items-center gap-2 mb-2">
           <History className="h-6 w-6 text-burnt-yellow" />
-          <h1 className="text-2xl font-bold text-gray-900">Histórico de Rotas</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Romaneios - Histórico de Rotas</h1>
         </div>
-        <p className="text-gray-600">Visualize e gerencie o histórico de rotas otimizadas</p>
+        <p className="text-gray-600">Visualize e gerencie os romaneios e o histórico de rotas otimizadas</p>
       </div>
 
       {/* Filtros */}
@@ -953,10 +1633,9 @@ export default function RoutesHistoryPage() {
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="draft">Rascunho</SelectItem>
-                  <SelectItem value="optimized">Otimizada</SelectItem>
-                  <SelectItem value="running">Em execução</SelectItem>
-                  <SelectItem value="done">Finalizada</SelectItem>
-                  <SelectItem value="canceled">Cancelada</SelectItem>
+                  <SelectItem value="confirmado">Confirmado</SelectItem>
+                  <SelectItem value="finalizado">Finalizado</SelectItem>
+                  <SelectItem value="cancelado">Cancelado</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1037,20 +1716,49 @@ export default function RoutesHistoryPage() {
                         <TableCell className="text-green-600">{fmtMin(route.durationTotal)}</TableCell>
                         <TableCell>{route.stopsCount}</TableCell>
                         <TableCell>
-                          <Badge className={statusColors[route.status] || statusColors.draft}>
-                            {statusLabels[route.status] || route.status}
-                          </Badge>
+                          <Select
+                            value={route.status}
+                            onValueChange={(newStatus) => {
+                              updateStatusMutation.mutate({ routeId: route.id, status: newStatus });
+                            }}
+                          >
+                            <SelectTrigger className={`w-[140px] h-7 ${statusColors[route.status] || statusColors.draft} border-0 font-medium`}>
+                              <SelectValue>
+                                {statusLabels[route.status] || route.status}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="draft">Rascunho</SelectItem>
+                              <SelectItem value="confirmado">Confirmado</SelectItem>
+                              <SelectItem value="finalizado">Finalizado</SelectItem>
+                              <SelectItem value="cancelado">Cancelado</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSelectedRoute(route.id)}
-                            data-testid={`button-view-route-${route.id}`}
-                          >
-                            <Eye className="h-4 w-4 mr-1" />
-                            Ver
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedRoute(route.id);
+                                setLocation(`/routes-history/${route.displayNumber}`);
+                              }}
+                              data-testid={`button-view-route-${route.id}`}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              Ver
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setAuditRouteId(route.id)}
+                              data-testid={`button-audit-route-${route.id}`}
+                              title="Ver histórico de alterações"
+                            >
+                              <FileText className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -1067,7 +1775,11 @@ export default function RoutesHistoryPage() {
       <Dialog
         open={!!selectedRoute}
         onOpenChange={(open) => {
-          if (!open) setSelectedRoute(null);
+          if (!open) {
+            setSelectedRoute(null);
+            // Voltar para /routes-history quando fechar o modal
+            setLocation('/routes-history');
+          }
         }}
       >
         <DialogContent
@@ -1109,16 +1821,33 @@ export default function RoutesHistoryPage() {
 
                       <div>
                         <div className="text-gray-500">Status</div>
-                        <Badge className={statusColors[routeDetail.route?.status] || statusColors.draft}>
-                          {statusLabels[routeDetail.route?.status] || routeDetail.route?.status}
-                        </Badge>
+                        <Select
+                          value={routeDetail.route?.status}
+                          onValueChange={(newStatus) => {
+                            if (routeDetail.route?.id) {
+                              updateStatusMutation.mutate({ routeId: routeDetail.route.id, status: newStatus });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className={`w-[140px] h-7 ${statusColors[routeDetail.route?.status] || statusColors.draft} border-0 font-medium`}>
+                            <SelectValue>
+                              {statusLabels[routeDetail.route?.status] || routeDetail.route?.status}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="draft">Rascunho</SelectItem>
+                            <SelectItem value="confirmado">Confirmado</SelectItem>
+                            <SelectItem value="finalizado">Finalizado</SelectItem>
+                            <SelectItem value="cancelado">Cancelado</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
 
                       <div>
                         <div className="text-gray-500">Veículo</div>
                         <div className="font-medium flex items-center gap-2">
                           <Car className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                          {formatVehicle(getVehicleById(routeDetail.route?.vehicleId))}
+                          {getRouteVehicleName(routeDetail.route)}
                         </div>
                       </div>
 
@@ -1137,6 +1866,7 @@ export default function RoutesHistoryPage() {
                         variant="outline"
                         className="border-burnt-yellow text-burnt-yellow hover:bg-yellow-50"
                         onClick={() => setAddStopsOpen(true)}
+                        disabled={!isRouteEditable(routeDetail.route?.status)}
                         data-testid="btn-add-existing-appointments"
                       >
                         + Incluir agendamentos existentes
@@ -1145,6 +1875,7 @@ export default function RoutesHistoryPage() {
                       <Button
                         onClick={() => routeDetail?.route?.id && optimizeRouteMutation.mutate(routeDetail.route.id)}
                         disabled={
+                          !isRouteEditable(routeDetail.route?.status) ||
                           optimizeRouteMutation.isPending ||
                           !routeDetail?.stops || routeDetail.stops.length < 2
                         }
@@ -1155,6 +1886,11 @@ export default function RoutesHistoryPage() {
                         {optimizeRouteMutation.isPending ? "Otimizando..." : "Otimizar rota"}
                       </Button>
                     </div>
+                    {!isRouteEditable(routeDetail.route?.status) && (
+                      <div className="mt-2 text-sm text-amber-600">
+                        ⚠️ Esta rota está {statusLabels[routeDetail.route?.status]?.toLowerCase()} e não pode ser editada.
+                      </div>
+                    )}
                   </div>
 
                   <Separator />
@@ -1291,50 +2027,76 @@ export default function RoutesHistoryPage() {
                       </div>
 
                       {/* === Drag & Drop só nas paradas (stopsUI) === */}
-                      <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleDragEnd}
-                      >
-                        <SortableContext
-                          items={stopsUI.map((s) => s.id)}
-                          strategy={verticalListSortingStrategy}
+                      {isRouteEditable(routeDetail.route?.status) ? (
+                        <DndContext
+                          sensors={sensors}
+                          collisionDetection={closestCenter}
+                          onDragEnd={handleDragEnd}
                         >
-                          {stopsUI.map((stop) => (
-                            <SortableStopItem key={stop.id} stop={stop}>
+                          <SortableContext
+                            items={stopsUI.map((s) => s.id)}
+                            strategy={verticalListSortingStrategy}
+                          >
+                            {stopsUI.map((stop) => (
+                              <SortableStopItem key={stop.id} stop={stop}>
                               <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
                                 <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-bold">
                                   {stop.order}
                                 </div>
                                 <div className="flex-1">
                                   <div className="font-medium text-sm">
-                                    {stop.clientName ? stop.clientName : `Agendamento #${stop.appointmentId}`}
+                                    {displayStopName(stop, appointments, clients)}
                                   </div>
                                   <div className="text-xs sm:text-sm text-gray-600 mt-1">{stop.address}</div>
-                                  <div className="text-[11px] text-gray-500 mt-1">
-                                    {stop.lat.toFixed(6)}, {stop.lng.toFixed(6)}
-                                  </div>
+                                  {Number.isFinite(stop.lat) && Number.isFinite(stop.lng) && (stop.lat !== 0 || stop.lng !== 0) && (
+                                    <div className="text-[11px] text-gray-500 mt-1">
+                                      {Number(stop.lat).toFixed(6)}, {Number(stop.lng).toFixed(6)}
+                                    </div>
+                                  )}
                                 </div>
                                 {/* Botão remover */}
-                                <button
-                                  onClick={() => {
-                                    setStopToRemove({ 
-                                      id: stop.id, 
-                                      clientName: stop.clientName || undefined 
-                                    });
-                                    setRemoveOpen(true);
-                                  }}
-                                  className="ml-2 rounded-md p-1 text-gray-500 hover:text-red-600 hover:bg-red-50"
-                                  title="Remover da rota"
-                                  aria-label="Remover da rota"
-                                >
-                                  <X className="h-4 w-4" />
-                                </button>
+                                {isRouteEditable(routeDetail.route?.status) && (
+                                  <button
+                                    onClick={() => {
+                                      setStopToRemove({ 
+                                        id: stop.id, 
+                                        clientName: stop.clientName || undefined 
+                                      });
+                                      setRemoveOpen(true);
+                                    }}
+                                    className="ml-2 rounded-md p-1 text-gray-500 hover:text-red-600 hover:bg-red-50"
+                                    title="Remover da rota"
+                                    aria-label="Remover da rota"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                )}
                               </div>
                             </SortableStopItem>
                           ))}
-                        </SortableContext>
-                      </DndContext>
+                          </SortableContext>
+                        </DndContext>
+                      ) : (
+                        // Modo somente leitura - sem drag and drop
+                        stopsUI.map((stop) => (
+                          <div key={stop.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                            <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-bold">
+                              {stop.order}
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">
+                                {displayStopName(stop, appointments, clients)}
+                              </div>
+                              <div className="text-xs sm:text-sm text-gray-600 mt-1">{stop.address}</div>
+                              {Number.isFinite(stop.lat) && Number.isFinite(stop.lng) && (stop.lat !== 0 || stop.lng !== 0) && (
+                                <div className="text-[11px] text-gray-500 mt-1">
+                                  {Number(stop.lat).toFixed(6)}, {Number(stop.lng).toFixed(6)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1344,77 +2106,124 @@ export default function RoutesHistoryPage() {
                   <div className="relative flex-1 h-full min-h-[300px] rounded-lg overflow-hidden border">
                     <div className="absolute inset-0">
                       {(() => {
-                        // 1) Paradas ordenadas
-                        const orderedStops = (routeDetail.stops || [])
+                        // 1) Paradas (clientes) em ordem
+                        const sourceStops = isLocalReordered && stopsUI?.length ? stopsUI : (routeDetail.stops || []);
+                        const orderedStops = sourceStops
                           .slice()
                           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-                        // 2) Waypoints das paradas (apenas as paradas!)
-                        const stopWps = orderedStops.map((s) => ({
-                          lat: Number(s.lat),
-                          lon: Number(s.lng),
-                        }));
+                        console.log("🔄 [RoutesHistory] Estado do mapa:", {
+                          isLocalReordered,
+                          sourceStopsCount: sourceStops.length,
+                          orderedStopsCount: orderedStops.length,
+                          primeiraParada: orderedStops[0],
+                          localStart,
+                          apiStart: (routeDetail as any)?.start,
+                        });
 
-                        // 3) Tenta pegar coordenadas de início (técnico/equipe/empresa)
-                        const startWp = getStartCoords(routeDetail.route);
+                        // 2) Waypoints (somente clientes) – filtra inválidos
+                        const stopsAsWaypoints = orderedStops
+                          .map((s) => ({ lat: Number(s.lat), lon: Number(s.lng) }))
+                          .filter((w) => Number.isFinite(w.lat) && Number.isFinite(w.lon));
 
-                        // 4) GeoJSON vindo do backend (pode vir string → parse)
+                        // 3) START: EMPRESA primeiro (getStartCoords já prioriza empresa)
+                        const apiStart = (routeDetail as any)?.start;
+                        const derivedStart =
+                          localStart ??
+                          (apiStart && Number.isFinite(Number(apiStart.lat)) && Number.isFinite(Number(apiStart.lng ?? apiStart.lon))
+                            ? { lat: Number(apiStart.lat), lon: Number(apiStart.lng ?? apiStart.lon) }
+                            : getStartCoords(routeDetail.route));
+
+                        // 👉 Garantia extra: se ainda assim vier null, não deixamos o mapa "pegar" o 1º cliente como start.
+                        //    Preferimos não desenhar o pino até termos a empresa (evita o bug visual).
+                        const startForMap = derivedStart || null;
+                        
+                        console.log("📍 [RoutesHistory] Ponto inicial calculado:", {
+                          startForMap,
+                          derivedStart,
+                          usandoLocalStart: !!localStart,
+                          usandoApiStart: !localStart && !!apiStart,
+                          usandoGetStartCoords: !localStart && !apiStart,
+                        });
+
+                        // 4) GeoJSON vindo do back (quando existir)
                         let rawBackendGeoJson: any =
                           (routeDetail.route as any)?.polylineGeoJson ??
                           (routeDetail.route as any)?.routeGeoJson ??
-                          (routeDetail.route as any)?.geojson ??
-                          null;
-
+                          (routeDetail.route as any)?.geojson ?? null;
                         if (typeof rawBackendGeoJson === "string") {
                           try { rawBackendGeoJson = JSON.parse(rawBackendGeoJson); } catch {}
                         }
 
-                        // 5) GeoJSON para desenhar (fallback simples se não vier do back)
-                        const routeGeoJson =
-                          rawBackendGeoJson ??
-                          (stopWps.length >= 2
-                            ? { type: "LineString", coordinates: stopWps.map((w) => [w.lon, w.lat]) }
-                            : null);
-
-                        // 6) Se NÃO temos startWp, tenta inferir do GeoJSON (primeiro ponto da linha)
-                        const startFromGeo: { lat: number; lon: number } | null =
-                          !startWp && routeGeoJson
-                            ? (() => {
-                                const geom =
-                                  routeGeoJson?.type === "LineString"
-                                    ? routeGeoJson
-                                    : routeGeoJson?.type === "Feature"
-                                    ? routeGeoJson.geometry
-                                    : routeGeoJson?.geometry?.type === "LineString"
-                                    ? routeGeoJson.geometry
-                                    : null;
-                                const c = geom?.coordinates?.[0];
-                                if (Array.isArray(c) && c.length >= 2) {
-                                  const [lon, lat] = c;
-                                  if (Number.isFinite(lat) && Number.isFinite(lon)) {
-                                    return { lat: Number(lat), lon: Number(lon) };
-                                  }
-                                }
-                                return null;
-                              })()
+                        // 5) Linha manual durante DnD – renomeado para evitar sombra de state
+                        const manualLineGeo =
+                          isLocalReordered && startForMap && stopsAsWaypoints.length > 0
+                            ? ({
+                                type: "LineString",
+                                coordinates: [
+                                  [startForMap.lon, startForMap.lat],
+                                  ...stopsAsWaypoints.map((w) => [w.lon, w.lat]),
+                                ],
+                              } as const)
                             : null;
 
-                        // 7) Ponto inicial definitivo para o pin verde
-                        const startPoint = startWp || startFromGeo || null;
+                        // 6) GeoJSON final
+                        const routeGeoJson =
+                          manualLineGeo ??
+                          rawBackendGeoJson ??
+                          // ✅ FALLBACK: Sempre inclui o ponto inicial antes das paradas
+                          (startForMap && stopsAsWaypoints.length > 0
+                            ? { 
+                                type: "LineString", 
+                                coordinates: [
+                                  [startForMap.lon, startForMap.lat],
+                                  ...stopsAsWaypoints.map((w) => [w.lon, w.lat])
+                                ]
+                              }
+                            : null);
+
+                        // 7) key inclui versão para re-render forçado (ver ajuste 3)
+                        const keyForMap = `${routeDetail.route?.id}-${isLocalReordered ? "local" : "server"}-${mapVersion}`;
+
+                        // LOG FINAL: Verificar o que está sendo enviado para o mapa
+                        console.log("🎯 [RENDER MAP] Dados finais para o mapa:", {
+                          keyForMap,
+                          isLocalReordered,
+                          startForMap,
+                          waypointsCount: stopsAsWaypoints.length,
+                          firstWaypoint: stopsAsWaypoints[0],
+                          hasGeoJson: !!routeGeoJson,
+                          geoJsonFirstCoord: routeGeoJson?.coordinates?.[0],
+                        });
 
                         return (
                           <OptimizedRouteMap
-                            routeGeoJson={routeGeoJson}   // o que você calculou acima
-                            waypoints={stopWps}           // só as paradas (lat/lon)
-                            startWaypoint={startPoint}    // pode vir de getStartCoords ou inferido do geojson
+                            key={keyForMap}
+                            routeGeoJson={routeGeoJson}
+                            waypoints={stopsAsWaypoints}
+                            // � Mantenha o pino fixo da empresa:
+                            startWaypoint={startForMap}
+                            // (Compat opcional, caso seu OptimizedRouteMap novo espere 'origin')
+                            {...({ origin: startForMap } as any)}
                           />
                         );
-
                       })()}
+
+                      {/* Overlay de loading durante reordenação */}
+                      {isReordering && (
+                        <div className="absolute inset-0 z-50 flex items-center justify-center bg-burnt-yellow/20 backdrop-blur-sm">
+                          <div className="bg-white/95 rounded-lg shadow-xl p-6 flex flex-col items-center space-y-3 border-2 border-burnt-yellow/30">
+                            <Loader2 className="h-10 w-10 animate-spin text-burnt-yellow" />
+                            <p className="text-gray-700 font-semibold">Reordenando rota...</p>
+                            <p className="text-sm text-gray-500">Por favor, aguarde...</p>
+                          </div>
+                        </div>
+                      )}
 
                     </div>
                   </div>
                 </div>
+
 
               </div>
             ) : (
@@ -1485,6 +2294,13 @@ export default function RoutesHistoryPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de auditoria de alterações da rota */}
+      <RouteAuditModal
+        routeId={auditRouteId}
+        open={!!auditRouteId}
+        onOpenChange={(open) => !open && setAuditRouteId(null)}
+      />
 
     </div>
   );

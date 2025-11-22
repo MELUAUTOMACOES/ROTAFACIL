@@ -10,7 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Users, UserPlus, MapPin } from "lucide-react";
+import { Users, UserPlus, MapPin, Clock as ClockIcon } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 // Função para buscar endereço por CEP - idêntica ao cadastro de técnico
@@ -41,6 +41,11 @@ const teamFormSchema = z.object({
   enderecoInicioBairro: z.string().optional(),
   enderecoInicioCidade: z.string().optional(),
   enderecoInicioEstado: z.string().optional(),
+  // Horários de trabalho
+  horarioInicioTrabalho: z.string().default("08:00"),
+  horarioFimTrabalho: z.string().default("18:00"),
+  horarioAlmocoMinutos: z.number().default(60),
+  diasTrabalho: z.array(z.string()).default(['segunda', 'terca', 'quarta', 'quinta', 'sexta']),
 });
 
 type ExtendedTeamForm = z.infer<typeof teamFormSchema>;
@@ -92,6 +97,11 @@ export default function TeamForm({
       enderecoInicioBairro: "",
       enderecoInicioCidade: "",
       enderecoInicioEstado: "",
+      // Horários de trabalho
+      horarioInicioTrabalho: "08:00",
+      horarioFimTrabalho: "18:00",
+      horarioAlmocoMinutos: 60,
+      diasTrabalho: ['segunda', 'terca', 'quarta', 'quinta', 'sexta'],
     },
   });
 
@@ -115,6 +125,11 @@ export default function TeamForm({
         enderecoInicioBairro: team.enderecoInicioBairro || "",
         enderecoInicioCidade: team.enderecoInicioCidade || "",
         enderecoInicioEstado: team.enderecoInicioEstado || "",
+        // Horários de trabalho
+        horarioInicioTrabalho: team.horarioInicioTrabalho || "08:00",
+        horarioFimTrabalho: team.horarioFimTrabalho || "18:00",
+        horarioAlmocoMinutos: team.horarioAlmocoMinutos || 60,
+        diasTrabalho: team.diasTrabalho || ['segunda', 'terca', 'quarta', 'quinta', 'sexta'],
       });
 
       setSelectedServices(serviceIds);
@@ -137,6 +152,11 @@ export default function TeamForm({
         enderecoInicioBairro: "",
         enderecoInicioCidade: "",
         enderecoInicioEstado: "",
+        // Horários de trabalho
+        horarioInicioTrabalho: "08:00",
+        horarioFimTrabalho: "18:00",
+        horarioAlmocoMinutos: 60,
+        diasTrabalho: ['segunda', 'terca', 'quarta', 'quinta', 'sexta'],
       });
       setSelectedTechnicians([]);
       setSelectedServices([]);
@@ -512,6 +532,122 @@ export default function TeamForm({
                 )}
               />
             </div>
+          </div>
+
+          {/* Horários de Trabalho */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <ClockIcon className="h-5 w-5 text-green-500" />
+              <h3 className="text-lg font-medium">Horários de Trabalho</h3>
+            </div>
+            <p className="text-sm text-gray-500">
+              Defina os horários e dias de trabalho da equipe. Estes horários serão usados para calcular a disponibilidade.
+            </p>
+            
+            <div className="grid gap-4 md:grid-cols-3">
+              <FormField
+                control={form.control}
+                name="horarioInicioTrabalho"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Horário de Início</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="time"
+                        {...field}
+                        value={field.value || "08:00"}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="horarioFimTrabalho"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Horário de Término</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="time"
+                        {...field}
+                        value={field.value || "18:00"}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="horarioAlmocoMinutos"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tempo de Almoço (minutos)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="180"
+                        placeholder="60"
+                        {...field}
+                        value={field.value || 60}
+                        onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="diasTrabalho"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Dias de Trabalho</FormLabel>
+                  <div className="border rounded-lg p-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                        { value: 'segunda', label: 'Segunda' },
+                        { value: 'terca', label: 'Terça' },
+                        { value: 'quarta', label: 'Quarta' },
+                        { value: 'quinta', label: 'Quinta' },
+                        { value: 'sexta', label: 'Sexta' },
+                        { value: 'sabado', label: 'Sábado' },
+                        { value: 'domingo', label: 'Domingo' },
+                      ].map((day) => (
+                        <div key={day.value} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`team-day-${day.value}`}
+                            checked={field.value?.includes(day.value) || false}
+                            onCheckedChange={(checked) => {
+                              const currentDays = field.value || [];
+                              if (checked) {
+                                field.onChange([...currentDays, day.value]);
+                              } else {
+                                field.onChange(currentDays.filter(d => d !== day.value));
+                              }
+                            }}
+                          />
+                          <label
+                            htmlFor={`team-day-${day.value}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                          >
+                            {day.label}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
 
           {/* Seleção de Técnicos */}
