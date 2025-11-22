@@ -16,9 +16,19 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import AppointmentForm from "@/components/forms/AppointmentForm";
-import AppointmentCalendar from "@/components/AppointmentCalendar";
 import AvailabilityCalendar from "@/components/AvailabilityCalendar";
 import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
+import { cn } from "@/lib/utils";
+import {
+  format,
+  addDays,
+  startOfWeek,
+  endOfWeek,
+  isSameDay,
+  parseISO,
+  isValid,
+} from "date-fns";
+
 import {
   Plus,
   Calendar,
@@ -39,8 +49,10 @@ import {
   Repeat2,
   ChevronDown,
   Wrench,
+  FilterX,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import {
   Select,
   SelectContent,
@@ -72,16 +84,16 @@ export default function Appointments() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [prefilledData, setPrefilledData] = useState<any>(null);
 
-  // Estados para filtros
+  // Estados para filtros (agora arrays para multi-seleção)
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState<string>("");
-  const [selectedService, setSelectedService] = useState<string>("all");
-  const [selectedTechnician, setSelectedTechnician] = useState<string>("all");
-  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [selectedTechnicians, setSelectedTechnicians] = useState<string[]>([]); // IDs de técnicos e equipes misturados
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [inRouteFilter, setInRouteFilter] = useState<string>("no"); // "all", "yes", "no"
 
-  // Estado para controlar visualização (lista, calendário ou disponibilidade)
-  const [viewMode, setViewMode] = useState<"list" | "calendar" | "availability">("list");
+  // Estado para controlar visualização (lista ou calendário)
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
 
   // Estado para data de navegação na visualização de disponibilidade
   const [availabilityDate, setAvailabilityDate] = useState<Date>(new Date());
@@ -180,7 +192,7 @@ export default function Appointments() {
     ],
     calendars: [
       {
-        isVisible: viewMode === "calendar" || viewMode === "availability",
+        isVisible: viewMode === "calendar",
       },
     ],
   });
@@ -234,17 +246,17 @@ export default function Appointments() {
     console.log("🔍 [FILTER] Filtros aplicados:", {
       selectedDate,
       searchTerm,
-      selectedService,
-      selectedTechnician,
-      selectedStatus,
+      selectedServices,
+      selectedTechnicians,
+      selectedStatuses,
       inRouteFilter,
     });
   }, [
     selectedDate,
     searchTerm,
-    selectedService,
-    selectedTechnician,
-    selectedStatus,
+    selectedServices,
+    selectedTechnicians,
+    selectedStatuses,
     inRouteFilter,
   ]);
 
@@ -367,7 +379,7 @@ export default function Appointments() {
       if (!response.ok) throw new Error("Failed to fetch date restrictions");
       return response.json();
     },
-    enabled: viewMode === "availability" || viewMode === "calendar",
+    enabled: viewMode === "calendar",
   });
 
   const { data: services = [] } = useQuery({
@@ -1260,54 +1272,25 @@ export default function Appointments() {
         }
       }
 
-      // Filter by service
-      if (selectedService && selectedService !== "all") {
-        console.log(
-          `🔍 [FILTER] Filtro de serviço aplicado - selectedService: ${selectedService}, apt.serviceId: ${apt.serviceId}`,
-        );
-        if (apt.serviceId.toString() !== selectedService) {
-          console.log(`🔍 [FILTER] Agendamento ${apt.id} filtrado por serviço`);
-          return false;
-        }
+      // Filtro por Serviço (Multi)
+      if (selectedServices.length > 0 && !selectedServices.includes(apt.serviceId.toString())) {
+        return false;
       }
 
-      // Filter by technician/team
-      if (selectedTechnician && selectedTechnician !== "all") {
-        console.log(
-          `🔍 [FILTER] Filtro de técnico/equipe aplicado - selectedTechnician: ${selectedTechnician}`,
-        );
+      // Filtro por Técnico/Equipe (Multi)
+      if (selectedTechnicians.length > 0) {
+        const techKey = apt.technicianId ? apt.technicianId.toString() : null;
+        const teamKey = apt.teamId ? `team-${apt.teamId}` : null;
 
-        // Verificar se é um técnico individual
-        const technician = getTechnician(apt.technicianId);
-        const isMatchingTechnician =
-          technician?.id.toString() === selectedTechnician;
+        const matchesTech = techKey && selectedTechnicians.includes(techKey);
+        const matchesTeam = teamKey && selectedTechnicians.includes(teamKey);
 
-        // Verificar se é uma equipe (o valor vem como "team-{id}")
-        const team = teams.find((t: any) => t.id === apt.teamId);
-        const isMatchingTeam = team && selectedTechnician === `team-${team.id}`;
-
-        console.log(
-          `🔍 [FILTER] isMatchingTechnician: ${isMatchingTechnician}, isMatchingTeam: ${isMatchingTeam}, team:`,
-          team?.name,
-        );
-
-        if (!isMatchingTechnician && !isMatchingTeam) {
-          console.log(
-            `🔍 [FILTER] Agendamento ${apt.id} filtrado por técnico/equipe`,
-          );
-          return false;
-        }
+        if (!matchesTech && !matchesTeam) return false;
       }
 
-      // Filter by status
-      if (selectedStatus && selectedStatus !== "all") {
-        console.log(
-          `🔍 [FILTER] Filtro de status aplicado - selectedStatus: ${selectedStatus}, apt.status: ${apt.status}`,
-        );
-        if (apt.status !== selectedStatus) {
-          console.log(`🔍 [FILTER] Agendamento ${apt.id} filtrado por status`);
-          return false;
-        }
+      // Filtro por Status (Multi)
+      if (selectedStatuses.length > 0 && !selectedStatuses.includes(apt.status)) {
+        return false;
       }
 
       // Filter by route (em romaneio)
@@ -1332,9 +1315,9 @@ export default function Appointments() {
     appointments,
     selectedDate,
     searchTerm,
-    selectedService,
-    selectedTechnician,
-    selectedStatus,
+    selectedServices,
+    selectedTechnicians,
+    selectedStatuses,
     inRouteFilter,
     clients,
     services,
@@ -1401,10 +1384,97 @@ export default function Appointments() {
       .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
   }, [paginatedAppointments]);
 
+  // Filtered appointments for Calendar (ignores specific date filter to show whole month context)
+  const calendarFilteredAppointments = useMemo(() => {
+    return appointments.filter((apt: Appointment) => {
+      // Filter by search term (client name)
+      if (searchTerm) {
+        const client = getClient(apt.clientId);
+        if (!client?.name.toLowerCase().includes(searchTerm.toLowerCase())) {
+          return false;
+        }
+      }
+
+      // Filter by service (Multi)
+      if (selectedServices.length > 0 && !selectedServices.includes(apt.serviceId.toString())) {
+        return false;
+      }
+
+      // Filter by technician/team (Multi)
+      if (selectedTechnicians.length > 0) {
+        const techKey = apt.technicianId ? apt.technicianId.toString() : null;
+        const teamKey = apt.teamId ? `team-${apt.teamId}` : null;
+
+        const matchesTech = techKey && selectedTechnicians.includes(techKey);
+        const matchesTeam = teamKey && selectedTechnicians.includes(teamKey);
+
+        if (!matchesTech && !matchesTeam) return false;
+      }
+
+      // Filter by status (Multi)
+      if (selectedStatuses.length > 0 && !selectedStatuses.includes(apt.status)) {
+        return false;
+      }
+
+      // Filter by route (em romaneio)
+      if (inRouteFilter !== "all") {
+        const hasRoute = (apt as any).routeInfo !== null && (apt as any).routeInfo !== undefined;
+        if (inRouteFilter === "yes" && !hasRoute) return false;
+        if (inRouteFilter === "no" && hasRoute) return false;
+      }
+
+      return true;
+    });
+  }, [
+    appointments,
+    searchTerm,
+    selectedServices,
+    selectedTechnicians,
+    selectedStatuses,
+    inRouteFilter,
+    clients,
+  ]);
+
+  // Filtered resources for Calendar (Dynamic filtering based on appointments)
+  const calendarResources = useMemo(() => {
+    // Se houver filtros de "Atributo" (Status, Serviço, Busca, Romaneio), filtramos os recursos
+    // para mostrar apenas aqueles que possuem agendamentos correspondentes.
+    const hasAttributeFilters =
+      selectedServices.length > 0 ||
+      selectedStatuses.length > 0 ||
+      searchTerm !== "" ||
+      inRouteFilter !== "no";
+
+    let filteredTechs = technicians;
+    let filteredTeams = teams;
+
+    // 1. Primeiro, aplica o filtro explícito de técnicos/equipes se houver
+    if (selectedTechnicians.length > 0) {
+      filteredTechs = filteredTechs.filter((t: Technician) => selectedTechnicians.includes(t.id.toString()));
+      filteredTeams = filteredTeams.filter((t: any) => selectedTechnicians.includes(`team-${t.id}`));
+    }
+
+    // 2. Se houver outros filtros, refina a lista para mostrar apenas quem tem agendamentos visíveis
+    if (hasAttributeFilters) {
+      const activeTechIds = new Set<number>();
+      const activeTeamIds = new Set<number>();
+
+      calendarFilteredAppointments.forEach((apt: Appointment) => {
+        if (apt.technicianId) activeTechIds.add(apt.technicianId);
+        if (apt.teamId) activeTeamIds.add(apt.teamId);
+      });
+
+      filteredTechs = filteredTechs.filter((t: Technician) => activeTechIds.has(t.id));
+      filteredTeams = filteredTeams.filter((t: any) => activeTeamIds.has(t.id));
+    }
+
+    return { technicians: filteredTechs, teams: filteredTeams };
+  }, [technicians, teams, selectedTechnicians, calendarFilteredAppointments, selectedServices, selectedStatuses, searchTerm, inRouteFilter]);
+
   // Resetar para página 1 quando os filtros mudarem
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedDate, searchTerm, selectedService, selectedTechnician, selectedStatus, inRouteFilter]);
+  }, [selectedDate, searchTerm, selectedServices, selectedTechnicians, selectedStatuses, inRouteFilter]);
 
   // Computed values for route optimization
   const selectedAppointments = filteredAppointments.filter((apt: Appointment) =>
@@ -2195,15 +2265,6 @@ export default function Appointments() {
               <Upload className="h-4 w-4 mr-2" />
               Importar CSV
             </Button>
-
-            <Button
-              variant="outline"
-              onClick={exportToCSV}
-              className="border-burnt-yellow text-burnt-yellow hover:bg-burnt-yellow hover:text-white w-full sm:w-auto"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Exportar CSV
-            </Button>
           </div>
 
           <Button
@@ -2224,246 +2285,115 @@ export default function Appointments() {
         </div>
       </div>
 
-      {/* Mobile-First Responsive Layout */}
-      <div className="space-y-4 md:space-y-6">
-        {/* Filters Card with View Mode Toggle */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center">
-              <Filter className="h-5 w-5 mr-2" />
-              Filtros e Visualização
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              {/* Filter Fields */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Data</label>
-                  <Input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => {
-                      console.log("🔍 [FILTER] Data alterada:", e.target.value);
-                      setSelectedDate(e.target.value);
-                    }}
-                    className="w-full"
-                  />
-                </div>
+      {/* New Compact Filter Bar */}
+      <div className="bg-white border-b sticky top-0 z-10 px-6 py-3 shadow-sm space-y-3">
+        {/* Filter Row */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 h-3.5 w-3.5" />
+            <Input
+              placeholder="Buscar cliente..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-8 pl-8 text-xs bg-gray-50 border-gray-200 focus:bg-white transition-colors"
+            />
+          </div>
 
-                <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    Buscar Cliente
-                  </label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                    <Input
-                      placeholder="Nome do cliente..."
-                      value={searchTerm}
-                      onChange={(e) => {
-                        console.log(
-                          "🔍 [FILTER] Busca alterada:",
-                          e.target.value,
-                        );
-                        setSearchTerm(e.target.value);
-                      }}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
+          <div className="flex-1 min-w-[200px] max-w-xs">
+            <Input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                setSelectedDate(e.target.value);
+                if (e.target.value) {
+                  setAvailabilityDate(new Date(e.target.value));
+                }
+              }}
+              className="h-8 w-full text-xs"
+            />
+          </div>
 
-                <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    Serviço
-                  </label>
-                  <Select
-                    value={selectedService}
-                    onValueChange={(value) => {
-                      console.log("🔍 [FILTER] Serviço alterado:", value);
-                      setSelectedService(value);
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Todos os serviços" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os serviços</SelectItem>
-                      {services.map((service: Service) => (
-                        <SelectItem
-                          key={service.id}
-                          value={service.id.toString()}
-                        >
-                          {service.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+          <MultiSelectFilter
+            title="Técnicos/Equipes"
+            options={[
+              ...technicians.map((t: Technician) => ({ label: t.name, value: t.id.toString(), icon: User })),
+              ...teams.map((t: any) => ({ label: t.name, value: `team-${t.id}`, icon: User }))
+            ]}
+            selectedValues={selectedTechnicians}
+            onSelectionChange={setSelectedTechnicians}
+            className="w-[180px]"
+          />
 
-                <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    Técnicos/Equipes
-                  </label>
-                  <Select
-                    value={selectedTechnician}
-                    onValueChange={(value) => {
-                      console.log(
-                        "🔍 [FILTER] Técnico/Equipe alterado:",
-                        value,
-                      );
-                      setSelectedTechnician(value);
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Todos os técnicos e equipes" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">
-                        Todos os técnicos e equipes
-                      </SelectItem>
-                      {technicians.map((technician: Technician) => (
-                        <SelectItem
-                          key={`tech-${technician.id}`}
-                          value={technician.id.toString()}
-                        >
-                          👤 {technician.name}
-                        </SelectItem>
-                      ))}
-                      {teams.map((team: any) => (
-                        <SelectItem
-                          key={`team-${team.id}`}
-                          value={`team-${team.id}`}
-                        >
-                          👥 {team.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+          <MultiSelectFilter
+            title="Serviços"
+            options={services.map((s: Service) => ({ label: s.name, value: s.id.toString(), icon: Wrench }))}
+            selectedValues={selectedServices}
+            onSelectionChange={setSelectedServices}
+            className="w-[160px]"
+          />
 
-                <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    Status
-                  </label>
-                  <Select
-                    value={selectedStatus}
-                    onValueChange={(value) => {
-                      console.log("🔍 [FILTER] Status alterado:", value);
-                      setSelectedStatus(value);
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Todos os status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os status</SelectItem>
-                      <SelectItem value="scheduled">Agendado</SelectItem>
-                      <SelectItem value="in_progress">Em Andamento</SelectItem>
-                      <SelectItem value="completed">Concluído</SelectItem>
-                      <SelectItem value="cancelled">Cancelado</SelectItem>
-                      <SelectItem value="rescheduled">Remarcado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+          <MultiSelectFilter
+            title="Status"
+            options={[
+              { label: "Agendado", value: "scheduled" },
+              { label: "Em Andamento", value: "in_progress" },
+              { label: "Concluído", value: "completed" },
+              { label: "Cancelado", value: "cancelled" },
+              { label: "Remarcado", value: "rescheduled" },
+            ]}
+            selectedValues={selectedStatuses}
+            onSelectionChange={setSelectedStatuses}
+            className="w-[140px]"
+          />
 
-                <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    Em romaneio
-                  </label>
-                  <Select
-                    value={inRouteFilter}
-                    onValueChange={(value) => {
-                      setInRouteFilter(value);
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Filtrar por romaneio" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="yes">Sim</SelectItem>
-                      <SelectItem value="no">Não</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+          {(selectedTechnicians.length > 0 || selectedServices.length > 0 || selectedStatuses.length > 0 || searchTerm || selectedDate) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSelectedTechnicians([]);
+                setSelectedServices([]);
+                setSelectedStatuses([]);
+                setSearchTerm("");
+                setSelectedDate("");
+              }}
+              className="h-8 px-2 text-xs text-gray-500 hover:text-red-600"
+              title="Limpar todos os filtros"
+            >
+              <FilterX className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      </div>
 
-              {/* View Mode Toggle and Clear Filters */}
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pt-4 border-t border-gray-100">
-                {/* View Mode Toggle */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                  <span className="text-sm font-medium text-gray-700">
-                    Modo de Visualização:
-                  </span>
-                  <div className="bg-white border border-gray-200 rounded p-0.5 shadow-sm w-full max-w-sm sm:w-auto">
-                    <Tabs
-                      value={viewMode}
-                      onValueChange={(value) =>
-                        setViewMode(value as "list" | "calendar" | "availability")
-                      }
-                      className="w-full"
-                    >
-                      <TabsList className="grid w-full grid-cols-3 h-auto sm:h-8 bg-gray-50 p-0 gap-1 sm:gap-0">
-                        <TabsTrigger
-                          value="list"
-                          className="flex items-center justify-center gap-2 py-2 px-2 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
-                        >
-                          <List className="h-4 w-4" />
-                          <span className="text-sm sm:text-xs">Lista</span>
-                        </TabsTrigger>
-                        <TabsTrigger
-                          value="calendar"
-                          className="flex items-center justify-center gap-2 py-2 px-2 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
-                        >
-                          <Calendar className="h-4 w-4" />
-                          <span className="text-sm sm:text-xs">Calendário</span>
-                        </TabsTrigger>
-                        <TabsTrigger
-                          value="availability"
-                          className="flex items-center justify-center gap-2 py-2 px-2 sm:py-1 sm:px-3 text-sm font-medium rounded border shadow-none data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-burnt-yellow data-[state=active]:border-burnt-yellow w-full"
-                        >
-                          <Clock className="h-4 w-4" />
-                          <span className="text-sm sm:text-xs">Disponibilidade</span>
-                        </TabsTrigger>
-                      </TabsList>
-                    </Tabs>
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-2">
-                  {/* Botão de restrição de data */}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full sm:w-auto border-red-500 text-red-600 hover:bg-red-50"
-                    onClick={() => setIsRestrictionModalOpen(true)}
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    Restrição de data
-                  </Button>
-
-                  {/* Clear Filters Button */}
-                  <Button
-                    onClick={() => {
-                      console.log("🔍 [FILTER] Limpando todos os filtros");
-                      setSelectedDate("");
-                      setSearchTerm("");
-                      setSelectedService("all");
-                      setSelectedTechnician("all");
-                      setSelectedStatus("all");
-                      setInRouteFilter("no");
-                    }}
-                    variant="outline"
-                    className="w-full sm:w-auto"
-                    type="button"
-                  >
-                    Limpar Filtros
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* View Mode Toggle (Centered) */}
+      <div className="flex justify-center py-1 bg-gray-50/50 border-b border-gray-100">
+        <div className="bg-white p-1 rounded-lg border shadow-sm flex items-center gap-1">
+          <Button
+            variant={viewMode === "list" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setViewMode("list")}
+            className={cn(
+              "h-8 px-4 text-xs font-medium transition-all",
+              viewMode === "list" ? "bg-burnt-yellow text-white shadow-md" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+            )}
+          >
+            <List className="h-3.5 w-3.5 mr-2" />
+            Lista
+          </Button>
+          <Button
+            variant={viewMode === "calendar" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setViewMode("calendar")}
+            className={cn(
+              "h-8 px-4 text-xs font-medium transition-all",
+              viewMode === "calendar" ? "bg-burnt-yellow text-white shadow-md" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+            )}
+          >
+            <Calendar className="h-3.5 w-3.5 mr-2" />
+            Calendário
+          </Button>
+        </div>
       </div>
 
       {/* Content Area - List or Calendar View */}
@@ -2799,61 +2729,21 @@ export default function Appointments() {
             )}
           </div>
         )
-      ) : viewMode === "calendar" ? (
-        /* Calendar View */
-        <Card>
-          <CardContent className="p-6">
-            {filteredAppointments.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <Calendar className="h-12 w-12 text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  {appointments.length === 0
-                    ? "Nenhum agendamento encontrado"
-                    : "Nenhum agendamento encontrado com os filtros aplicados"}
-                </h3>
-                <p className="text-gray-600 text-center mb-6">
-                  {appointments.length === 0
-                    ? "Comece criando seu primeiro agendamento para organizar seus atendimentos técnicos."
-                    : "Tente ajustar os filtros ou limpar todos os filtros para ver mais agendamentos."}
-                </p>
-                <Button
-                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                  onClick={() => {
-                    setPrefilledData(null);
-                    setSelectedAppointment(null);
-                    setIsFormOpen(true);
-                  }}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Criar Primeiro Agendamento
-                </Button>
-              </div>
-            ) : (
-              <AppointmentCalendar
-                appointments={filteredAppointments}
-                clients={clients}
-                services={services}
-                technicians={technicians}
-                teams={teams}
-                dateRestrictions={dateRestrictions}
-              />
-            )}
-          </CardContent>
-        </Card>
       ) : (
-        /* Availability View */
+        /* Calendar View (Antigo Availability) */
         <Card>
           <CardContent className="p-6">
             <AvailabilityCalendar
-              appointments={appointments}
+              appointments={calendarFilteredAppointments}
               services={services}
-              technicians={technicians}
-              teams={teams}
+              technicians={calendarResources.technicians}
+              teams={calendarResources.teams}
               teamMembers={teamMembers}
               businessRules={businessRules}
               currentDate={availabilityDate}
               onDateChange={setAvailabilityDate}
               dateRestrictions={dateRestrictions}
+              onEditAppointment={handleEdit}
             />
           </CardContent>
         </Card>

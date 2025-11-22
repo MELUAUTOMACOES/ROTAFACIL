@@ -1,9 +1,12 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Calendar, CheckCircle, AlertCircle, Clock, XCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, CheckCircle, AlertCircle, Clock, XCircle, ChevronDown, GripVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { DndContext, useDraggable, useDroppable, DragOverlay, DragStartEvent, DragEndEvent, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
 import type { Appointment, Service, Technician, Team, TeamMember, BusinessRules, DateRestriction } from '@shared/schema';
 
 interface AvailabilityCalendarProps {
@@ -16,6 +19,7 @@ interface AvailabilityCalendarProps {
   currentDate: Date;
   onDateChange: (date: Date) => void;
   dateRestrictions: DateRestriction[];
+  onEditAppointment?: (appointment: Appointment) => void;
 }
 
 interface DayAvailability {
@@ -43,7 +47,109 @@ export default function AvailabilityCalendar({
   currentDate,
   onDateChange,
   dateRestrictions,
+  onEditAppointment,
 }: AvailabilityCalendarProps) {
+
+  // Estado para controlar quais células estão expandidas (formato: "dateKey|responsibleKey")
+  const [expandedCells, setExpandedCells] = useState<Set<string>>(new Set());
+
+  // Estado para drag & drop
+  const [activeAppointment, setActiveAppointment] = useState<Appointment | null>(null);
+
+  // React Query
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Mutation para atualizar agendamento
+  const updateAppointmentMutation = useMutation({
+    mutationFn: async ({ id, newDate }: { id: number; newDate: Date }) => {
+      const response = await fetch(`/api/appointments/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(localStorage.getItem("token") && {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          }),
+        },
+        body: JSON.stringify({ scheduledDate: newDate }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Erro ao atualizar agendamento");
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+      toast({
+        title: "Sucesso",
+        description: "Agendamento movido com sucesso.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao mover agendamento.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Função para toggle de expansão
+  const toggleExpanded = (dateKey: string, responsibleKey: string) => {
+    const cellKey = `${dateKey}|${responsibleKey}`;
+    setExpandedCells(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(cellKey)) {
+        newSet.delete(cellKey);
+      } else {
+        newSet.add(cellKey);
+      }
+      return newSet;
+    });
+  };
+
+  // Handlers de drag & drop
+  const handleDragStart = (event: DragStartEvent) => {
+    const aptId = event.active.id as number;
+    const apt = appointments.find(a => a.id === aptId);
+    setActiveAppointment(apt || null);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveAppointment(null);
+
+    if (!over) return;
+
+    const aptId = active.id as number;
+    const targetDateKey = over.id as string;
+
+    // Verificar se estamos movendo para um dia diferente
+    const appointment = appointments.find(a => a.id === aptId);
+    if (!appointment) return;
+
+    const currentDateKey = format(new Date(appointment.scheduledDate), 'yyyy-MM-dd');
+    if (currentDateKey === targetDateKey) return; // Mesmo dia, não faz nada
+
+    // Criar nova data mantendo o horário original
+    const originalDate = new Date(appointment.scheduledDate);
+    const [year, month, day] = targetDateKey.split('-').map(Number);
+    const newDate = new Date(
+      year,
+      month - 1,
+      day,
+      originalDate.getHours(),
+      originalDate.getMinutes(),
+      originalDate.getSeconds(),
+      originalDate.getMilliseconds()
+    );
+
+    // Atualizar via API
+    updateAppointmentMutation.mutate({ id: aptId, newDate });
+  };
 
   // Função helper para verificar se técnico/equipe trabalha em determinado dia
   const worksOnDay = (responsibleType: 'technician' | 'team', responsibleId: number, date: Date): boolean => {
@@ -452,36 +558,49 @@ export default function AvailabilityCalendar({
 
   const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
+  // Sensores para drag & drop com restrição de ativação (evita conflito com clique)
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Só ativa drag após mover 8px
+      },
+    })
+  );
+
   return (
     <div className="space-y-4">
       {/* Header com navegação */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between bg-white p-4 rounded-lg border shadow-sm">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">
+          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-primary" />
             {format(currentDate, 'MMMM yyyy', { locale: ptBR })}
           </h2>
-          <p className="text-sm text-gray-600 mt-1">
-            Visualização de disponibilidade por equipe/técnico
+          <p className="text-sm text-gray-500 mt-0.5">
+            Gestão de disponibilidade
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-md border">
           <Button
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 hover:bg-white hover:shadow-sm"
             onClick={handlePreviousMonth}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
+            className="h-8 px-3 text-xs font-medium hover:bg-white hover:shadow-sm"
             onClick={handleToday}
           >
             Hoje
           </Button>
           <Button
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 hover:bg-white hover:shadow-sm"
             onClick={handleNextMonth}
           >
             <ChevronRight className="h-4 w-4" />
@@ -490,158 +609,288 @@ export default function AvailabilityCalendar({
       </div>
 
       {/* Legenda */}
-      <Card className="p-4">
-        <h3 className="text-sm font-semibold mb-3">Legenda:</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
-            <span className="text-xs">Disponível</span>
+      {/* Legenda */}
+      <Card className="p-4 border-none shadow-sm bg-gray-50/50">
+        <div className="flex flex-wrap items-center gap-4 text-xs">
+          <span className="font-semibold text-gray-700 mr-2">Legenda:</span>
+
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+            <span className="text-gray-600">Disponível</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-yellow-100 border border-yellow-300 rounded"></div>
-            <span className="text-xs">Parcialmente ocupado</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+            <span className="text-gray-600">Parcial</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-blue-100 border border-blue-300 rounded"></div>
-            <span className="text-xs">Completo</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
+            <span className="text-gray-600">Completo</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-red-100 border border-red-300 rounded"></div>
-            <span className="text-xs">Excedido</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+            <span className="text-gray-600">Excedido</span>
           </div>
-        </div>
-        <div className="mt-3 pt-3 border-t">
-          <p className="text-xs text-gray-600">
-            <strong>Nota:</strong> Cada técnico e equipe possui horários de trabalho individuais definidos em seus cadastros.
-          </p>
+
+          <div className="ml-auto text-gray-400 flex items-center gap-1">
+            <AlertCircle className="h-3 w-3" />
+            <span>Horários individuais considerados</span>
+          </div>
         </div>
       </Card>
 
       {/* Calendário */}
-      <div className="border rounded-lg overflow-hidden bg-white">
-        {/* Cabeçalho dos dias da semana */}
-        <div className="grid grid-cols-7 bg-gray-100 border-b">
-          {weekDays.map(day => (
-            <div
-              key={day}
-              className="p-2 text-center text-xs font-semibold text-gray-700"
-            >
-              {day}
-            </div>
-          ))}
-        </div>
-
-        {/* Dias do mês */}
-        <div className="grid grid-cols-1 md:grid-cols-7">
-          {calendarDays.map((day, index) => {
-            const dateKey = format(day, 'yyyy-MM-dd');
-            const dayData = availabilityByDay.get(dateKey);
-            const isCurrentMonth = isSameMonth(day, currentDate);
-            const isTodayDate = isToday(day);
-
-            return (
+      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div className="border rounded-lg overflow-hidden bg-white">
+          {/* Cabeçalho dos dias da semana */}
+          <div className="grid grid-cols-7 bg-gray-100 border-b">
+            {weekDays.map(day => (
               <div
-                key={index}
-                className={`min-h-[120px] p-2 border-b border-r ${!isCurrentMonth ? 'bg-gray-50' : ''
-                  } ${isTodayDate ? 'bg-blue-50' : ''}`}
+                key={day}
+                className="p-2 text-center text-xs font-semibold text-gray-700"
               >
-                {/* Número do dia */}
-                <div className={`text-xs font-semibold mb-2 ${!isCurrentMonth ? 'text-gray-400' : 'text-gray-900'
-                  } ${isTodayDate ? 'text-blue-600' : ''}`}>
-                  {format(day, 'd')}
-                </div>
-
-                {/* Disponibilidade por responsável */}
-                <div className="space-y-1">
-                  {allResponsibles.map(responsible => {
-                    // Verificar se o responsável trabalha neste dia
-                    const worksThisDay = worksOnDay(responsible.type, responsible.id, day);
-
-                    // Se não trabalha neste dia, não exibir
-                    if (!worksThisDay) {
-                      return null;
-                    }
-
-                    const restrictionKey = `${dateKey}|${responsible.type}-${responsible.id}`;
-                    const restrictionsForResponsible = restrictionsByDayAndResponsible.get(restrictionKey);
-
-                    if (restrictionsForResponsible && restrictionsForResponsible.length > 0) {
-                      const reason = restrictionsForResponsible[0]?.title || 'Indisponível';
-                      return (
-                        <div
-                          key={responsible.key}
-                          className="text-xs p-1 rounded border bg-red-50 border-red-300"
-                          title={`${responsible.name}: indisponível (${reason})`}
-                        >
-                          <div className="flex items-center gap-1 justify-between">
-                            <div className="flex items-center gap-1 truncate min-w-0">
-                              <span>{responsible.type === 'team' ? '👥' : '👤'}</span>
-                              <span className="truncate text-red-700">{responsible.name}</span>
-                            </div>
-                            <XCircle className="h-3 w-3 text-red-600" />
-                          </div>
-                          <div className="text-[10px] mt-0.5 text-red-700 truncate">
-                            {reason}
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    const responsibleData = dayData?.byResponsible.get(responsible.key);
-
-                    if (!responsibleData) {
-                      // Sem agendamentos para este responsável neste dia - DISPONÍVEL (verde)
-                      return (
-                        <div
-                          key={responsible.key}
-                          className="text-xs p-1 rounded border bg-green-50 border-green-200"
-                        >
-                          <div className="flex items-center gap-1 truncate">
-                            <span>{responsible.type === 'team' ? '👥' : '👤'}</span>
-                            <span className="truncate text-green-700">{responsible.name}</span>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={responsible.key}
-                        className={`text-xs p-1 rounded border ${getStatusColor(responsibleData.status)}`}
-                        title={`${responsible.name}: ${responsibleData.appointments.length} agendamento(s), ${formatMinutes(responsibleData.usedMinutes)} usado de ${formatMinutes(responsibleData.totalMinutes)}`}
-                      >
-                        <div className="flex items-center gap-1 justify-between">
-                          <div className="flex items-center gap-1 truncate min-w-0">
-                            <span>{responsible.type === 'team' ? '👥' : '👤'}</span>
-                            <span className="truncate">{responsible.name}</span>
-                          </div>
-                          {getStatusIcon(responsibleData.status)}
-                        </div>
-                        <div className="text-xs mt-0.5 font-semibold">
-                          {responsibleData.allDayCount > 0 ? (
-                            <span className="text-red-700">
-                              {responsibleData.allDayCount} dia{responsibleData.allDayCount > 1 ? 's' : ''} inteiro{responsibleData.allDayCount > 1 ? 's' : ''}
-                              {responsibleData.appointments.length > responsibleData.allDayCount && (
-                                <span> + {responsibleData.appointments.length - responsibleData.allDayCount} evento{responsibleData.appointments.length - responsibleData.allDayCount > 1 ? 's' : ''}</span>
-                              )}
-                            </span>
-                          ) : responsibleData.status === 'exceeded' ? (
-                            <span className="text-red-700">
-                              +{formatMinutes(Math.abs(responsibleData.availableMinutes))} excedido
-                            </span>
-                          ) : responsibleData.status === 'full' ? (
-                            <span>Completo</span>
-                          ) : (
-                            <span>{formatMinutes(responsibleData.availableMinutes)} livre</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                {day}
               </div>
-            );
-          })}
+            ))}
+          </div>
+
+          {/* Dias do mês */}
+          <div className="grid grid-cols-1 md:grid-cols-7">
+            {
+              calendarDays.map((day, index) => {
+                const dateKey = format(day, 'yyyy-MM-dd');
+                const dayData = availabilityByDay.get(dateKey);
+                const isCurrentMonth = isSameMonth(day, currentDate);
+                const isTodayDate = isToday(day);
+
+                return (
+                  <DroppableDay
+                    key={index}
+                    dateKey={dateKey}
+                    className={`min-h-[120px] p-2 border-b border-r ${!isCurrentMonth ? 'bg-gray-50' : ''
+                      } ${isTodayDate ? 'bg-blue-50' : ''}`}
+                  >
+                    {/* Número do dia */}
+                    <div className={`text-xs font-semibold mb-2 ${!isCurrentMonth ? 'text-gray-400' : 'text-gray-900'
+                      } ${isTodayDate ? 'text-blue-600' : ''}`}>
+                      {format(day, 'd')}
+                    </div>
+
+                    {/* Disponibilidade por responsável */}
+                    <div className="space-y-1">
+                      {allResponsibles.map(responsible => {
+                        // Verificar se o responsável trabalha neste dia
+                        const worksThisDay = worksOnDay(responsible.type, responsible.id, day);
+
+                        // Se não trabalha neste dia, não exibir
+                        if (!worksThisDay) {
+                          return null;
+                        }
+
+                        const restrictionKey = `${dateKey}|${responsible.type}-${responsible.id}`;
+                        const restrictionsForResponsible = restrictionsByDayAndResponsible.get(restrictionKey);
+
+                        if (restrictionsForResponsible && restrictionsForResponsible.length > 0) {
+                          const reason = restrictionsForResponsible[0]?.title || 'Indisponível';
+                          return (
+                            <div
+                              key={responsible.key}
+                              className="text-xs p-1 rounded border bg-red-50 border-red-300"
+                              title={`${responsible.name}: indisponível (${reason})`}
+                            >
+                              <div className="flex items-center gap-1 justify-between">
+                                <div className="flex items-center gap-1 truncate min-w-0">
+                                  <span>{responsible.type === 'team' ? '👥' : '👤'}</span>
+                                  <span className="truncate text-red-700">{responsible.name}</span>
+                                </div>
+                                <XCircle className="h-3 w-3 text-red-600" />
+                              </div>
+                              <div className="text-[10px] mt-0.5 text-red-700 truncate">
+                                {reason}
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        const responsibleData = dayData?.byResponsible.get(responsible.key);
+
+                        if (!responsibleData) {
+                          // Sem agendamentos para este responsável neste dia - DISPONÍVEL (verde)
+                          return (
+                            <div
+                              key={responsible.key}
+                              className="text-xs p-1 rounded border bg-green-50 border-green-200"
+                            >
+                              <div className="flex items-center gap-1 truncate">
+                                <span>{responsible.type === 'team' ? '👥' : '👤'}</span>
+                                <span className="truncate text-green-700">{responsible.name}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        const cellKey = `${dateKey}|${responsible.key}`;
+                        const isExpanded = expandedCells.has(cellKey);
+
+                        return (
+                          <div
+                            key={responsible.key}
+                            className={`text-xs p-1 rounded border ${getStatusColor(responsibleData.status)}`}
+                          >
+                            <div
+                              className="flex items-center gap-1 justify-between cursor-pointer hover:opacity-80 transition-opacity"
+                              onClick={() => toggleExpanded(dateKey, responsible.key)}
+                              title={`${responsible.name}: ${responsibleData.appointments.length} agendamento(s), ${formatMinutes(responsibleData.usedMinutes)} usado de ${formatMinutes(responsibleData.totalMinutes)}. Clique para ${isExpanded ? 'ocultar' : 'expandir'} detalhes.`}
+                            >
+                              <div className="flex items-center gap-1 truncate min-w-0">
+                                <span>{responsible.type === 'team' ? '👥' : '👤'}</span>
+                                <span className="truncate">{responsible.name}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {getStatusIcon(responsibleData.status)}
+                                <ChevronDown
+                                  className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                />
+                              </div>
+                            </div>
+                            <div className="text-xs mt-0.5 font-semibold">
+                              {responsibleData.allDayCount > 0 ? (
+                                <span className="text-red-700">
+                                  {responsibleData.allDayCount} dia{responsibleData.allDayCount > 1 ? 's' : ''} inteiro{responsibleData.allDayCount > 1 ? 's' : ''}
+                                  {responsibleData.appointments.length > responsibleData.allDayCount && (
+                                    <span> + {responsibleData.appointments.length - responsibleData.allDayCount} evento{responsibleData.appointments.length - responsibleData.allDayCount > 1 ? 's' : ''}</span>
+                                  )}
+                                </span>
+                              ) : responsibleData.status === 'exceeded' ? (
+                                <span className="text-red-700">
+                                  +{formatMinutes(Math.abs(responsibleData.availableMinutes))} excedido
+                                </span>
+                              ) : responsibleData.status === 'full' ? (
+                                <span>Completo</span>
+                              ) : (
+                                <span>{formatMinutes(responsibleData.availableMinutes)} livre</span>
+                              )}
+                            </div>
+
+                            {/* Eventos expandidos com drag & drop */}
+                            {isExpanded && responsibleData.appointments.length > 0 && (
+                              <div className="mt-2 pt-2 border-t space-y-1">
+                                {responsibleData.appointments.map((apt, aptIndex) => (
+                                  <DraggableAppointmentCard
+                                    key={`${apt.id}-${aptIndex}`}
+                                    appointment={apt}
+                                    services={services}
+                                    formatMinutes={formatMinutes}
+                                    onEdit={onEditAppointment}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </DroppableDay>
+                );
+              })
+            }
+          </div >
+        </div >
+
+        {/* DragOverlay para preview durante drag */}
+        <DragOverlay>
+          {
+            activeAppointment ? (
+              <DraggableAppointmentCard
+                appointment={activeAppointment}
+                services={services}
+                formatMinutes={formatMinutes}
+                isDragging
+              />
+            ) : null
+          }
+        </DragOverlay >
+      </DndContext >
+    </div >
+  );
+}
+
+// Componente para célula de dia (Droppable)
+function DroppableDay({ dateKey, children, className }: { dateKey: string; children: React.ReactNode; className: string }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: dateKey,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`${className} ${isOver ? 'ring-2 ring-blue-400 ring-inset' : ''}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+// Componente para card de agendamento (Draggable)
+function DraggableAppointmentCard({
+  appointment,
+  services,
+  formatMinutes,
+  isDragging = false,
+  onEdit,
+}: {
+  appointment: Appointment;
+  services: Service[];
+  formatMinutes: (minutes: number) => string;
+  isDragging?: boolean;
+  onEdit?: (appointment: Appointment) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    id: appointment.id,
+  });
+
+  const service = services.find(s => s.id === appointment.serviceId);
+  const serviceName = service?.name || 'Serviço sem nome';
+
+  let timeInfo = '';
+  if (appointment.allDay) {
+    timeInfo = 'Dia inteiro';
+  } else {
+    const duration = service?.duration || 60;
+    const startTime = format(new Date(appointment.scheduledDate), 'HH:mm');
+    timeInfo = `${startTime} (${formatMinutes(duration)})`;
+  }
+
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+  } : undefined;
+
+  const statusColor = appointment.status === 'confirmed' ? 'border-l-green-500' :
+    appointment.status === 'pending' ? 'border-l-yellow-500' :
+      appointment.status === 'completed' ? 'border-l-blue-500' : 'border-l-gray-300';
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      onClick={() => !isDragging && onEdit?.(appointment)}
+      className={`
+        group relative text-xs p-2 bg-white rounded-md border border-gray-100 shadow-sm cursor-pointer transition-all duration-200
+        border-l-[3px] ${statusColor}
+        ${isDragging
+          ? 'opacity-50 rotate-2 shadow-xl cursor-grabbing scale-105 z-50'
+          : 'hover:shadow-md hover:scale-[1.02] hover:border-gray-200'
+        }
+      `}
+    >
+      <div className="flex flex-col gap-1">
+        <div className="font-medium text-gray-900 truncate leading-tight" title={serviceName}>
+          {serviceName}
+        </div>
+        <div className="flex items-center justify-between text-[10px] text-gray-500">
+          <span className="font-medium">{timeInfo}</span>
+          {appointment.status === 'pending' && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" title="Pendente" />}
         </div>
       </div>
     </div>
