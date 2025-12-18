@@ -13,6 +13,7 @@ import FindDate from "./pages/FindDate";
 import Clients from "./pages/Clients";
 import Technicians from "./pages/Technicians";
 import Vehicles from "./pages/Vehicles";
+import PrestadoresPage from "@/pages/PrestadoresPage";
 import Services from "./pages/Services";
 import BusinessRules from "./pages/BusinessRules";
 import RoutesHistoryPage from "./pages/routes-history/RoutesHistoryPage";
@@ -31,7 +32,7 @@ import NotFound from "@/pages/not-found";
 
 function AppRoutes() {
   const { user, isLoading, requirePasswordChange } = useAuth();
-  
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -81,6 +82,7 @@ function AppRoutes() {
         <Route path="/clients" component={Clients} />
         <Route path="/technicians" component={Technicians} />
         <Route path="/vehicles" component={Vehicles} />
+        <Route path="/prestadores" component={PrestadoresPage} />
         <Route path="/services" component={Services} />
         <Route path="/business-rules" component={BusinessRules} />
         <Route path="/users" component={UserManagement} />

@@ -193,6 +193,12 @@ export const appointments = pgTable("appointments", {
   status: text("status").notNull().default("scheduled"), // scheduled, in_progress, completed, cancelled, rescheduled
   priority: text("priority").notNull().default("normal"), // normal, high, urgent
   notes: text("notes"),
+  // Novos campos para o fluxo de prestadores
+  photos: jsonb("photos"), // Array de URLs das fotos
+  signature: text("signature"), // URL ou base64 da assinatura
+  feedback: text("feedback"), // Feedback do prestador sobre o serviço
+  executionStatus: text("execution_status"), // concluido, nao_realizado_...
+  executionNotes: text("execution_notes"), // Motivo/detalhes obrigatório se não for concluído
   cep: text("cep").notNull(),
   logradouro: text("logradouro").notNull(),
   numero: text("numero").notNull(),
@@ -594,6 +600,12 @@ export const extendedInsertAppointmentSchema = insertAppointmentSchema.extend({
     }
     return val;
   }),
+  // Validação dos novos campos opcionais
+  photos: z.array(z.string()).optional().nullable(),
+  signature: z.string().optional().nullable(),
+  feedback: z.string().optional().nullable(),
+  executionStatus: z.string().optional().nullable(),
+  executionNotes: z.string().optional().nullable(),
 }).refine((data) => {
   // Pelo menos um responsável deve ser selecionado (técnico ou equipe)
   return data.technicianId || data.teamId;

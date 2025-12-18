@@ -1,0 +1,32 @@
+# Render.com Deployment Configuration
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: rotafacil
+    runtime: node
+    region: oregon # Região mais próxima do Brasil disponível gratuitamente
+    plan: free
+    buildCommand: pnpm install && pnpm run build
+    startCommand: pnpm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # Configurar manualmente no dashboard
+      - key: JWT_SECRET
+        sync: false # Configurar manualmente no dashboard
+      - key: DEV_MODE
+        value: false
+      - key: RESEND_API_KEY
+        sync: false # Configurar manualmente no dashboard
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_FROM_PASSWORD_RESET
+        sync: false
+      - key: EMAIL_REPLY_TO
+        sync: false
+      - key: EMAIL_FROM_INVITE
+        sync: false
+      - key: APP_URL
+        sync: false # Será a URL do Render após deploy

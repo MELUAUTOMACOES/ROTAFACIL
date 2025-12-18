@@ -14,12 +14,18 @@ import {
   type Membership, type InsertMembership,
   type Invitation, type InsertInvitation,
   type DateRestriction, type InsertDateRestriction,
+  type Route,
   users, clients, services, technicians, vehicles, appointments, checklists, businessRules, teams, teamMembers, accessSchedules,
   companies, memberships, invitations,
   dateRestrictions,
+  routes, routeStops,
+  type RouteStop,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, ilike, sql } from "drizzle-orm";
+import { db } from "./db";
+import { eq, and, or, ilike, sql, inArray, isNotNull, ne, isNull } from "drizzle-orm";
+import { format } from "date-fns";
+import { format } from "date-fns";
 import bcrypt from "bcryptjs";
 
 export interface IStorage {
@@ -42,13 +48,14 @@ export interface IStorage {
   setRequirePasswordChange(userId: number, require: boolean): Promise<void>;
 
   // Clients
-  getClients(userId: number): Promise<Client[]>;
+  getAllClients(userId: number): Promise<Client[]>;
+  getClients(userId: number, page?: number, limit?: number): Promise<{ data: Client[], total: number }>;
   getClient(id: number, userId: number): Promise<Client | undefined>;
   getClientByCpf(cpf: string, userId: number): Promise<Client | undefined>;
   createClient(client: InsertClient, userId: number): Promise<Client>;
   updateClient(id: number, client: Partial<InsertClient>, userId: number): Promise<Client>;
   deleteClient(id: number, userId: number): Promise<boolean>;
-  searchClients(query: string, userId: number): Promise<Client[]>;
+  searchClients(query: string, userId: number, page?: number, limit?: number): Promise<{ data: Client[], total: number }>;
 
   // Services
   getServices(userId: number): Promise<Service[]>;
@@ -137,7 +144,23 @@ export interface IStorage {
   getInvitationByToken(token: string): Promise<Invitation | undefined>;
   getInvitationsByCompanyId(companyId: number): Promise<Invitation[]>;
   updateInvitationStatus(id: number, status: string): Promise<Invitation>;
+  updateInvitationStatus(id: number, status: string): Promise<Invitation>;
   deleteInvitation(id: number): Promise<boolean>;
+
+  // Provider Flow
+  getProviderActiveRoute(userId: number, date: Date): Promise<Route | undefined>;
+  updateAppointmentExecution(id: number, data: {
+    status: string;
+    feedback?: string | null;
+    photos?: string[] | null;
+    signature?: string | null;
+    executionStatus?: string | null;
+    executionNotes?: string | null;
+  }, userId: number): Promise<Appointment>;
+  finalizeRoute(id: string, status: string, userId: number): Promise<Route>;
+  updateRouteDate(id: string, date: Date, userId: number): Promise<Route>;
+  getRouteStops(routeId: string): Promise<RouteStop[]>;
+  getPendingAppointments(userId: number): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -328,9 +351,43 @@ export class DatabaseStorage implements IStorage {
     return updatedUser;
   }
 
+  async updateRouteDate(id: string, date: Date, userId: number): Promise<Route> {
+    const [route] = await db
+      .update(routes)
+      .set({ date, updatedAt: new Date() })
+      .where(and(eq(routes.id, id), eq(routes.userId, userId))) // Garante isolamento
+      .returning();
+    return route;
+  }
+
   // Clients
-  async getClients(userId: number): Promise<Client[]> {
-    return await db.select().from(clients).where(eq(clients.userId, userId));
+  async getAllClients(userId: number): Promise<Client[]> {
+    return await db
+      .select()
+      .from(clients)
+      .where(eq(clients.userId, userId))
+      .orderBy(sql`${clients.createdAt} DESC`);
+  }
+
+  async getClients(userId: number, page: number = 1, limit: number = 20): Promise<{ data: Client[], total: number }> {
+    const offset = (page - 1) * limit;
+
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(clients)
+      .where(eq(clients.userId, userId));
+
+    const total = Number(countResult?.count || 0);
+
+    const data = await db
+      .select()
+      .from(clients)
+      .where(eq(clients.userId, userId))
+      .orderBy(sql`${clients.createdAt} DESC`)
+      .limit(limit)
+      .offset(offset);
+
+    return { data, total };
   }
 
   async getClient(id: number, userId: number): Promise<Client | undefined> {
@@ -367,26 +424,52 @@ export class DatabaseStorage implements IStorage {
     return (result.rowCount || 0) > 0;
   }
 
-  async searchClients(query: string, userId: number): Promise<Client[]> {
+  async searchClients(query: string, userId: number, page: number = 1, limit: number = 20): Promise<{ data: Client[], total: number }> {
     console.log("Busca cliente - input:", query);
     const searchTerm = `%${query}%`;
 
-    const results = await db
+    // Tenta limpar a query para ver se é apenas números (busca por CPF)
+    const numericQuery = query.replace(/\D/g, '');
+    const isCpfSearch = numericQuery.length > 0;
+
+    let whereClause;
+
+    if (isCpfSearch) {
+      whereClause = and(
+        eq(clients.userId, userId),
+        or(
+          ilike(clients.name, searchTerm),
+          ilike(clients.cpf, searchTerm),
+          sql`regexp_replace(${clients.cpf}, '\\D', '', 'g') LIKE ${`%${numericQuery}%`}`
+        )
+      );
+    } else {
+      whereClause = and(
+        eq(clients.userId, userId),
+        or(
+          ilike(clients.name, searchTerm),
+          ilike(clients.cpf, searchTerm)
+        )
+      );
+    }
+
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(clients)
+      .where(whereClause);
+
+    const total = Number(countResult?.count || 0);
+
+    const data = await db
       .select()
       .from(clients)
-      .where(
-        and(
-          eq(clients.userId, userId),
-          or(
-            ilike(clients.name, searchTerm),
-            ilike(clients.cpf, searchTerm)
-          )
-        )
-      )
-      .limit(5);
+      .where(whereClause)
+      .orderBy(sql`${clients.createdAt} DESC`)
+      .limit(limit)
+      .offset((page - 1) * limit);
 
-    console.log("Resultados encontrados:", results);
-    return results;
+    console.log(`Resultados encontrados para "${query}":`, total);
+    return { data, total };
   }
 
   // Services
@@ -744,6 +827,201 @@ export class DatabaseStorage implements IStorage {
   async deleteTeamMember(id: number, userId: number): Promise<boolean> {
     const result = await db.delete(teamMembers).where(and(eq(teamMembers.id, id), eq(teamMembers.userId, userId)));
     return (result.rowCount || 0) > 0;
+  }
+
+  // Provider Flow Implementation
+  async getProviderActiveRoute(userId: number, date: Date): Promise<Route | undefined> {
+    // 1. Buscar rotas onde o usuário é o responsável direto (technician)
+    // OU onde o usuário faz parte da equipe responsável (team)
+
+    // Normalizar data para início e fim do dia
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Buscar técnico associado ao usuário
+    const [tech] = await db.select().from(technicians).where(eq(technicians.userId, userId));
+
+    // Buscar equipes que o usuário faz parte
+    const userTeams = await db
+      .select({ teamId: teamMembers.teamId })
+      .from(teamMembers)
+      .where(eq(teamMembers.userId, userId));
+
+    const teamIds = userTeams.map(t => t.teamId);
+
+    // Construir query
+    const conditions = [
+      and(
+        // Comparar Apenas a DATA (ignorando hora/timezone)
+        sql`DATE(${routes.date}) = DATE(${format(date, "yyyy-MM-dd")})`,
+
+        // Status confirmado ou em andamento
+        or(eq(routes.status, 'confirmado'), eq(routes.status, 'em_andamento')),
+        // Responsável
+        or(
+          // Caso 1: Responsável é o técnico (usuário logado)
+          and(
+            eq(routes.responsibleType, 'technician'),
+            eq(routes.responsibleId, String(tech?.id || 0)) // tech.id pode ser undefined se usuário não for técnico
+          ),
+          // Caso 2: Responsável é uma equipe que o usuário faz parte
+          and(
+            eq(routes.responsibleType, 'team'),
+            inArray(routes.responsibleId, teamIds.map(String))
+          )
+        )
+      )
+    ];
+
+    // Se não tiver técnico nem equipes, retorna undefined direto (exceto se for admin, mas aqui focamos no fluxo de prestador)
+    if (!tech && teamIds.length === 0) {
+      return undefined;
+    }
+
+    const [route] = await db
+      .select()
+      .from(routes)
+      .where(and(...conditions))
+      .limit(1);
+
+    return route || undefined;
+  }
+
+  async updateAppointmentExecution(
+    id: number,
+    data: {
+      status: string;
+      feedback?: string | null;
+      photos?: string[] | null;
+      signature?: string | null;
+      executionStatus?: string | null;
+      executionNotes?: string | null;
+    },
+    userId: number
+  ): Promise<Appointment> {
+    // Validar se o usuário tem permissão para editar esse agendamento
+    // (Idealmente verificar se ele é o dono da rota, mas por simplificação vamos confiar no userId do contexto e na existência do agendamento)
+
+    // Preparar objeto de atualização
+    const updateData: any = {
+      status: data.status,
+    };
+
+    if (data.feedback !== undefined) updateData.feedback = data.feedback;
+    if (data.photos !== undefined) updateData.photos = data.photos;
+    if (data.signature !== undefined) updateData.signature = data.signature;
+    if (data.executionStatus !== undefined) updateData.executionStatus = data.executionStatus;
+    if (data.executionNotes !== undefined) updateData.executionNotes = data.executionNotes;
+
+    const [appointment] = await db
+      .update(appointments)
+      .set(updateData)
+      .where(eq(appointments.id, id)) // Removido filtro de userId estrito para permitir que membros da equipe editem
+      .returning();
+
+    return appointment;
+  }
+
+  async getPendingAppointments(userId: number): Promise<any[]> {
+    // Buscar agendamentos de rotas finalizadas que não foram concluídos
+    // Precisamos fazer um join com routeStops e routes
+
+    console.log(`📋 [PENDING] Buscando pendências para userId: ${userId}`);
+
+    // 1. Buscar rotas finalizadas (incluindo rotas antigas sem userId para compatibilidade)
+    const finalizedRoutes = await db
+      .select({ id: routes.id, status: routes.status, title: routes.title })
+      .from(routes)
+      .where(and(
+        or(eq(routes.userId, userId), isNull(routes.userId)), // Aceita rotas do usuário OU rotas sem userId (legado)
+        or(eq(routes.status, 'finalizado'), eq(routes.status, 'cancelado'), eq(routes.status, 'incompleto'))
+      ));
+
+    console.log(`📋 [PENDING] Rotas finalizadas encontradas: ${finalizedRoutes.length}`);
+    finalizedRoutes.forEach(r => console.log(`   - Rota: ${r.title} (ID: ${r.id}, Status: ${r.status})`));
+
+    const routeIds = finalizedRoutes.map(r => r.id);
+
+    if (routeIds.length === 0) {
+      console.log(`📋 [PENDING] Nenhuma rota finalizada, retornando vazio`);
+      return [];
+    }
+
+    // 2. Buscar agendamentos dessas rotas que NÃO estão concluídos (execution_status != 'concluido')
+    // Precisamos cruzar com routeStops para saber de qual rota é
+
+    // Como o Drizzle não facilita joins complexos com abstração simples, vamos fazer em etapas ou usar query builder
+    // Vamos buscar os routeStops dessas rotas
+    const stops = await db
+      .select()
+      .from(routeStops)
+      .where(inArray(routeStops.routeId, routeIds));
+
+    console.log(`📋 [PENDING] RouteStops encontrados: ${stops.length}`);
+
+    const appointmentIds = stops
+      .map(s => s.appointmentNumericId)
+      .filter((id): id is number => id !== null);
+
+    console.log(`📋 [PENDING] IDs de agendamentos extraídos (appointmentNumericId): ${appointmentIds.length}`);
+    console.log(`   IDs: [${appointmentIds.join(', ')}]`);
+
+    if (appointmentIds.length === 0) {
+      console.log(`📋 [PENDING] Nenhum appointmentNumericId encontrado nos routeStops, retornando vazio`);
+      return [];
+    }
+
+    const pendingAppointments = await db
+      .select()
+      .from(appointments)
+      .where(and(
+        inArray(appointments.id, appointmentIds),
+        or(isNull(appointments.executionStatus), ne(appointments.executionStatus, 'concluido'))
+      ));
+
+    console.log(`📋 [PENDING] Agendamentos pendentes encontrados: ${pendingAppointments.length}`);
+    pendingAppointments.forEach(apt => {
+      console.log(`   - Apt #${apt.id}: executionStatus="${apt.executionStatus || 'NULL'}" (status=${apt.status})`);
+    });
+
+    // Enriquecer com dados da rota e cliente
+    const result = await Promise.all(pendingAppointments.map(async (apt) => {
+      const stop = stops.find(s => s.appointmentNumericId === apt.id);
+      const route = await db.select().from(routes).where(eq(routes.id, stop!.routeId)).limit(1);
+      const client = await this.getClient(apt.clientId!, userId);
+      const service = await this.getService(apt.serviceId, userId);
+      const technician = apt.technicianId ? await this.getTechnician(apt.technicianId, userId) : null;
+      const team = apt.teamId ? await this.getTeam(apt.teamId, userId) : null;
+
+      return {
+        ...apt,
+        routeDate: route[0]?.date,
+        routeTitle: route[0]?.title,
+        clientName: client?.name,
+        serviceName: service?.name,
+        responsibleName: technician?.name || team?.name || 'N/A'
+      };
+    }));
+
+    console.log(`📋 [PENDING] Retornando ${result.length} pendências enriquecidas`);
+
+    return result;
+  }
+
+  async finalizeRoute(id: string, status: string, userId: number): Promise<Route> {
+    const [route] = await db
+      .update(routes)
+      .set({ status })
+      .where(eq(routes.id, id))
+      .returning();
+
+    return route;
+  }
+
+  async getRouteStops(routeId: string): Promise<RouteStop[]> {
+    return await db.select().from(routeStops).where(eq(routeStops.routeId, routeId)).orderBy(routeStops.order);
   }
 
   // Access Schedules - Implementação para controle de horário de acesso

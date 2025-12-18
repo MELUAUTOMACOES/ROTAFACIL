@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getAuthHeaders } from "@/lib/auth";
+import { getAuthHeaders, useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -141,6 +141,7 @@ export default function Appointments() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const handleRestrictionModalClose = () => {
     setIsRestrictionModalOpen(false);
@@ -689,9 +690,9 @@ export default function Appointments() {
 
   // Nova função para visualizar rota SEM otimizar (na ordem dos agendamentos selecionados)
   const handleViewRoute = async () => {
-    if (selectedAppointmentIds.length < 2) {
+    if (selectedAppointmentIds.length < 1) {
       toast({
-        title: "Selecione ao menos 2 agendamentos.",
+        title: "Selecione ao menos 1 agendamento.",
         variant: "destructive",
       });
       return;
@@ -2316,8 +2317,12 @@ export default function Appointments() {
           <MultiSelectFilter
             title="Técnicos/Equipes"
             options={[
-              ...technicians.map((t: Technician) => ({ label: t.name, value: t.id.toString(), icon: User })),
-              ...teams.map((t: any) => ({ label: t.name, value: `team-${t.id}`, icon: User }))
+              ...technicians
+                .filter((t: Technician) => user?.role === 'admin' || t.userId === user?.id) // Filter technicians
+                .map((t: Technician) => ({ label: t.name, value: t.id.toString(), icon: User })),
+              ...teams
+                .filter((t: any) => user?.role === 'admin' || t.userId === user?.id) // Filter teams (assuming userId link)
+                .map((t: any) => ({ label: t.name, value: `team-${t.id}`, icon: User }))
             ]}
             selectedValues={selectedTechnicians}
             onSelectionChange={setSelectedTechnicians}
@@ -2346,7 +2351,21 @@ export default function Appointments() {
             className="w-[140px]"
           />
 
-          {(selectedTechnicians.length > 0 || selectedServices.length > 0 || selectedStatuses.length > 0 || searchTerm || selectedDate) && (
+          <Select
+            value={inRouteFilter}
+            onValueChange={(val: 'all' | 'yes' | 'no') => setInRouteFilter(val)}
+          >
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Romaneio" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="yes">Com Romaneio</SelectItem>
+              <SelectItem value="no">Sem Romaneio</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {(selectedTechnicians.length > 0 || selectedServices.length > 0 || selectedStatuses.length > 0 || searchTerm || selectedDate || inRouteFilter !== "all") && (
             <Button
               variant="ghost"
               size="sm"
@@ -2356,6 +2375,7 @@ export default function Appointments() {
                 setSelectedStatuses([]);
                 setSearchTerm("");
                 setSelectedDate("");
+                setInRouteFilter("all");
               }}
               className="h-8 px-2 text-xs text-gray-500 hover:text-red-600"
               title="Limpar todos os filtros"
@@ -3105,8 +3125,8 @@ export default function Appointments() {
 
                     {/* Action Buttons */}
                     <div className="space-y-3">
-                      {/* Botão de otimizar (aparece apenas se ainda não foi otimizado) */}
-                      {!optimizedRoute.route?.id && !savedInfo && !isRouteOptimized && (
+                      {/* Botão de otimizar (aparece apenas se ainda não foi otimizado E há mais de 1 agendamento) */}
+                      {!optimizedRoute.route?.id && !savedInfo && !isRouteOptimized && selectedAppointmentIds.length > 1 && (
                         <Button
                           className="w-full bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
                           onClick={handleOptimizeRoute}
@@ -3174,7 +3194,7 @@ export default function Appointments() {
       )}
 
       {/* Botão flutuante para otimizar rotas */}
-      {selectedAppointmentIds.length > 1 && (
+      {selectedAppointmentIds.length > 0 && (
         <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
           {/* Checkbox "Terminar no ponto inicial" - Mobile: ícone, Desktop: com texto */}
           <label className="flex items-center gap-2 bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-[#B8860B] border border-[#DAA520] cursor-pointer hover:bg-gray-50">

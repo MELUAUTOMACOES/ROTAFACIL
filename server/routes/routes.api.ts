@@ -433,16 +433,16 @@ export function registerRoutesAPI(app: Express) {
     async (req: any, res: Response) => {
       try {
         const { responsibleType, responsibleId } = req.body;
-        
+
         if (!responsibleType || !responsibleId) {
-          return res.status(400).json({ 
-            message: "responsibleType e responsibleId são obrigatórios" 
+          return res.status(400).json({
+            message: "responsibleType e responsibleId são obrigatórios"
           });
         }
 
         if (responsibleType !== "technician" && responsibleType !== "team") {
-          return res.status(400).json({ 
-            message: "responsibleType deve ser 'technician' ou 'team'" 
+          return res.status(400).json({
+            message: "responsibleType deve ser 'technician' ou 'team'"
           });
         }
 
@@ -459,6 +459,59 @@ export function registerRoutesAPI(app: Express) {
       }
     },
   );
+
+  // Endpoint para atualizar a DATA da rota
+  app.patch("/api/routes/:id/date", authenticateToken, async (req: any, res: Response) => {
+    try {
+      const routeId = req.params.id;
+      const { date } = req.body;
+
+      if (!date) {
+        return res.status(400).json({ message: "Data é obrigatória" });
+      }
+
+      const newDate = new Date(date);
+      if (isNaN(newDate.getTime())) {
+        return res.status(400).json({ message: "Data inválida" });
+      }
+
+      // TODO: Adicionar storage.updateRouteDate na interface IStorage e implementar no DatabaseStorage
+      // Já adicionei no passo anterior, agora é só usar.
+      // Como o storage é importado de ../storage (que exporta a instância 'storage'), precisamos garantir que estamos usando a instância correta.
+      // O arquivo routes.api.ts importa 'db' de '../db', mas não 'storage'.
+      // Vou usar 'db' diretamente aqui ou importar 'storage'.
+      // Melhor usar 'db' direto aqui se 'storage' não estiver disponível no escopo, 
+      // MAS o padrão do projeto é usar storage. 
+      // Vou verificar imports. O arquivo routes.api.ts NÃO importa 'storage' de '../storage'.
+      // Vou adicionar o import do storage no topo do arquivo ou usar db direto.
+      // Usando db direto para evitar mexer nos imports lá em cima e causar conflito, 
+      // mas espere, eu já editei o storage.ts. O ideal é usar o storage.
+      // Vou usar db direto aqui para ser consistente com o resto deste arquivo que usa db bastante.
+
+      const [updatedRoute] = await db
+        .update(routesTbl)
+        .set({ date: newDate, updatedAt: new Date() })
+        .where(eq(routesTbl.id, routeId))
+        .returning();
+
+      if (!updatedRoute) {
+        return res.status(404).json({ message: "Rota não encontrada" });
+      }
+
+      // Registrar auditoria
+      await createRouteAudit(
+        routeId,
+        req.user.userId,
+        "update_date",
+        `Alterou a data da rota para ${newDate.toLocaleDateString()}`
+      );
+
+      res.json(updatedRoute);
+    } catch (error: any) {
+      console.error("❌ Erro ao atualizar data da rota:", error);
+      res.status(500).json({ message: "Erro ao atualizar data da rota" });
+    }
+  });
 
   // ==== POST /api/routes/:id/optimize ====
   app.post("/api/routes/:id/optimize", authenticateToken, async (req: any, res) => {
@@ -530,7 +583,7 @@ export function registerRoutesAPI(app: Express) {
       const tableResp = await fetch(tableUrl);
       if (!tableResp.ok) {
         const t = await tableResp.text();
-        return res.status(500).json({ message: `Falha no OSRM table: ${t.slice(0,200)}` });
+        return res.status(500).json({ message: `Falha no OSRM table: ${t.slice(0, 200)}` });
       }
       const tableData: any = await tableResp.json();
       const matrix: number[][] = tableData.durations;
@@ -856,10 +909,11 @@ export function registerRoutesAPI(app: Express) {
           ) as string[];
         };
 
+        let responsibleName = "Prestador";
+        let entidade: EntityAddr | null = null;
+
         try {
           console.log("🏁 Determinando ponto inicial com fallbacks…");
-
-          let entidade: EntityAddr | null = null;
 
           if (derivedResponsibleType === "technician") {
             const [tech] = await db
@@ -883,7 +937,10 @@ export function registerRoutesAPI(app: Express) {
               )
               .limit(1);
 
-            if (tech) entidade = tech as EntityAddr;
+            if (tech) {
+              entidade = tech as EntityAddr;
+              if (tech.name) responsibleName = tech.name;
+            }
           } else if (derivedResponsibleType === "team") {
             const [team] = await db
               .select({
@@ -905,7 +962,10 @@ export function registerRoutesAPI(app: Express) {
               )
               .limit(1);
 
-            if (team) entidade = team as EntityAddr;
+            if (team) {
+              entidade = team as EntityAddr;
+              if (team.name) responsibleName = team.name;
+            }
           }
 
           // 2.1 Tenta endereço próprio do técnico/equipe
@@ -1238,9 +1298,15 @@ export function registerRoutesAPI(app: Express) {
         }
 
         // 8. Preparar dados da rota
-        const routeTitle =
-          title || `Rota ${new Date().toLocaleDateString("pt-BR")}`;
+        // 8. Preparar dados da rota
         const routeDate = selectedAppointments[0]?.scheduledDate || new Date();
+
+        // Formatar data para DD/MM/YYYY (garantindo timezone correto)
+        const dateObj = typeof routeDate === 'string' ? new Date(routeDate + 'T12:00:00') : new Date(new Date(routeDate).toISOString().split('T')[0] + 'T12:00:00');
+        const dateStr = dateObj.toLocaleDateString("pt-BR");
+
+        const routeTitle =
+          title || `Rota ${dateStr} - ${responsibleName}`;
 
         const routeData = {
           title: routeTitle,
@@ -1354,8 +1420,8 @@ export function registerRoutesAPI(app: Express) {
             status: routeData.status,
             polylineGeoJson: routeData.polylineGeoJson,
             displayNumber: nextDisplayNumber,
-            // userId: req.user.userId, // 🔒 DESCOMENTAR APÓS MIGRATION: Isolamento entre empresas
-          } as any) // Temporário: type assertion até migration
+            userId: req.user.userId, // 🔒 Isolamento entre empresas
+          })
           .returning();
 
         // Salvar paradas
@@ -1407,8 +1473,8 @@ export function registerRoutesAPI(app: Express) {
 
         console.error(error);
         console.log("==== LOG FIM: /api/routes/optimize (ERRO) ====");
-        res.status(500).json({ 
-          message: error?.message || "Erro interno na otimização da rota" 
+        res.status(500).json({
+          message: error?.message || "Erro interno na otimização da rota"
         });
       }
     });
@@ -1482,8 +1548,8 @@ export function registerRoutesAPI(app: Express) {
       const routeList =
         conditions.length > 0
           ? await baseQuery
-              .where(and(...conditions))
-              .orderBy(desc(routesTbl.createdAt))
+            .where(and(...conditions))
+            .orderBy(desc(routesTbl.createdAt))
           : await baseQuery.orderBy(desc(routesTbl.createdAt));
 
       console.log("✅ Rotas encontradas:", routeList.length);
@@ -1645,7 +1711,7 @@ export function registerRoutesAPI(app: Express) {
     async (req: any, res: Response) => {
       try {
         const { routeId } = req.params;
-        const { appointmentIds } = req.body as { appointmentIds: (string|number)[] };
+        const { appointmentIds } = req.body as { appointmentIds: (string | number)[] };
 
         if (!Array.isArray(appointmentIds) || appointmentIds.length === 0) {
           return res.status(400).json({ message: "appointmentIds (array) é obrigatório" });
@@ -1771,7 +1837,7 @@ export function registerRoutesAPI(app: Express) {
           }
 
           console.log(`📝 [ADD STOPS] Preparando insert para agendamento ID ${r.id}`);
-          
+
           inserts.push({
             routeId,
             appointmentId: numberToUUID(r.id),
@@ -1786,7 +1852,7 @@ export function registerRoutesAPI(app: Express) {
         if (inserts.length > 0) {
           console.log(`📝 [ADD STOPS] Inserindo ${inserts.length} paradas:`, inserts.map(i => ({ appointmentNumericId: i.appointmentNumericId, appointmentId: i.appointmentId })));
           await db.insert(stopsTbl).values(inserts);
-          
+
           // Verificar o que foi realmente salvo
           const savedStops = await db
             .select({ appointmentNumericId: stopsTbl.appointmentNumericId, appointmentId: stopsTbl.appointmentId })
@@ -1801,7 +1867,7 @@ export function registerRoutesAPI(app: Express) {
             .where(eq(stopsTbl.routeId, routeId));
           await db
             .update(routesTbl)
-            .set({ 
+            .set({
               stopsCount: Number(cnt),
               updatedAt: sql`CURRENT_TIMESTAMP`
             })
@@ -1883,7 +1949,7 @@ export function registerRoutesAPI(app: Express) {
         // 4) Atualiza contador da rota
         await db
           .update(routesTbl)
-          .set({ 
+          .set({
             stopsCount: remainingStops.length,
             updatedAt: sql`CURRENT_TIMESTAMP`
           })
@@ -1926,10 +1992,10 @@ export function registerRoutesAPI(app: Express) {
 
         // Verificar se todos os stopIds pertencem à rota e capturar ordem anterior
         const existingStops = await db
-          .select({ 
-            id: stopsTbl.id, 
+          .select({
+            id: stopsTbl.id,
             order: stopsTbl.order,
-            address: stopsTbl.address 
+            address: stopsTbl.address
           })
           .from(stopsTbl)
           .where(eq(stopsTbl.routeId, routeId));
@@ -1945,12 +2011,12 @@ export function registerRoutesAPI(app: Express) {
 
         // Identificar mudanças de ordem para auditoria
         const orderChanges: Array<{ address: string; oldOrder: number; newOrder: number }> = [];
-        
+
         // Atualizar a ordem das paradas (1..n)
         for (let i = 0; i < stopIds.length; i++) {
           const newOrder = i + 1;
           const stopInfo = oldOrderMap.get(stopIds[i]);
-          
+
           if (stopInfo && stopInfo.order !== newOrder) {
             orderChanges.push({
               address: stopInfo.address,
@@ -1958,7 +2024,7 @@ export function registerRoutesAPI(app: Express) {
               newOrder: newOrder
             });
           }
-          
+
           await db
             .update(stopsTbl)
             .set({ order: newOrder })
@@ -2011,7 +2077,7 @@ export function registerRoutesAPI(app: Express) {
         if (orderedStops.length === 0) {
           await db
             .update(routesTbl)
-            .set({ 
+            .set({
               stopsCount: 0,
               updatedAt: sql`CURRENT_TIMESTAMP`
             })
@@ -2025,7 +2091,7 @@ export function registerRoutesAPI(app: Express) {
           // ainda assim finalize sem polyline
           await db
             .update(routesTbl)
-            .set({ 
+            .set({
               stopsCount: orderedStops.length,
               updatedAt: sql`CURRENT_TIMESTAMP`
             })
@@ -2051,7 +2117,7 @@ export function registerRoutesAPI(app: Express) {
             const rjson: any = await routeResp.json();
             polylineGeoJson = rjson?.routes?.[0]?.geometry || null;
           }
-        } catch {}
+        } catch { }
 
         // table → durations/distances entre pares consecutivos (incluindo do início até primeira parada)
         let totalDistance = 0;
@@ -2064,11 +2130,11 @@ export function registerRoutesAPI(app: Express) {
             const distances: number[][] = tjson?.distances || [];
             // Soma trajeto do início (índice 0) até todas as paradas
             for (let i = 0; i < allCoords.length - 1; i++) {
-              totalDuration += Number(durations?.[i]?.[i+1] ?? 0);
-              totalDistance += Number(distances?.[i]?.[i+1] ?? 0);
+              totalDuration += Number(durations?.[i]?.[i + 1] ?? 0);
+              totalDistance += Number(distances?.[i]?.[i + 1] ?? 0);
             }
           }
-        } catch {}
+        } catch { }
 
         await db
           .update(routesTbl)
@@ -2091,20 +2157,20 @@ export function registerRoutesAPI(app: Express) {
               req.user.userId,
               "reorder",
               `Alterou ordem: ${change.address} (posição ${change.oldOrder} → ${change.newOrder})`,
-              { 
-                address: change.address, 
-                oldOrder: change.oldOrder, 
-                newOrder: change.newOrder 
+              {
+                address: change.address,
+                oldOrder: change.oldOrder,
+                newOrder: change.newOrder
               }
             );
           }
         }
 
         // IMPORTANTE: Retornar o ponto inicial na resposta
-        return res.json({ 
-          ok: true, 
-          routeId, 
-          stopIds, 
+        return res.json({
+          ok: true,
+          routeId,
+          stopIds,
           rebuilt: true,
           start: {
             lat: startInfo.lat,
@@ -2145,7 +2211,7 @@ export function registerRoutesAPI(app: Express) {
         // Validação: Se estiver confirmando ou finalizando, verificar se algum agendamento já está em outro romaneio confirmado/finalizado
         if (status === 'confirmado' || status === 'finalizado') {
           console.log(`🔍 [VALIDAÇÃO] Validando status ${status} para rota ${routeId}`);
-          
+
           // Buscar agendamentos desta rota
           const stopsThisRoute = await db
             .select({ appointmentNumericId: stopsTbl.appointmentNumericId })
@@ -2193,17 +2259,17 @@ export function registerRoutesAPI(app: Express) {
                 }
                 conflictMap.get(c.appointmentNumericId!)!.add(c.routeDisplayNumber);
               });
-              
+
               // Formatar mensagem concisa
               const apptIds = Array.from(conflictMap.keys());
               const firstConflict = conflictingRoutes[0];
-              
+
               const message = apptIds.length === 1
                 ? `Não foi possível ${status === 'confirmado' ? 'confirmar' : 'finalizar'} o romaneio. Agendamento #${apptIds[0]} já está no romaneio #${firstConflict.routeDisplayNumber}.`
                 : `Não foi possível ${status === 'confirmado' ? 'confirmar' : 'finalizar'} o romaneio. Agendamentos #${apptIds.join(', #')} já estão em romaneios confirmados/finalizados.`;
-              
+
               console.error(`❌ [VALIDAÇÃO] BLOQUEANDO: ${message}`);
-              
+
               return res.status(400).json({ error: message });
             } else {
               console.log(`✅ [VALIDAÇÃO] Nenhum conflito encontrado, pode prosseguir`);

@@ -2,6 +2,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
+import InputMask from "react-input-mask";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,23 +52,23 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
     resolver: zodResolver(schema),
     defaultValues: isEditing && user
       ? {
-          name: user.name,
-          username: user.username,
-          role: user.role as "admin" | "user" | "operador",
-          phone: user.phone || "",
-          cep: user.cep || "",
-          logradouro: user.logradouro || "",
-          numero: user.numero || "",
-          complemento: user.complemento || "",
-          bairro: user.bairro || "",
-          cidade: user.cidade || "",
-          estado: user.estado || "",
-          isActive: user.isActive,
-          accessScheduleId: user.accessScheduleId,
-        }
+        name: user.name,
+        username: user.username,
+        role: user.role as "admin" | "user" | "operador",
+        phone: user.phone || "",
+        cep: user.cep || "",
+        logradouro: user.logradouro || "",
+        numero: user.numero || "",
+        complemento: user.complemento || "",
+        bairro: user.bairro || "",
+        cidade: user.cidade || "",
+        estado: user.estado || "",
+        isActive: user.isActive,
+        accessScheduleId: user.accessScheduleId,
+      }
       : {
-          role: "user" as const,
-        },
+        role: "user" as const,
+      },
   });
 
   const role = watch("role");
@@ -98,7 +99,7 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
         setValue("bairro", endereco.bairro || "");
         setValue("cidade", endereco.localidade || "");
         setValue("estado", endereco.uf || "");
-        
+
         toast({
           title: "CEP encontrado",
           description: "Endereço preenchido automaticamente",
@@ -216,12 +217,19 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
         {/* Telefone */}
         <div className="space-y-2">
           <Label htmlFor="phone">Telefone</Label>
-          <Input
-            id="phone"
+          <InputMask
+            mask="(99) 99999-9999"
             {...register("phone")}
-            placeholder="(11) 99999-9999"
             disabled={isSubmitting}
-          />
+          >
+            {(inputProps: any) => (
+              <Input
+                {...inputProps}
+                id="phone"
+                placeholder="(11) 99999-9999"
+              />
+            )}
+          </InputMask>
           {errors.phone && (
             <p className="text-sm text-red-500">{errors.phone.message}</p>
           )}
@@ -241,7 +249,7 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
               <SelectValue placeholder="Selecione o perfil" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="user">Usuário</SelectItem>
+              <SelectItem value="user">Prestador</SelectItem>
               <SelectItem value="operador">Operador</SelectItem>
               <SelectItem value="admin">Administrador</SelectItem>
             </SelectContent>
@@ -283,19 +291,25 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
       {/* Endereço */}
       <div className="space-y-4 border-t pt-4">
         <h3 className="font-semibold text-lg">Endereço</h3>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* CEP */}
           <div className="space-y-2">
             <Label htmlFor="cep">CEP</Label>
-            <Input
-              id="cep"
+            <InputMask
+              mask="99999-999"
               {...register("cep")}
-              placeholder="00000-000"
               disabled={isSubmitting}
               onBlur={handleCepBlur}
-              maxLength={9}
-            />
+            >
+              {(inputProps: any) => (
+                <Input
+                  {...inputProps}
+                  id="cep"
+                  placeholder="00000-000"
+                />
+              )}
+            </InputMask>
             {errors.cep && (
               <p className="text-sm text-red-500">{errors.cep.message}</p>
             )}
@@ -435,8 +449,8 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
           {isSubmitting
             ? "Salvando..."
             : isEditing
-            ? "Atualizar"
-            : "Criar Usuário"}
+              ? "Atualizar"
+              : "Criar Usuário"}
         </Button>
       </div>
     </form>

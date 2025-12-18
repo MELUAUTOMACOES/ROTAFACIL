@@ -53,11 +53,6 @@ export default function FindDate() {
   const [isSearching, setIsSearching] = useState(false);
   const [isFetchingCep, setIsFetchingCep] = useState(false);
 
-  // Buscar clientes
-  const { data: clients = [], isLoading: isLoadingClients, error: errorClients } = useQuery<Client[]>({
-    queryKey: ["/api/clients"],
-  });
-
   // Buscar serviços
   const { data: services = [], isLoading: isLoadingServices, error: errorServices } = useQuery<Service[]>({
     queryKey: ["/api/services"],
@@ -80,7 +75,6 @@ export default function FindDate() {
 
   // Debug detalhado
   console.log("🔍 [FIND-DATE] Status das queries:");
-  console.log("  - Clientes:", { count: clients.length, loading: isLoadingClients, error: errorClients?.message });
   console.log("  - Serviços:", { count: services.length, loading: isLoadingServices, error: errorServices?.message });
   console.log("  - Técnicos:", { count: technicians.length, loading: isLoadingTechnicians, error: errorTechnicians?.message });
   console.log("  - Equipes:", { count: teams.length, loading: isLoadingTeams, error: errorTeams?.message });
@@ -148,31 +142,42 @@ export default function FindDate() {
   };
 
   // Função para lidar com seleção de cliente
-  const handleClientChange = (clientId: number | undefined) => {
-    console.log("Cliente selecionado ID:", clientId);
-    form.setValue("clientId", clientId);
-    
-    if (clientId) {
-      const selectedClient = clients.find(c => c.id === clientId);
-      console.log("Cliente encontrado:", selectedClient);
-      if (selectedClient) {
-        // Preencher automaticamente CEP e número
-        console.log("Preenchendo CEP:", selectedClient.cep, "Número:", selectedClient.numero);
-        form.setValue("cep", selectedClient.cep);
-        form.setValue("numero", selectedClient.numero);
-      }
+  const handleClientSelect = (client: Client | null) => {
+    console.log("Cliente selecionado:", client);
+    form.setValue("clientId", client?.id);
+
+    if (client) {
+      // Preencher automaticamente todos os dados de endereço
+      console.log("Preenchendo endereço completo do cliente:", client);
+      form.setValue("cep", client.cep);
+      form.setValue("numero", client.numero);
+      form.setValue("logradouro", client.logradouro);
+      form.setValue("bairro", client.bairro);
+      form.setValue("cidade", client.cidade);
+
+      // Buscar o estado (UF) pelo CEP, pois a tabela clients não possui esse campo
+      buscarEnderecoPorCep(client.cep).then(data => {
+        if (data.uf) form.setValue("estado", data.uf);
+      }).catch(err => console.error("Erro ao buscar UF do cliente:", err));
     } else {
       // Limpar campos quando nenhum cliente selecionado
       form.setValue("cep", "");
       form.setValue("numero", "");
+      form.setValue("logradouro", "");
+      form.setValue("bairro", "");
+      form.setValue("cidade", "");
+      form.setValue("estado", "");
     }
   };
+
+  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
 
   // Função para buscar datas com streaming (Server-Sent Events)
   const searchDatesWithStreaming = async (data: FindDateFormData) => {
     setIsSearching(true);
+    setIsFiltersCollapsed(true); // Minimizar filtros ao iniciar busca
     setSearchResults([]); // Limpar resultados anteriores
-    
+
     const token = localStorage.getItem("token");
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -213,7 +218,7 @@ export default function FindDate() {
 
       while (true) {
         const { done, value } = await reader.read();
-        
+
         if (done) {
           setIsSearching(false);
           break;
@@ -221,7 +226,7 @@ export default function FindDate() {
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n\n");
-        
+
         // Manter a última linha incompleta no buffer
         buffer = lines.pop() || "";
 
@@ -230,7 +235,7 @@ export default function FindDate() {
             const jsonStr = line.substring(6);
             try {
               const event = JSON.parse(jsonStr);
-              
+
               if (event.done) {
                 console.log("✅ Busca concluída!");
                 setIsSearching(false);
@@ -265,7 +270,7 @@ export default function FindDate() {
   const handleSchedule = (result: AvailableDate, formData: FindDateFormData) => {
     console.log("🔄 [DEBUG] handleSchedule - result:", result);
     console.log("🔄 [DEBUG] handleSchedule - formData:", formData);
-    
+
     // Navegar para a tela de agendamentos com dados pré-preenchidos
     const params = new URLSearchParams({
       date: result.date,
@@ -288,7 +293,7 @@ export default function FindDate() {
       params.append("teamId", result.responsibleId.toString());
       console.log("🔄 [DEBUG] Adicionando teamId:", result.responsibleId);
     }
-    
+
     console.log("🔄 [DEBUG] Parâmetros finais:", params.toString());
     setLocation(`/appointments?${params.toString()}`);
   };
@@ -316,251 +321,273 @@ export default function FindDate() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Buscar datas disponíveis</CardTitle>
-          <CardDescription>
-            Preencha os dados abaixo para encontrar as melhores opções de agendamento
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="cliente">Cliente (opcional)</Label>
-              <ClientSearch
-                value={form.watch("clientId")}
-                onValueChange={handleClientChange}
-                placeholder="Pesquisar por nome ou CPF"
-              />
+        <CardHeader className="cursor-pointer" onClick={() => setIsFiltersCollapsed(!isFiltersCollapsed)}>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Buscar datas disponíveis</CardTitle>
+              <CardDescription>
+                {isFiltersCollapsed
+                  ? "Clique para expandir os filtros"
+                  : "Preencha os dados abaixo para encontrar as melhores opções de agendamento"}
+              </CardDescription>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="cep">CEP</Label>
-                <Input
-                  id="cep"
-                  placeholder="00000-000"
-                  value={form.watch("cep")}
-                  onChange={handleCepChange}
-                  onBlur={handleCepBlur}
-                  maxLength={9}
-                  disabled={!!form.watch("clientId") || isFetchingCep}
-                  className={form.formState.errors.cep ? "border-red-500" : ""}
-                />
-                {isFetchingCep && <p className="text-sm text-gray-500">Buscando CEP...</p>}
-                {form.formState.errors.cep && (
-                  <p className="text-sm text-red-500">{form.formState.errors.cep.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="logradouro">Logradouro</Label>
-                <Input
-                  id="logradouro"
-                  placeholder="Rua, Avenida..."
-                  value={form.watch("logradouro")}
-                  disabled
-                  className="bg-gray-50"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="numero">Número</Label>
-                <Input
-                  id="numero"
-                  placeholder="123"
-                  value={form.watch("numero")}
-                  onChange={handleNumeroChange}
-                  disabled={!!form.watch("clientId")}
-                  className={form.formState.errors.numero ? "border-red-500" : ""}
-                />
-                {form.formState.errors.numero && (
-                  <p className="text-sm text-red-500">{form.formState.errors.numero.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="bairro">Bairro</Label>
-                <Input
-                  id="bairro"
-                  placeholder="Bairro"
-                  value={form.watch("bairro")}
-                  disabled
-                  className="bg-gray-50"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="cidade">Cidade</Label>
-                <Input
-                  id="cidade"
-                  placeholder="Cidade"
-                  value={form.watch("cidade")}
-                  disabled
-                  className="bg-gray-50"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="estado">Estado</Label>
-                <Input
-                  id="estado"
-                  placeholder="UF"
-                  value={form.watch("estado")}
-                  disabled
-                  className="bg-gray-50"
-                  maxLength={2}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-              <div className="space-y-2">
-                <Label htmlFor="service">Serviço</Label>
-                <Select
-                  value={form.watch("serviceId")?.toString() || ""}
-                  onValueChange={(value) => form.setValue("serviceId", parseInt(value))}
-                  disabled={isLoadingServices}
-                >
-                  <SelectTrigger className={form.formState.errors.serviceId ? "border-red-500" : ""}>
-                    <SelectValue placeholder={
-                      isLoadingServices ? "Carregando serviços..." :
-                      errorServices ? "Erro ao carregar serviços" :
-                      "Selecione um serviço"
-                    } />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {isLoadingServices ? (
-                      <SelectItem value="loading" disabled>
-                        Carregando...
-                      </SelectItem>
-                    ) : errorServices ? (
-                      <SelectItem value="error" disabled>
-                        Erro: {errorServices.message}
-                      </SelectItem>
-                    ) : services.length === 0 ? (
-                      <SelectItem value="0" disabled>
-                        Nenhum serviço cadastrado
-                      </SelectItem>
-                    ) : (
-                      services.map((service) => (
-                        <SelectItem key={service.id} value={service.id.toString()}>
-                          {service.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                {form.formState.errors.serviceId && (
-                  <p className="text-sm text-red-500">{form.formState.errors.serviceId.message}</p>
-                )}
-                {errorServices && (
-                  <p className="text-sm text-red-500">Erro ao carregar serviços. Verifique sua conexão.</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="startDate">Data inicial da busca</Label>
-                <Input
-                  id="startDate"
-                  type="date"
-                  value={form.watch("startDate")}
-                  onChange={(e) => form.setValue("startDate", e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
-                  className=""
-                />
-                <p className="text-xs text-gray-500">Buscar datas a partir de</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="technician">Técnico/Equipe (opcional)</Label>
-                <Select
-                  value={
-                    form.watch("technicianId") ? `tech-${form.watch("technicianId")}` :
-                    form.watch("teamId") ? `team-${form.watch("teamId")}` : ""
-                  }
-                  onValueChange={(value) => {
-                    console.log("🔄 [DEBUG] FindDate - Seleção alterada para:", value);
-                    
-                    if (value === "0" || value === "") {
-                      // Limpar seleções
-                      form.setValue("technicianId", undefined);
-                      form.setValue("teamId", undefined);
-                      console.log("🔄 [DEBUG] FindDate - Limpando seleções");
-                    } else if (value.startsWith('tech-')) {
-                      // É um técnico
-                      const technicianId = parseInt(value.split('-')[1]);
-                      console.log("🔄 [DEBUG] FindDate - Técnico selecionado ID:", technicianId);
-                      form.setValue("technicianId", technicianId);
-                      form.setValue("teamId", undefined);
-                    } else if (value.startsWith('team-')) {
-                      // É uma equipe
-                      const teamId = parseInt(value.split('-')[1]);
-                      console.log("🔄 [DEBUG] FindDate - Equipe selecionada ID:", teamId);
-                      form.setValue("teamId", teamId);
-                      form.setValue("technicianId", undefined);
-                    }
-                  }}
-                  disabled={isLoadingTechnicians || isLoadingTeams}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={
-                      (isLoadingTechnicians || isLoadingTeams) ? "Carregando..." :
-                      (errorTechnicians || errorTeams) ? "Erro ao carregar" :
-                      "Qualquer técnico/equipe"
-                    } />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(isLoadingTechnicians || isLoadingTeams) ? (
-                      <SelectItem value="loading" disabled>
-                        Carregando...
-                      </SelectItem>
-                    ) : (errorTechnicians || errorTeams) ? (
-                      <SelectItem value="error" disabled>
-                        Erro ao carregar dados
-                      </SelectItem>
-                    ) : (
-                      <>
-                        <SelectItem value="0">Qualquer técnico/equipe</SelectItem>
-                        {technicians.map((technician) => (
-                          <SelectItem key={`tech-${technician.id}`} value={`tech-${technician.id}`}>
-                            👤 {technician.name}
-                          </SelectItem>
-                        ))}
-                        {teams.map((team) => (
-                          <SelectItem key={`team-${team.id}`} value={`team-${team.id}`}>
-                            👥 {team.name}
-                          </SelectItem>
-                        ))}
-                        {technicians.length === 0 && teams.length === 0 && (
-                          <SelectItem value="none" disabled>
-                            Nenhum técnico ou equipe cadastrado
-                          </SelectItem>
-                        )}
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
-                {(errorTechnicians || errorTeams) && (
-                  <p className="text-sm text-red-500">Erro ao carregar técnicos/equipes.</p>
-                )}
-              </div>
-            </div>
-
-            <Button 
-              type="submit" 
-              className="w-full bg-burnt-yellow hover:bg-burnt-yellow/90"
-              disabled={isSearching}
-            >
-              {isSearching ? "Buscando..." : "Buscar datas"}
-              <Search className="ml-2 h-4 w-4" />
+            <Button variant="ghost" size="sm">
+              {isFiltersCollapsed ? "Expandir" : "Minimizar"}
             </Button>
-          </form>
-        </CardContent>
+          </div>
+        </CardHeader>
+
+        {!isFiltersCollapsed && (
+          <CardContent>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="cliente">Cliente (opcional)</Label>
+                <ClientSearch
+                  value={form.watch("clientId")}
+                  onValueChange={(id) => form.setValue("clientId", id)}
+                  onSelect={handleClientSelect}
+                  placeholder="Pesquisar por nome ou CPF"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cep">CEP</Label>
+                  <Input
+                    id="cep"
+                    placeholder="00000-000"
+                    value={form.watch("cep")}
+                    onChange={handleCepChange}
+                    onBlur={handleCepBlur}
+                    maxLength={9}
+                    disabled={!!form.watch("clientId") || isFetchingCep}
+                    className={form.formState.errors.cep ? "border-red-500" : ""}
+                  />
+                  {isFetchingCep && <p className="text-sm text-gray-500">Buscando CEP...</p>}
+                  {form.formState.errors.cep && (
+                    <p className="text-sm text-red-500">{form.formState.errors.cep.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="logradouro">Logradouro</Label>
+                  <Input
+                    id="logradouro"
+                    placeholder="Rua, Avenida..."
+                    value={form.watch("logradouro")}
+                    disabled
+                    className="bg-gray-50"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="numero">Número</Label>
+                  <Input
+                    id="numero"
+                    placeholder="123"
+                    value={form.watch("numero")}
+                    onChange={handleNumeroChange}
+                    disabled={!!form.watch("clientId")}
+                    className={form.formState.errors.numero ? "border-red-500" : ""}
+                  />
+                  {form.formState.errors.numero && (
+                    <p className="text-sm text-red-500">{form.formState.errors.numero.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="bairro">Bairro</Label>
+                  <Input
+                    id="bairro"
+                    placeholder="Bairro"
+                    value={form.watch("bairro")}
+                    disabled
+                    className="bg-gray-50"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="cidade">Cidade</Label>
+                  <Input
+                    id="cidade"
+                    placeholder="Cidade"
+                    value={form.watch("cidade")}
+                    disabled
+                    className="bg-gray-50"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="estado">Estado</Label>
+                  <Input
+                    id="estado"
+                    placeholder="UF"
+                    value={form.watch("estado")}
+                    disabled
+                    className="bg-gray-50"
+                    maxLength={2}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                <div className="space-y-2">
+                  <Label htmlFor="service">Serviço</Label>
+                  <Select
+                    value={form.watch("serviceId")?.toString() || ""}
+                    onValueChange={(value) => form.setValue("serviceId", parseInt(value))}
+                    disabled={isLoadingServices}
+                  >
+                    <SelectTrigger className={form.formState.errors.serviceId ? "border-red-500" : ""}>
+                      <SelectValue placeholder={
+                        isLoadingServices ? "Carregando serviços..." :
+                          errorServices ? "Erro ao carregar serviços" :
+                            "Selecione um serviço"
+                      } />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isLoadingServices ? (
+                        <SelectItem value="loading" disabled>
+                          Carregando...
+                        </SelectItem>
+                      ) : errorServices ? (
+                        <SelectItem value="error" disabled>
+                          Erro: {errorServices.message}
+                        </SelectItem>
+                      ) : services.length === 0 ? (
+                        <SelectItem value="0" disabled>
+                          Nenhum serviço cadastrado
+                        </SelectItem>
+                      ) : (
+                        services.map((service) => (
+                          <SelectItem key={service.id} value={service.id.toString()}>
+                            {service.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {form.formState.errors.serviceId && (
+                    <p className="text-sm text-red-500">{form.formState.errors.serviceId.message}</p>
+                  )}
+                  {errorServices && (
+                    <p className="text-sm text-red-500">Erro ao carregar serviços. Verifique sua conexão.</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="startDate">Data inicial da busca</Label>
+                  <Input
+                    id="startDate"
+                    type="date"
+                    value={form.watch("startDate")}
+                    onChange={(e) => form.setValue("startDate", e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className=""
+                  />
+                  <p className="text-xs text-gray-500">Buscar datas a partir de</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="technician">Técnico/Equipe (opcional)</Label>
+                  <Select
+                    value={
+                      form.watch("technicianId") ? `tech-${form.watch("technicianId")}` :
+                        form.watch("teamId") ? `team-${form.watch("teamId")}` : ""
+                    }
+                    onValueChange={(value) => {
+                      console.log("🔄 [DEBUG] FindDate - Seleção alterada para:", value);
+
+                      if (value === "0" || value === "") {
+                        // Limpar seleções
+                        form.setValue("technicianId", undefined);
+                        form.setValue("teamId", undefined);
+                        console.log("🔄 [DEBUG] FindDate - Limpando seleções");
+                      } else if (value.startsWith('tech-')) {
+                        // É um técnico
+                        const technicianId = parseInt(value.split('-')[1]);
+                        console.log("🔄 [DEBUG] FindDate - Técnico selecionado ID:", technicianId);
+                        form.setValue("technicianId", technicianId);
+                        form.setValue("teamId", undefined);
+                      } else if (value.startsWith('team-')) {
+                        // É uma equipe
+                        const teamId = parseInt(value.split('-')[1]);
+                        console.log("🔄 [DEBUG] FindDate - Equipe selecionada ID:", teamId);
+                        form.setValue("teamId", teamId);
+                        form.setValue("technicianId", undefined);
+                      }
+                    }}
+                    disabled={isLoadingTechnicians || isLoadingTeams}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={
+                        (isLoadingTechnicians || isLoadingTeams) ? "Carregando..." :
+                          (errorTechnicians || errorTeams) ? "Erro ao carregar" :
+                            "Qualquer técnico/equipe"
+                      } />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(isLoadingTechnicians || isLoadingTeams) ? (
+                        <SelectItem value="loading" disabled>
+                          Carregando...
+                        </SelectItem>
+                      ) : (errorTechnicians || errorTeams) ? (
+                        <SelectItem value="error" disabled>
+                          Erro ao carregar dados
+                        </SelectItem>
+                      ) : (
+                        <>
+                          <SelectItem value="0">Qualquer técnico/equipe</SelectItem>
+                          {technicians.map((technician) => (
+                            <SelectItem key={`tech-${technician.id}`} value={`tech-${technician.id}`}>
+                              👤 {technician.name}
+                            </SelectItem>
+                          ))}
+                          {teams.map((team) => (
+                            <SelectItem key={`team-${team.id}`} value={`team-${team.id}`}>
+                              👥 {team.name}
+                            </SelectItem>
+                          ))}
+                          {technicians.length === 0 && teams.length === 0 && (
+                            <SelectItem value="none" disabled>
+                              Nenhum técnico ou equipe cadastrado
+                            </SelectItem>
+                          )}
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {(errorTechnicians || errorTeams) && (
+                    <p className="text-sm text-red-500">Erro ao carregar técnicos/equipes.</p>
+                  )}
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full bg-burnt-yellow hover:bg-burnt-yellow/90 transition-all duration-300"
+                disabled={isSearching}
+              >
+                {isSearching ? (
+                  <>
+                    <span className="animate-pulse">Procurando datas...</span>
+                    <Search className="ml-2 h-4 w-4 animate-spin" />
+                  </>
+                ) : (
+                  <>
+                    Buscar datas
+                    <Search className="ml-2 h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        )}
       </Card>
 
       {searchResults.length > 0 && (
-        <Card>
+        <Card className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           <CardHeader>
             <CardTitle>Datas disponíveis</CardTitle>
             <CardDescription>
@@ -615,8 +642,8 @@ export default function FindDate() {
         </Card>
       )}
 
-      {searchResults.length === 0 && searchDatesMutation.isSuccess && (
-        <Card>
+      {searchResults.length === 0 && searchDatesMutation.isSuccess && !isSearching && (
+        <Card className="animate-in fade-in duration-300">
           <CardContent className="text-center py-8">
             <p className="text-gray-500">
               Nenhuma data disponível foi encontrada para os critérios informados.
@@ -624,6 +651,13 @@ export default function FindDate() {
             <p className="text-sm text-gray-400 mt-2">
               Tente expandir a área de busca ou selecionar outro serviço.
             </p>
+            <Button
+              variant="link"
+              onClick={() => setIsFiltersCollapsed(false)}
+              className="mt-4"
+            >
+              Modificar filtros
+            </Button>
           </CardContent>
         </Card>
       )}

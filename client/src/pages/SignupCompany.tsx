@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signupCompanySchema, type SignupCompanyData } from "@shared/schema";
+import InputMask from "react-input-mask";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -170,11 +171,18 @@ export default function SignupCompany() {
 
                   <div>
                     <Label htmlFor="company.cnpj">CNPJ *</Label>
-                    <Input
-                      id="company.cnpj"
+                    <InputMask
+                      mask="99.999.999/9999-99"
                       {...register("company.cnpj")}
-                      placeholder="00.000.000/0000-00"
-                    />
+                    >
+                      {(inputProps: any) => (
+                        <Input
+                          {...inputProps}
+                          id="company.cnpj"
+                          placeholder="00.000.000/0000-00"
+                        />
+                      )}
+                    </InputMask>
                     {errors.company?.cnpj && (
                       <p className="text-sm text-red-500 mt-1">{errors.company.cnpj.message}</p>
                     )}
@@ -182,11 +190,18 @@ export default function SignupCompany() {
 
                   <div>
                     <Label htmlFor="company.telefone">Telefone (WhatsApp) *</Label>
-                    <Input
-                      id="company.telefone"
+                    <InputMask
+                      mask="(99) 99999-9999"
                       {...register("company.telefone")}
-                      placeholder="(00) 00000-0000"
-                    />
+                    >
+                      {(inputProps: any) => (
+                        <Input
+                          {...inputProps}
+                          id="company.telefone"
+                          placeholder="(00) 00000-0000"
+                        />
+                      )}
+                    </InputMask>
                     {errors.company?.telefone && (
                       <p className="text-sm text-red-500 mt-1">{errors.company.telefone.message}</p>
                     )}
@@ -214,12 +229,19 @@ export default function SignupCompany() {
                   <div className="grid md:grid-cols-3 gap-4">
                     <div>
                       <Label htmlFor="company.cep">CEP *</Label>
-                      <Input
-                        id="company.cep"
+                      <InputMask
+                        mask="99999-999"
                         {...register("company.cep")}
-                        placeholder="00000-000"
                         onBlur={(e) => handleCepBlur(e.target.value)}
-                      />
+                      >
+                        {(inputProps: any) => (
+                          <Input
+                            {...inputProps}
+                            id="company.cep"
+                            placeholder="00000-000"
+                          />
+                        )}
+                      </InputMask>
                       {errors.company?.cep && (
                         <p className="text-sm text-red-500 mt-1">{errors.company.cep.message}</p>
                       )}
@@ -318,11 +340,18 @@ export default function SignupCompany() {
 
                   <div>
                     <Label htmlFor="admin.phone">Telefone (WhatsApp) *</Label>
-                    <Input
-                      id="admin.phone"
+                    <InputMask
+                      mask="(99) 99999-9999"
                       {...register("admin.phone")}
-                      placeholder="(00) 00000-0000"
-                    />
+                    >
+                      {(inputProps: any) => (
+                        <Input
+                          {...inputProps}
+                          id="admin.phone"
+                          placeholder="(00) 00000-0000"
+                        />
+                      )}
+                    </InputMask>
                     {errors.admin?.phone && (
                       <p className="text-sm text-red-500 mt-1">{errors.admin.phone.message}</p>
                     )}

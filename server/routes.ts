@@ -6,6 +6,7 @@ import crypto from "node:crypto"; // para randomUUID
 import { db } from "./db"; // ajuste o caminho se o seu db estiver noutro arquivo
 import { routes, routeStops, appointments, clients, dailyAvailability } from "@shared/schema";
 import { eq, inArray, sql, and, or } from "drizzle-orm";
+import { format } from "date-fns";
 import {
   insertUserSchema, loginSchema, insertClientSchema, insertServiceSchema,
   insertTechnicianSchema, insertVehicleSchema, insertAppointmentSchema,
@@ -217,6 +218,267 @@ function sleep(ms: number) {
 // ================================================================
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // ==================== PROVIDER ROUTES ====================
+
+  // 1. Obter rota ativa do prestador (Hoje)
+  app.get("/api/provider/route", authenticateToken, async (req: any, res) => {
+    try {
+      const dateParam = req.query.date ? new Date(req.query.date) : new Date();
+      let route;
+
+      // Se passar routeId (admin selecionando rota específica)
+      if (req.query.routeId) {
+        const routeId = req.query.routeId as string;
+        // Verifica permissão: admin ou dono da rota
+        const [targetRoute] = await db.select().from(routes).where(eq(routes.id, routeId));
+
+        if (targetRoute) {
+          // Se não for admin e não for o dono, nega
+          if (req.user.role !== 'admin' && targetRoute.userId !== req.user.userId) {
+            return res.status(403).json({ message: "Acesso negado a esta rota" });
+          }
+          route = targetRoute;
+        }
+      } else {
+        // Comportamento padrão: busca rota ativa do usuário
+        let targetUserId = req.user.userId;
+        // Se for admin e passar userId, permite ver rota de outro usuário (mantendo compatibilidade com o plano anterior)
+        if (req.query.userId && req.user.role === 'admin') {
+          targetUserId = parseInt(req.query.userId as string);
+        }
+        route = await storage.getProviderActiveRoute(targetUserId, dateParam);
+      }
+
+      if (!route) {
+        console.log(`🚚 [PROVIDER] Nenhuma rota encontrada`);
+        return res.json(null); // Retorna null se não tiver rota, front trata
+      }
+
+      console.log(`🚚 [PROVIDER] Rota encontrada: ${route.id} - ${route.title}`);
+
+      // Buscar paradas (agendamentos) da rota
+      // Precisamos buscar os routeStops e depois os appointments completos
+      // Como não temos um método direto "getRouteStopsWithAppointments", vamos fazer em duas etapas ou adicionar no storage
+      // Por simplicidade, vamos buscar os routeStops e depois os appointments
+
+      // Nota: Idealmente isso estaria no storage, mas vamos compor aqui para não alterar demais o storage agora
+      const allRouteStops = await db
+        .select()
+        .from(routeStops)
+        .where(eq(routeStops.routeId, route.id))
+        .orderBy(routeStops.order);
+
+      const appointmentIds = allRouteStops.map(rs => rs.appointmentId);
+
+      // Buscar detalhes dos agendamentos
+      // Drizzle `inArray` precisa de array não vazio
+      let appointmentsList: any[] = [];
+      if (appointmentIds.length > 0) {
+        // Precisamos fazer cast para array de strings uuid se for o caso, ou number
+        // O schema diz que appointmentId em routeStops é uuid, mas appointments.id é serial (number)
+        // O campo appointmentNumericId em routeStops parece ser o link correto para appointments.id (number)
+
+        const numericIds = allRouteStops
+          .map(rs => rs.appointmentNumericId)
+          .filter((id): id is number => id !== null);
+
+        if (numericIds.length > 0) {
+          appointmentsList = await db
+            .select()
+            .from(appointments)
+            .where(inArray(appointments.id, numericIds));
+        }
+      }
+
+      // Combinar dados: RouteStop + Appointment + Client + Service
+      const stopsWithDetails = await Promise.all(allRouteStops.map(async (stop) => {
+        const apt = appointmentsList.find(a => a.id === stop.appointmentNumericId);
+        if (!apt) return { ...stop, appointment: null };
+
+        const client = await storage.getClient(apt.clientId, apt.userId); // Pode falhar se userId for diferente, mas em tese é da mesma empresa
+        const service = await storage.getService(apt.serviceId, apt.userId);
+
+        return {
+          ...stop,
+          appointment: {
+            ...apt,
+            clientName: client?.name || "Cliente não encontrado",
+            serviceName: service?.name || "Serviço não encontrado",
+            serviceDuration: service?.duration || 0,
+          }
+        };
+      }));
+
+      res.json({
+        route,
+        stops: stopsWithDetails,
+        summary: {
+          totalStops: route.stopsCount,
+          completedStops: appointmentsList.filter(a => a.status === 'completed').length,
+          pendingStops: appointmentsList.filter(a => a.status === 'scheduled' || a.status === 'in_progress').length
+        }
+      });
+
+    } catch (error: any) {
+      console.error("❌ [PROVIDER] Erro ao buscar rota:", error);
+      res.status(500).json({ message: error.message });
+    }
+
+  });
+
+  // 1.1 Listar prestadores com rotas ativas hoje (apenas admin)
+  app.get("/api/provider/active-today", authenticateToken, async (req: any, res) => {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Acesso negado" });
+    }
+
+    try {
+      const dateParam = req.query.date ? new Date(req.query.date) : new Date();
+      console.log(`🔍 [PROVIDER] Buscando rotas ativas para data: ${dateParam.toISOString()} (User: ${req.user.userId}, Role: ${req.user.role})`);
+
+      // Buscar todas as rotas do dia que estão confirmadas ou finalizadas (não mostra rascunhos)
+      const activeRoutesWithId = await db
+        .select({
+          id: routes.id,
+          userId: routes.userId,
+          responsibleId: routes.responsibleId,
+          responsibleType: routes.responsibleType,
+          title: routes.title,
+          status: routes.status
+        })
+        .from(routes)
+        .where(and(
+          sql`DATE(${routes.date}) = DATE(${format(dateParam, "yyyy-MM-dd")})`,
+          or(
+            eq(routes.status, 'confirmado'),
+            eq(routes.status, 'finalizado')
+          )
+        ));
+
+      console.log(`🔍 [PROVIDER] Rotas encontradas: ${activeRoutesWithId.length}`);
+
+      const result = await Promise.all(activeRoutesWithId.map(async (r) => {
+        let name = "Desconhecido";
+        if (r.responsibleType === 'technician') {
+          const tech = await storage.getTechnician(Number(r.responsibleId), req.user.userId);
+          if (tech) name = tech.name;
+        } else if (r.responsibleType === 'team') {
+          const team = await storage.getTeam(Number(r.responsibleId), req.user.userId);
+          if (team) name = team.name;
+        }
+
+        return {
+          id: r.id,
+          title: r.title,
+          responsibleName: name,
+          status: r.status
+        };
+      }));
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("❌ [PROVIDER] Erro ao listar prestadores ativos:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+  app.put("/api/provider/appointments/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { status, feedback, photos, signature, executionStatus, executionNotes } = req.body;
+
+      // 🔒 Validar se a rota pai já está finalizada
+      const appointmentStops = await db.select().from(routeStops).where(eq(routeStops.appointmentNumericId, id));
+
+      // Se houver múltiplas rotas (raro), verifica todas. Se alguma estiver finalizada, bloqueia.
+      for (const stop of appointmentStops) {
+        const [r] = await db.select().from(routes).where(eq(routes.id, stop.routeId));
+        if (r && ['finalizado', 'cancelado', 'incompleto'].includes(r.status)) {
+          return res.status(400).json({ message: "Não é possível editar um agendamento de uma rota já finalizada." });
+        }
+      }
+
+      console.log(`🔧 [PROVIDER] Atualizando agendamento ${id}:`, { status, executionStatus });
+
+      const updated = await storage.updateAppointmentExecution(id, {
+        status,
+        feedback,
+        photos,
+        signature,
+        executionStatus,
+        executionNotes
+      }, req.user.userId);
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("❌ [PROVIDER] Erro ao atualizar agendamento:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // 3. Finalizar rota
+  app.post("/api/provider/route/:id/finalize", authenticateToken, async (req: any, res) => {
+    try {
+      const { id } = req.params; // UUID
+      const { status, motivo } = req.body; // status: finalizado, incompleto, cancelado
+
+      console.log(`🏁 [PROVIDER] Finalizando rota ${id} com status ${status}`);
+
+      // Validar status permitido
+      if (!['finalizado', 'incompleto', 'cancelado'].includes(status)) {
+        return res.status(400).json({ message: "Status inválido para finalização" });
+      }
+
+      // 🔒 VALIDAÇÃO: Todos os agendamentos devem ter execution_status preenchido
+      // (Exceto se a rota estiver sendo CANCELADA inteira? O usuário pediu para não deixar finalizar rota se algum ficar sem status.
+      // Vou assumir que para "finalizado" e "incompleto" precisa verificar. Para "cancelado" talvez não, mas por segurança vou exigir em todos,
+      // pois "cancelado" na rota também implica um estado final.)
+
+      const stops = await db.select().from(routeStops).where(eq(routeStops.routeId, id));
+      const appointmentIds = stops
+        .map(s => s.appointmentNumericId)
+        .filter((id): id is number => id !== null);
+
+      if (appointmentIds.length > 0) {
+        const apts = await db.select().from(appointments).where(inArray(appointments.id, appointmentIds));
+        // Verifica se algum NÃO tem executionStatus
+        const missingStatus = apts.filter(a => !a.executionStatus || a.executionStatus.trim() === '');
+
+        if (missingStatus.length > 0) {
+          return res.status(400).json({
+            message: "Existem atendimentos pendentes de registro. Informe o status de execução de todos antes de encerrar a rota.",
+            missingCount: missingStatus.length
+          });
+        }
+      }
+
+      const route = await storage.finalizeRoute(id, status, req.user.userId);
+
+      if (motivo) {
+        console.log(`📝 [PROVIDER] Motivo da finalização: ${motivo}`);
+        // Se quiser salvar motivo na rota, precisaria de coluna "notes" na tabela routes
+        // Como não foi pedido explicitamente create column, deixamos logado
+      }
+
+      res.json(route);
+    } catch (error: any) {
+      console.error("❌ [PROVIDER] Erro ao finalizar rota:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // 4. Listar pendências (agendamentos não concluídos de rotas finalizadas)
+  app.get("/api/pending-appointments", authenticateToken, async (req: any, res) => {
+    try {
+      console.log(`📋 [PENDING API] Requisição recebida de userId: ${req.user.userId}`);
+      const pendencias = await storage.getPendingAppointments(req.user.userId);
+      console.log(`📋 [PENDING API] Retornando ${pendencias.length} pendências`);
+      res.json(pendencias);
+    } catch (error: any) {
+      console.error("❌ [PENDING] Erro ao listar pendências:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Endpoint para gerar matriz do OSRM
   app.post('/api/rota/matrix', async (req, res) => {
     console.log("==== LOG INÍCIO: /api/rota/matrix ====");
@@ -712,8 +974,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Clients routes
   app.get("/api/clients", authenticateToken, async (req: any, res) => {
     try {
-      const clients = await storage.getClients(req.user.userId);
-      res.json(clients);
+      // Se não houver parâmetros de paginação, retorna todos os clientes (compatibilidade)
+      if (!req.query.page && !req.query.limit) {
+        const result = await storage.getAllClients(req.user.userId);
+        return res.json(result);
+      }
+
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const result = await storage.getClients(req.user.userId, page, limit);
+      res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -722,12 +992,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/clients/search", authenticateToken, async (req: any, res) => {
     try {
       const { q } = req.query;
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+
       if (!q || typeof q !== 'string') {
-        return res.json([]);
+        // Se não tiver query, retorna lista vazia ou paginada vazia
+        return res.json({ data: [], total: 0 });
       }
 
-      const clients = await storage.searchClients(q.trim(), req.user.userId);
-      res.json(clients);
+      const result = await storage.searchClients(q.trim(), req.user.userId, page, limit);
+      res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

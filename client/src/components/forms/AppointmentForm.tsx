@@ -33,18 +33,18 @@ interface AppointmentFormProps {
   } | null;
 }
 
-export default function AppointmentForm({ 
-  appointment, 
-  clients, 
-  services, 
-  technicians, 
+export default function AppointmentForm({
+  appointment,
+  clients,
+  services,
+  technicians,
   teams,
   onClose,
-  prefilledData 
+  prefilledData
 }: AppointmentFormProps) {
   console.log("📝 [DEBUG] AppointmentForm - prefilledData:", prefilledData);
   console.log("📝 [DEBUG] AppointmentForm - appointment:", appointment);
-  
+
   const [selectedClient, setSelectedClient] = useState<number | null>(
     appointment?.clientId || (prefilledData?.clientId ? parseInt(prefilledData.clientId) : null)
   );
@@ -52,7 +52,7 @@ export default function AppointmentForm({
   const [isAllDay, setIsAllDay] = useState(appointment?.allDay || false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   // Verificar se o formulário foi aberto a partir do fluxo "Ache uma Data"
   const isFromFindDate = !!prefilledData && !appointment;
   console.log("📝 [DEBUG] AppointmentForm - isFromFindDate:", isFromFindDate);
@@ -91,14 +91,14 @@ export default function AppointmentForm({
       priority: "normal",
       notes: "",
       cep: prefilledData.cep || "",
-      logradouro: prefilledData.clientId ? 
+      logradouro: prefilledData.clientId ?
         (clients.find(c => c.id === parseInt(prefilledData.clientId!))?.logradouro || "") : "",
       numero: prefilledData.numero || "",
-      complemento: prefilledData.clientId ? 
+      complemento: prefilledData.clientId ?
         (clients.find(c => c.id === parseInt(prefilledData.clientId!))?.complemento || "") : "",
-      bairro: prefilledData.clientId ? 
+      bairro: prefilledData.clientId ?
         (clients.find(c => c.id === parseInt(prefilledData.clientId!))?.bairro || "Não informado") : "Não informado",
-      cidade: prefilledData.clientId ? 
+      cidade: prefilledData.clientId ?
         (clients.find(c => c.id === parseInt(prefilledData.clientId!))?.cidade || "Não informado") : "Não informado",
     } : {
       clientId: 0,
@@ -118,10 +118,10 @@ export default function AppointmentForm({
       cidade: "Não informado",
     },
   });
-  
+
   const selectedServiceId = form.watch("serviceId");
   const selectedService = services.find((s) => s.id === selectedServiceId);
-  
+
   // Effect to update address fields whenever the selected client changes or clients data is updated
   useEffect(() => {
     if (selectedClient && appointment) {
@@ -217,15 +217,15 @@ export default function AppointmentForm({
     const scheduledDate = form.watch('scheduledDate');
     const technicianId = form.watch('technicianId');
     const teamId = form.watch('teamId');
-    
+
     if (!scheduledDate) return null;
-    
+
     const date = new Date(scheduledDate);
     const dayOfWeek = date.getDay(); // 0 = domingo, 1 = segunda, ..., 6 = sábado
     const dayNames = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
     const dayName = dayNames[dayOfWeek];
     const dayNameDisplay = dayName.charAt(0).toUpperCase() + dayName.slice(1);
-    
+
     // Verificar técnico
     if (technicianId) {
       const technician = technicians.find(t => t.id === technicianId);
@@ -241,7 +241,7 @@ export default function AppointmentForm({
         }
       }
     }
-    
+
     // Verificar equipe
     if (teamId) {
       const team = teams.find(t => t.id === teamId);
@@ -257,14 +257,14 @@ export default function AppointmentForm({
         }
       }
     }
-    
+
     return null;
   }, [form.watch('scheduledDate'), form.watch('technicianId'), form.watch('teamId'), technicians, teams]);
 
   const onSubmit = (data: InsertAppointment) => {
     console.log("📝 [DEBUG] onSubmit - Dados recebidos do form:", data);
     console.log("📝 [DEBUG] onSubmit - Tipo de scheduledDate:", typeof data.scheduledDate, data.scheduledDate);
-    
+
     // Convert scheduledDate to Date object for the mutations
     let processedDate;
     try {
@@ -275,7 +275,7 @@ export default function AppointmentForm({
         processedDate = new Date(data.scheduledDate);
         console.log("📝 [DEBUG] onSubmit - scheduledDate convertido para Date:", processedDate);
       }
-      
+
       // Verificar se a data é válida
       if (isNaN(processedDate.getTime())) {
         throw new Error(`Data inválida: ${data.scheduledDate}`);
@@ -289,12 +289,12 @@ export default function AppointmentForm({
       });
       return;
     }
-    
+
     const formData = {
       ...data,
       scheduledDate: processedDate
     };
-    
+
     // Ensure proper handling of technician vs team assignment
     if (formData.teamId) {
       // If teamId is set, clear technicianId to avoid foreign key conflicts
@@ -305,9 +305,9 @@ export default function AppointmentForm({
       formData.teamId = undefined;
       console.log("📝 [DEBUG] onSubmit - Usando técnico, teamId limpo");
     }
-    
+
     console.log("📝 [DEBUG] onSubmit - Dados finais para envio:", formData);
-    
+
     if (appointment) {
       console.log("📝 [DEBUG] onSubmit - Atualizando agendamento ID:", appointment.id);
       updateMutation.mutate(formData);
@@ -346,13 +346,13 @@ export default function AppointmentForm({
   const handleClientUpdated = async () => {
     // Close the edit client dialog first
     setIsEditClientOpen(false);
-    
+
     // Invalidate clients query to get updated data
     await queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
-    
+
     // Force refetch of clients data to get the latest information
     await queryClient.refetchQueries({ queryKey: ['/api/clients'] });
-    
+
     // Update address fields with the updated client data
     if (selectedClient) {
       // Wait a bit longer to ensure the query has completed
@@ -459,12 +459,12 @@ export default function AppointmentForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Serviço *</FormLabel>
-                  <Select 
+                  <Select
                     onValueChange={(value) => {
                       if (!isFromFindDate && !isReadOnly) {
                         field.onChange(parseInt(value));
                       }
-                    }} 
+                    }}
                     value={field.value?.toString()}
                     disabled={isFromFindDate || isReadOnly}
                   >
@@ -501,11 +501,11 @@ export default function AppointmentForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Técnico/Equipe *</FormLabel>
-                  <Select 
+                  <Select
                     onValueChange={(value) => {
                       if (!isFromFindDate && !isReadOnly) {
                         console.log("Seleção alterada para:", value);
-                        
+
                         if (value.startsWith('tech-')) {
                           // É um técnico
                           const technicianId = parseInt(value.split('-')[1]);
@@ -522,10 +522,10 @@ export default function AppointmentForm({
                           form.setValue("teamId", teamId);
                         }
                       }
-                    }} 
+                    }}
                     value={
-                      field.value ? `tech-${field.value}` : 
-                      form.getValues("teamId") ? `team-${form.getValues("teamId")}` : ""
+                      field.value ? `tech-${field.value}` :
+                        form.getValues("teamId") ? `team-${form.getValues("teamId")}` : ""
                     }
                     disabled={isFromFindDate || isReadOnly}
                   >
@@ -568,12 +568,22 @@ export default function AppointmentForm({
                     <Input
                       type={isAllDay ? "date" : "datetime-local"}
                       {...field}
-                      value={field.value ? 
-                        (isAllDay ? 
-                          new Date(field.value.getTime() - field.value.getTimezoneOffset() * 60000).toISOString().slice(0, 10) :
+                      value={field.value ?
+                        (isAllDay ?
+                          // Para "dia todo", usar a data local sem ajuste de timezone
+                          `${field.value.getFullYear()}-${String(field.value.getMonth() + 1).padStart(2, '0')}-${String(field.value.getDate()).padStart(2, '0')}` :
+                          // Para horário específico, aplicar ajuste de timezone
                           new Date(field.value.getTime() - field.value.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
                         ) : ""}
-                      onChange={(e) => field.onChange(new Date(e.target.value))}
+                      onChange={(e) => {
+                        if (isAllDay) {
+                          // Para "dia todo", criar data às 12:00 do dia local para evitar problemas de timezone
+                          const [year, month, day] = e.target.value.split('-').map(Number);
+                          field.onChange(new Date(year, month - 1, day, 12, 0, 0));
+                        } else {
+                          field.onChange(new Date(e.target.value));
+                        }
+                      }}
                       disabled={!!prefilledData?.date || isReadOnly}
                     />
                   </FormControl>
@@ -659,7 +669,7 @@ export default function AppointmentForm({
                 </p>
               </div>
             )}
-            
+
             <div className="grid gap-4 md:grid-cols-2">
               <FormField
                 control={form.control}
@@ -732,9 +742,9 @@ export default function AppointmentForm({
                   <FormItem>
                     <FormLabel>Logradouro *</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="Rua das Flores" 
-                        {...field} 
+                      <Input
+                        placeholder="Rua das Flores"
+                        {...field}
                         onClick={appointment ? handleAddressFieldClick : undefined}
                         disabled={isFromFindDate || !!appointment || isReadOnly}
                         readOnly={!!appointment || isReadOnly}
@@ -756,10 +766,10 @@ export default function AppointmentForm({
                   <FormItem>
                     <FormLabel>Complemento</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="Apto 123" 
-                        {...field} 
-                        value={field.value || ""} 
+                      <Input
+                        placeholder="Apto 123"
+                        {...field}
+                        value={field.value || ""}
                         onClick={appointment ? handleAddressFieldClick : undefined}
                         disabled={isFromFindDate || !!appointment || isReadOnly}
                         readOnly={!!appointment || isReadOnly}
@@ -781,10 +791,10 @@ export default function AppointmentForm({
                   <FormItem>
                     <FormLabel>Bairro *</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="Centro" 
-                        {...field} 
-                        value={field.value || ""} 
+                      <Input
+                        placeholder="Centro"
+                        {...field}
+                        value={field.value || ""}
                         onClick={appointment ? handleAddressFieldClick : undefined}
                         disabled={isFromFindDate || !!appointment || isReadOnly}
                         readOnly={!!appointment || isReadOnly}
@@ -806,10 +816,10 @@ export default function AppointmentForm({
                   <FormItem>
                     <FormLabel>Cidade *</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="São Paulo" 
-                        {...field} 
-                        value={field.value || ""} 
+                      <Input
+                        placeholder="São Paulo"
+                        {...field}
+                        value={field.value || ""}
                         onClick={appointment ? handleAddressFieldClick : undefined}
                         disabled={isFromFindDate || !!appointment || isReadOnly}
                         readOnly={!!appointment || isReadOnly}

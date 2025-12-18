@@ -18,7 +18,8 @@ import {
   Shield,
   Clock,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Truck
 } from "lucide-react";
 import {
   Tooltip,
@@ -44,6 +45,7 @@ const navigation = [
   { name: "Veículos", href: "/vehicles", icon: Car },
   { name: "Serviços", href: "/services", icon: Wrench },
   { name: "Regras de Negócio", href: "/business-rules", icon: FileText },
+  { name: "Prestadores", href: "/prestadores", icon: Truck },
 ];
 
 export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCollapse }: SidebarProps) {
@@ -78,12 +80,12 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
 
       {/* Sidebar */}
       <div className={`
-        fixed inset-y-0 left-0 z-50 bg-white shadow-lg transform transition-all duration-300 ease-in-out
+        fixed inset-y-0 left-0 z-50 bg-white shadow-lg transform transition-all duration-300 ease-in-out flex flex-col
         ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
         ${isCollapsed ? 'w-20' : 'w-64'}
       `}>
         {/* Toggle Button (Desktop only) */}
-        <div className="hidden lg:block absolute -right-3 top-20">
+        <div className="hidden lg:block absolute -right-3 top-20 z-10">
           <Button
             variant="secondary"
             size="icon"
@@ -95,7 +97,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
         </div>
 
         {/* Header */}
-        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} h-16 bg-black px-4 transition-all duration-300`}>
+        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} h-16 bg-black px-4 transition-all duration-300 flex-shrink-0`}>
           <Link href="/dashboard">
             <div className="flex items-center space-x-2 cursor-pointer hover:opacity-80 transition-opacity">
               <img src={logoImg} alt="RotaFácil Logo" className="h-8 w-8" />
@@ -116,8 +118,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
           </Button>
         </div>
 
-        {/* Navigation */}
-        <nav className="mt-8 px-3">
+        {/* Navigation - Scrollable Area */}
+        <nav className="flex-1 overflow-y-auto mt-8 px-3 pb-4">
           <ul className="space-y-2">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -181,8 +183,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
           )}
         </nav>
 
-        {/* User info */}
-        <div className={`absolute bottom-0 w-full p-4 border-t border-gray-200 bg-white ${isCollapsed ? 'flex justify-center' : ''}`}>
+        {/* User info - Fixed at bottom */}
+        <div className={`p-4 border-t border-gray-200 bg-white flex-shrink-0 ${isCollapsed ? 'flex justify-center' : ''}`}>
           <div className="flex items-center w-full">
             <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
               <span className="text-sm font-medium text-gray-600">

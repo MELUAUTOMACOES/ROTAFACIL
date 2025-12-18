@@ -6,6 +6,7 @@ import { apiRequest } from "@/lib/queryClient"; // você já usa no VehicleForm
 import { getAuthHeaders } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,14 +18,14 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import OptimizedRouteMap from "@/components/maps/OptimizedRouteMap";
 import RouteAuditModal from "@/components/RouteAuditModal";
-import { 
-  History, 
-  Search, 
-  Filter, 
-  Car, 
-  User, 
-  MapPin, 
-  Clock, 
+import {
+  History,
+  Search,
+  Filter,
+  Car,
+  User,
+  MapPin,
+  Clock,
   Route as RouteIcon,   // ⬅ renomeado
   Navigation,
   Download,
@@ -32,6 +33,9 @@ import {
   Wand2, // Adicionado
   X,
   GripVertical,
+  ChevronLeft,
+  ChevronRight,
+  Truck,
   Loader2,
   FileText
 } from 'lucide-react';
@@ -119,7 +123,7 @@ const joinParts = (...parts: (string | number | undefined | null)[]) =>
 
 const statusLabels = {
   draft: 'Rascunho',
-  confirmado: 'Confirmado', 
+  confirmado: 'Confirmado',
   finalizado: 'Finalizado',
   cancelado: 'Cancelado'
 };
@@ -129,6 +133,10 @@ const statusColors = {
   confirmado: 'bg-blue-100 text-blue-800',
   finalizado: 'bg-green-100 text-green-800',
   cancelado: 'bg-red-100 text-red-800'
+};
+
+const isRouteEditable = (status: string) => {
+  return status === 'draft' || status === 'confirmado';
 };
 
 // uuid "0000-...-0026" -> 26 (versão de front)
@@ -154,7 +162,7 @@ const displayStopName = (stop: any, appointments: any[], clients: any[]) => {
 
   if (Number.isFinite(apptIdNum)) {
     const appt = appointments.find(a => Number(a.id) === apptIdNum);
-    
+
     if (appt) {
       // a) já vem nome no appointment?
       if (appt?.client?.name) clientName = appt.client.name;
@@ -164,7 +172,7 @@ const displayStopName = (stop: any, appointments: any[], clients: any[]) => {
         const cli = clients.find((c: any) => String(c.id) === String(appt.clientId));
         if (cli?.name) clientName = cli.name;
       }
-      
+
       // Retorna nome + ID do agendamento
       if (clientName) return `${clientName} #${apptIdNum}`;
     }
@@ -172,7 +180,7 @@ const displayStopName = (stop: any, appointments: any[], clients: any[]) => {
 
   // fallback final (mas com label mais curta/legível)
   const raw = String(stop?.appointmentId ?? "");
-  return `Agendamento #${raw.length > 12 ? `${raw.slice(0,8)}…${raw.slice(-4)}` : raw}`;
+  return `Agendamento #${raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw}`;
 };
 
 
@@ -194,10 +202,13 @@ const fmtDate = (v?: string | number | Date | null) => {
 const fmtKm = (m?: number) => (m && m > 0 ? `${(m / 1000).toFixed(1)} km` : "—");
 const fmtMin = (s?: number) => (s && s > 0 ? `${Math.round(s / 60)} min` : "—");
 
-// mostra só a data em pt-BR
+// mostra só a data em pt-BR (com correção de timezone)
 const fmtDateList = (input: string | Date) => {
-  const d = typeof input === "string" ? new Date(input) : input;
-  return d.toLocaleDateString("pt-BR");
+  // Garante que pegamos apenas YYYY-MM-DD, seja string ISO ou Date
+  const dateStr = typeof input === 'string' ? input : input.toISOString();
+  const ymd = dateStr.split('T')[0];
+  // Adiciona meio-dia para evitar problemas de fuso horário
+  return new Date(ymd + 'T12:00:00').toLocaleDateString("pt-BR");
 };
 
 
@@ -206,13 +217,13 @@ export default function RoutesHistoryPage() {
     dateFrom: '',
     dateTo: '',
     selectedResponsible: 'all',
-    selectedVehicle: 'all', 
+    selectedVehicle: 'all',
     selectedStatus: 'all',
     searchTerm: ''
   });
 
   const [, setLocation] = useLocation();
-  
+
   // Capturar ID da rota da URL (/routes-history/:routeId)
   const [match, params] = useRoute("/routes-history/:routeId");
 
@@ -264,7 +275,7 @@ export default function RoutesHistoryPage() {
     if (match && params?.routeId && routesData.length > 0) {
       // Tentar converter para número (displayNumber)
       const displayNum = Number(params.routeId);
-      
+
       if (!isNaN(displayNum)) {
         // Buscar rota pelo displayNumber
         const routeExists = routesData.find(route => route.displayNumber === displayNum);
@@ -280,7 +291,7 @@ export default function RoutesHistoryPage() {
       }
       return;
     }
-    
+
     // Prioridade 2: Query string (?open=routeId) - para compatibilidade
     const urlParams = new URLSearchParams(window.location.search);
     const openRouteId = urlParams.get('open');
@@ -297,6 +308,35 @@ export default function RoutesHistoryPage() {
 
   console.log('✅ Página Histórico de Rotas carregada');
   console.log('🔍 [ROUTES HISTORY] Aplicando filtros:', filters);
+
+  // Query para pendências (agendamentos não concluídos de rotas finalizadas)
+  const { data: pendingAppointments = [], isLoading: isLoadingPending } = useQuery({
+    queryKey: ['/api/pending-appointments'],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/pending-appointments");
+      return res.json();
+    }
+  });
+
+  const getExecutionStatusColor = (status: string | null) => {
+    if (!status) return 'bg-gray-100 text-gray-800 border-gray-200';
+    if (status === 'concluido') return 'bg-green-100 text-green-800 border-green-200';
+    return 'bg-red-100 text-red-800 border-red-200';
+  };
+
+  const getExecutionStatusLabel = (status: string | null) => {
+    if (!status) return 'Pendente';
+    switch (status) {
+      case 'concluido': return 'Concluído';
+      case 'nao_realizado_cliente_ausente': return 'Ausente';
+      case 'nao_realizado_cliente_pediu_remarcacao': return 'Remarcar';
+      case 'nao_realizado_problema_tecnico': return 'Prob. Técnico';
+      case 'nao_realizado_endereco_incorreto': return 'End. Incorreto';
+      case 'nao_realizado_cliente_recusou': return 'Recusou';
+      case 'nao_realizado_outro': return 'Outro';
+      default: return 'Pendente';
+    }
+  };
 
   // Detalhe da rota selecionada
   const { data: routeDetail } = useQuery<RouteDetail>({
@@ -393,13 +433,13 @@ export default function RoutesHistoryPage() {
 
   // (opcional) debug
   console.log("[ADD-APPTS] disponíveis do back:", appointmentsAll?.length || 0,
-              "| fallback:", fallbackFromAll.length,
-              "| exibindo:", availableList.length);
+    "| fallback:", fallbackFromAll.length,
+    "| exibindo:", availableList.length);
 
   // Função para confirmar adição das paradas selecionadas
   const confirmAddStops = () => {
     if (!selectedRoute || selectedToAdd.length === 0) return;
-    
+
     const appointmentIds = selectedToAdd.map(id => String(id));
     addStopsMutation.mutate({
       routeId: selectedRoute,
@@ -446,6 +486,8 @@ export default function RoutesHistoryPage() {
       // Recarrega tanto o detalhe quanto a lista
       queryClient.invalidateQueries({ queryKey: ["/api/routes", selectedRoute] });
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+      // Invalida appointments para atualização instantânea na tela de agendamentos
+      queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
     },
     onError: (error: Error) => {
       toast({
@@ -503,6 +545,11 @@ export default function RoutesHistoryPage() {
       });
       queryClient.invalidateQueries({ queryKey: ['/api/routes', selectedRoute] });
       queryClient.invalidateQueries({ queryKey: ['/api/routes'] });
+      // Invalida appointments para atualização instantânea na tela de agendamentos
+      queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+      // Invalida provider active-today para atualização na tela de Prestadores
+      queryClient.invalidateQueries({ queryKey: ['/api/provider/active-today'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/provider/route'] });
     },
     onError: (error: Error) => {
       toast({
@@ -511,6 +558,30 @@ export default function RoutesHistoryPage() {
         variant: "destructive",
       });
     },
+  });
+
+  const updateRouteDateMutation = useMutation({
+    mutationFn: async ({ routeId, date }: { routeId: string; date: string }) => {
+      const res = await apiRequest("PATCH", `/api/routes/${routeId}/date`, { date });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/routes'] });
+      if (selectedRoute) {
+        queryClient.invalidateQueries({ queryKey: [`/api/routes/${selectedRoute}`] });
+      }
+      toast({
+        title: "Data atualizada",
+        description: "A data da rota foi alterada com sucesso.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro ao atualizar data",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   });
 
   // Função helper para verificar se a rota é editável baseado no status
@@ -564,10 +635,10 @@ export default function RoutesHistoryPage() {
   useEffect(() => {
     // Só atualiza se ainda não tem um localStart definido ou se mudou de rota
     if (!routeDetail?.route?.id) return;
-    
+
     const apiStart = (routeDetail as any)?.start;
     let newStart = null;
-    
+
     if (apiStart && Number.isFinite(Number(apiStart.lat)) && Number.isFinite(Number(apiStart.lng ?? apiStart.lon))) {
       newStart = { lat: Number(apiStart.lat), lon: Number(apiStart.lng ?? apiStart.lon) };
       console.log("🎯 [START UPDATE] Usando start do API:", newStart);
@@ -578,7 +649,7 @@ export default function RoutesHistoryPage() {
         console.log("🎯 [START UPDATE] Usando start calculado:", newStart);
       }
     }
-    
+
     // Só atualiza se realmente tem um novo valor válido
     if (newStart) {
       setLocalStart(newStart);
@@ -588,7 +659,7 @@ export default function RoutesHistoryPage() {
 
   // Flag de ordenação local
   const [isLocalReordered, setIsLocalReordered] = useState(false);
-  
+
   // Estado de loading para reordenação - usando useRef para persistir entre re-renders
   const [isReordering, setIsReordering] = useState(false);
   const reorderingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -601,7 +672,7 @@ export default function RoutesHistoryPage() {
       console.log("⚠️ [BLOCK] Bloqueando atualização de stopsUI durante reordenação");
       return;
     }
-    
+
     const sorted = (routeDetail?.stops || [])
       .slice()
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -609,12 +680,12 @@ export default function RoutesHistoryPage() {
     setIsLocalReordered(false); // <- sempre que vier algo do back (ex.: Otimizar), voltamos ao modo "servidor"
   }, [routeDetail?.stops]);
 
-  useEffect(() => { 
+  useEffect(() => {
     if (!isReorderingRef.current) {
       setIsLocalReordered(false);
     }
   }, [routeDetail?.route?.id]);
-  
+
   // Força atualização quando a rota é atualizada no backend
   useEffect(() => {
     // Só atualiza se NÃO está reordenando
@@ -623,7 +694,7 @@ export default function RoutesHistoryPage() {
       setMapVersion((v) => v + 1);
     }
   }, [routeDetail?.route?.updatedAt]);
-  
+
   // Limpa timeout ao desmontar
   useEffect(() => {
     return () => {
@@ -633,27 +704,27 @@ export default function RoutesHistoryPage() {
     };
   }, []);
 
-  
+
   // mutation para remover parada
   const removeStopMutation = useMutation({
-    mutationFn: async ({ routeId, stopId, appointmentId, clientName }: { 
-      routeId: string; 
+    mutationFn: async ({ routeId, stopId, appointmentId, clientName }: {
+      routeId: string;
       stopId: string;
       appointmentId?: number;
       clientName?: string | null;
     }) => {
-      const res = await fetch(`/api/routes/${routeId}/stops/${stopId}`, { 
+      const res = await fetch(`/api/routes/${routeId}/stops/${stopId}`, {
         method: "DELETE",
         headers: getAuthHeaders(),
       });
       const contentType = res.headers.get("content-type") || "";
       const payload = contentType.includes("application/json") ? await res.json() : await res.text();
-      
+
       if (!res.ok) {
         const msg = typeof payload === "string" ? payload : payload?.message || "Falha ao remover";
         throw new Error(msg);
       }
-      
+
       return { ...payload, routeId, stopId, appointmentId, clientName };
     },
     onSuccess: (payload) => {
@@ -680,6 +751,8 @@ export default function RoutesHistoryPage() {
       // recarrega detalhe da rota e listagem
       queryClient.invalidateQueries({ queryKey: ["/api/routes", selectedRoute] });
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+      // Invalida appointments para atualização instantânea na tela de agendamentos
+      queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
     },
     onError: (err: any) => {
       toast({
@@ -720,7 +793,7 @@ export default function RoutesHistoryPage() {
     },
     onSuccess: (data) => {
       console.log("✨ [REORDER SUCCESS] Resposta do backend:", data);
-      
+
       // Se o backend retornou o ponto inicial, atualizar o estado local
       if (data?.start) {
         setLocalStart({
@@ -729,10 +802,10 @@ export default function RoutesHistoryPage() {
         });
         console.log("📍 [REORDER SUCCESS] Ponto inicial atualizado:", data.start);
       }
-      
+
       // força voltar ao modo "servidor" para usar dados corretos do backend
       setIsLocalReordered(false);
-      
+
       // Aguarda um pouco antes de invalidar para evitar multiplos re-renders
       // TIMEOUT ÚNICO de 2500ms total
       reorderingTimeoutRef.current = setTimeout(() => {
@@ -740,7 +813,7 @@ export default function RoutesHistoryPage() {
         // Invalida apenas uma vez
         queryClient.invalidateQueries({ queryKey: ['/api/routes', selectedRoute] });
         setMapVersion((v) => v + 1);
-        
+
         // Remove o loading após garantir que tudo foi atualizado
         isReorderingRef.current = false;
         setIsReordering(false);
@@ -870,7 +943,7 @@ export default function RoutesHistoryPage() {
       (route.responsibleType === "team"
         ? vehicles.find((v: any) => v.teamId === Number(route.responsibleId))?.id
         : vehicles.find((v: any) => v.technicianId === Number(route.responsibleId))?.id);
-    
+
     return formatVehicle(getVehicleById(fallbackVehicleId));
   };
 
@@ -996,7 +1069,7 @@ export default function RoutesHistoryPage() {
       const orderedStops = [...(routeDetail.stops || [])].sort(
         (a, b) => (a.order ?? 0) - (b.order ?? 0)
       );
-      
+
       const stopAddresses = orderedStops
         .map((s) => {
           const addr = (s.address || "").trim();
@@ -1051,12 +1124,12 @@ export default function RoutesHistoryPage() {
 
       // 4. Capturar mapa como imagem - usando dom-to-image-more para melhor precisão
       let mapImageDataUrl = "";
-      
+
       const mapContainer = document.querySelector('.leaflet-container') as HTMLElement;
       if (mapContainer) {
         // Aguardar que todos os tiles e elementos do mapa estejam carregados
         await new Promise(resolve => setTimeout(resolve, 2000));
-        
+
         // Forçar invalidação do tamanho do mapa para garantir renderização correta
         try {
           const mapInstance = (mapContainer as any)._leaflet_map;
@@ -1067,7 +1140,7 @@ export default function RoutesHistoryPage() {
         } catch (e) {
           console.warn('Não foi possível invalidar o tamanho do mapa:', e);
         }
-        
+
         try {
           // dom-to-image-more lida melhor com CSS transforms do Leaflet
           const dataUrl = await domtoimage.toPng(mapContainer, {
@@ -1081,18 +1154,18 @@ export default function RoutesHistoryPage() {
               // Filtrar controles do Leaflet
               if (node.classList) {
                 return !node.classList.contains('leaflet-control-container') &&
-                       !node.classList.contains('leaflet-control-attribution') &&
-                       !node.classList.contains('leaflet-control-zoom');
+                  !node.classList.contains('leaflet-control-attribution') &&
+                  !node.classList.contains('leaflet-control-zoom');
               }
               return true;
             },
           });
           mapImageDataUrl = dataUrl;
-          
+
           console.log('✅ Mapa capturado com sucesso usando dom-to-image-more');
         } catch (error) {
           console.error('Erro ao capturar mapa com dom-to-image-more, tentando html2canvas:', error);
-          
+
           // Fallback para html2canvas se dom-to-image falhar
           try {
             const canvas = await html2canvas(mapContainer, {
@@ -1103,7 +1176,7 @@ export default function RoutesHistoryPage() {
               logging: false,
               ignoreElements: (element) => {
                 return element.classList?.contains('leaflet-control-container') ||
-                       element.classList?.contains('leaflet-control-attribution');
+                  element.classList?.contains('leaflet-control-attribution');
               },
             });
             mapImageDataUrl = canvas.toDataURL('image/png', 1.0);
@@ -1147,7 +1220,7 @@ export default function RoutesHistoryPage() {
       pdf.setFontSize(24);
       pdf.setTextColor(255, 255, 255);
       pdf.text('Rota Fácil', logoDataUrl ? margin + 20 : margin, 18);
-      
+
       pdf.setFontSize(12);
       pdf.setTextColor(255, 255, 255);
       pdf.text('Relatório de Rota', logoDataUrl ? margin + 20 : margin, 26);
@@ -1166,11 +1239,11 @@ export default function RoutesHistoryPage() {
       pdf.setFillColor(250, 250, 250);
       const cardHeight = 50;
       pdf.roundedRect(margin, yPosition, pageWidth - 2 * margin, cardHeight, 3, 3, 'F');
-      
+
       yPosition += 5;
       const leftCol = margin + 5;
       const rightCol = pageWidth / 2 + 5;
-      
+
       // Coluna esquerda
       pdf.setFontSize(10);
       pdf.setTextColor(...primaryColor);
@@ -1200,7 +1273,7 @@ export default function RoutesHistoryPage() {
 
       // Coluna direita
       yPosition -= 18;
-      
+
       pdf.setTextColor(...primaryColor);
       pdf.text('Status:', rightCol, yPosition);
       pdf.setTextColor(...textColor);
@@ -1233,7 +1306,7 @@ export default function RoutesHistoryPage() {
       pdf.setTextColor(255, 255, 255);
       pdf.text('Ponto Inicial', margin + 3, yPosition + 5.5);
       yPosition += 12;
-      
+
       pdf.setFontSize(10);
       pdf.setTextColor(...textColor);
       const startAddress = getStartAddressText(routeDetail.route);
@@ -1287,14 +1360,14 @@ export default function RoutesHistoryPage() {
       pdf.setFontSize(16);
       pdf.setTextColor(255, 255, 255);
       pdf.text('Visualização e Navegação', margin, 13);
-      
+
       yPosition = 30;
 
       // Mapa com borda
       if (mapImageDataUrl) {
         pdf.setFillColor(...lightGray);
         pdf.roundedRect(margin - 2, yPosition - 2, pageWidth - 2 * margin + 4, 124, 3, 3, 'F');
-        
+
         const mapWidth = pageWidth - 2 * margin;
         const mapHeight = 120;
         pdf.addImage(mapImageDataUrl, 'PNG', margin, yPosition, mapWidth, mapHeight);
@@ -1305,7 +1378,7 @@ export default function RoutesHistoryPage() {
       if (qrCodeDataUrl) {
         pdf.setFillColor(250, 250, 250);
         pdf.roundedRect(margin, yPosition, pageWidth - 2 * margin, 70, 3, 3, 'F');
-        
+
         yPosition += 8;
         pdf.setFontSize(14);
         pdf.setTextColor(...primaryColor);
@@ -1389,7 +1462,7 @@ export default function RoutesHistoryPage() {
       clearTimeout(reorderingTimeoutRef.current);
       reorderingTimeoutRef.current = null;
     }
-    
+
     // Define em ambos: state e ref
     isReorderingRef.current = true;
     setIsReordering(true);
@@ -1409,7 +1482,7 @@ export default function RoutesHistoryPage() {
 
     console.log("🔄 [DRAG END] Nova ordem:", newList.map(s => ({ id: s.id, order: s.order, address: s.address?.substring(0, 30) })));
 
-      // Pequeno delay para garantir que o loading apareça antes das mudanças
+    // Pequeno delay para garantir que o loading apareça antes das mudanças
     setTimeout(() => {
       setStopsUI(newList);
       setIsLocalReordered(true);
@@ -1540,236 +1613,308 @@ export default function RoutesHistoryPage() {
         <p className="text-gray-600">Visualize e gerencie os romaneios e o histórico de rotas otimizadas</p>
       </div>
 
-      {/* Filtros */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Filtros
-          </CardTitle>
-          <CardDescription>
-            Use os filtros abaixo para encontrar rotas específicas
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Período */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Data de</label>
-              <Input
-                type="date"
-                value={filters.dateFrom}
-                onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-                data-testid="input-date-from"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Data até</label>
-              <Input
-                type="date"
-                value={filters.dateTo}
-                onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-                data-testid="input-date-to"
-              />
-            </div>
+      <Tabs defaultValue="romaneios" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
+          <TabsTrigger value="romaneios">Romaneios</TabsTrigger>
+          <TabsTrigger value="pendencias" className="relative">
+            Pendências
+            {pendingAppointments.length > 0 && (
+              <Badge variant="destructive" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
+                {pendingAppointments.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
-            {/* Responsável */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Responsável</label>
-              <Select 
-                value={filters.selectedResponsible}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, selectedResponsible: value }))}
-              >
-                <SelectTrigger data-testid="select-responsible">
-                  <SelectValue placeholder="Selecione..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {technicians.map((tech: any) => (
-                    <SelectItem key={`technician:${tech.id}`} value={`technician:${tech.id}`}>
-                      {tech.name} (Técnico)
-                    </SelectItem>
-                  ))}
-                  {teams.map((team: any) => (
-                    <SelectItem key={`team:${team.id}`} value={`team:${team.id}`}>
-                      {team.name} (Equipe)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        <TabsContent value="romaneios" className="space-y-6 mt-6">
+          {/* Filtros */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Filter className="h-5 w-5" />
+                Filtros
+              </CardTitle>
+              <CardDescription>
+                Use os filtros abaixo para encontrar rotas específicas
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Período */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Data de</label>
+                  <Input
+                    type="date"
+                    value={filters.dateFrom}
+                    onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                    data-testid="input-date-from"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Data até</label>
+                  <Input
+                    type="date"
+                    value={filters.dateTo}
+                    onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                    data-testid="input-date-to"
+                  />
+                </div>
 
-            {/* Veículo */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Veículo</label>
-              <Select
-                value={filters.selectedVehicle}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, selectedVehicle: value }))}
-              >
-                <SelectTrigger data-testid="select-vehicle">
-                  <SelectValue placeholder="Selecione..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {vehicles.map((vehicle: any) => (
-                    <SelectItem key={vehicle.id} value={vehicle.id.toString()}>
-                      {vehicle.plate} ({vehicle.model})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                {/* Responsável */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Responsável</label>
+                  <Select
+                    value={filters.selectedResponsible}
+                    onValueChange={(value) => setFilters(prev => ({ ...prev, selectedResponsible: value }))}
+                  >
+                    <SelectTrigger data-testid="select-responsible">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {technicians.map((tech: any) => (
+                        <SelectItem key={`technician:${tech.id}`} value={`technician:${tech.id}`}>
+                          {tech.name} (Técnico)
+                        </SelectItem>
+                      ))}
+                      {teams.map((team: any) => (
+                        <SelectItem key={`team:${team.id}`} value={`team:${team.id}`}>
+                          {team.name} (Equipe)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            {/* Status */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
-              <Select
-                value={filters.selectedStatus}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, selectedStatus: value }))}
-              >
-                <SelectTrigger data-testid="select-status">
-                  <SelectValue placeholder="Selecione..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="draft">Rascunho</SelectItem>
-                  <SelectItem value="confirmado">Confirmado</SelectItem>
-                  <SelectItem value="finalizado">Finalizado</SelectItem>
-                  <SelectItem value="cancelado">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                {/* Veículo */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Veículo</label>
+                  <Select
+                    value={filters.selectedVehicle}
+                    onValueChange={(value) => setFilters(prev => ({ ...prev, selectedVehicle: value }))}
+                  >
+                    <SelectTrigger data-testid="select-vehicle">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {vehicles.map((vehicle: any) => (
+                        <SelectItem key={vehicle.id} value={vehicle.id.toString()}>
+                          {vehicle.plate} ({vehicle.model})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            {/* Busca por título */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Buscar por título</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Digite o título da rota..."
-                  value={filters.searchTerm}
-                  onChange={(e) => setFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
-                  className="pl-10"
-                  data-testid="input-search-term"
-                />
+                {/* Status */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Status</label>
+                  <Select
+                    value={filters.selectedStatus}
+                    onValueChange={(value) => setFilters(prev => ({ ...prev, selectedStatus: value }))}
+                  >
+                    <SelectTrigger data-testid="select-status">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="draft">Rascunho</SelectItem>
+                      <SelectItem value="confirmado">Confirmado</SelectItem>
+                      <SelectItem value="finalizado">Finalizado</SelectItem>
+                      <SelectItem value="cancelado">Cancelado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Busca por título */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Buscar por título</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Digite o título da rota..."
+                      value={filters.searchTerm}
+                      onChange={(e) => setFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
+                      className="pl-10"
+                      data-testid="input-search-term"
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
 
-      {/* Tabela */}
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Rotas Encontradas ({routesData.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoadingRoutes ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-burnt-yellow"></div>
-            </div>
-          ) : routesData.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="text-gray-500">Nenhuma rota encontrada com os filtros aplicados</div>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
+          {/* Tabela */}
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                Rotas Encontradas ({routesData.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoadingRoutes ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-burnt-yellow"></div>
+                </div>
+              ) : routesData.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="text-gray-500">Nenhuma rota encontrada com os filtros aplicados</div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ID</TableHead>
+                        <TableHead>Rota Criada dia</TableHead>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Veículo</TableHead>
+                        <TableHead>Técnico/Equipe</TableHead>
+                        <TableHead>Distância</TableHead>
+                        <TableHead>Duração</TableHead>
+                        <TableHead>Paradas</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {routesData.map((route) => {
+                        // 👇 fallback: se a rota não tiver vehicleId, tenta pelo responsável
+                        const fallbackVehicleId =
+                          route.vehicleId ??
+                          (route.responsibleType === "team"
+                            ? vehicles.find((v: any) => v.teamId === Number(route.responsibleId))?.id
+                            : vehicles.find((v: any) => v.technicianId === Number(route.responsibleId))?.id);
+
+                        return (
+                          <TableRow key={route.id} data-testid={`row-route-${route.id}`}>
+                            <TableCell className="font-medium">#{route.displayNumber}</TableCell>
+                            <TableCell className="font-medium">{route.title}</TableCell>
+                            <TableCell>{fmtDateList(route.date)}</TableCell>
+
+                            {/* Veículo (agora correto) */}
+                            <TableCell>
+                              {formatVehicle(getVehicleById(fallbackVehicleId))}
+                            </TableCell>
+
+                            <TableCell>{getResponsibleName(route)}</TableCell>
+                            <TableCell className="text-blue-600">{fmtKm(route.distanceTotal)}</TableCell>
+                            <TableCell className="text-green-600">{fmtMin(route.durationTotal)}</TableCell>
+                            <TableCell>{route.stopsCount}</TableCell>
+                            <TableCell>
+                              <Select
+                                value={route.status}
+                                onValueChange={(newStatus) => {
+                                  updateStatusMutation.mutate({ routeId: route.id, status: newStatus });
+                                }}
+                                disabled={!isRouteEditable(route.status)}
+                              >
+                                <SelectTrigger className={`w-[140px] h-7 ${statusColors[route.status] || statusColors.draft} border-0 font-medium`}>
+                                  <SelectValue>
+                                    {statusLabels[route.status] || route.status}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="draft">Rascunho</SelectItem>
+                                  <SelectItem value="confirmado">Confirmado</SelectItem>
+                                  <SelectItem value="finalizado">Finalizado</SelectItem>
+                                  <SelectItem value="cancelado">Cancelado</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedRoute(route.id);
+                                    setLocation(`/routes-history/${route.displayNumber}`);
+                                  }}
+                                  data-testid={`button-view-route-${route.id}`}
+                                >
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  Ver
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setAuditRouteId(route.id)}
+                                  data-testid={`button-audit-route-${route.id}`}
+                                  title="Ver histórico de alterações"
+                                >
+                                  <FileText className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="pendencias" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Pendências de Rotas Finalizadas</CardTitle>
+              <CardDescription>Agendamentos que não foram concluídos em rotas já encerradas.</CardDescription>
+            </CardHeader>
+            <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Rota Criada dia</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Veículo</TableHead>
-                    <TableHead>Técnico/Equipe</TableHead>
-                    <TableHead>Distância</TableHead>
-                    <TableHead>Duração</TableHead>
-                    <TableHead>Paradas</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Ações</TableHead>
+                    <TableHead>Data Rota</TableHead>
+                    <TableHead>Rota</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Responsável</TableHead>
+                    <TableHead>Status Execução</TableHead>
+                    <TableHead>Notas</TableHead>
+                    <TableHead>Ação</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {routesData.map((route) => {
-                    // 👇 fallback: se a rota não tiver vehicleId, tenta pelo responsável
-                    const fallbackVehicleId =
-                      route.vehicleId ??
-                      (route.responsibleType === "team"
-                        ? vehicles.find((v: any) => v.teamId === Number(route.responsibleId))?.id
-                        : vehicles.find((v: any) => v.technicianId === Number(route.responsibleId))?.id);
-
-                    return (
-                      <TableRow key={route.id} data-testid={`row-route-${route.id}`}>
-                        <TableCell className="font-medium">#{route.displayNumber}</TableCell>
-                        <TableCell className="font-medium">{route.title}</TableCell>
-                        <TableCell>{fmtDateList(route.date)}</TableCell>
-
-                        {/* Veículo (agora correto) */}
-                        <TableCell>
-                          {formatVehicle(getVehicleById(fallbackVehicleId))}
-                        </TableCell>
-
-                        <TableCell>{getResponsibleName(route)}</TableCell>
-                        <TableCell className="text-blue-600">{fmtKm(route.distanceTotal)}</TableCell>
-                        <TableCell className="text-green-600">{fmtMin(route.durationTotal)}</TableCell>
-                        <TableCell>{route.stopsCount}</TableCell>
-                        <TableCell>
-                          <Select
-                            value={route.status}
-                            onValueChange={(newStatus) => {
-                              updateStatusMutation.mutate({ routeId: route.id, status: newStatus });
-                            }}
-                          >
-                            <SelectTrigger className={`w-[140px] h-7 ${statusColors[route.status] || statusColors.draft} border-0 font-medium`}>
-                              <SelectValue>
-                                {statusLabels[route.status] || route.status}
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="draft">Rascunho</SelectItem>
-                              <SelectItem value="confirmado">Confirmado</SelectItem>
-                              <SelectItem value="finalizado">Finalizado</SelectItem>
-                              <SelectItem value="cancelado">Cancelado</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedRoute(route.id);
-                                setLocation(`/routes-history/${route.displayNumber}`);
-                              }}
-                              data-testid={`button-view-route-${route.id}`}
-                            >
-                              <Eye className="h-4 w-4 mr-1" />
-                              Ver
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setAuditRouteId(route.id)}
-                              data-testid={`button-audit-route-${route.id}`}
-                              title="Ver histórico de alterações"
-                            >
-                              <FileText className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {pendingAppointments.map((apt: any) => (
+                    <TableRow key={apt.id}>
+                      <TableCell>{fmtDate(apt.routeDate)}</TableCell>
+                      <TableCell>{apt.routeTitle}</TableCell>
+                      <TableCell>{apt.clientName}</TableCell>
+                      <TableCell>{apt.responsibleName}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={getExecutionStatusColor(apt.executionStatus)}>
+                          {getExecutionStatusLabel(apt.executionStatus)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="max-w-[200px] truncate" title={apt.executionNotes}>{apt.executionNotes || '-'}</TableCell>
+                      <TableCell>
+                        <Button variant="outline" size="sm" onClick={() => {
+                          // Redirecionar para tela de agendamentos com filtro (implementação futura ou simples redirect)
+                          // Por enquanto, apenas avisa
+                          // setLocation(`/appointments?search=${apt.clientName}`);
+                          toast({ title: "Em breve", description: "Funcionalidade de resolução direta será implementada." });
+                        }}>
+                          Resolver
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {pendingAppointments.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-4 text-gray-500">Nenhuma pendência encontrada.</TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
-
               </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Modal central (layout split — infos à esq., mapa à dir.) */}
       <Dialog
@@ -1816,7 +1961,22 @@ export default function RoutesHistoryPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm">
                       <div>
                         <div className="text-gray-500">Data do Serviço</div>
-                        <div className="font-medium">{fmtDateList(routeDetail.route?.date)}</div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="date"
+                            className="h-7 w-auto min-w-[130px] text-xs px-2"
+                            value={routeDetail.route?.date ? new Date(routeDetail.route.date).toISOString().split('T')[0] : ''}
+                            onChange={(e) => {
+                              if (routeDetail.route?.id && e.target.value) {
+                                updateRouteDateMutation.mutate({
+                                  routeId: routeDetail.route.id,
+                                  date: e.target.value
+                                });
+                              }
+                            }}
+                            disabled={!isRouteEditable(routeDetail.route?.status)}
+                          />
+                        </div>
                       </div>
 
                       <div>
@@ -1828,6 +1988,7 @@ export default function RoutesHistoryPage() {
                               updateStatusMutation.mutate({ routeId: routeDetail.route.id, status: newStatus });
                             }
                           }}
+                          disabled={!isRouteEditable(routeDetail.route?.status)}
                         >
                           <SelectTrigger className={`w-[140px] h-7 ${statusColors[routeDetail.route?.status] || statusColors.draft} border-0 font-medium`}>
                             <SelectValue>
@@ -2039,41 +2200,41 @@ export default function RoutesHistoryPage() {
                           >
                             {stopsUI.map((stop) => (
                               <SortableStopItem key={stop.id} stop={stop}>
-                              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                                <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-bold">
-                                  {stop.order}
-                                </div>
-                                <div className="flex-1">
-                                  <div className="font-medium text-sm">
-                                    {displayStopName(stop, appointments, clients)}
+                                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                                  <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-bold">
+                                    {stop.order}
                                   </div>
-                                  <div className="text-xs sm:text-sm text-gray-600 mt-1">{stop.address}</div>
-                                  {Number.isFinite(stop.lat) && Number.isFinite(stop.lng) && (stop.lat !== 0 || stop.lng !== 0) && (
-                                    <div className="text-[11px] text-gray-500 mt-1">
-                                      {Number(stop.lat).toFixed(6)}, {Number(stop.lng).toFixed(6)}
+                                  <div className="flex-1">
+                                    <div className="font-medium text-sm">
+                                      {displayStopName(stop, appointments, clients)}
                                     </div>
+                                    <div className="text-xs sm:text-sm text-gray-600 mt-1">{stop.address}</div>
+                                    {Number.isFinite(stop.lat) && Number.isFinite(stop.lng) && (stop.lat !== 0 || stop.lng !== 0) && (
+                                      <div className="text-[11px] text-gray-500 mt-1">
+                                        {Number(stop.lat).toFixed(6)}, {Number(stop.lng).toFixed(6)}
+                                      </div>
+                                    )}
+                                  </div>
+                                  {/* Botão remover */}
+                                  {isRouteEditable(routeDetail.route?.status) && (
+                                    <button
+                                      onClick={() => {
+                                        setStopToRemove({
+                                          id: stop.id,
+                                          clientName: stop.clientName || undefined
+                                        });
+                                        setRemoveOpen(true);
+                                      }}
+                                      className="ml-2 rounded-md p-1 text-gray-500 hover:text-red-600 hover:bg-red-50"
+                                      title="Remover da rota"
+                                      aria-label="Remover da rota"
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </button>
                                   )}
                                 </div>
-                                {/* Botão remover */}
-                                {isRouteEditable(routeDetail.route?.status) && (
-                                  <button
-                                    onClick={() => {
-                                      setStopToRemove({ 
-                                        id: stop.id, 
-                                        clientName: stop.clientName || undefined 
-                                      });
-                                      setRemoveOpen(true);
-                                    }}
-                                    className="ml-2 rounded-md p-1 text-gray-500 hover:text-red-600 hover:bg-red-50"
-                                    title="Remover da rota"
-                                    aria-label="Remover da rota"
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </button>
-                                )}
-                              </div>
-                            </SortableStopItem>
-                          ))}
+                              </SortableStopItem>
+                            ))}
                           </SortableContext>
                         </DndContext>
                       ) : (
@@ -2137,7 +2298,7 @@ export default function RoutesHistoryPage() {
                         // 👉 Garantia extra: se ainda assim vier null, não deixamos o mapa "pegar" o 1º cliente como start.
                         //    Preferimos não desenhar o pino até termos a empresa (evita o bug visual).
                         const startForMap = derivedStart || null;
-                        
+
                         console.log("📍 [RoutesHistory] Ponto inicial calculado:", {
                           startForMap,
                           derivedStart,
@@ -2152,19 +2313,19 @@ export default function RoutesHistoryPage() {
                           (routeDetail.route as any)?.routeGeoJson ??
                           (routeDetail.route as any)?.geojson ?? null;
                         if (typeof rawBackendGeoJson === "string") {
-                          try { rawBackendGeoJson = JSON.parse(rawBackendGeoJson); } catch {}
+                          try { rawBackendGeoJson = JSON.parse(rawBackendGeoJson); } catch { }
                         }
 
                         // 5) Linha manual durante DnD – renomeado para evitar sombra de state
                         const manualLineGeo =
                           isLocalReordered && startForMap && stopsAsWaypoints.length > 0
                             ? ({
-                                type: "LineString",
-                                coordinates: [
-                                  [startForMap.lon, startForMap.lat],
-                                  ...stopsAsWaypoints.map((w) => [w.lon, w.lat]),
-                                ],
-                              } as const)
+                              type: "LineString",
+                              coordinates: [
+                                [startForMap.lon, startForMap.lat],
+                                ...stopsAsWaypoints.map((w) => [w.lon, w.lat]),
+                              ],
+                            } as const)
                             : null;
 
                         // 6) GeoJSON final
@@ -2173,13 +2334,13 @@ export default function RoutesHistoryPage() {
                           rawBackendGeoJson ??
                           // ✅ FALLBACK: Sempre inclui o ponto inicial antes das paradas
                           (startForMap && stopsAsWaypoints.length > 0
-                            ? { 
-                                type: "LineString", 
-                                coordinates: [
-                                  [startForMap.lon, startForMap.lat],
-                                  ...stopsAsWaypoints.map((w) => [w.lon, w.lat])
-                                ]
-                              }
+                            ? {
+                              type: "LineString",
+                              coordinates: [
+                                [startForMap.lon, startForMap.lat],
+                                ...stopsAsWaypoints.map((w) => [w.lon, w.lat])
+                              ]
+                            }
                             : null);
 
                         // 7) key inclui versão para re-render forçado (ver ajuste 3)
@@ -2280,8 +2441,8 @@ export default function RoutesHistoryPage() {
               onClick={() => {
                 if (stopToRemove && routeDetail?.route?.id) {
                   const stop = routeDetail.stops.find(s => s.id === stopToRemove.id);
-                  removeStopMutation.mutate({ 
-                    routeId: routeDetail.route.id, 
+                  removeStopMutation.mutate({
+                    routeId: routeDetail.route.id,
                     stopId: stopToRemove.id,
                     appointmentId: Number(stop?.appointmentNumericId ?? stop?.appointmentId),
                     clientName: stopToRemove.clientName
