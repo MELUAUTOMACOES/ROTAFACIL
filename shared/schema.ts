@@ -210,7 +210,8 @@ export const appointments = pgTable("appointments", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Vehicle checklists table
+// Vehicle checklists table (DEPRECATED - old simple version)
+// Kept for backwards compatibility, will be removed in future migration
 export const checklists = pgTable("checklists", {
   id: serial("id").primaryKey(),
   vehicleId: integer("vehicle_id").notNull().references(() => vehicles.id),
@@ -221,6 +222,52 @@ export const checklists = pgTable("checklists", {
   userId: integer("user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Vehicle Checklists - New robust structure for vehicle inspection checklists
+export const vehicleChecklists = pgTable("vehicle_checklists", {
+  id: serial("id").primaryKey(),
+  vehicleId: integer("vehicle_id").notNull().references(() => vehicles.id, { onDelete: 'cascade' }),
+  checkDate: timestamp("check_date").notNull(), // Data do checklist
+  checkTime: text("check_time"), // Hora do checklist (formato HH:MM, opcional)
+  // Responsável: Técnico OU Membro de equipe (exclusivo)
+  technicianId: integer("technician_id").references(() => technicians.id),
+  teamMemberId: integer("team_member_id").references(() => teamMembers.id),
+  vehicleKm: integer("vehicle_km").notNull(), // KM atual do veículo
+  checklistType: text("checklist_type").notNull(), // 'pre_trip' | 'post_trip'
+  photos: jsonb("photos"), // Array de fotos em Base64
+  generalObservations: text("general_observations"), // Observações gerais
+  vehicleApproved: boolean("vehicle_approved").notNull(), // Veículo apto para uso?
+  disapprovalReason: text("disapproval_reason"), // Motivo se não aprovado
+  maintenanceId: integer("maintenance_id").references(() => vehicleMaintenances.id), // Vinculação a manutenção (opcional)
+  userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Vehicle Checklist Items - Individual inspection items
+export const vehicleChecklistItems = pgTable("vehicle_checklist_items", {
+  id: serial("id").primaryKey(),
+  checklistId: integer("checklist_id").notNull().references(() => vehicleChecklists.id, { onDelete: 'cascade' }),
+  category: text("category").notNull(), // 'fluids', 'tires', 'lights', 'panel', 'safety', 'mandatory_items', 'fuel'
+  itemName: text("item_name").notNull(), // Nome específico do item (ex: 'oil', 'front_tires', 'headlights_low')
+  status: text("status").notNull(), // 'ok', 'attention', 'critical', 'not_checked'
+  observation: text("observation"), // Observação específica do item (opcional)
+});
+
+// Vehicle Checklist Audits - Auditoria de checklists pelo gestor
+export const vehicleChecklistAudits = pgTable("vehicle_checklist_audits", {
+  id: serial("id").primaryKey(),
+  checklistId: integer("checklist_id").notNull().references(() => vehicleChecklists.id, { onDelete: 'cascade' }).unique(), // Um checklist pode ter apenas uma auditoria
+  verified: boolean("verified").notNull().default(false), // Checklist verificado?
+  verifiedBy: integer("verified_by").references(() => users.id), // Gestor que verificou
+  verifiedAt: timestamp("verified_at"), // Data/hora da verificação
+  observations: text("observations"), // Observações da auditoria
+  maintenanceLinked: integer("maintenance_linked").references(() => vehicleMaintenances.id), // Manutenção vinculada (se aplicável)
+  userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 
 // Business rules table
 export const businessRules = pgTable("business_rules", {
@@ -401,6 +448,55 @@ export const insertChecklistSchema = createInsertSchema(checklists).omit({
   id: true,
   userId: true,
   createdAt: true,
+});
+
+// Vehicle Checklists schemas
+export const insertVehicleChecklistSchema = createInsertSchema(vehicleChecklists).omit({
+  id: true,
+  userId: true,
+  companyId: true,
+  createdAt: true,
+}).extend({
+  checkDate: z.union([z.string(), z.date()]).transform((val) => {
+    if (typeof val === 'string') return new Date(val);
+    return val;
+  }),
+  checkTime: z.string().regex(/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/, "Horário deve estar no formato HH:MM").optional().or(z.literal("")),
+  vehicleKm: z.number().min(0, "KM não pode ser negativo"),
+  checklistType: z.enum(["pre_trip", "post_trip"], { errorMap: () => ({ message: "Tipo deve ser pré-viagem ou pós-viagem" }) }),
+  photos: z.array(z.string()).optional().nullable(),
+  vehicleApproved: z.boolean(),
+}).refine(
+  (d) => d.technicianId || d.teamMemberId,
+  { message: "Selecione um técnico ou membro de equipe responsável", path: ["technicianId"] }
+).refine(
+  (d) => !(d.technicianId && d.teamMemberId),
+  { message: "Selecione Técnico OU Membro de Equipe (apenas um)", path: ["technicianId"] }
+).refine(
+  (d) => d.vehicleApproved || (d.disapprovalReason && d.disapprovalReason.trim().length > 0),
+  { message: "Informe o motivo caso o veículo não seja aprovado", path: ["disapprovalReason"] }
+);
+
+export const insertVehicleChecklistItemSchema = createInsertSchema(vehicleChecklistItems).omit({
+  id: true,
+  checklistId: true, // checklistId é preenchido após criar o checklist principal
+}).extend({
+  category: z.enum(["fluids", "tires", "lights", "panel", "safety", "mandatory_items", "fuel"]),
+  status: z.enum(["ok", "attention", "critical", "not_checked"]),
+});
+
+// Vehicle Checklist Audits schemas
+export const insertVehicleChecklistAuditSchema = createInsertSchema(vehicleChecklistAudits).omit({
+  id: true,
+  userId: true,
+  companyId: true,
+  createdAt: true,
+}).extend({
+  verifiedAt: z.union([z.string(), z.date(), z.null(), z.undefined()]).transform((val) => {
+    if (!val) return null;
+    if (typeof val === 'string') return new Date(val);
+    return val;
+  }).optional().nullable(),
 });
 
 export const insertTeamSchema = createInsertSchema(teams).omit({
@@ -684,6 +780,125 @@ export const acceptInvitationExistingUserSchema = z.object({
   token: z.string().min(1, "Token é obrigatório"),
 });
 
+// Audit Logs - Registro de ações do sistema para segurança e compliance
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: 'set null' }),
+  action: text("action").notNull(), // login, logout, create, update, delete, view
+  resource: text("resource").notNull(), // appointment, client, route, etc.
+  resourceId: text("resource_id"), // ID do recurso afetado
+  details: jsonb("details"), // Dados extras (ex: campos alterados)
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs);
+
+// Vehicle Documents - Documentos anexados ao veículo (CRLV, seguro, etc.)
+export const vehicleDocuments = pgTable("vehicle_documents", {
+  id: serial("id").primaryKey(),
+  vehicleId: integer("vehicle_id").notNull().references(() => vehicles.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(), // Nome do documento (ex: "CRLV 2024", "Apólice Seguro")
+  type: text("type").notNull(), // Tipo: crlv, seguro, contrato, nota_fiscal, outro
+  fileUrl: text("file_url").notNull(), // Base64 do arquivo
+  fileName: text("file_name").notNull(), // Nome original do arquivo
+  expirationDate: timestamp("expiration_date"), // Data de vencimento (opcional)
+  notes: text("notes"), // Observações
+  userId: integer("user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertVehicleDocumentSchema = createInsertSchema(vehicleDocuments).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+});
+
+// Vehicle Maintenances - Registro de manutenções
+export const vehicleMaintenances = pgTable("vehicle_maintenances", {
+  id: serial("id").primaryKey(),
+  vehicleId: integer("vehicle_id").notNull().references(() => vehicles.id, { onDelete: 'cascade' }),
+  // Dados da Manutenção
+  entryDate: timestamp("entry_date").notNull(), // Data de entrada
+  exitDate: timestamp("exit_date"), // Data de saída
+  workshop: text("workshop").notNull(), // Local (Oficina)
+  technicianResponsible: text("technician_responsible"), // Técnico responsável (opcional)
+  // Detalhes
+  description: text("description").notNull(), // O que foi feito
+  category: text("category").notNull(), // motor, suspensao, freios, eletrica, pneus, documentacao, funilaria_pintura
+  maintenanceType: text("maintenance_type").notNull(), // preventiva, corretiva, urgente, revisao
+  vehicleKm: integer("vehicle_km").notNull(), // KM do veículo na manutenção
+  photos: jsonb("photos"), // Array de fotos (antes/depois, NF) - Base64
+  // Custos
+  laborCost: decimal("labor_cost", { precision: 10, scale: 2 }).default("0"), // Valor mão de obra
+  materialsCost: decimal("materials_cost", { precision: 10, scale: 2 }).default("0"), // Valor materiais
+  totalCost: decimal("total_cost", { precision: 10, scale: 2 }).default("0"), // Valor total
+  // Impacto Operacional
+  vehicleUnavailable: boolean("vehicle_unavailable").default(false), // Veículo ficou indisponível?
+  unavailableDays: integer("unavailable_days").default(0), // Quantos dias?
+  affectedAppointments: boolean("affected_appointments").default(false), // Afetou agendamentos?
+  // Nota Fiscal / OS
+  invoiceNumber: text("invoice_number"), // Número da Nota Fiscal / OS
+  // Observações
+  observations: text("observations"),
+  // Status e Agendamento
+  status: text("status").notNull().default("concluida"), // 'agendada' | 'concluida'
+  scheduledDate: timestamp("scheduled_date"), // Data agendada (para manutenções futuras)
+  userId: integer("user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertVehicleMaintenanceSchema = createInsertSchema(vehicleMaintenances).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  entryDate: z.union([z.string(), z.date()]).transform((val) => {
+    if (typeof val === 'string') return new Date(val);
+    return val;
+  }),
+  exitDate: z.union([z.string(), z.date(), z.null(), z.undefined()]).transform((val) => {
+    if (!val) return null;
+    if (typeof val === 'string') return new Date(val);
+    return val;
+  }).optional().nullable(),
+  scheduledDate: z.union([z.string(), z.date(), z.null(), z.undefined()]).transform((val) => {
+    if (!val) return null;
+    if (typeof val === 'string') return new Date(val);
+    return val;
+  }).optional().nullable(),
+  status: z.enum(["agendada", "concluida"]).default("concluida").optional(),
+  laborCost: z.string().or(z.number()).optional(),
+  materialsCost: z.string().or(z.number()).optional(),
+  totalCost: z.string().or(z.number()).optional(),
+  photos: z.array(z.string()).optional().nullable(),
+}).refine(
+  (d) => d.status !== 'agendada' || (d.scheduledDate !== null && d.scheduledDate !== undefined),
+  { message: "Data agendada é obrigatória quando status é 'agendada'", path: ["scheduledDate"] }
+);
+
+// Maintenance Warranties - Garantias de peças
+export const maintenanceWarranties = pgTable("maintenance_warranties", {
+  id: serial("id").primaryKey(),
+  maintenanceId: integer("maintenance_id").notNull().references(() => vehicleMaintenances.id, { onDelete: 'cascade' }),
+  partName: text("part_name").notNull(), // Nome da peça
+  warrantyExpiration: timestamp("warranty_expiration").notNull(), // Validade da garantia
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertMaintenanceWarrantySchema = createInsertSchema(maintenanceWarranties).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  warrantyExpiration: z.union([z.string(), z.date()]).transform((val) => {
+    if (typeof val === 'string') return new Date(val);
+    return val;
+  }),
+});
+
 // Types
 export type Company = typeof companies.$inferSelect;
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
@@ -711,6 +926,11 @@ export type Appointment = typeof appointments.$inferSelect;
 export type InsertAppointment = z.infer<typeof extendedInsertAppointmentSchema>;
 export type Checklist = typeof checklists.$inferSelect;
 export type InsertChecklist = z.infer<typeof insertChecklistSchema>;
+export type VehicleChecklist = typeof vehicleChecklists.$inferSelect;
+export type InsertVehicleChecklist = z.infer<typeof insertVehicleChecklistSchema>;
+export type VehicleChecklistItem = typeof vehicleChecklistItems.$inferSelect;
+export type InsertVehicleChecklistItem = z.infer<typeof insertVehicleChecklistItemSchema>;
+
 export type BusinessRules = typeof businessRules.$inferSelect;
 export type InsertBusinessRules = z.infer<typeof insertBusinessRulesSchema>;
 export type Team = typeof teams.$inferSelect;
@@ -729,9 +949,21 @@ export type DateRestriction = typeof dateRestrictions.$inferSelect;
 export type InsertDateRestriction = z.infer<typeof insertDateRestrictionSchema>;
 export type AccessSchedule = typeof accessSchedules.$inferSelect;
 export type InsertAccessSchedule = z.infer<typeof insertAccessScheduleSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type LoginData = z.infer<typeof loginSchema>;
 export type CreateUserByAdmin = z.infer<typeof createUserByAdminSchema>;
 export type UpdateUserByAdmin = z.infer<typeof updateUserByAdminSchema>;
 export type VerifyEmailData = z.infer<typeof verifyEmailSchema>;
 export type SetFirstPasswordData = z.infer<typeof setFirstPasswordSchema>;
 export type ChangePasswordData = z.infer<typeof changePasswordSchema>;
+
+// Vehicle Documents & Maintenance Types
+export type VehicleDocument = typeof vehicleDocuments.$inferSelect;
+export type InsertVehicleDocument = z.infer<typeof insertVehicleDocumentSchema>;
+export type VehicleMaintenance = typeof vehicleMaintenances.$inferSelect;
+export type InsertVehicleMaintenance = z.infer<typeof insertVehicleMaintenanceSchema>;
+export type MaintenanceWarranty = typeof maintenanceWarranties.$inferSelect;
+export type InsertMaintenanceWarranty = z.infer<typeof insertMaintenanceWarrantySchema>;
+export type VehicleChecklistAudit = typeof vehicleChecklistAudits.$inferSelect;
+export type InsertVehicleChecklistAudit = z.infer<typeof insertVehicleChecklistAuditSchema>;

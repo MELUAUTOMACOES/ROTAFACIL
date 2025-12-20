@@ -4,10 +4,10 @@ import { getAuthHeaders } from "@/lib/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Calendar, 
-  Users, 
-  CheckCircle, 
+import {
+  Calendar,
+  Users,
+  CheckCircle,
   DollarSign,
   Plus,
   Route,
@@ -18,6 +18,8 @@ import {
   TrendingUp
 } from "lucide-react";
 import type { Appointment, Client, Technician } from "@shared/schema";
+import { VehiclesAttentionCard } from "@/components/dashboard/VehiclesAttentionCard";
+import { UpcomingMaintenancesCard } from "@/components/dashboard/UpcomingMaintenancesCard";
 
 interface DashboardStats {
   todayAppointments: number;
@@ -38,7 +40,7 @@ interface TodayAppointment {
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
-  
+
   const { data: appointments = [] } = useQuery<Appointment[]>({
     queryKey: ["/api/appointments"],
   });
@@ -53,13 +55,13 @@ export default function Dashboard() {
 
   // Calculate stats
   const today = new Date().toDateString();
-  const todayAppointments = appointments.filter((apt: Appointment) => 
+  const todayAppointments = appointments.filter((apt: Appointment) =>
     new Date(apt.scheduledDate).toDateString() === today
   );
-  
+
   const activeTechnicians = technicians.filter((tech: Technician) => tech.isActive);
   const completedAppointments = appointments.filter((apt: Appointment) => apt.status === "completed");
-  const completionRate = appointments.length > 0 
+  const completionRate = appointments.length > 0
     ? Math.round((completedAppointments.length / appointments.length) * 100)
     : 0;
 
@@ -128,7 +130,7 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -142,14 +144,14 @@ export default function Dashboard() {
             </div>
             <div className="mt-4 flex items-center">
               <span className="text-gray-600 text-sm">
-                {activeTechnicians.filter((t: Technician) => 
+                {activeTechnicians.filter((t: Technician) =>
                   todayAppointments.some((a: Appointment) => a.technicianId === t.id)
                 ).length} em campo agora
               </span>
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -168,7 +170,7 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -219,7 +221,7 @@ export default function Dashboard() {
                     appointment.cidade,
                     appointment.cep,
                   ].filter(Boolean).join(', ');
-                  
+
                   return (
                     <div key={appointment.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
                       <div className="w-12 h-12 bg-burnt-yellow rounded-lg flex items-center justify-center">
@@ -266,7 +268,7 @@ export default function Dashboard() {
                   <p className="text-sm text-gray-600">Criar um novo atendimento</p>
                 </div>
               </Button>
-              
+
               <Button
                 variant="outline"
                 className="flex items-center justify-start p-4 h-auto border-gray-200 hover:bg-gray-50"
@@ -280,7 +282,7 @@ export default function Dashboard() {
                   <p className="text-sm text-gray-600">Gerar rota para hoje</p>
                 </div>
               </Button>
-              
+
               <Button
                 variant="outline"
                 className="flex items-center justify-start p-4 h-auto border-gray-200 hover:bg-gray-50"
@@ -294,7 +296,7 @@ export default function Dashboard() {
                   <p className="text-sm text-gray-600">Cadastrar cliente</p>
                 </div>
               </Button>
-              
+
               <Button
                 variant="outline"
                 className="flex items-center justify-start p-4 h-auto border-gray-200 hover:bg-gray-50"
@@ -313,45 +315,126 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Recent Activity */}
-      <Card>
-        <CardHeader className="border-b border-gray-100">
-          <CardTitle>Atividade Recente</CardTitle>
-        </CardHeader>
-        <CardContent className="p-6">
-          {appointments.length === 0 ? (
-            <div className="text-center py-8">
-              <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">Nenhuma atividade recente</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {appointments.slice(0, 4).map((activity: Appointment) => {
-                const client = clients.find((c: Client) => c.id === activity.clientId);
-                const technician = technicians.find((t: Technician) => t.id === activity.technicianId);
-                
+      {/* Recent Activity - Two Columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Administrative Activity */}
+        <Card>
+          <CardHeader className="border-b border-gray-100">
+            <CardTitle className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+              Atividades Administrativas
+            </CardTitle>
+            <CardDescription>Cadastros e agendamentos</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6">
+            {appointments.length === 0 ? (
+              <div className="text-center py-8">
+                <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">Nenhuma atividade administrativa</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {appointments.slice(0, 4).map((activity: Appointment) => {
+                  const client = clients.find((c: Client) => c.id === activity.clientId);
+
+                  return (
+                    <div key={activity.id} className="flex items-start space-x-4">
+                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <Calendar className="text-blue-600 h-4 w-4" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm text-gray-900">
+                          Agendamento criado para{" "}
+                          <span className="font-medium">{client?.name || "Cliente"}</span>
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(activity.createdAt).toLocaleDateString('pt-BR')} às{" "}
+                          {new Date(activity.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Provider Activity - Admin Only */}
+        <Card>
+          <CardHeader className="border-b border-gray-100">
+            <CardTitle className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              Atividades de Prestadores
+            </CardTitle>
+            <CardDescription>Finalizações e entregas</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6">
+            {(() => {
+              // Filtrar apenas agendamentos com executionStatus (finalizados por prestadores)
+              const providerActivities = appointments.filter((a: Appointment) => a.executionStatus);
+
+              if (providerActivities.length === 0) {
                 return (
-                  <div key={activity.id} className="flex items-start space-x-4">
-                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <CheckCircle className="text-green-600 h-4 w-4" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-gray-900">
-                        <span className="font-medium">{technician?.name || "Técnico"}</span>{" "}
-                        {activity.status === "completed" ? "concluiu" : "criou"} o atendimento na{" "}
-                        <span className="font-medium">{client?.name || "Cliente"}</span>
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {new Date(activity.createdAt).toLocaleDateString('pt-BR')}
-                      </p>
-                    </div>
+                  <div className="text-center py-8">
+                    <CheckCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">Nenhuma atividade de prestadores</p>
                   </div>
                 );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              }
+
+              return (
+                <div className="space-y-4">
+                  {providerActivities.slice(0, 4).map((activity: Appointment) => {
+                    const client = clients.find((c: Client) => c.id === activity.clientId);
+                    const technician = technicians.find((t: Technician) => t.id === activity.technicianId);
+
+                    const isCompleted = activity.executionStatus === 'concluido';
+                    const statusLabel = activity.executionStatus === 'concluido' ? 'Concluído' :
+                      activity.executionStatus?.startsWith('nao_realizado') ? 'Não realizado' :
+                        activity.executionStatus || 'Pendente';
+
+                    return (
+                      <div key={activity.id} className="flex items-start space-x-4">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-green-100' : 'bg-orange-100'
+                          }`}>
+                          {isCompleted ? (
+                            <CheckCircle className="text-green-600 h-4 w-4" />
+                          ) : (
+                            <Clock className="text-orange-600 h-4 w-4" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm text-gray-900">
+                            <span className="font-medium">{technician?.name || "Técnico"}</span>{" "}
+                            {isCompleted ? 'concluiu' : 'registrou'} atendimento em{" "}
+                            <span className="font-medium">{client?.name || "Cliente"}</span>
+                          </p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge className={`text-xs ${isCompleted ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
+                              }`}>
+                              {statusLabel}
+                            </Badge>
+                            <span className="text-xs text-gray-500">
+                              {activity.updatedAt ? new Date(activity.updatedAt).toLocaleDateString('pt-BR') : ''}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Vehicle Alerts & Maintenance - Two Columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <VehiclesAttentionCard />
+        <UpcomingMaintenancesCard />
+      </div>
     </div>
   );
 }

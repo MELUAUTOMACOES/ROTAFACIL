@@ -222,13 +222,13 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
             {...register("phone")}
             disabled={isSubmitting}
           >
-            {(inputProps: any) => (
+            {((inputProps: any) => (
               <Input
                 {...inputProps}
                 id="phone"
                 placeholder="(11) 99999-9999"
               />
-            )}
+            )) as any}
           </InputMask>
           {errors.phone && (
             <p className="text-sm text-red-500">{errors.phone.message}</p>
@@ -302,13 +302,13 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
               disabled={isSubmitting}
               onBlur={handleCepBlur}
             >
-              {(inputProps: any) => (
+              {((inputProps: any) => (
                 <Input
                   {...inputProps}
                   id="cep"
                   placeholder="00000-000"
                 />
-              )}
+              )) as any}
             </InputMask>
             {errors.cep && (
               <p className="text-sm text-red-500">{errors.cep.message}</p>

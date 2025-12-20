@@ -1,17 +1,19 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import jwt from "jsonwebtoken";
+import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import crypto from "node:crypto"; // para randomUUID
 import { db } from "./db"; // ajuste o caminho se o seu db estiver noutro arquivo
-import { routes, routeStops, appointments, clients, dailyAvailability } from "@shared/schema";
+import { routes, routeStops, appointments, clients, dailyAvailability, vehicleChecklists, vehicleChecklistItems } from "@shared/schema";
 import { eq, inArray, sql, and, or } from "drizzle-orm";
 import { format } from "date-fns";
 import {
   insertUserSchema, loginSchema, insertClientSchema, insertServiceSchema,
   insertTechnicianSchema, insertVehicleSchema, insertAppointmentSchema,
   insertChecklistSchema, insertBusinessRulesSchema, insertTeamSchema,
-  insertTeamMemberSchema, extendedInsertAppointmentSchema
+  insertTeamMemberSchema, extendedInsertAppointmentSchema,
+  insertVehicleChecklistSchema, insertVehicleChecklistItemSchema
 } from "@shared/schema";
 import {
   validateTechnicianTeamConflict,
@@ -24,7 +26,17 @@ import { registerUserManagementRoutes } from "./routes/user-management.routes";
 import { registerAccessSchedulesRoutes } from "./routes/access-schedules.routes";
 import { registerDateRestrictionsRoutes } from "./routes/date-restrictions.routes";
 import { registerCompanyRoutes } from "./routes/company.routes";
+import { registerVehicleExtensionRoutes } from "./routes/vehicle-extensions.routes";
 import { isAccessAllowed, getAccessDeniedMessage } from "./access-schedule-validator";
+
+// 🛡️ Rate Limiting para Login (previne brute force)
+const loginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 5, // Máximo 5 tentativas por janela
+  message: { message: "Muitas tentativas de login. Tente novamente em 15 minutos." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // 🔐 CONFIGURAÇÃO OBRIGATÓRIA: JWT_SECRET deve estar definido nas variáveis de ambiente
 // Esta chave é usada para assinar e verificar tokens de autenticação
@@ -397,8 +409,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      console.log(`🔧 [PROVIDER] Atualizando agendamento ${id}:`, { status, executionStatus });
-
       const updated = await storage.updateAppointmentExecution(id, {
         status,
         feedback,
@@ -420,8 +430,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params; // UUID
       const { status, motivo } = req.body; // status: finalizado, incompleto, cancelado
-
-      console.log(`🏁 [PROVIDER] Finalizando rota ${id} com status ${status}`);
 
       // Validar status permitido
       if (!['finalizado', 'incompleto', 'cancelado'].includes(status)) {
@@ -454,9 +462,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const route = await storage.finalizeRoute(id, status, req.user.userId);
 
       if (motivo) {
-        console.log(`📝 [PROVIDER] Motivo da finalização: ${motivo}`);
         // Se quiser salvar motivo na rota, precisaria de coluna "notes" na tabela routes
-        // Como não foi pedido explicitamente create column, deixamos logado
       }
 
       res.json(route);
@@ -469,9 +475,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 4. Listar pendências (agendamentos não concluídos de rotas finalizadas)
   app.get("/api/pending-appointments", authenticateToken, async (req: any, res) => {
     try {
-      console.log(`📋 [PENDING API] Requisição recebida de userId: ${req.user.userId}`);
       const pendencias = await storage.getPendingAppointments(req.user.userId);
-      console.log(`📋 [PENDING API] Retornando ${pendencias.length} pendências`);
       res.json(pendencias);
     } catch (error: any) {
       console.error("❌ [PENDING] Erro ao listar pendências:", error);
@@ -808,7 +812,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/login", async (req, res) => {
+  // 🛡️ Login com rate limiting (máximo 5 tentativas por 15 min)
+  app.post("/api/auth/login", loginRateLimiter, async (req, res) => {
     try {
       const { email, password } = loginSchema.parse(req.body);
 
@@ -885,6 +890,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         companyId: companyId,
         companyRole: companyRole,
       }, JWT_SECRET, { expiresIn: '24h' });
+
+      // 🔐 Registrar login no log de auditoria
+      try {
+        await storage.logAudit({
+          userId: user.id,
+          action: 'login',
+          resource: 'auth',
+          details: { email: user.email, companyId },
+          ipAddress: req.ip || req.headers['x-forwarded-for']?.toString(),
+          userAgent: req.headers['user-agent'],
+        });
+      } catch (auditError) {
+        console.error('⚠️ Erro ao registrar log de auditoria:', auditError);
+        // Não bloquear login por falha no audit
+      }
 
       res.json({
         user: {
@@ -1299,6 +1319,231 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Vehicle not found" });
       }
       res.json({ message: "Vehicle deleted successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== VEHICLE DOCUMENTS ROUTES ====================
+
+  // Lista documentos de um veículo
+  app.get("/api/vehicles/:vehicleId/documents", authenticateToken, async (req: any, res) => {
+    try {
+      const vehicleId = parseInt(req.params.vehicleId);
+      const documents = await storage.getVehicleDocuments(vehicleId, req.user.userId);
+      res.json(documents);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Criar documento
+  app.post("/api/vehicles/:vehicleId/documents", authenticateToken, async (req: any, res) => {
+    try {
+      const vehicleId = parseInt(req.params.vehicleId);
+
+      // Verificar se o veículo pertence ao usuário
+      const vehicle = await storage.getVehicle(vehicleId, req.user.userId);
+      if (!vehicle) {
+        return res.status(404).json({ message: "Veículo não encontrado" });
+      }
+
+      const documentData = {
+        ...req.body,
+        vehicleId,
+        // Converter expirationDate de string para Date se existir
+        expirationDate: req.body.expirationDate ? new Date(req.body.expirationDate) : null,
+      };
+
+      const document = await storage.createVehicleDocument(documentData, req.user.userId);
+      res.json(document);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Excluir documento
+  app.delete("/api/vehicles/:vehicleId/documents/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteVehicleDocument(id, req.user.userId);
+      if (!success) {
+        return res.status(404).json({ message: "Documento não encontrado" });
+      }
+      res.json({ message: "Documento excluído com sucesso" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== VEHICLE MAINTENANCES ROUTES ====================
+
+  // Lista manutenções de um veículo
+  app.get("/api/vehicles/:vehicleId/maintenances", authenticateToken, async (req: any, res) => {
+    try {
+      const vehicleId = parseInt(req.params.vehicleId);
+      const maintenances = await storage.getVehicleMaintenances(vehicleId, req.user.userId);
+      res.json(maintenances);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Buscar uma manutenção específica
+  app.get("/api/vehicle-maintenances/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const maintenance = await storage.getVehicleMaintenance(id, req.user.userId);
+      if (!maintenance) {
+        return res.status(404).json({ message: "Manutenção não encontrada" });
+      }
+
+      // Buscar também as garantias
+      const warranties = await storage.getMaintenanceWarranties(id);
+
+      res.json({ ...maintenance, warranties });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Criar manutenção
+  app.post("/api/vehicles/:vehicleId/maintenances", authenticateToken, async (req: any, res) => {
+    try {
+      const vehicleId = parseInt(req.params.vehicleId);
+
+      // Verificar se o veículo pertence ao usuário
+      const vehicle = await storage.getVehicle(vehicleId, req.user.userId);
+      if (!vehicle) {
+        return res.status(404).json({ message: "Veículo não encontrado" });
+      }
+
+      const { warranties, ...maintenanceData } = req.body;
+
+      // Converter datas de string para Date
+      const processedMaintenanceData = {
+        ...maintenanceData,
+        vehicleId,
+        entryDate: maintenanceData.entryDate ? new Date(maintenanceData.entryDate) : new Date(),
+        exitDate: maintenanceData.exitDate ? new Date(maintenanceData.exitDate) : null,
+      };
+
+      const maintenance = await storage.createVehicleMaintenance(
+        processedMaintenanceData,
+        req.user.userId
+      );
+
+      // Criar garantias se fornecidas
+      if (warranties && Array.isArray(warranties)) {
+        for (const warranty of warranties) {
+          await storage.createMaintenanceWarranty({
+            maintenanceId: maintenance.id,
+            partName: warranty.partName,
+            // Converter data de garantia
+            warrantyExpiration: warranty.warrantyExpiration ? new Date(warranty.warrantyExpiration) : new Date(),
+          });
+        }
+      }
+
+      // Buscar manutenção completa com garantias
+      const fullMaintenance = await storage.getVehicleMaintenance(maintenance.id, req.user.userId);
+      const createdWarranties = await storage.getMaintenanceWarranties(maintenance.id);
+
+      res.json({ ...fullMaintenance, warranties: createdWarranties });
+    } catch (error: any) {
+      console.error("❌ [MAINTENANCE] Erro ao criar manutenção:", error);
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Atualizar manutenção
+  app.put("/api/vehicle-maintenances/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { warranties, ...maintenanceData } = req.body;
+
+      // Converter datas de string para Date
+      const processedData = {
+        ...maintenanceData,
+      };
+
+      if (maintenanceData.entryDate) {
+        processedData.entryDate = new Date(maintenanceData.entryDate);
+      }
+      if (maintenanceData.exitDate) {
+        processedData.exitDate = new Date(maintenanceData.exitDate);
+      }
+
+      const maintenance = await storage.updateVehicleMaintenance(id, processedData, req.user.userId);
+
+      // Buscar garantias atuais
+      const currentWarranties = await storage.getMaintenanceWarranties(id);
+
+      res.json({ ...maintenance, warranties: currentWarranties });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Excluir manutenção
+  app.delete("/api/vehicle-maintenances/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteVehicleMaintenance(id, req.user.userId);
+      if (!success) {
+        return res.status(404).json({ message: "Manutenção não encontrada" });
+      }
+      res.json({ message: "Manutenção excluída com sucesso" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== MAINTENANCE WARRANTIES ROUTES ====================
+
+  // Lista garantias de uma manutenção
+  app.get("/api/vehicle-maintenances/:maintenanceId/warranties", authenticateToken, async (req: any, res) => {
+    try {
+      const maintenanceId = parseInt(req.params.maintenanceId);
+      const warranties = await storage.getMaintenanceWarranties(maintenanceId);
+      res.json(warranties);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Criar garantia
+  app.post("/api/vehicle-maintenances/:maintenanceId/warranties", authenticateToken, async (req: any, res) => {
+    try {
+      const maintenanceId = parseInt(req.params.maintenanceId);
+
+      // Verificar se a manutenção pertence ao usuário
+      const maintenance = await storage.getVehicleMaintenance(maintenanceId, req.user.userId);
+      if (!maintenance) {
+        return res.status(404).json({ message: "Manutenção não encontrada" });
+      }
+
+      const warranty = await storage.createMaintenanceWarranty({
+        maintenanceId,
+        partName: req.body.partName,
+        warrantyExpiration: req.body.warrantyExpiration,
+      });
+
+      res.json(warranty);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Excluir garantia
+  app.delete("/api/vehicle-maintenances/warranties/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteMaintenanceWarranty(id);
+      if (!success) {
+        return res.status(404).json({ message: "Garantia não encontrada" });
+      }
+      res.json({ message: "Garantia excluída com sucesso" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -2852,6 +3097,194 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
 
+  // ==================== VEHICLE CHECKLISTS ROUTES ====================
+
+  // Criar novo checklist
+  app.post("/api/vehicle-checklists", authenticateToken, async (req: any, res) => {
+    try {
+      console.log("📋 [CHECKLIST] Criando novo checklist de veículo");
+
+      const { items, ...checklistData } = req.body;
+
+      // Validar dados do checklist (sem userId e companyId)
+      const validatedChecklist = insertVehicleChecklistSchema.parse(checklistData);
+
+      // Adicionar userId e companyId APÓS a validação (o schema os omite)
+      const checklistWithUser = {
+        ...validatedChecklist,
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+      };
+
+      // Validar items
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: "É necessário incluir ao menos um item no checklist" });
+      }
+
+      const validatedItems = items.map((item: any) =>
+        insertVehicleChecklistItemSchema.parse(item)
+      );
+
+      // Verificar se o veículo existe e pertence ao usuário
+      const vehicle = await storage.getVehicle(checklistWithUser.vehicleId, req.user.userId);
+      if (!vehicle) {
+        return res.status(404).json({ message: "Veículo não encontrado" });
+      }
+
+      // Verificar se técnico existe
+      if (checklistWithUser.technicianId) {
+        const technician = await storage.getTechnician(checklistWithUser.technicianId, req.user.userId);
+        if (!technician) {
+          return res.status(404).json({ message: "Técnico não encontrado" });
+        }
+      }
+
+      // TODO: Validar teamMemberId quando a tabela teamMembers for criada no schema
+
+      // Inserir checklist (type assertion necessária pois userId/companyId são adicionados após validação)
+      const [newChecklist] = await db.insert(vehicleChecklists).values(checklistWithUser as any).returning();
+
+      // Inserir items com checklistId
+      const itemsWithChecklistId = validatedItems.map(item => ({
+        ...item,
+        checklistId: newChecklist.id,
+      }));
+
+      await db.insert(vehicleChecklistItems).values(itemsWithChecklistId);
+
+      console.log(`✅ [CHECKLIST] Checklist ${newChecklist.id} criado com ${items.length} itens`);
+
+      res.status(201).json(newChecklist);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        console.error("❌ [CHECKLIST] Erro de validação:", error.errors);
+        return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
+      }
+      console.error("❌ [CHECKLIST] Erro ao criar checklist:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Listar checklists com filtros
+  app.get("/api/vehicle-checklists", authenticateToken, async (req: any, res) => {
+    try {
+      console.log("📋 [CHECKLIST] Listando checklists com filtros:", req.query);
+
+      const { vehicleId, checklistType, technicianId, startDate, endDate } = req.query;
+
+      let query = db.select().from(vehicleChecklists).where(eq(vehicleChecklists.userId, req.user.userId));
+
+      // Aplicar filtros
+      const conditions: any[] = [eq(vehicleChecklists.userId, req.user.userId)];
+
+      if (vehicleId) {
+        conditions.push(eq(vehicleChecklists.vehicleId, parseInt(vehicleId as string)));
+      }
+
+      if (checklistType) {
+        conditions.push(eq(vehicleChecklists.checklistType, checklistType as string));
+      }
+
+      if (technicianId) {
+        conditions.push(eq(vehicleChecklists.technicianId, parseInt(technicianId as string)));
+      }
+
+      if (startDate) {
+        conditions.push(sql`${vehicleChecklists.checkDate} >= ${new Date(startDate as string)}`);
+      }
+
+      if (endDate) {
+        conditions.push(sql`${vehicleChecklists.checkDate} <= ${new Date(endDate as string)}`);
+      }
+
+      const checklists = await db.select().from(vehicleChecklists).where(and(...conditions)).orderBy(sql`${vehicleChecklists.checkDate} DESC`);
+
+      // Buscar dados relacionados (veículo, técnico, items) para cada checklist
+      const checklistsWithDetails = await Promise.all(checklists.map(async (checklist) => {
+        const vehicle = await storage.getVehicle(checklist.vehicleId, req.user.userId);
+
+        let responsibleName = "Desconhecido";
+        if (checklist.technicianId) {
+          const tech = await storage.getTechnician(checklist.technicianId, req.user.userId);
+          if (tech) responsibleName = tech.name;
+        } else if (checklist.teamMemberId) {
+          const [teamMember] = await db.select().from(teamMembers).where(eq(teamMembers.id, checklist.teamMemberId)).limit(1);
+          if (teamMember) {
+            const tech = await storage.getTechnician(teamMember.technicianId, req.user.userId);
+            if (tech) responsibleName = tech.name;
+          }
+        }
+
+        const items = await db.select().from(vehicleChecklistItems).where(eq(vehicleChecklistItems.checklistId, checklist.id));
+
+        return {
+          ...checklist,
+          vehicle: vehicle ? { plate: vehicle.plate, model: vehicle.model, brand: vehicle.brand } : null,
+          responsibleName,
+          itemsCount: items.length,
+        };
+      }));
+
+      console.log(`✅ [CHECKLIST] ${checklistsWithDetails.length} checklists encontrados`);
+
+      res.json(checklistsWithDetails);
+    } catch (error: any) {
+      console.error("❌ [CHECKLIST] Erro ao listar checklists:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Consultar checklist específico por ID
+  app.get("/api/vehicle-checklists/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      console.log(`📋 [CHECKLIST] Consultando checklist ${id}`);
+
+      const [checklist] = await db.select().from(vehicleChecklists).where(
+        and(
+          eq(vehicleChecklists.id, id),
+          eq(vehicleChecklists.userId, req.user.userId)
+        )
+      ).limit(1);
+
+      if (!checklist) {
+        return res.status(404).json({ message: "Checklist não encontrado" });
+      }
+
+      // Buscar dados relacionados
+      const vehicle = await storage.getVehicle(checklist.vehicleId, req.user.userId);
+
+      let responsibleName = "Desconhecido";
+      if (checklist.technicianId) {
+        const tech = await storage.getTechnician(checklist.technicianId, req.user.userId);
+        if (tech) responsibleName = tech.name;
+      } else if (checklist.teamMemberId) {
+        const [teamMember] = await db.select().from(teamMembers).where(eq(teamMembers.id, checklist.teamMemberId)).limit(1);
+        if (teamMember) {
+          const tech = await storage.getTechnician(teamMember.technicianId, req.user.userId);
+          if (tech) responsibleName = tech.name;
+        }
+      }
+
+      const items = await db.select().from(vehicleChecklistItems).where(eq(vehicleChecklistItems.checklistId, checklist.id));
+
+      const checklistWithDetails = {
+        ...checklist,
+        vehicle: vehicle ? { plate: vehicle.plate, model: vehicle.model, brand: vehicle.brand, year: vehicle.year } : null,
+        responsibleName,
+        items,
+      };
+
+      console.log(`✅ [CHECKLIST] Checklist ${id} retornado com ${items.length} itens`);
+
+      res.json(checklistWithDetails);
+    } catch (error: any) {
+      console.error("❌ [CHECKLIST] Erro ao consultar checklist:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+
   // Registrar rotas de otimização
   const { registerRoutesAPI } = await import("./routes/routes.api");
   registerRoutesAPI(app);
@@ -2867,6 +3300,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Registrar rotas de multiempresa (companies, memberships, invitations)
   registerCompanyRoutes(app, authenticateToken);
+
+  // Registrar rotas de extensão de veículos (auditorias, dashboard)
+  registerVehicleExtensionRoutes(app, authenticateToken);
 
   const httpServer = createServer(app);
   return httpServer;

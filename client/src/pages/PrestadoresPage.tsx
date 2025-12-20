@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
     MapPin, Calendar, Navigation, CheckCircle, Clock,
-    AlertTriangle, ChevronRight, QrCode, LogOut, Map as MapIcon
+    AlertTriangle, ChevronRight, QrCode, LogOut, Map as MapIcon, ClipboardCheck
 } from 'lucide-react';
 import QRCode from "react-qr-code";
 
@@ -16,9 +16,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { AppointmentExecutionModal } from "@/components/provider/AppointmentExecutionModal";
+import VehicleChecklistTab from "@/components/provider/VehicleChecklistTab";
 import { useAuth } from "@/lib/auth";
 
 export default function PrestadoresPage() {
@@ -218,9 +220,9 @@ export default function PrestadoresPage() {
                                         <span className="flex items-center gap-2">
                                             {p.responsibleName} - {p.title}
                                             <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${p.status === 'finalizado' ? 'bg-green-100 text-green-800' :
-                                                    p.status === 'confirmado' ? 'bg-blue-100 text-blue-800' :
-                                                        p.status === 'cancelado' ? 'bg-red-100 text-red-800' :
-                                                            'bg-gray-100 text-gray-800'
+                                                p.status === 'confirmado' ? 'bg-blue-100 text-blue-800' :
+                                                    p.status === 'cancelado' ? 'bg-red-100 text-red-800' :
+                                                        'bg-gray-100 text-gray-800'
                                                 }`}>
                                                 {p.status === 'finalizado' ? 'Finalizado' :
                                                     p.status === 'confirmado' ? 'Ativo' :
@@ -269,9 +271,9 @@ export default function PrestadoresPage() {
                                             <span className="flex items-center gap-2">
                                                 {p.responsibleName} - {p.title}
                                                 <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${p.status === 'finalizado' ? 'bg-green-100 text-green-800' :
-                                                        p.status === 'confirmado' ? 'bg-blue-100 text-blue-800' :
-                                                            p.status === 'cancelado' ? 'bg-red-100 text-red-800' :
-                                                                'bg-gray-100 text-gray-800'
+                                                    p.status === 'confirmado' ? 'bg-blue-100 text-blue-800' :
+                                                        p.status === 'cancelado' ? 'bg-red-100 text-red-800' :
+                                                            'bg-gray-100 text-gray-800'
                                                     }`}>
                                                     {p.status === 'finalizado' ? 'Finalizado' :
                                                         p.status === 'confirmado' ? 'Ativo' :
@@ -315,73 +317,93 @@ export default function PrestadoresPage() {
                 </div>
             </header>
 
-            {/* Map Actions */}
-            <div className="p-4 grid grid-cols-2 gap-3">
-                <Button variant="outline" className="w-full" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${stops[0]?.lat},${stops[0]?.lng}`, '_blank')}>
-                    <MapIcon className="w-4 h-4 mr-2" />
-                    Abrir Mapa
-                </Button>
-                <Button variant="outline" className="w-full" onClick={() => setShowQRModal(true)}>
-                    <QrCode className="w-4 h-4 mr-2" />
-                    Ver QR Code
-                </Button>
-            </div>
+            {/* Tabs: Rotas do Dia e Checklist */}
+            <Tabs defaultValue="routes" className="w-full">
+                <TabsList className="w-full grid grid-cols-2 mx-4 my-2">
+                    <TabsTrigger value="routes" className="flex items-center gap-2">
+                        <MapIcon className="w-4 h-4" />
+                        Rotas do Dia
+                    </TabsTrigger>
+                    <TabsTrigger value="checklist" className="flex items-center gap-2">
+                        <ClipboardCheck className="w-4 h-4" />
+                        Checklist Veiculo
+                    </TabsTrigger>
+                </TabsList>
 
-            {/* Stops List */}
-            <div className="px-4 space-y-3">
-                {stops.map((stop: any, index: number) => (
-                    <Card
-                        key={stop.id}
-                        className={`overflow-hidden transition-all active:scale-[0.98] ${stop.appointment?.status === 'completed' ? 'opacity-75' : ''}`}
-                        onClick={() => handleAppointmentClick(stop)}
-                    >
-                        <div className="flex">
-                            {/* Order Indicator */}
-                            <div className="w-10 bg-gray-100 flex items-center justify-center border-r font-bold text-gray-500">
-                                #{stop.order}
-                            </div>
+                <TabsContent value="routes" className="mt-0">
+                    {/* Map Actions */}
+                    <div className="p-4 grid grid-cols-2 gap-3">
+                        <Button variant="outline" className="w-full" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${stops[0]?.lat},${stops[0]?.lng}`, '_blank')}>
+                            <MapIcon className="w-4 h-4 mr-2" />
+                            Abrir Mapa
+                        </Button>
+                        <Button variant="outline" className="w-full" onClick={() => setShowQRModal(true)}>
+                            <QrCode className="w-4 h-4 mr-2" />
+                            Ver QR Code
+                        </Button>
+                    </div>
 
-                            <div className="flex-1 p-3">
-                                <div className="flex justify-between items-start mb-1">
-                                    <span className="font-semibold text-gray-900 line-clamp-1">
-                                        {stop.appointment?.clientName}
-                                    </span>
-                                    {/* Mostra status da execução por padrão, mas fallback para status administrativo se não tiver execução */}
-                                    <Badge variant="outline" className={`text-xs ${getExecutionStatusColor(stop.appointment?.executionStatus)}`}>
-                                        {getExecutionStatusLabel(stop.appointment?.executionStatus)}
-                                    </Badge>
+                    {/* Stops List */}
+                    <div className="px-4 space-y-3">
+                        {stops.map((stop: any, index: number) => (
+                            <Card
+                                key={stop.id}
+                                className={`overflow-hidden transition-all active:scale-[0.98] ${stop.appointment?.status === 'completed' ? 'opacity-75' : ''}`}
+                                onClick={() => handleAppointmentClick(stop)}
+                            >
+                                <div className="flex">
+                                    {/* Order Indicator */}
+                                    <div className="w-10 bg-gray-100 flex items-center justify-center border-r font-bold text-gray-500">
+                                        #{stop.order}
+                                    </div>
+
+                                    <div className="flex-1 p-3">
+                                        <div className="flex justify-between items-start mb-1">
+                                            <span className="font-semibold text-gray-900 line-clamp-1">
+                                                {stop.appointment?.clientName}
+                                            </span>
+                                            {/* Mostra status da execução por padrão, mas fallback para status administrativo se não tiver execução */}
+                                            <Badge variant="outline" className={`text-xs ${getExecutionStatusColor(stop.appointment?.executionStatus)}`}>
+                                                {getExecutionStatusLabel(stop.appointment?.executionStatus)}
+                                            </Badge>
+                                        </div>
+
+                                        <p className="text-sm text-gray-600 mb-1 line-clamp-1">{stop.appointment?.serviceName}</p>
+
+                                        <div className="flex items-start gap-1 text-xs text-gray-500 mt-2">
+                                            <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                                            <span className="line-clamp-2">{stop.address}</span>
+                                        </div>
+                                    </div>
+
+                                    {!isRouteFinalized && (
+                                        <div className="flex items-center px-2 text-gray-300">
+                                            <ChevronRight className="w-5 h-5" />
+                                        </div>
+                                    )}
                                 </div>
+                            </Card>
+                        ))}
+                    </div>
 
-                                <p className="text-sm text-gray-600 mb-1 line-clamp-1">{stop.appointment?.serviceName}</p>
-
-                                <div className="flex items-start gap-1 text-xs text-gray-500 mt-2">
-                                    <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                                    <span className="line-clamp-2">{stop.address}</span>
-                                </div>
-                            </div>
-
-                            {!isRouteFinalized && (
-                                <div className="flex items-center px-2 text-gray-300">
-                                    <ChevronRight className="w-5 h-5" />
-                                </div>
-                            )}
+                    {/* Footer Actions */}
+                    {!isRouteFinalized && (
+                        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg">
+                            <Button
+                                className="w-full bg-gray-900 hover:bg-gray-800 text-white h-12 text-lg"
+                                onClick={handleOpenFinalizeModal}
+                            >
+                                <CheckCircle className="w-5 h-5 mr-2" />
+                                Fechar Romaneio
+                            </Button>
                         </div>
-                    </Card>
-                ))}
-            </div>
+                    )}
+                </TabsContent>
 
-            {/* Footer Actions */}
-            {!isRouteFinalized && (
-                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg">
-                    <Button
-                        className="w-full bg-gray-900 hover:bg-gray-800 text-white h-12 text-lg"
-                        onClick={handleOpenFinalizeModal}
-                    >
-                        <CheckCircle className="w-5 h-5 mr-2" />
-                        Fechar Romaneio
-                    </Button>
-                </div>
-            )}
+                <TabsContent value="checklist" className="mt-0">
+                    <VehicleChecklistTab />
+                </TabsContent>
+            </Tabs>
 
             {/* Appointment Execution Modal */}
             {selectedAppointment && (

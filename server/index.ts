@@ -1,8 +1,28 @@
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet";
+import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
+
+// 🛡️ Security Headers (Helmet)
+app.use(helmet({
+  contentSecurityPolicy: false, // Desativado para permitir inline scripts do Vite em dev
+  crossOriginEmbedderPolicy: false, // Permite carregar recursos externos (ex: mapas)
+}));
+
+// 🌐 CORS Configuration
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production'
+    ? process.env.APP_URL || true // Em produção, usa APP_URL ou permite qualquer origem
+    : true, // Em desenvolvimento, permite qualquer origem
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+app.use(cors(corsOptions));
+
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: false }));
 

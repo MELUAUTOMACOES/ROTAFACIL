@@ -175,13 +175,13 @@ export default function SignupCompany() {
                       mask="99.999.999/9999-99"
                       {...register("company.cnpj")}
                     >
-                      {(inputProps: any) => (
+                      {((inputProps: any) => (
                         <Input
                           {...inputProps}
                           id="company.cnpj"
                           placeholder="00.000.000/0000-00"
                         />
-                      )}
+                      )) as any}
                     </InputMask>
                     {errors.company?.cnpj && (
                       <p className="text-sm text-red-500 mt-1">{errors.company.cnpj.message}</p>
@@ -194,13 +194,13 @@ export default function SignupCompany() {
                       mask="(99) 99999-9999"
                       {...register("company.telefone")}
                     >
-                      {(inputProps: any) => (
+                      {((inputProps: any) => (
                         <Input
                           {...inputProps}
                           id="company.telefone"
                           placeholder="(00) 00000-0000"
                         />
-                      )}
+                      )) as any}
                     </InputMask>
                     {errors.company?.telefone && (
                       <p className="text-sm text-red-500 mt-1">{errors.company.telefone.message}</p>
@@ -234,13 +234,13 @@ export default function SignupCompany() {
                         {...register("company.cep")}
                         onBlur={(e) => handleCepBlur(e.target.value)}
                       >
-                        {(inputProps: any) => (
+                        {((inputProps: any) => (
                           <Input
                             {...inputProps}
                             id="company.cep"
                             placeholder="00000-000"
                           />
-                        )}
+                        )) as any}
                       </InputMask>
                       {errors.company?.cep && (
                         <p className="text-sm text-red-500 mt-1">{errors.company.cep.message}</p>
@@ -344,13 +344,13 @@ export default function SignupCompany() {
                       mask="(99) 99999-9999"
                       {...register("admin.phone")}
                     >
-                      {(inputProps: any) => (
+                      {((inputProps: any) => (
                         <Input
                           {...inputProps}
                           id="admin.phone"
                           placeholder="(00) 00000-0000"
                         />
-                      )}
+                      )) as any}
                     </InputMask>
                     {errors.admin?.phone && (
                       <p className="text-sm text-red-500 mt-1">{errors.admin.phone.message}</p>

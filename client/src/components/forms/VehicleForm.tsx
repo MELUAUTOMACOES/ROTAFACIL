@@ -21,9 +21,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Car, Calendar, User, Users } from "lucide-react";
+import { Car, Calendar, User, Users, FileText } from "lucide-react";
+import VehicleDocumentsSection from "./VehicleDocumentsSection";
 
 interface VehicleFormProps {
   vehicle?: Vehicle | null;
@@ -42,6 +44,7 @@ export default function VehicleForm({
 }: VehicleFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("dados");
   const [assignmentType, setAssignmentType] = useState<"technician" | "team">(
     vehicle?.technicianId
       ? "technician"
@@ -54,21 +57,21 @@ export default function VehicleForm({
     resolver: zodResolver(insertVehicleSchema),
     defaultValues: vehicle
       ? {
-          plate: vehicle.plate,
-          model: vehicle.model,
-          brand: vehicle.brand,
-          year: vehicle.year,
-          technicianId: vehicle.technicianId || undefined,
-          teamId: vehicle.teamId || undefined,
-        }
+        plate: vehicle.plate,
+        model: vehicle.model,
+        brand: vehicle.brand,
+        year: vehicle.year,
+        technicianId: vehicle.technicianId || undefined,
+        teamId: vehicle.teamId || undefined,
+      }
       : {
-          plate: "",
-          model: "",
-          brand: "",
-          year: new Date().getFullYear(),
-          technicianId: undefined,
-          teamId: undefined,
-        },
+        plate: "",
+        model: "",
+        brand: "",
+        year: new Date().getFullYear(),
+        technicianId: undefined,
+        teamId: undefined,
+      },
   });
 
   const createVehicleMutation = useMutation({
@@ -139,6 +142,37 @@ export default function VehicleForm({
         </DialogTitle>
       </DialogHeader>
 
+      {/* Se estiver editando, mostra abas */}
+      {vehicle ? (
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="dados" className="flex items-center">
+              <Car className="h-4 w-4 mr-2" />
+              Dados
+            </TabsTrigger>
+            <TabsTrigger value="documentos" className="flex items-center">
+              <FileText className="h-4 w-4 mr-2" />
+              Documentos
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="dados" className="mt-4">
+            {renderVehicleForm()}
+          </TabsContent>
+
+          <TabsContent value="documentos" className="mt-4">
+            <VehicleDocumentsSection vehicleId={vehicle.id} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        // Se estiver criando, mostra apenas o formulário
+        renderVehicleForm()
+      )}
+    </div>
+  );
+
+  function renderVehicleForm() {
+    return (
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div>
           <Label htmlFor="plate">Placa *</Label>
@@ -288,10 +322,10 @@ export default function VehicleForm({
                     .filter((t) => {
                       // Filtrar técnicos ativos
                       if (!t.isActive) return false;
-                      
+
                       // Se estiver editando, permitir o técnico atual
                       if (vehicle?.technicianId === t.id) return true;
-                      
+
                       // Filtrar técnicos já vinculados a outros veículos
                       const isLinked = vehicles.some(
                         (v) => v.technicianId === t.id && v.id !== vehicle?.id
@@ -331,7 +365,7 @@ export default function VehicleForm({
                     .filter((team) => {
                       // Se estiver editando, permitir a equipe atual
                       if (vehicle?.teamId === team.id) return true;
-                      
+
                       // Filtrar equipes já vinculadas a outros veículos
                       const isLinked = vehicles.some(
                         (v) => v.teamId === team.id && v.id !== vehicle?.id
@@ -375,6 +409,6 @@ export default function VehicleForm({
           </Button>
         </div>
       </form>
-    </div>
-  );
+    );
+  }
 }

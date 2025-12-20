@@ -15,16 +15,20 @@ import {
   type Invitation, type InsertInvitation,
   type DateRestriction, type InsertDateRestriction,
   type Route,
+  type AuditLog, type InsertAuditLog,
+  type VehicleDocument, type InsertVehicleDocument,
+  type VehicleMaintenance, type InsertVehicleMaintenance,
+  type MaintenanceWarranty, type InsertMaintenanceWarranty,
   users, clients, services, technicians, vehicles, appointments, checklists, businessRules, teams, teamMembers, accessSchedules,
   companies, memberships, invitations,
   dateRestrictions,
   routes, routeStops,
   type RouteStop,
+  auditLogs,
+  vehicleDocuments, vehicleMaintenances, maintenanceWarranties,
 } from "@shared/schema";
 import { db } from "./db";
-import { db } from "./db";
 import { eq, and, or, ilike, sql, inArray, isNotNull, ne, isNull } from "drizzle-orm";
-import { format } from "date-fns";
 import { format } from "date-fns";
 import bcrypt from "bcryptjs";
 
@@ -161,6 +165,23 @@ export interface IStorage {
   updateRouteDate(id: string, date: Date, userId: number): Promise<Route>;
   getRouteStops(routeId: string): Promise<RouteStop[]>;
   getPendingAppointments(userId: number): Promise<any[]>;
+
+  // Vehicle Documents
+  getVehicleDocuments(vehicleId: number, userId: number): Promise<VehicleDocument[]>;
+  createVehicleDocument(document: InsertVehicleDocument, userId: number): Promise<VehicleDocument>;
+  deleteVehicleDocument(id: number, userId: number): Promise<boolean>;
+
+  // Vehicle Maintenances
+  getVehicleMaintenances(vehicleId: number, userId: number): Promise<VehicleMaintenance[]>;
+  getVehicleMaintenance(id: number, userId: number): Promise<VehicleMaintenance | undefined>;
+  createVehicleMaintenance(maintenance: InsertVehicleMaintenance, userId: number): Promise<VehicleMaintenance>;
+  updateVehicleMaintenance(id: number, data: Partial<InsertVehicleMaintenance>, userId: number): Promise<VehicleMaintenance>;
+  deleteVehicleMaintenance(id: number, userId: number): Promise<boolean>;
+
+  // Maintenance Warranties
+  getMaintenanceWarranties(maintenanceId: number): Promise<MaintenanceWarranty[]>;
+  createMaintenanceWarranty(warranty: InsertMaintenanceWarranty): Promise<MaintenanceWarranty>;
+  deleteMaintenanceWarranty(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -665,13 +686,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateAppointment(id: number, appointmentData: Partial<InsertAppointment>, userId: number): Promise<Appointment> {
-    console.log(`🔧 [STORAGE] Dados recebidos para atualização:`, appointmentData);
-
     // Processar scheduledDate se presente
     const processedData = { ...appointmentData };
     if (processedData.scheduledDate) {
-      console.log(`📅 [STORAGE] Processando scheduledDate:`, processedData.scheduledDate);
-
       // Garantir que scheduledDate seja uma string ISO válida ou Date
       if (typeof processedData.scheduledDate === 'string') {
         // Verificar se é uma string ISO válida
@@ -681,13 +698,10 @@ export class DatabaseStorage implements IStorage {
         }
         // Converter para Date object para o Drizzle
         processedData.scheduledDate = dateTest;
-        console.log(`✅ [STORAGE] String convertida para Date object`);
       } else if (!(processedData.scheduledDate instanceof Date)) {
         throw new Error(`Tipo de data inválido no storage: ${typeof processedData.scheduledDate}`);
       }
     }
-
-    console.log(`🔄 [STORAGE] Dados processados:`, processedData);
 
     const [appointment] = await db
       .update(appointments)
@@ -695,7 +709,6 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
       .returning();
 
-    console.log(`✅ [STORAGE] Agendamento atualizado no banco: ${appointment.id}`);
     return appointment;
   }
 
@@ -926,9 +939,6 @@ export class DatabaseStorage implements IStorage {
 
   async getPendingAppointments(userId: number): Promise<any[]> {
     // Buscar agendamentos de rotas finalizadas que não foram concluídos
-    // Precisamos fazer um join com routeStops e routes
-
-    console.log(`📋 [PENDING] Buscando pendências para userId: ${userId}`);
 
     // 1. Buscar rotas finalizadas (incluindo rotas antigas sem userId para compatibilidade)
     const finalizedRoutes = await db
@@ -939,40 +949,27 @@ export class DatabaseStorage implements IStorage {
         or(eq(routes.status, 'finalizado'), eq(routes.status, 'cancelado'), eq(routes.status, 'incompleto'))
       ));
 
-    console.log(`📋 [PENDING] Rotas finalizadas encontradas: ${finalizedRoutes.length}`);
-    finalizedRoutes.forEach(r => console.log(`   - Rota: ${r.title} (ID: ${r.id}, Status: ${r.status})`));
-
     const routeIds = finalizedRoutes.map(r => r.id);
 
     if (routeIds.length === 0) {
-      console.log(`📋 [PENDING] Nenhuma rota finalizada, retornando vazio`);
       return [];
     }
 
-    // 2. Buscar agendamentos dessas rotas que NÃO estão concluídos (execution_status != 'concluido')
-    // Precisamos cruzar com routeStops para saber de qual rota é
-
-    // Como o Drizzle não facilita joins complexos com abstração simples, vamos fazer em etapas ou usar query builder
-    // Vamos buscar os routeStops dessas rotas
+    // 2. Buscar routeStops dessas rotas
     const stops = await db
       .select()
       .from(routeStops)
       .where(inArray(routeStops.routeId, routeIds));
 
-    console.log(`📋 [PENDING] RouteStops encontrados: ${stops.length}`);
-
     const appointmentIds = stops
       .map(s => s.appointmentNumericId)
       .filter((id): id is number => id !== null);
 
-    console.log(`📋 [PENDING] IDs de agendamentos extraídos (appointmentNumericId): ${appointmentIds.length}`);
-    console.log(`   IDs: [${appointmentIds.join(', ')}]`);
-
     if (appointmentIds.length === 0) {
-      console.log(`📋 [PENDING] Nenhum appointmentNumericId encontrado nos routeStops, retornando vazio`);
       return [];
     }
 
+    // 3. Buscar agendamentos pendentes (não concluídos)
     const pendingAppointments = await db
       .select()
       .from(appointments)
@@ -981,12 +978,7 @@ export class DatabaseStorage implements IStorage {
         or(isNull(appointments.executionStatus), ne(appointments.executionStatus, 'concluido'))
       ));
 
-    console.log(`📋 [PENDING] Agendamentos pendentes encontrados: ${pendingAppointments.length}`);
-    pendingAppointments.forEach(apt => {
-      console.log(`   - Apt #${apt.id}: executionStatus="${apt.executionStatus || 'NULL'}" (status=${apt.status})`);
-    });
-
-    // Enriquecer com dados da rota e cliente
+    // 4. Enriquecer com dados da rota e cliente
     const result = await Promise.all(pendingAppointments.map(async (apt) => {
       const stop = stops.find(s => s.appointmentNumericId === apt.id);
       const route = await db.select().from(routes).where(eq(routes.id, stop!.routeId)).limit(1);
@@ -1004,8 +996,6 @@ export class DatabaseStorage implements IStorage {
         responsibleName: technician?.name || team?.name || 'N/A'
       };
     }));
-
-    console.log(`📋 [PENDING] Retornando ${result.length} pendências enriquecidas`);
 
     return result;
   }
@@ -1205,6 +1195,184 @@ export class DatabaseStorage implements IStorage {
 
   async deleteInvitation(id: number): Promise<boolean> {
     const result = await db.delete(invitations).where(eq(invitations.id, id));
+    return (result.rowCount || 0) > 0;
+  }
+
+  // 🔐 Audit Logging - Registro de ações para segurança
+  async logAudit(data: {
+    userId?: number;
+    action: string; // login, logout, create, update, delete, view
+    resource: string; // appointment, client, route, user, etc.
+    resourceId?: string;
+    details?: any;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<AuditLog> {
+    const [log] = await db.insert(auditLogs).values({
+      userId: data.userId || null,
+      action: data.action,
+      resource: data.resource,
+      resourceId: data.resourceId || null,
+      details: data.details || null,
+      ipAddress: data.ipAddress || null,
+      userAgent: data.userAgent || null,
+    }).returning();
+    return log;
+  }
+
+  async getAuditLogs(filters?: {
+    userId?: number;
+    action?: string;
+    resource?: string;
+    limit?: number;
+  }): Promise<AuditLog[]> {
+    const conditions = [];
+
+    if (filters?.userId) {
+      conditions.push(eq(auditLogs.userId, filters.userId));
+    }
+    if (filters?.action) {
+      conditions.push(eq(auditLogs.action, filters.action));
+    }
+    if (filters?.resource) {
+      conditions.push(eq(auditLogs.resource, filters.resource));
+    }
+
+    const query = db.select().from(auditLogs);
+
+    if (conditions.length > 0) {
+      return await query.where(and(...conditions)).orderBy(sql`${auditLogs.createdAt} DESC`).limit(filters?.limit || 100);
+    }
+
+    return await query.orderBy(sql`${auditLogs.createdAt} DESC`).limit(filters?.limit || 100);
+  }
+
+  // Vehicle Documents
+  async getVehicleDocuments(vehicleId: number, userId: number): Promise<VehicleDocument[]> {
+    return await db
+      .select()
+      .from(vehicleDocuments)
+      .where(and(eq(vehicleDocuments.vehicleId, vehicleId), eq(vehicleDocuments.userId, userId)))
+      .orderBy(sql`${vehicleDocuments.createdAt} DESC`);
+  }
+
+  async createVehicleDocument(document: InsertVehicleDocument, userId: number): Promise<VehicleDocument> {
+    const [doc] = await db
+      .insert(vehicleDocuments)
+      .values({ ...document, userId })
+      .returning();
+    return doc;
+  }
+
+  async deleteVehicleDocument(id: number, userId: number): Promise<boolean> {
+    const result = await db
+      .delete(vehicleDocuments)
+      .where(and(eq(vehicleDocuments.id, id), eq(vehicleDocuments.userId, userId)));
+    return (result.rowCount || 0) > 0;
+  }
+
+  // Vehicle Maintenances
+  async getVehicleMaintenances(vehicleId: number, userId: number): Promise<VehicleMaintenance[]> {
+    return await db
+      .select()
+      .from(vehicleMaintenances)
+      .where(and(eq(vehicleMaintenances.vehicleId, vehicleId), eq(vehicleMaintenances.userId, userId)))
+      .orderBy(sql`${vehicleMaintenances.entryDate} DESC`);
+  }
+
+  async getVehicleMaintenance(id: number, userId: number): Promise<VehicleMaintenance | undefined> {
+    const [maintenance] = await db
+      .select()
+      .from(vehicleMaintenances)
+      .where(and(eq(vehicleMaintenances.id, id), eq(vehicleMaintenances.userId, userId)));
+    return maintenance || undefined;
+  }
+
+  async createVehicleMaintenance(maintenance: InsertVehicleMaintenance, userId: number): Promise<VehicleMaintenance> {
+    // Calcular totalCost automaticamente
+    const laborCost = parseFloat(String(maintenance.laborCost || 0));
+    const materialsCost = parseFloat(String(maintenance.materialsCost || 0));
+    const totalCost = (laborCost + materialsCost).toFixed(2);
+
+    const [created] = await db
+      .insert(vehicleMaintenances)
+      .values({
+        vehicleId: maintenance.vehicleId,
+        entryDate: maintenance.entryDate,
+        exitDate: maintenance.exitDate,
+        workshop: maintenance.workshop,
+        technicianResponsible: maintenance.technicianResponsible,
+        description: maintenance.description,
+        category: maintenance.category,
+        maintenanceType: maintenance.maintenanceType,
+        vehicleKm: maintenance.vehicleKm,
+        photos: maintenance.photos,
+        laborCost: laborCost.toFixed(2),
+        materialsCost: materialsCost.toFixed(2),
+        totalCost,
+        vehicleUnavailable: maintenance.vehicleUnavailable,
+        unavailableDays: maintenance.unavailableDays,
+        affectedAppointments: maintenance.affectedAppointments,
+        invoiceNumber: maintenance.invoiceNumber,
+        observations: maintenance.observations,
+        userId,
+        updatedAt: new Date()
+      })
+      .returning();
+    return created;
+  }
+
+  async updateVehicleMaintenance(id: number, data: Partial<InsertVehicleMaintenance>, userId: number): Promise<VehicleMaintenance> {
+    // Recalcular totalCost se laborCost ou materialsCost foram alterados
+    let updateData: any = { ...data, updatedAt: new Date() };
+
+    if (data.laborCost !== undefined || data.materialsCost !== undefined) {
+      // Buscar registro atual para pegar valores não alterados
+      const current = await this.getVehicleMaintenance(id, userId);
+      if (current) {
+        const laborCost = parseFloat(String(data.laborCost ?? current.laborCost ?? 0));
+        const materialsCost = parseFloat(String(data.materialsCost ?? current.materialsCost ?? 0));
+        updateData.totalCost = (laborCost + materialsCost).toFixed(2);
+      }
+    }
+
+    const [updated] = await db
+      .update(vehicleMaintenances)
+      .set(updateData)
+      .where(and(eq(vehicleMaintenances.id, id), eq(vehicleMaintenances.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteVehicleMaintenance(id: number, userId: number): Promise<boolean> {
+    // Cascade delete de warranties é automático pela FK
+    const result = await db
+      .delete(vehicleMaintenances)
+      .where(and(eq(vehicleMaintenances.id, id), eq(vehicleMaintenances.userId, userId)));
+    return (result.rowCount || 0) > 0;
+  }
+
+  // Maintenance Warranties
+  async getMaintenanceWarranties(maintenanceId: number): Promise<MaintenanceWarranty[]> {
+    return await db
+      .select()
+      .from(maintenanceWarranties)
+      .where(eq(maintenanceWarranties.maintenanceId, maintenanceId))
+      .orderBy(sql`${maintenanceWarranties.warrantyExpiration} ASC`);
+  }
+
+  async createMaintenanceWarranty(warranty: InsertMaintenanceWarranty): Promise<MaintenanceWarranty> {
+    const [created] = await db
+      .insert(maintenanceWarranties)
+      .values(warranty)
+      .returning();
+    return created;
+  }
+
+  async deleteMaintenanceWarranty(id: number): Promise<boolean> {
+    const result = await db
+      .delete(maintenanceWarranties)
+      .where(eq(maintenanceWarranties.id, id));
     return (result.rowCount || 0) > 0;
   }
 }
