@@ -31,13 +31,33 @@ interface AuthenticatedRequest extends Request {
 
 // Helper para ler URL do OSRM
 function getOsrmUrl() {
-  const filePath = path.join(__dirname, "../osrm_url.txt");
-  try {
-    return fs.readFileSync(filePath, "utf8").trim();
-  } catch (err) {
-    console.error("Arquivo osrm_url.txt não encontrado ou não lido!", err);
-    return null;
+  // 1. Prioridade: Variável de ambiente (Ideal para Deploy/Render)
+  if (process.env.OSRM_URL) {
+    console.log("Variável de ambiente OSRM_URL encontrada:", process.env.OSRM_URL);
+    return process.env.OSRM_URL;
   }
+
+  // 2. Fallback: Arquivo txt em vários locais possíveis
+  const candidates = [
+    path.join(__dirname, "../osrm_url.txt"), // Localização original relativa (src/routes/ -> src/)
+    path.join(__dirname, "osrm_url.txt"),    // Mesmo diretório
+    path.join(process.cwd(), "server/osrm_url.txt"), // Caminho a partir da raiz (dev)
+    path.join(process.cwd(), "osrm_url.txt"),        // Caminho a partir da raiz (prod/dist - se copiado)
+  ];
+
+  for (const filePath of candidates) {
+    try {
+      if (fs.existsSync(filePath)) {
+        console.log("Arquivo de configuração OSRM encontrado em:", filePath);
+        return fs.readFileSync(filePath, "utf8").trim();
+      }
+    } catch (err) {
+      // continua procurando
+    }
+  }
+
+  console.error("Nenhuma configuração de OSRM encontrada (ENV ou arquivo).");
+  return null;
 }
 
 // Helper para converter ID numérico para UUID válido

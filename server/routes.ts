@@ -54,14 +54,31 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 function getOsrmUrl() {
-  const filePath = path.join(__dirname, 'osrm_url.txt');
-  console.log("Procurando arquivo em:", filePath);
-  try {
-    return fs.readFileSync(filePath, 'utf8').trim();
-  } catch (err) {
-    console.error('Arquivo osrm_url.txt não encontrado ou não lido!', err);
-    return null;
+  // 1. Prioridade: Variável de ambiente (Ideal para Deploy/Render)
+  if (process.env.OSRM_URL) {
+    return process.env.OSRM_URL;
   }
+
+  // 2. Fallback: Arquivo txt em vários locais possíveis
+  const candidates = [
+    path.join(__dirname, 'osrm_url.txt'),
+    path.join(process.cwd(), 'server/osrm_url.txt'),
+    path.join(process.cwd(), 'osrm_url.txt'),
+  ];
+
+  for (const filePath of candidates) {
+    try {
+      if (fs.existsSync(filePath)) {
+        console.log("Arquivo de configuração OSRM encontrado em:", filePath);
+        return fs.readFileSync(filePath, 'utf8').trim();
+      }
+    } catch (err) {
+      // continua procurando
+    }
+  }
+
+  console.error('Arquivo osrm_url.txt não encontrado em nenhum local padrão.');
+  return null;
 }
 
 // Auth middleware
