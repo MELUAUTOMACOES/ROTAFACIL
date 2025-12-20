@@ -327,5 +327,77 @@ export function registerVehicleExtensionRoutes(app: Express, authenticateToken: 
         }
     });
 
+    // GET /api/dashboard/maintenance-costs - Custos de manutenção por mês e ano
+    app.get("/api/dashboard/maintenance-costs", authenticateToken, async (req: any, res) => {
+        try {
+            console.log("📊 [DASHBOARD] Buscando custos de manutenção");
+
+            const { vehicleId } = req.query;
+
+            const now = new Date();
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+            // Base conditions
+            const baseConditions = [
+                eq(vehicleMaintenances.userId, req.user.userId),
+                eq(vehicleMaintenances.status, "concluida"),
+            ];
+
+            if (vehicleId) {
+                baseConditions.push(eq(vehicleMaintenances.vehicleId, parseInt(vehicleId)));
+            }
+
+            // Total do mês atual
+            const monthMaintenances = await db
+                .select({ totalCost: vehicleMaintenances.totalCost })
+                .from(vehicleMaintenances)
+                .where(
+                    and(
+                        ...baseConditions,
+                        gte(vehicleMaintenances.entryDate, startOfMonth)
+                    )
+                );
+
+            const monthTotal = monthMaintenances.reduce((acc, m) => {
+                return acc + parseFloat(m.totalCost?.toString() || "0");
+            }, 0);
+
+            // Total do ano atual
+            const yearMaintenances = await db
+                .select({ totalCost: vehicleMaintenances.totalCost })
+                .from(vehicleMaintenances)
+                .where(
+                    and(
+                        ...baseConditions,
+                        gte(vehicleMaintenances.entryDate, startOfYear)
+                    )
+                );
+
+            const yearTotal = yearMaintenances.reduce((acc, m) => {
+                return acc + parseFloat(m.totalCost?.toString() || "0");
+            }, 0);
+
+            // Buscar veículos para filtro
+            const userVehicles = await db
+                .select({ id: vehicles.id, plate: vehicles.plate, model: vehicles.model })
+                .from(vehicles)
+                .where(eq(vehicles.userId, req.user.userId));
+
+            console.log(`✅ [DASHBOARD] Custos calculados - Mês: R$ ${monthTotal.toFixed(2)}, Ano: R$ ${yearTotal.toFixed(2)}`);
+            res.json({
+                monthTotal,
+                yearTotal,
+                monthName: now.toLocaleDateString("pt-BR", { month: "long" }),
+                year: now.getFullYear(),
+                vehicles: userVehicles,
+                selectedVehicleId: vehicleId ? parseInt(vehicleId) : null,
+            });
+        } catch (error: any) {
+            console.error("❌ [DASHBOARD] Erro ao buscar custos de manutenção:", error);
+            res.status(500).json({ message: error.message });
+        }
+    });
+
     console.log("✅ Rotas de extensão de veículos registradas");
 }

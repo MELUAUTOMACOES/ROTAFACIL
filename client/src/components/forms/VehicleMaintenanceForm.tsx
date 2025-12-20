@@ -54,7 +54,7 @@ interface FormData {
     description: string;
     category: string;
     maintenanceType: string;
-    vehicleKm: number;
+    vehicleKm: string;
     laborCost: string;
     materialsCost: string;
     vehicleUnavailable: boolean;
@@ -63,6 +63,28 @@ interface FormData {
     invoiceNumber: string;
     observations: string;
 }
+
+// Helpers para máscaras de input
+const formatKilometers = (value: string): string => {
+    const numericValue = value.replace(/\D/g, "");
+    if (!numericValue) return "";
+    return new Intl.NumberFormat("pt-BR").format(parseInt(numericValue));
+};
+
+const unformatKilometers = (value: string): string => {
+    return value.replace(/\D/g, "");
+};
+
+const formatCurrency = (value: string): string => {
+    const numericValue = value.replace(/\D/g, "");
+    if (!numericValue) return "";
+    const floatValue = parseInt(numericValue) / 100;
+    return floatValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+const unformatCurrency = (value: string): string => {
+    return value.replace(/\D/g, "");
+};
 
 interface Warranty {
     id?: number;
@@ -95,9 +117,9 @@ export default function VehicleMaintenanceForm({
                 description: maintenance.description || "",
                 category: maintenance.category || "motor",
                 maintenanceType: maintenance.maintenanceType || "corretiva",
-                vehicleKm: maintenance.vehicleKm || 0,
-                laborCost: maintenance.laborCost?.toString() || "0",
-                materialsCost: maintenance.materialsCost?.toString() || "0",
+                vehicleKm: maintenance.vehicleKm ? formatKilometers(String(maintenance.vehicleKm)) : "",
+                laborCost: maintenance.laborCost ? formatCurrency(String(Math.round(parseFloat(maintenance.laborCost.toString()) * 100))) : "",
+                materialsCost: maintenance.materialsCost ? formatCurrency(String(Math.round(parseFloat(maintenance.materialsCost.toString()) * 100))) : "",
                 vehicleUnavailable: maintenance.vehicleUnavailable || false,
                 unavailableDays: maintenance.unavailableDays || 0,
                 affectedAppointments: maintenance.affectedAppointments || false,
@@ -114,9 +136,9 @@ export default function VehicleMaintenanceForm({
                 description: "",
                 category: "motor",
                 maintenanceType: "corretiva",
-                vehicleKm: 0,
-                laborCost: "0",
-                materialsCost: "0",
+                vehicleKm: "",
+                laborCost: "",
+                materialsCost: "",
                 vehicleUnavailable: false,
                 unavailableDays: 0,
                 affectedAppointments: false,
@@ -132,9 +154,9 @@ export default function VehicleMaintenanceForm({
         }
     }, [maintenance]);
 
-    const laborCost = parseFloat(form.watch("laborCost") || "0");
-    const materialsCost = parseFloat(form.watch("materialsCost") || "0");
-    const totalCost = laborCost + materialsCost;
+    const laborCostRaw = parseInt(unformatCurrency(form.watch("laborCost") || "0") || "0") / 100;
+    const materialsCostRaw = parseInt(unformatCurrency(form.watch("materialsCost") || "0") || "0") / 100;
+    const totalCost = laborCostRaw + materialsCostRaw;
 
     const createMutation = useMutation({
         mutationFn: async (data: any) => {
@@ -201,6 +223,9 @@ export default function VehicleMaintenanceForm({
 
         const payload = {
             ...data,
+            vehicleKm: parseInt(unformatKilometers(data.vehicleKm) || "0"),
+            laborCost: (parseInt(unformatCurrency(data.laborCost) || "0") / 100).toFixed(2),
+            materialsCost: (parseInt(unformatCurrency(data.materialsCost) || "0") / 100).toFixed(2),
             entryDate: new Date(data.entryDate).toISOString(),
             exitDate: data.exitDate ? new Date(data.exitDate).toISOString() : null,
             scheduledDate: data.scheduledDate ? new Date(data.scheduledDate).toISOString() : null,
@@ -438,12 +463,17 @@ export default function VehicleMaintenanceForm({
                         <div>
                             <Label htmlFor="vehicleKm">KM do Veículo *</Label>
                             <Input
-                                {...form.register("vehicleKm", { valueAsNumber: true, required: true })}
-                                type="number"
-                                min="0"
+                                value={form.watch("vehicleKm")}
+                                onChange={(e) => {
+                                    const formatted = formatKilometers(e.target.value);
+                                    form.setValue("vehicleKm", formatted);
+                                }}
                                 placeholder="0"
-                                className="mt-1"
+                                className={`mt-1 ${form.formState.errors.vehicleKm ? "border-red-500 focus:ring-red-500" : ""}`}
                             />
+                            {form.formState.errors.vehicleKm && (
+                                <p className="text-red-500 text-xs mt-1">Informe a quilometragem</p>
+                            )}
                         </div>
                     </div>
 
@@ -495,29 +525,31 @@ export default function VehicleMaintenanceForm({
                         <div>
                             <Label htmlFor="laborCost">Mão de Obra (R$)</Label>
                             <Input
-                                {...form.register("laborCost")}
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                placeholder="0.00"
+                                value={form.watch("laborCost")}
+                                onChange={(e) => {
+                                    const formatted = formatCurrency(e.target.value);
+                                    form.setValue("laborCost", formatted);
+                                }}
+                                placeholder="0,00"
                                 className="mt-1"
                             />
                         </div>
                         <div>
                             <Label htmlFor="materialsCost">Materiais (R$)</Label>
                             <Input
-                                {...form.register("materialsCost")}
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                placeholder="0.00"
+                                value={form.watch("materialsCost")}
+                                onChange={(e) => {
+                                    const formatted = formatCurrency(e.target.value);
+                                    form.setValue("materialsCost", formatted);
+                                }}
+                                placeholder="0,00"
                                 className="mt-1"
                             />
                         </div>
                         <div>
                             <Label>Total (R$)</Label>
                             <div className="mt-1 h-10 px-3 py-2 bg-gray-100 border rounded-md flex items-center font-medium">
-                                R$ {totalCost.toFixed(2)}
+                                R$ {totalCost.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                         </div>
                     </div>

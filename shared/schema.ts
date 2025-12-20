@@ -59,6 +59,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   plan: text("plan").notNull().default("basic"), // basic, professional (herdado, pode ser descontinuado em favor de companies.plan)
   role: text("role").notNull().default("user"), // admin, user, operador (compatibilidade, preferir memberships.role)
+  isSuperAdmin: boolean("is_super_admin").notNull().default(false), // Flag exclusiva para admin master (fundador)
   phone: text("phone"),
   cep: text("cep"),
   logradouro: text("logradouro"),
@@ -795,6 +796,22 @@ export const auditLogs = pgTable("audit_logs", {
 
 export const insertAuditLogSchema = createInsertSchema(auditLogs);
 
+// Feature Usage - Rastreamento de uso de funcionalidades para métricas
+export const featureUsage = pgTable("feature_usage", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  companyId: integer("company_id").references(() => companies.id, { onDelete: 'set null' }),
+  feature: text("feature").notNull(), // Ex: 'appointments', 'clients', 'routes', 'vehicles'
+  action: text("action").notNull(), // Ex: 'create', 'update', 'delete', 'list', 'view'
+  metadata: jsonb("metadata"), // Dados extras contextuais (opcional)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertFeatureUsageSchema = createInsertSchema(featureUsage).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Vehicle Documents - Documentos anexados ao veículo (CRLV, seguro, etc.)
 export const vehicleDocuments = pgTable("vehicle_documents", {
   id: serial("id").primaryKey(),
@@ -967,3 +984,5 @@ export type MaintenanceWarranty = typeof maintenanceWarranties.$inferSelect;
 export type InsertMaintenanceWarranty = z.infer<typeof insertMaintenanceWarrantySchema>;
 export type VehicleChecklistAudit = typeof vehicleChecklistAudits.$inferSelect;
 export type InsertVehicleChecklistAudit = z.infer<typeof insertVehicleChecklistAuditSchema>;
+export type FeatureUsage = typeof featureUsage.$inferSelect;
+export type InsertFeatureUsage = z.infer<typeof insertFeatureUsageSchema>;

@@ -20,6 +20,7 @@ import {
   users,
 } from "@shared/schema";
 import { eq, and, gte, lte, like, or, desc, inArray, sql, asc, ne } from "drizzle-orm";
+import { trackFeatureUsage } from "./metrics.routes";
 
 // Extend Request type for authenticated user
 interface AuthenticatedRequest extends Request {
@@ -721,6 +722,13 @@ export function registerRoutesAPI(app: Express) {
         `Otimizou a rota`,
         { stopsCount: stops.length, distanceTotal: distanceToSave, durationTotal: durationToSave }
       );
+
+      // Tracking metrics
+      trackFeatureUsage(req.user.userId, "routes", "optimize", null, {
+        routeId,
+        stops: stops.length,
+        dist: distanceToSave
+      });
 
       // 9) ok: o front vai refazer o GET /api/routes/:id
       return res.json({ ok: true });

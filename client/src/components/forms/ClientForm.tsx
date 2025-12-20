@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Users, Mail, Phone, MapPin } from "lucide-react";
 
@@ -17,23 +18,17 @@ interface ClientFormProps {
   onClose: () => void;
 }
 
-async function buscarEnderecoPorCep(cep: string) {
-  const url = `https://viacep.com.br/ws/${cep.replace(/\D/g, '')}/json/`;
-  const res = await fetch(url);
-  const data = await res.json();
-  if (data.erro) throw new Error("CEP não encontrado");
-  return data; // {logradouro, bairro, localidade, uf, ...}
-}
+import { buscarEnderecoPorCep } from "@/lib/cep";
 
 
 export default function ClientForm({ client, onClose }: ClientFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   // Estados para validação de CPF
   const [cpfInput, setCpfInput] = useState(client?.cpf || "");
   const [cpfError, setCpfError] = useState<string | null>(null);
-  
+
   const form = useForm<InsertClient>({
     resolver: zodResolver(extendedInsertClientSchema),
     defaultValues: client ? {
@@ -80,23 +75,55 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
     }
   }, [client]);
 
+  // Monitorar mudanças no CEP para busca automática
+  const watchedCep = form.watch("cep");
+  useEffect(() => {
+    const cleanCep = watchedCep?.replace(/\D/g, '') || "";
+    if (cleanCep.length === 8) {
+      const fetchAddress = async () => {
+        try {
+          const endereco = await buscarEnderecoPorCep(cleanCep);
+
+          // Update local state
+          setLogradouro(endereco.logradouro || "");
+          setBairro(endereco.bairro || "");
+          setCidade(endereco.localidade || "");
+
+          // Update form fields
+          form.setValue("logradouro", endereco.logradouro || "");
+          form.setValue("bairro", endereco.bairro || "");
+          form.setValue("cidade", endereco.localidade || "");
+          form.setValue("numero", ""); // Clear number to force entry
+
+          // Focus on number
+          form.setFocus("numero");
+
+        } catch (error) {
+          // Silent fail or minimal toast if user just finished typing
+          console.warn("CEP lookup failed", error);
+        }
+      };
+      fetchAddress();
+    }
+  }, [watchedCep, form]);
+
   // Query para validação de CPF
   const { data: cpfValidation, refetch: validateCpf } = useQuery({
     queryKey: ['/api/clients/validate-cpf', cpfInput],
     queryFn: async () => {
       if (!cpfInput || cpfInput.length < 11) return { exists: false };
       console.log("Validação de CPF:", cpfInput);
-      
+
       const response = await fetch(`/api/clients/validate-cpf?cpf=${encodeURIComponent(cpfInput)}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
       });
-      
+
       if (!response.ok) {
         throw new Error('Erro na validação de CPF');
       }
-      
+
       return response.json();
     },
     enabled: false, // Só executa quando chamado manualmente
@@ -110,11 +137,11 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
         setCpfError(null);
         return;
       }
-      
+
       const timer = setTimeout(() => {
         validateCpf();
       }, 500); // Debounce de 500ms
-      
+
       return () => clearTimeout(timer);
     } else {
       setCpfError(null);
@@ -185,7 +212,7 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
       });
       return;
     }
-    
+
     if (client) {
       updateClientMutation.mutate(data);
     } else {
@@ -243,12 +270,12 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
             onChange={(e) => {
               let value = e.target.value.replace(/\D/g, '');
               console.log("Validação de CPF:", value);
-              
+
               if (value.length > 11) {
                 value = value.slice(0, 11);
               }
               const formattedValue = value.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, '$1.$2.$3-$4');
-              
+
               setCpfInput(formattedValue);
               form.setValue("cpf", formattedValue);
             }}
@@ -329,46 +356,21 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
               placeholder="00000-000"
               maxLength={9}
               className="mt-1"
-              onChange={(e) => {
+              onBlur={(e) => {
+                // Keep onBlur just for mask formatting if needed, but logic moved to effect
                 let value = e.target.value.replace(/\D/g, '');
                 if (value.length > 5) {
                   value = value.slice(0, 5) + '-' + value.slice(5, 8);
                 }
                 form.setValue("cep", value);
               }}
-              
-              onBlur={async (e) => {
-                const value = e.target.value.replace(/\D/g, '');
-                if (value.length === 8) {
-                  try {
-                    const endereco = await buscarEnderecoPorCep(value);
-
-                    setLogradouro(endereco.logradouro || "");
-                    setBairro(endereco.bairro || "");
-                    setCidade(endereco.localidade || "");
-                    setEstado(endereco.uf || "");
-
-                    // Agora preenche TAMBÉM no formulário do react-hook-form
-                    form.setValue("logradouro", endereco.logradouro || "");
-                    form.setValue("bairro", endereco.bairro || "");
-                    form.setValue("cidade", endereco.localidade || "");
-                    // form.setValue("estado", endereco.uf || ""); // caso adicione UF depois
-
-                  } catch (err) {
-                    toast({
-                      title: "CEP não encontrado!",
-                      description: "Preencha o endereço manualmente.",
-                      variant: "destructive",
-                    });
-                    setLogradouro("");
-                    setBairro("");
-                    setCidade("");
-                    setEstado("");
-                    form.setValue("logradouro", "");
-                    form.setValue("bairro", "");
-                    form.setValue("cidade", "");
-                  }
+              onChange={(e) => {
+                // Only handle mask
+                let value = e.target.value.replace(/\D/g, '');
+                if (value.length > 5) {
+                  value = value.slice(0, 5) + '-' + value.slice(5, 8);
                 }
+                form.setValue("cep", value);
               }}
 
             />
@@ -404,39 +406,39 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="bairro">Bairro *</Label>
-          <Input
-            {...form.register("bairro")}
-            placeholder="Centro"
-            className="mt-1"
-            value={bairro}
-            onChange={e => {
-              setBairro(e.target.value);
-              form.setValue("bairro", e.target.value);
-            }}
-          />
-          {form.formState.errors.bairro && (
-            <p className="text-sm text-red-600 mt-1">{form.formState.errors.bairro.message}</p>
-          )}
+          <div>
+            <Label htmlFor="bairro">Bairro *</Label>
+            <Input
+              {...form.register("bairro")}
+              placeholder="Centro"
+              className="mt-1"
+              value={bairro}
+              onChange={e => {
+                setBairro(e.target.value);
+                form.setValue("bairro", e.target.value);
+              }}
+            />
+            {form.formState.errors.bairro && (
+              <p className="text-sm text-red-600 mt-1">{form.formState.errors.bairro.message}</p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="cidade">Cidade *</Label>
+            <Input
+              {...form.register("cidade")}
+              placeholder="Sua cidade"
+              className="mt-1"
+              value={cidade}
+              onChange={e => {
+                setCidade(e.target.value);
+                form.setValue("cidade", e.target.value);
+              }}
+            />
+            {form.formState.errors.cidade && (
+              <p className="text-sm text-red-600 mt-1">{form.formState.errors.cidade.message}</p>
+            )}
+          </div>
         </div>
-        <div>
-          <Label htmlFor="cidade">Cidade *</Label>
-          <Input
-            {...form.register("cidade")}
-            placeholder="Sua cidade"
-            className="mt-1"
-            value={cidade}
-            onChange={e => {
-              setCidade(e.target.value);
-              form.setValue("cidade", e.target.value);
-            }}
-          />
-          {form.formState.errors.cidade && (
-            <p className="text-sm text-red-600 mt-1">{form.formState.errors.cidade.message}</p>
-          )}
-        </div>
-      </div>
 
 
         <div>
@@ -472,15 +474,15 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
         </div>
 
         <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
-          <Button 
-            type="button" 
+          <Button
+            type="button"
             variant="outline"
             onClick={onClose}
           >
             Cancelar
           </Button>
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             disabled={isLoading}
             className="bg-black text-white hover:bg-gray-800"
           >

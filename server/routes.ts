@@ -7,6 +7,7 @@ import crypto from "node:crypto"; // para randomUUID
 import { db } from "./db"; // ajuste o caminho se o seu db estiver noutro arquivo
 import { routes, routeStops, appointments, clients, dailyAvailability, vehicleChecklists, vehicleChecklistItems } from "@shared/schema";
 import { eq, inArray, sql, and, or } from "drizzle-orm";
+import { z } from "zod";
 import { format } from "date-fns";
 import {
   insertUserSchema, loginSchema, insertClientSchema, insertServiceSchema,
@@ -28,6 +29,7 @@ import { registerAccessSchedulesRoutes } from "./routes/access-schedules.routes"
 import { registerDateRestrictionsRoutes } from "./routes/date-restrictions.routes";
 import { registerCompanyRoutes } from "./routes/company.routes";
 import { registerVehicleExtensionRoutes } from "./routes/vehicle-extensions.routes";
+import { registerMetricsRoutes, trackFeatureUsage } from "./routes/metrics.routes";
 import { isAccessAllowed, getAccessDeniedMessage } from "./access-schedule-validator";
 
 // 🛡️ Rate Limiting para Login (previne brute force)
@@ -135,6 +137,7 @@ function authenticateToken(req: any, res: any, next: any) {
         role: decoded.role || 'user', // Importante: incluir o role
         companyId: decoded.companyId,
         companyRole: decoded.companyRole,
+        isSuperAdmin: user.isSuperAdmin || false, // Flag para admin master
       };
 
       // Token válido - log removido para não poluir console
@@ -1059,6 +1062,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const clientData = insertClientSchema.parse(req.body);
       const client = await storage.createClient(clientData, req.user.userId);
+      trackFeatureUsage(req.user.userId, "clients", "create", req.user.companyId, { id: client.id });
       res.json(client);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1072,6 +1076,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const clientData = insertClientSchema.partial().parse(req.body);
       console.log("📝 [PUT /clients] payload após Zod:", clientData); // <- confirma que lat/lng passaram
       const client = await storage.updateClient(id, clientData, req.user.userId);
+      trackFeatureUsage(req.user.userId, "clients", "update", req.user.companyId, { id: client.id });
       res.json(client);
     } catch (error: any) {
       console.error("❌ [PUT /clients] erro:", error);
@@ -1178,6 +1183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const serviceData = insertServiceSchema.parse(req.body);
       const service = await storage.createService(serviceData, req.user.userId);
+      trackFeatureUsage(req.user.userId, "services", "create", req.user.companyId, { id: service.id });
       res.json(service);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1232,6 +1238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`ID: ${technician.id}, Nome: ${technician.name}`);
       console.log("==== LOG FIM: POST /api/technicians (SUCESSO) ====");
 
+      trackFeatureUsage(req.user.userId, "technicians", "create", req.user.companyId, { id: technician.id });
       res.json(technician);
     } catch (error: any) {
       console.log("❌ ERRO ao criar técnico:");
@@ -1295,6 +1302,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const vehicleData = insertVehicleSchema.parse(req.body);
       const vehicle = await storage.createVehicle(vehicleData, req.user.userId);
+      trackFeatureUsage(req.user.userId, "vehicles", "create", req.user.companyId, { id: vehicle.id });
       res.json(vehicle);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1449,6 +1457,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fullMaintenance = await storage.getVehicleMaintenance(maintenance.id, req.user.userId);
       const createdWarranties = await storage.getMaintenanceWarranties(maintenance.id);
 
+      trackFeatureUsage(req.user.userId, "maintenances", "create", req.user.companyId, { id: maintenance.id });
       res.json({ ...fullMaintenance, warranties: createdWarranties });
     } catch (error: any) {
       console.error("❌ [MAINTENANCE] Erro ao criar manutenção:", error);
@@ -1462,8 +1471,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = parseInt(req.params.id);
       const { warranties, ...maintenanceData } = req.body;
 
-      // Usar schema partial para validar e transformar campos alterados
-      const processedData = insertVehicleMaintenanceSchema.partial().parse(maintenanceData);
+      // Schema base para update (sem refine)
+      // Recriamos o schema parcial manualmente pois zod effects não suportam partial() direto
+      const updateSchema = z.object({
+        entryDate: z.union([z.string(), z.date()]).transform((val) => {
+          if (typeof val === 'string') return new Date(val);
+          return val;
+        }).optional(),
+        exitDate: z.union([z.string(), z.date(), z.null(), z.undefined()]).transform((val) => {
+          if (!val) return null;
+          if (typeof val === 'string') return new Date(val);
+          return val;
+        }).optional().nullable(),
+        scheduledDate: z.union([z.string(), z.date(), z.null(), z.undefined()]).transform((val) => {
+          if (!val) return null;
+          if (typeof val === 'string') return new Date(val);
+          return val;
+        }).optional().nullable(),
+        status: z.enum(["agendada", "concluida"]).optional(),
+        laborCost: z.string().or(z.number()).optional(),
+        materialsCost: z.string().or(z.number()).optional(),
+        totalCost: z.string().or(z.number()).optional(),
+        photos: z.array(z.string()).optional().nullable(),
+        description: z.string().optional(),
+        category: z.string().optional(),
+        maintenanceType: z.string().optional(),
+        vehicleKm: z.number().optional(),
+        workshop: z.string().optional(),
+        technicianResponsible: z.string().optional().nullable(),
+        vehicleUnavailable: z.boolean().optional(),
+        unavailableDays: z.number().optional(),
+        affectedAppointments: z.boolean().optional(),
+        invoiceNumber: z.string().optional().nullable(),
+        observations: z.string().optional().nullable(),
+      });
+
+      // Usar schema construído manualmente para validar e transformar campos alterados
+      const processedData = updateSchema.parse(maintenanceData);
 
       const maintenance = await storage.updateVehicleMaintenance(id, processedData, req.user.userId);
 
@@ -1647,6 +1691,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Atualizar disponibilidade após criar agendamento
       await updateAvailabilityForAppointment(req.user.userId, appointment);
 
+      trackFeatureUsage(req.user.userId, "appointments", "create", req.user.companyId, { id: appointment.id });
       res.json(appointment);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -3295,6 +3340,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Registrar rotas de extensão de veículos (auditorias, dashboard)
   registerVehicleExtensionRoutes(app, authenticateToken);
 
+  // Registrar rotas de métricas (apenas superadmin)
+  registerMetricsRoutes(app, authenticateToken);
+
   const httpServer = createServer(app);
+  // CEP Proxy to avoid CORS
+  app.get("/api/cep/:cep", async (req, res) => {
+    try {
+      const { cep } = req.params;
+      const cleanCep = cep.replace(/\D/g, '');
+
+      if (cleanCep.length !== 8) {
+        return res.status(400).json({ message: "CEP inválido" });
+      }
+
+      console.log(`Searching CEP: ${cleanCep}`);
+
+      // 1. Tentar ViaCEP
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`, {
+          headers: { 'User-Agent': 'RotaFacil/1.0' }
+        });
+
+        if (!response.ok) throw new Error(`Status ${response.status}`);
+
+        const data = await response.json();
+        if (data.erro) throw new Error("CEP não encontrado no ViaCEP");
+
+        return res.json(data);
+      } catch (error: any) {
+        console.warn(`WARNING: ViaCEP falhou (${error.message || error}), tentando BrasilAPI...`);
+      }
+
+      // 2. Fallback: BrasilAPI
+      try {
+        console.log(`Tentando BrasilAPI para ${cleanCep}...`);
+        const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cleanCep}`);
+        if (!response.ok) throw new Error(`Status ${response.status}`);
+
+        const data = await response.json();
+
+        // Mapear para formato ViaCEP
+        return res.json({
+          cep: data.cep,
+          logradouro: data.street,
+          complemento: "",
+          bairro: data.neighborhood,
+          localidade: data.city,
+          uf: data.state,
+        });
+      } catch (error: any) {
+        console.error(`ERROR: Ambas APIs de CEP falharam para ${cleanCep}.`, error);
+        return res.status(404).json({ message: "CEP não encontrado (serviços indisponíveis)" });
+      }
+    } catch (error: any) {
+      console.error("Critical error in CEP endpoint:", error);
+      res.status(500).json({ message: "Erro interno ao buscar CEP" });
+    }
+  });
+
   return httpServer;
 }

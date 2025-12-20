@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Calendar, Clock, MapPin, UserPlus, Edit3, AlertCircle } from "lucide-react";
 import NewClientDialog from "./NewClientDialog";
 import ClientForm from "./ClientForm";
+import { buscarEnderecoPorCep } from "@/lib/cep";
 
 interface AppointmentFormProps {
   appointment?: Appointment | null;
@@ -689,6 +690,24 @@ export default function AppointmentForm({
                               value = value.slice(0, 5) + '-' + value.slice(5, 8);
                             }
                             field.onChange(value);
+
+                            // Auto-search when CEP is complete
+                            if (value.replace(/\D/g, '').length === 8) {
+                              buscarEnderecoPorCep(value)
+                                .then((endereco) => {
+                                  form.setValue("logradouro", endereco.logradouro || "");
+                                  form.setValue("bairro", endereco.bairro || "");
+                                  form.setValue("cidade", endereco.localidade || "");
+                                  form.setFocus("numero");
+                                })
+                                .catch(() => {
+                                  toast({
+                                    title: "CEP não encontrado",
+                                    description: "Não foi possível encontrar o endereço automaticamente.",
+                                    variant: "destructive",
+                                  });
+                                });
+                            }
                           }
                         }}
                         onClick={appointment ? handleAddressFieldClick : undefined}

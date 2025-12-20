@@ -19,7 +19,8 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
-  Truck
+  Truck,
+  BarChart3
 } from "lucide-react";
 import {
   Tooltip,
@@ -60,13 +61,25 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
   };
 
   // Adicionar gestão de usuários e tabelas de horário apenas para admins
-  const navItems = user?.role === 'admin'
+  // Adicionar métricas apenas para superadmin
+  let navItems = user?.role === 'admin'
     ? [
       ...navigation,
       { name: "Gestão de Usuários", href: "/users", icon: Shield },
       { name: "Tabelas de Horário", href: "/access-schedules", icon: Clock }
     ]
     : navigation;
+
+  // Link de métricas apenas para superadmin (fundador)
+  // Fallback: verifica flag OU email hardcoded para garantir acesso imediato
+  const isSuperAdmin = user?.isSuperAdmin || user?.email === 'lucaspmastaler@gmail.com';
+
+  if (isSuperAdmin) {
+    navItems = [
+      ...navItems,
+      { name: "Métricas", href: "/admin/metrics", icon: BarChart3 }
+    ];
+  }
 
   return (
     <>

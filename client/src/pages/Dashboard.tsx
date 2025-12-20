@@ -20,6 +20,7 @@ import {
 import type { Appointment, Client, Technician } from "@shared/schema";
 import { VehiclesAttentionCard } from "@/components/dashboard/VehiclesAttentionCard";
 import { UpcomingMaintenancesCard } from "@/components/dashboard/UpcomingMaintenancesCard";
+import { MaintenanceCostsCard } from "@/components/dashboard/MaintenanceCostsCard";
 
 interface DashboardStats {
   todayAppointments: number;
@@ -434,6 +435,11 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <VehiclesAttentionCard />
         <UpcomingMaintenancesCard />
+      </div>
+
+      {/* Maintenance Costs - Full Width */}
+      <div className="grid grid-cols-1 gap-6">
+        <MaintenanceCostsCard />
       </div>
     </div>
   );

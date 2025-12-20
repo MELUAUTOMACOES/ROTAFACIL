@@ -27,6 +27,7 @@ import ResetPassword from "./pages/ResetPassword";
 import SignupCompany from "./pages/SignupCompany";
 import AcceptInvite from "./pages/AcceptInvite";
 import CompanyUsers from "./pages/CompanyUsers";
+import AdminMetrics from "./pages/AdminMetrics";
 import Layout from "./components/Layout";
 import NotFound from "@/pages/not-found";
 
@@ -65,34 +66,40 @@ function AppRoutes() {
 
   // Rotas autenticadas
   return (
-    <Layout>
-      <Switch>
-        <Route path="/" component={Dashboard} />
-        <Route path="/dashboard" component={Dashboard} />
-        <Route path="/appointments" component={Appointments} />
-        <Route path="/find-date" component={FindDate} />
-        {/* Legacy builder routes → redirect to Appointments */}
-        <Route path="/routes" component={() => <Redirect to="/appointments" />} />
-        <Route path="/roteirizacao" component={() => <Redirect to="/appointments" />} />
-        <Route path="/routes/builder" component={() => <Redirect to="/appointments" />} />
-        <Route path="/routes/optimize" component={() => <Redirect to="/appointments" />} />
-        {/* Keep Routes History intact */}
-        <Route path="/routes-history/:routeId" component={RoutesHistoryPage} />
-        <Route path="/routes-history" component={RoutesHistoryPage} />
-        <Route path="/clients" component={Clients} />
-        <Route path="/technicians" component={Technicians} />
-        <Route path="/vehicles" component={Vehicles} />
-        <Route path="/prestadores" component={PrestadoresPage} />
-        <Route path="/services" component={Services} />
-        <Route path="/business-rules" component={BusinessRules} />
-        <Route path="/users" component={UserManagement} />
-        <Route path="/company/users" component={CompanyUsers} />
-        <Route path="/convite/:token" component={AcceptInvite} />
-        <Route path="/access-schedules" component={AccessSchedules} />
-        <Route path="/change-password" component={() => <ChangePassword isRequired={false} />} />
-        <Route component={NotFound} />
-      </Switch>
-    </Layout>
+    <Switch>
+      <Route path="/admin/metrics" component={AdminMetrics} />
+      <Route>
+        <Layout>
+          <Switch>
+            <Route path="/" component={Dashboard} />
+            <Route path="/dashboard" component={Dashboard} />
+            <Route path="/appointments" component={Appointments} />
+            <Route path="/find-date" component={FindDate} />
+            {/* Legacy builder routes → redirect to Appointments */}
+            <Route path="/routes" component={() => <Redirect to="/appointments" />} />
+            <Route path="/roteirizacao" component={() => <Redirect to="/appointments" />} />
+            <Route path="/routes/builder" component={() => <Redirect to="/appointments" />} />
+            <Route path="/routes/optimize" component={() => <Redirect to="/appointments" />} />
+            {/* Keep Routes History intact */}
+            <Route path="/routes-history/:routeId" component={RoutesHistoryPage} />
+            <Route path="/routes-history" component={RoutesHistoryPage} />
+            <Route path="/clients" component={Clients} />
+            <Route path="/technicians" component={Technicians} />
+            <Route path="/vehicles" component={Vehicles} />
+            <Route path="/prestadores" component={PrestadoresPage} />
+            <Route path="/services" component={Services} />
+            <Route path="/business-rules" component={BusinessRules} />
+            <Route path="/users" component={UserManagement} />
+            <Route path="/company/users" component={CompanyUsers} />
+            <Route path="/convite/:token" component={AcceptInvite} />
+            <Route path="/access-schedules" component={AccessSchedules} />
+
+            <Route path="/change-password" component={() => <ChangePassword isRequired={false} />} />
+            <Route component={NotFound} />
+          </Switch>
+        </Layout>
+      </Route>
+    </Switch>
   );
 }
 

@@ -19,6 +19,7 @@ import {
   type VehicleDocument, type InsertVehicleDocument,
   type VehicleMaintenance, type InsertVehicleMaintenance,
   type MaintenanceWarranty, type InsertMaintenanceWarranty,
+  type FeatureUsage, type InsertFeatureUsage,
   users, clients, services, technicians, vehicles, appointments, checklists, businessRules, teams, teamMembers, accessSchedules,
   companies, memberships, invitations,
   dateRestrictions,
@@ -26,6 +27,7 @@ import {
   type RouteStop,
   auditLogs,
   vehicleDocuments, vehicleMaintenances, maintenanceWarranties,
+  featureUsage,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, ilike, sql, inArray, isNotNull, ne, isNull } from "drizzle-orm";
@@ -182,6 +184,13 @@ export interface IStorage {
   getMaintenanceWarranties(maintenanceId: number): Promise<MaintenanceWarranty[]>;
   createMaintenanceWarranty(warranty: InsertMaintenanceWarranty): Promise<MaintenanceWarranty>;
   deleteMaintenanceWarranty(id: number): Promise<boolean>;
+
+  // Feature Usage (Metrics)
+  createFeatureUsage(data: InsertFeatureUsage): Promise<FeatureUsage>;
+  getFeatureUsageByPeriod(startDate: Date, endDate: Date): Promise<FeatureUsage[]>;
+  getTopFeatures(limit: number, startDate?: Date, endDate?: Date): Promise<{ feature: string; action: string; count: number }[]>;
+  getUsersActivityByDay(startDate: Date, endDate: Date): Promise<{ date: string; activeUsers: number; totalActions: number }[]>;
+  getMetricsOverview(): Promise<{ totalUsers: number; totalCompanies: number; totalActionsToday: number; totalActionsWeek: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1376,6 +1385,97 @@ export class DatabaseStorage implements IStorage {
       .delete(maintenanceWarranties)
       .where(eq(maintenanceWarranties.id, id));
     return (result.rowCount || 0) > 0;
+  }
+
+  // Feature Usage (Metrics)
+  async createFeatureUsage(data: InsertFeatureUsage): Promise<FeatureUsage> {
+    const [created] = await db
+      .insert(featureUsage)
+      .values(data)
+      .returning();
+    return created;
+  }
+
+  async getFeatureUsageByPeriod(startDate: Date, endDate: Date): Promise<FeatureUsage[]> {
+    return await db
+      .select()
+      .from(featureUsage)
+      .where(
+        and(
+          sql`${featureUsage.createdAt} >= ${startDate}`,
+          sql`${featureUsage.createdAt} <= ${endDate}`
+        )
+      )
+      .orderBy(sql`${featureUsage.createdAt} DESC`);
+  }
+
+  async getTopFeatures(limit: number, startDate?: Date, endDate?: Date): Promise<{ feature: string; action: string; count: number }[]> {
+    let query = db
+      .select({
+        feature: featureUsage.feature,
+        action: featureUsage.action,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(featureUsage);
+
+    if (startDate && endDate) {
+      query = query.where(
+        and(
+          sql`${featureUsage.createdAt} >= ${startDate}`,
+          sql`${featureUsage.createdAt} <= ${endDate}`
+        )
+      ) as typeof query;
+    }
+
+    const results = await query
+      .groupBy(featureUsage.feature, featureUsage.action)
+      .orderBy(sql`count(*) DESC`)
+      .limit(limit);
+
+    return results;
+  }
+
+  async getUsersActivityByDay(startDate: Date, endDate: Date): Promise<{ date: string; activeUsers: number; totalActions: number }[]> {
+    const results = await db
+      .select({
+        date: sql<string>`TO_CHAR(${featureUsage.createdAt}::date, 'YYYY-MM-DD')`,
+        activeUsers: sql<number>`COUNT(DISTINCT ${featureUsage.userId})::int`,
+        totalActions: sql<number>`COUNT(*)::int`,
+      })
+      .from(featureUsage)
+      .where(
+        and(
+          sql`${featureUsage.createdAt} >= ${startDate}`,
+          sql`${featureUsage.createdAt} <= ${endDate}`
+        )
+      )
+      .groupBy(sql`${featureUsage.createdAt}::date`)
+      .orderBy(sql`${featureUsage.createdAt}::date ASC`);
+
+    return results;
+  }
+
+  async getMetricsOverview(): Promise<{ totalUsers: number; totalCompanies: number; totalActionsToday: number; totalActionsWeek: number }> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    weekAgo.setHours(0, 0, 0, 0);
+
+    const [[usersCount], [companiesCount], [todayCount], [weekCount]] = await Promise.all([
+      db.select({ count: sql<number>`count(*)::int` }).from(users),
+      db.select({ count: sql<number>`count(*)::int` }).from(companies),
+      db.select({ count: sql<number>`count(*)::int` }).from(featureUsage).where(sql`${featureUsage.createdAt} >= ${today}`),
+      db.select({ count: sql<number>`count(*)::int` }).from(featureUsage).where(sql`${featureUsage.createdAt} >= ${weekAgo}`),
+    ]);
+
+    return {
+      totalUsers: usersCount?.count || 0,
+      totalCompanies: companiesCount?.count || 0,
+      totalActionsToday: todayCount?.count || 0,
+      totalActionsWeek: weekCount?.count || 0,
+    };
   }
 }
 

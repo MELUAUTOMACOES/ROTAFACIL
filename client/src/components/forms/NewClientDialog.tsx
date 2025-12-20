@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { extendedInsertClientSchema, type InsertClient, type Client } from "@shared/schema";
+import { buscarEnderecoPorCep } from "@/lib/cep";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +22,7 @@ export default function NewClientDialog({ onClientCreated, children }: NewClient
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   // Estados para validação de CPF
   const [cpfInput, setCpfInput] = useState("");
   const [cpfError, setCpfError] = useState<string | null>(null);
@@ -36,6 +37,8 @@ export default function NewClientDialog({ onClientCreated, children }: NewClient
       cpf: "",
       cep: "",
       logradouro: "",
+      bairro: "",
+      cidade: "",
       numero: "",
       complemento: "",
       observacoes: "",
@@ -48,17 +51,17 @@ export default function NewClientDialog({ onClientCreated, children }: NewClient
     queryFn: async () => {
       if (!cpfInput || cpfInput.length < 11) return { exists: false };
       console.log("Validação de CPF:", cpfInput);
-      
+
       const response = await fetch(`/api/clients/validate-cpf?cpf=${encodeURIComponent(cpfInput)}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
       });
-      
+
       if (!response.ok) {
         throw new Error('Erro na validação de CPF');
       }
-      
+
       return response.json();
     },
     enabled: false, // Só executa quando chamado manualmente
@@ -70,7 +73,7 @@ export default function NewClientDialog({ onClientCreated, children }: NewClient
       const timer = setTimeout(() => {
         validateCpf();
       }, 500); // Debounce de 500ms
-      
+
       return () => clearTimeout(timer);
     } else {
       setCpfError(null);
@@ -86,6 +89,29 @@ export default function NewClientDialog({ onClientCreated, children }: NewClient
       setCpfError(null);
     }
   }, [cpfValidation, cpfInput]);
+
+  // Monitorar mudanças no CEP para busca automática
+  const watchedCep = form.watch("cep");
+  useEffect(() => {
+    const cleanCep = watchedCep?.replace(/\D/g, '') || "";
+    if (cleanCep.length === 8) {
+      const fetchAddress = async () => {
+        try {
+          const endereco = await buscarEnderecoPorCep(cleanCep);
+
+          form.setValue("logradouro", endereco.logradouro || "");
+          form.setValue("bairro", endereco.bairro || "");
+          form.setValue("cidade", endereco.localidade || "");
+          form.setValue("numero", ""); // Limpa número para forçar digitação
+
+          form.setFocus("numero");
+        } catch (error) {
+          console.warn("CEP lookup failed", error);
+        }
+      };
+      fetchAddress();
+    }
+  }, [watchedCep, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertClient) => {
@@ -146,7 +172,7 @@ export default function NewClientDialog({ onClientCreated, children }: NewClient
       });
       return;
     }
-    
+
     createMutation.mutate(data);
   };
 
@@ -204,12 +230,12 @@ export default function NewClientDialog({ onClientCreated, children }: NewClient
               onChange={(e) => {
                 let value = e.target.value.replace(/\D/g, '');
                 console.log("Validação de CPF:", value);
-                
+
                 if (value.length > 11) {
                   value = value.slice(0, 11);
                 }
                 const formattedValue = value.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, '$1.$2.$3-$4');
-                
+
                 setCpfInput(formattedValue);
                 form.setValue("cpf", formattedValue);
               }}
@@ -343,6 +369,32 @@ export default function NewClientDialog({ onClientCreated, children }: NewClient
             )}
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="bairro">Bairro *</Label>
+              <Input
+                {...form.register("bairro")}
+                placeholder="Bairro"
+                className="mt-1"
+              />
+              {form.formState.errors.bairro && (
+                <p className="text-sm text-red-600 mt-1">{form.formState.errors.bairro.message}</p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="cidade">Cidade *</Label>
+              <Input
+                {...form.register("cidade")}
+                placeholder="Cidade"
+                className="mt-1"
+              />
+              {form.formState.errors.cidade && (
+                <p className="text-sm text-red-600 mt-1">{form.formState.errors.cidade.message}</p>
+              )}
+            </div>
+          </div>
+
           <div>
             <Label htmlFor="observacoes">Observações</Label>
             <Textarea
@@ -356,15 +408,15 @@ export default function NewClientDialog({ onClientCreated, children }: NewClient
           </div>
 
           <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
-            <Button 
-              type="button" 
+            <Button
+              type="button"
               variant="outline"
               onClick={() => setOpen(false)}
             >
               Cancelar
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               disabled={isLoading}
               className="bg-black text-white hover:bg-gray-800"
             >
