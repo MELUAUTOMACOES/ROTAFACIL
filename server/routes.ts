@@ -13,7 +13,8 @@ import {
   insertTechnicianSchema, insertVehicleSchema, insertAppointmentSchema,
   insertChecklistSchema, insertBusinessRulesSchema, insertTeamSchema,
   insertTeamMemberSchema, extendedInsertAppointmentSchema,
-  insertVehicleChecklistSchema, insertVehicleChecklistItemSchema
+  insertVehicleChecklistSchema, insertVehicleChecklistItemSchema,
+  insertVehicleMaintenanceSchema
 } from "@shared/schema";
 import {
   validateTechnicianTeamConflict,
@@ -1420,16 +1421,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { warranties, ...maintenanceData } = req.body;
 
-      // Converter datas de string para Date
-      const processedMaintenanceData = {
+      // Validar e transformar dados via Zod
+      const validatedData = insertVehicleMaintenanceSchema.parse({
         ...maintenanceData,
         vehicleId,
-        entryDate: maintenanceData.entryDate ? new Date(maintenanceData.entryDate) : new Date(),
-        exitDate: maintenanceData.exitDate ? new Date(maintenanceData.exitDate) : null,
-      };
+      });
 
       const maintenance = await storage.createVehicleMaintenance(
-        processedMaintenanceData,
+        validatedData,
         req.user.userId
       );
 
@@ -1439,7 +1438,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.createMaintenanceWarranty({
             maintenanceId: maintenance.id,
             partName: warranty.partName,
-            // Converter data de garantia
+            // O storage/schema já deve lidar com a conversão aqui se usássemos o schema de warranty, 
+            // mas por segurança mantemos a conversão manual ou usamos o schema
             warrantyExpiration: warranty.warrantyExpiration ? new Date(warranty.warrantyExpiration) : new Date(),
           });
         }
@@ -1462,17 +1462,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = parseInt(req.params.id);
       const { warranties, ...maintenanceData } = req.body;
 
-      // Converter datas de string para Date
-      const processedData = {
-        ...maintenanceData,
-      };
-
-      if (maintenanceData.entryDate) {
-        processedData.entryDate = new Date(maintenanceData.entryDate);
-      }
-      if (maintenanceData.exitDate) {
-        processedData.exitDate = new Date(maintenanceData.exitDate);
-      }
+      // Usar schema partial para validar e transformar campos alterados
+      const processedData = insertVehicleMaintenanceSchema.partial().parse(maintenanceData);
 
       const maintenance = await storage.updateVehicleMaintenance(id, processedData, req.user.userId);
 

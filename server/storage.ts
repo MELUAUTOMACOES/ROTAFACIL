@@ -1315,6 +1315,8 @@ export class DatabaseStorage implements IStorage {
         affectedAppointments: maintenance.affectedAppointments,
         invoiceNumber: maintenance.invoiceNumber,
         observations: maintenance.observations,
+        status: maintenance.status || "concluida",
+        scheduledDate: maintenance.scheduledDate,
         userId,
         updatedAt: new Date()
       })
