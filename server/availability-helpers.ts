@@ -1,13 +1,13 @@
 import { db } from "./db";
-import { 
-  dailyAvailability, 
-  appointments, 
-  services, 
+import {
+  dailyAvailability,
+  appointments,
+  services,
   technicians,
   teams,
   teamMembers,
   dateRestrictions,
-  type Appointment 
+  type Appointment
 } from "../shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 
@@ -20,7 +20,7 @@ export async function updateDailyAvailability(
   responsibleType: 'technician' | 'team',
   responsibleId: number
 ) {
-  console.log(`📊 [AVAILABILITY] Atualizando disponibilidade para ${responsibleType} #${responsibleId} em ${date.toISOString()}`);
+
 
   // Normalizar data para início do dia para comparação consistente
   const startOfDay = new Date(date);
@@ -174,43 +174,112 @@ export async function updateDailyAvailability(
 
   // Buscar agendamentos do dia para o responsável
 
+  // Buscar agendamentos do dia para o responsável e cruzamentos
+  // 1. Agendamentos diretos do responsável
   const dayAppointments = await db.query.appointments.findMany({
     where: and(
       eq(appointments.userId, userId),
-      responsibleType === 'technician' 
+      responsibleType === 'technician'
         ? eq(appointments.technicianId, responsibleId)
         : eq(appointments.teamId, responsibleId),
       sql`${appointments.scheduledDate} >= ${startOfDay.toISOString()}`,
-      sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`
+      sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`,
+      sql`${appointments.status} != 'cancelled'` // Ignorar cancelados
     ),
-    with: {
-      // Nenhum with necessário aqui, vamos buscar services separadamente
-    }
   });
 
   // Calcular minutos usados
   let usedMinutes = 0;
-  let hasAllDayAppointment = false;
 
+  // 1.1 Somar agendamentos diretos
   for (const apt of dayAppointments) {
     if (apt.allDay) {
-      hasAllDayAppointment = true;
       usedMinutes = totalMinutes;
       break;
     }
-
-    // Buscar duração do serviço
     const service = await db.query.services.findFirst({
       where: eq(services.id, apt.serviceId),
     });
-
     if (service) {
       usedMinutes += service.duration;
     }
   }
 
+  // 2. Cruzamento: Verificar agendamentos conflitantes
+  if (usedMinutes < totalMinutes) { // Só verifica se ainda tiver tempo
+    if (responsibleType === 'technician') {
+      // TÉCNICO: Verificar se as EQUIPES que ele participa têm agendamento
+      const myTeams = await db.query.teamMembers.findMany({
+        where: eq(teamMembers.technicianId, responsibleId),
+      });
+
+      for (const tm of myTeams) {
+        if (usedMinutes >= totalMinutes) break;
+
+        const teamAppts = await db.query.appointments.findMany({
+          where: and(
+            eq(appointments.userId, userId),
+            eq(appointments.teamId, tm.teamId),
+            sql`${appointments.scheduledDate} >= ${startOfDay.toISOString()}`,
+            sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`,
+            sql`${appointments.status} != 'cancelled'` // Ignorar cancelados
+          ),
+        });
+
+        if (teamAppts.length > 0) {
+
+          // REGRA DE NEGÓCIO: Se a equipe trabalha, o membro não trabalha avulso no mesmo dia.
+          // Bloqueio total do dia.
+          usedMinutes = totalMinutes;
+          break;
+        }
+      }
+    } else {
+      // EQUIPE: Verificar se os MEMBROS têm agendamento individual
+      const members = await db.query.teamMembers.findMany({
+        where: eq(teamMembers.teamId, responsibleId),
+      });
+
+      for (const member of members) {
+        if (usedMinutes >= totalMinutes) break;
+
+        const memberAppts = await db.query.appointments.findMany({
+          where: and(
+            eq(appointments.userId, userId),
+            eq(appointments.technicianId, member.technicianId),
+            sql`${appointments.scheduledDate} >= ${startOfDay.toISOString()}`,
+            sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`,
+            sql`${appointments.status} != 'cancelled'` // Ignorar cancelados
+          ),
+        });
+
+        for (const apt of memberAppts) {
+          console.log(`🔒 [AVAILABILITY] Equipe #${responsibleId} bloqueada: Membro #${member.technicianId} tem agendamento individual`);
+          // Se um membro está ocupado, a equipe (como unidade indivisível) não pode trabalhar
+          // Consideramos "block" total ou somamos o tempo? 
+          // Regra conservadora: Soma o tempo do agendamento do membro como tempo indisponível para a equipe
+          if (apt.allDay) {
+            usedMinutes = totalMinutes;
+            break;
+          }
+          const service = await db.query.services.findFirst({
+            where: eq(services.id, apt.serviceId),
+          });
+          if (service) {
+            usedMinutes += service.duration;
+          }
+        }
+      }
+    }
+  }
+
+  // Garantir que não estoure o total (embora logicamente signifique 'indisponível')
+  if (usedMinutes > totalMinutes) {
+    usedMinutes = totalMinutes;
+  }
+
   const availableMinutes = totalMinutes - usedMinutes;
-  
+
   // Determinar status
   let status: 'available' | 'partial' | 'full' | 'exceeded';
   if (usedMinutes === 0) {
@@ -241,7 +310,7 @@ export async function updateDailyAvailability(
     totalMinutes,
     usedMinutes,
     availableMinutes,
-    appointmentCount: dayAppointments.length,
+    appointmentCount: dayAppointments.length, // Mantemos contagem de appts DIRETA, mas tempo reflete cruzamento
     status,
     updatedAt: new Date(),
   };
@@ -251,15 +320,11 @@ export async function updateDailyAvailability(
       .update(dailyAvailability)
       .set(availabilityData)
       .where(eq(dailyAvailability.id, existingAvailability.id));
-    
-    console.log(`✅ [AVAILABILITY] Atualizado: ${status} - ${usedMinutes}/${totalMinutes} minutos`);
-  } else {
+
     await db.insert(dailyAvailability).values({
       ...availabilityData,
       createdAt: new Date(),
     });
-    
-    console.log(`✅ [AVAILABILITY] Criado: ${status} - ${usedMinutes}/${totalMinutes} minutos`);
   }
 }
 
@@ -298,7 +363,7 @@ export async function validateDateRestriction(
       const displayDate = startOfDay.toLocaleDateString('pt-BR');
       return {
         valid: false,
-        message: `O técnico ${tech?.name || '#'+technicianId} está indisponível em ${displayDate} (${restriction.title}).`,
+        message: `O técnico ${tech?.name || '#' + technicianId} está indisponível em ${displayDate} (${restriction.title}).`,
       };
     }
   }
@@ -323,7 +388,7 @@ export async function validateDateRestriction(
       const displayDate = startOfDay.toLocaleDateString('pt-BR');
       return {
         valid: false,
-        message: `A equipe ${team?.name || '#'+teamId} está indisponível em ${displayDate} (${restriction.title}).`,
+        message: `A equipe ${team?.name || '#' + teamId} está indisponível em ${displayDate} (${restriction.title}).`,
       };
     }
   }
@@ -347,7 +412,7 @@ export async function validateTechnicianTeamConflict(
 
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
-  
+
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
 
@@ -431,30 +496,30 @@ export async function updateAvailabilityForAppointment(
   appointment: Appointment
 ) {
   const date = new Date(appointment.scheduledDate);
-  
+
   // Atualizar disponibilidade do técnico
   if (appointment.technicianId) {
     await updateDailyAvailability(userId, date, 'technician', appointment.technicianId);
-    
+
     // Se o técnico faz parte de equipes, atualizar disponibilidade delas também
     const technicianTeams = await db.query.teamMembers.findMany({
       where: eq(teamMembers.technicianId, appointment.technicianId),
     });
-    
+
     for (const tm of technicianTeams) {
       await updateDailyAvailability(userId, date, 'team', tm.teamId);
     }
   }
-  
+
   // Atualizar disponibilidade da equipe
   if (appointment.teamId) {
     await updateDailyAvailability(userId, date, 'team', appointment.teamId);
-    
+
     // Atualizar disponibilidade de todos os técnicos da equipe
     const teamTechs = await db.query.teamMembers.findMany({
       where: eq(teamMembers.teamId, appointment.teamId),
     });
-    
+
     for (const tm of teamTechs) {
       await updateDailyAvailability(userId, date, 'technician', tm.technicianId);
     }

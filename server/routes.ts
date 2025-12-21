@@ -5,7 +5,7 @@ import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import crypto from "node:crypto"; // para randomUUID
 import { db } from "./db"; // ajuste o caminho se o seu db estiver noutro arquivo
-import { routes, routeStops, appointments, clients, dailyAvailability, vehicleChecklists, vehicleChecklistItems } from "@shared/schema";
+import { routes, routeStops, appointments, clients, dailyAvailability, vehicleChecklists, vehicleChecklistItems, teamMembers } from "@shared/schema";
 import { eq, inArray, sql, and, or } from "drizzle-orm";
 import { z } from "zod";
 import { format } from "date-fns";
@@ -1888,11 +1888,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log("🔍 [FIND-DATE] Iniciando busca de datas disponíveis:", { clientId, cep, numero, logradouro, cidade, serviceId, technicianId, teamId });
 
-      // 🌊 Configurar headers para streaming (Server-Sent Events)
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.flushHeaders();
+      // Headers removidos daqui para evitar envio antes da validação
+
 
       // Validações básicas
       if (!cep || !numero || !serviceId) {
@@ -2004,14 +2001,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (responsibles.length === 0) {
-        return res.status(400).json({ message: "Nenhum técnico ou equipe compatível com o serviço selecionado" });
+        // NEW: Mensagem detalhada para o usuário entender que falta vínculo no cadastro
+        return res.status(400).json({
+          message: "Nenhum técnico ou equipe habilitado para realizar este serviço. Verifique se o serviço está vinculado a algum prestador no cadastro."
+        });
       }
+
+      // ✅ Validações concluídas, iniciar streaming SSE
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
 
       console.log(`✅ [FIND-DATE] Encontrados ${responsibles.length} responsáveis compatíveis`);
 
+      // Contadores de rejeição para log final
+      const stats = {
+        checkedDays: 0,
+        skippedNotWorkDay: 0,
+        skippedNoTime: 0,
+        skippedTooFar: 0,
+        skippedGeocodeError: 0,
+        foundCandidates: 0
+      };
+
       // Buscar datas candidatas
       const today = new Date();
-      const searchStartDate = startDate ? new Date(startDate) : today;
+      // 🐛 FIX: Parsear data como local para evitar shift de fuso horário UTC (ex: dia 20 virar dia 19)
+      // Adicionando T00:00:00 garantimos que o new Date considere o início do dia no fuso local do servidor
+      const searchStartDate = startDate
+        ? new Date(`${startDate.split('T')[0]}T00:00:00`)
+        : today;
       const maxDaysAhead = 100;
       const candidates: Array<{
         date: string;
@@ -2025,9 +2045,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         distanceType: 'between_points' | 'from_base';
       }> = [];
 
-      for (const responsible of responsibles) {
-        console.log(`🔍 [FIND-DATE] Analisando ${responsible.type} ${responsible.name}`);
+      const debugLog = (msg: string) => {
+        const logFile = path.join(process.cwd(), 'debug_find_date.log');
+        const timestamp = new Date().toISOString();
+        fs.appendFileSync(logFile, `[${timestamp}] ${msg}\n`);
+      };
 
+      debugLog(`🚀 Starting Find Date Search for Service ${serviceId}`);
+      debugLog(`Found ${responsibles.length} responsibles: ${responsibles.map(r => `${r.name} (${r.type})`).join(', ')}`);
+
+      // 🔄 REFACTOR: Loop invertido (Data > Responsável) para priorizar datas próximas
+      // Isso garante que se uma equipe está livre amanhã, ela apareça antes de um técnico livre daqui a 30 dias.
+      // 🚀 PERFORMANCE FIX: "Lazy Loading" de disponibilidade.
+      // Em vez de pré-calcular 100 dias para todos (que demora), calculamos apenas o dia/prestador da vez.
+
+      const preparedResponsibles: Array<{
+        info: typeof responsibles[0];
+        baseAddress: { cep: string, logradouro: string, numero: string, cidade: string, estado: string };
+        diasTrabalho: string[];
+      }> = [];
+
+      const dayNames = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+
+      // debugLog(`Preparing data for ${responsibles.length} responsibles...`);
+
+      // 1. FASE DE PREPARAÇÃO: Carregar apenas Metadados (rápido)
+      for (const responsible of responsibles) {
         // Buscar horários de trabalho
         let horarioInicioTrabalho: string, horarioFimTrabalho: string, horarioAlmocoMinutos: number, diasTrabalho: string[];
         let baseAddress: { cep: string, logradouro: string, numero: string, cidade: string, estado: string };
@@ -2041,7 +2084,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           horarioAlmocoMinutos = tech.horarioAlmocoMinutos || 60;
           diasTrabalho = tech.diasTrabalho || ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
 
-          // Endereço de início (ou da empresa)
           if (tech.enderecoInicioCep) {
             baseAddress = {
               cep: tech.enderecoInicioCep,
@@ -2068,7 +2110,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           horarioAlmocoMinutos = team.horarioAlmocoMinutos || 60;
           diasTrabalho = team.diasTrabalho || ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
 
-          // Endereço de início (ou da empresa)
           if (team.enderecoInicioCep) {
             baseAddress = {
               cep: team.enderecoInicioCep,
@@ -2088,135 +2129,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        const dayNames = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
-
-        console.log(`📋 [FIND-DATE] Endereço base de ${responsible.name}: ${baseAddress.logradouro}, ${baseAddress.numero} - ${baseAddress.cidade} (${baseAddress.cep})`);
-        console.log(`⏰ [FIND-DATE] Horário: ${horarioInicioTrabalho} às ${horarioFimTrabalho} (${horarioAlmocoMinutos}min almoço)`);
-        console.log(`📅 [FIND-DATE] Dias de trabalho: ${diasTrabalho.join(', ')}`);
-        console.log(`🎯 [FIND-DATE] Limites: ${maxDistanceBetweenPoints}km entre pontos, ${maxDistanceServed}km da base`);
-
-        // 🚀 OTIMIZAÇÃO: Pré-calcular todas as datas e buscar disponibilidades em batch
-        const datesToCheck: Date[] = [];
-        for (let daysAhead = 0; daysAhead < maxDaysAhead; daysAhead++) {
-          const candidateDate = new Date(searchStartDate);
-          candidateDate.setDate(searchStartDate.getDate() + daysAhead);
-          candidateDate.setHours(0, 0, 0, 0);
-
-          // Verificar se é dia de trabalho
-          const dayOfWeek = candidateDate.getDay();
-          const currentDayName = dayNames[dayOfWeek];
-
-          // 🐛 DEBUG: Log para verificar filtro de dias
-          if (daysAhead < 10) { // Log apenas primeiros 10 dias
-            console.log(`  🗓️  ${candidateDate.toISOString().split('T')[0]} (${currentDayName}) - Dia de trabalho? ${diasTrabalho.includes(currentDayName)}`);
-          }
-
-          if (diasTrabalho.includes(currentDayName)) {
-            datesToCheck.push(candidateDate);
-          }
-        }
-
-        console.log(`🔍 [FIND-DATE] Verificando ${datesToCheck.length} dias de trabalho...`);
-
-        // 🚀 Buscar todas as disponibilidades de uma vez
-        const availabilities = await db.query.dailyAvailability.findMany({
-          where: and(
-            eq(dailyAvailability.userId, userId),
-            eq(dailyAvailability.responsibleType, responsible.type),
-            eq(dailyAvailability.responsibleId, responsible.id)
-          ),
+        preparedResponsibles.push({
+          info: responsible,
+          baseAddress,
+          diasTrabalho
         });
+      }
 
-        // Criar map de disponibilidades por data para acesso rápido
-        const availabilityMap = new Map<string, typeof availabilities[0]>();
-        for (const avail of availabilities) {
-          const dateKey = new Date(avail.date).toISOString().split('T')[0];
-          availabilityMap.set(dateKey, avail);
-        }
+      console.log(`✅ [FIND-DATE] Preparação de metadados concluída. Iniciando busca Lazy...`);
 
-        // 🚀 Atualizar apenas datas que não têm disponibilidade
-        const missingDates = datesToCheck.filter(date => {
-          const dateKey = date.toISOString().split('T')[0];
-          return !availabilityMap.has(dateKey);
-        });
+      // 2. FASE DE BUSCA: Cronológica (Dia 1 -> Dia 100)
+      // 🆕 Retorna 10 DIAS ÚNICOS, escolhendo o melhor responsável (menor distância) por dia.
+      const addedDays = new Set<string>();
 
-        if (missingDates.length > 0) {
-          console.log(`📊 [FIND-DATE] Atualizando ${missingDates.length} datas sem disponibilidade...`);
-          for (const date of missingDates) {
-            await updateDailyAvailability(userId, date, responsible.type, responsible.id);
-          }
+      for (let daysAhead = 0; daysAhead < maxDaysAhead; daysAhead++) {
+        if (addedDays.size >= 10) break;
 
-          // Re-buscar disponibilidades atualizadas
-          const newAvailabilities = await db.query.dailyAvailability.findMany({
-            where: and(
-              eq(dailyAvailability.userId, userId),
-              eq(dailyAvailability.responsibleType, responsible.type),
-              eq(dailyAvailability.responsibleId, responsible.id)
-            ),
-          });
+        const candidateDate = new Date(searchStartDate);
+        candidateDate.setDate(searchStartDate.getDate() + daysAhead);
+        candidateDate.setHours(0, 0, 0, 0);
 
-          // Atualizar o map
-          for (const avail of newAvailabilities) {
-            const dateKey = new Date(avail.date).toISOString().split('T')[0];
-            availabilityMap.set(dateKey, avail);
-          }
-        }
+        const dateKey = candidateDate.toISOString().split('T')[0];
+        const dayOfWeek = candidateDate.getDay();
+        const currentDayName = dayNames[dayOfWeek];
 
-        // Iterar pelos dias de trabalho
-        let checkedDays = 0;
-        let skippedNotWorkDay = maxDaysAhead - datesToCheck.length;
-        let skippedNoTime = 0;
-        let skippedTooFar = 0;
-        let skippedGeocodeError = 0;
+        stats.checkedDays++;
 
-        for (const candidateDate of datesToCheck) {
-          // ⚡ OTIMIZAÇÃO: Parar se já encontramos 10 candidatos
-          if (candidates.length >= 10) {
-            console.log(`⚡ [FIND-DATE] Já encontramos 10 candidatos, parando busca!`);
-            break;
-          }
+        // Coletar TODOS os candidatos válidos para este dia
+        const dayCandidates: Array<{
+          responsible: typeof preparedResponsibles[0]['info'];
+          distance: number;
+          distanceType: 'between_points' | 'from_base';
+          availableMinutes: number;
+          totalMinutes: number;
+          usedMinutes: number;
+        }> = [];
 
-          checkedDays++;
-          const dateKey = candidateDate.toISOString().split('T')[0];
-          const availability = availabilityMap.get(dateKey);
+        // Iterar pelos responsáveis para este dia
+        for (const data of preparedResponsibles) {
+          const { info: responsible, baseAddress, diasTrabalho } = data;
 
-          if (!availability || availability.availableMinutes < service.duration) {
-            // Não há tempo suficiente
-            skippedNoTime++;
+          // Verificar dia de trabalho
+          if (!diasTrabalho.includes(currentDayName)) {
+            stats.skippedNotWorkDay++;
             continue;
           }
 
-          // Buscar agendamentos do responsável no dia
+          // 🚀 JUST-IN-TIME AVAILABILITY UPDATE
+          await updateDailyAvailability(userId, candidateDate, responsible.type, responsible.id);
+
+          const availability = await db.query.dailyAvailability.findFirst({
+            where: and(
+              eq(dailyAvailability.userId, userId),
+              eq(dailyAvailability.responsibleType, responsible.type),
+              eq(dailyAvailability.responsibleId, responsible.id),
+              sql`DATE(${dailyAvailability.date}) = ${dateKey}`
+            ),
+          });
+
+          if (!availability || availability.availableMinutes < service.duration) {
+            stats.skippedNoTime++;
+            continue;
+          }
+
+          // --- LÓGICA DE DISTÂNCIA ---
           const startOfDay = new Date(candidateDate);
           startOfDay.setHours(0, 0, 0, 0);
           const endOfDay = new Date(candidateDate);
           endOfDay.setHours(23, 59, 59, 999);
 
-          const dayAppointments = await db.query.appointments.findMany({
+          // Buscar agendamentos diretos
+          let dayAppointments = await db.query.appointments.findMany({
             where: and(
               eq(appointments.userId, userId),
               responsible.type === 'technician'
                 ? eq(appointments.technicianId, responsible.id)
                 : eq(appointments.teamId, responsible.id),
               sql`${appointments.scheduledDate} >= ${startOfDay.toISOString()}`,
-              sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`
+              sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`,
+              sql`${appointments.status} != 'cancelled'`
             ),
           });
 
-          // Calcular distância
+          // Se for técnico, incluir agendamentos das equipes
+          if (responsible.type === 'technician') {
+            const techTeams = await db.query.teamMembers.findMany({
+              where: eq(teamMembers.technicianId, responsible.id)
+            });
+            for (const tm of techTeams) {
+              const teamAppts = await db.query.appointments.findMany({
+                where: and(
+                  eq(appointments.userId, userId),
+                  eq(appointments.teamId, tm.teamId),
+                  sql`${appointments.scheduledDate} >= ${startOfDay.toISOString()}`,
+                  sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`,
+                  sql`${appointments.status} != 'cancelled'`
+                ),
+              });
+              if (teamAppts.length > 0) {
+                dayAppointments = [...dayAppointments, ...teamAppts];
+              }
+            }
+          }
+
           let minDistance = Number.POSITIVE_INFINITY;
           let distanceType: 'between_points' | 'from_base' = 'from_base';
-          const dateStr = candidateDate.toISOString().split('T')[0];
 
           if (dayAppointments.length > 0) {
-            // Calcular distância até o agendamento mais próximo
-            console.log(`  📅 ${dateStr}: ${dayAppointments.length} agendamento(s) no dia`);
             for (const apt of dayAppointments) {
               if (!apt.clientId) continue;
-              const aptClient = await db.query.clients.findFirst({
-                where: eq(clients.id, apt.clientId),
-              });
-
+              const aptClient = await db.query.clients.findFirst({ where: eq(clients.id, apt.clientId) });
               if (aptClient?.lat && aptClient?.lng) {
                 const dist = haversineDistance(aptClient.lat, aptClient.lng, targetLat, targetLng);
                 if (dist < minDistance) {
@@ -2226,74 +2248,362 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             }
 
-            console.log(`  📏 Distância até ponto mais próximo: ${minDistance.toFixed(2)}km (limite: ${maxDistanceBetweenPoints}km)`);
-
-            // Verificar limite de distância entre pontos
             if (minDistance > maxDistanceBetweenPoints) {
-              console.log(`  ❌ Rejeitado: distância ${minDistance.toFixed(2)}km > limite ${maxDistanceBetweenPoints}km`);
-              skippedTooFar++;
-              continue; // Muito longe dos agendamentos existentes
+              stats.skippedTooFar++;
+              continue;
             }
-            console.log(`  ✅ Aceito: dentro do limite de distância entre pontos`);
           } else {
-            // Sem agendamentos no dia - calcular distância da base
-            console.log(`  📅 ${dateStr}: dia totalmente livre`);
             const baseFullAddress = `${baseAddress.logradouro}, ${baseAddress.numero}, ${baseAddress.cidade}, ${baseAddress.cep}, Brasil`;
-            console.log(`  📍 Geocodificando base: ${baseFullAddress}`);
-
             try {
-              await sleep(1000); // Rate limit Nominatim
               const baseCoords = await geocodeWithNominatim(baseFullAddress);
-              console.log(`  📍 Coordenadas da base: ${baseCoords.lat}, ${baseCoords.lng}`);
-
               minDistance = haversineDistance(baseCoords.lat, baseCoords.lng, targetLat, targetLng);
               distanceType = 'from_base';
 
-              console.log(`  📏 Distância da base: ${minDistance.toFixed(2)}km (limite: ${maxDistanceServed}km)`);
-
-              // Verificar limite de distância máxima atendida
               if (minDistance > maxDistanceServed) {
-                console.log(`  ❌ Rejeitado: distância ${minDistance.toFixed(2)}km > limite ${maxDistanceServed}km`);
-                skippedTooFar++;
-                continue; // Muito longe da base
+                stats.skippedTooFar++;
+                continue;
               }
-              console.log(`  ✅ Aceito: dentro do limite de distância da base`);
             } catch (error: any) {
-              console.warn(`  ⚠️ Erro ao geocodificar base: ${error.message}`);
-              skippedGeocodeError++;
+              stats.skippedGeocodeError++;
               continue;
             }
           }
 
-          // Adicionar candidato e enviar imediatamente via streaming
-          const candidate = {
-            date: candidateDate.toISOString().split('T')[0],
-            responsibleType: responsible.type,
-            responsibleId: responsible.id,
-            responsibleName: responsible.name,
-            availableMinutes: availability.availableMinutes,
-            totalMinutes: availability.totalMinutes,
-            usedMinutes: availability.usedMinutes,
+          // Adicionar à lista de candidatos do dia
+          dayCandidates.push({
+            responsible,
             distance: minDistance,
             distanceType,
-          };
-
-          console.log(`  ✨ CANDIDATO ADICIONADO: ${dateStr} - ${minDistance.toFixed(2)}km (${availability.availableMinutes}min livres)`);
-          candidates.push(candidate);
-
-          // 🌊 Enviar candidato imediatamente via SSE
-          res.write(`data: ${JSON.stringify(candidate)}\n\n`);
+            availableMinutes: availability.availableMinutes,
+            totalMinutes: availability.totalMinutes,
+            usedMinutes: availability.usedMinutes
+          });
         }
 
-        // Resumo da análise deste responsável
-        console.log(`📊 [FIND-DATE] Resumo ${responsible.name}:`);
-        console.log(`  - Dias verificados: ${checkedDays}`);
-        console.log(`  - Não é dia de trabalho: ${skippedNotWorkDay}`);
-        console.log(`  - Sem tempo suficiente: ${skippedNoTime}`);
-        console.log(`  - Muito longe: ${skippedTooFar}`);
-        console.log(`  - Erro geocodificação: ${skippedGeocodeError}`);
-        console.log(`  - ✅ Candidatos encontrados: ${candidates.filter(c => c.responsibleId === responsible.id).length}`);
+        // Se encontramos candidatos para este dia, escolher o MELHOR (menor distância)
+        if (dayCandidates.length > 0) {
+          // Ordenar por distância (menor primeiro)
+          dayCandidates.sort((a, b) => a.distance - b.distance);
+          const best = dayCandidates[0];
+
+          const candidate = {
+            date: dateKey,
+            responsibleType: best.responsible.type,
+            responsibleId: best.responsible.id,
+            responsibleName: best.responsible.name,
+            availableMinutes: best.availableMinutes,
+            totalMinutes: best.totalMinutes,
+            usedMinutes: best.usedMinutes,
+            distance: best.distance,
+            distanceType: best.distanceType,
+          };
+
+          console.log(`  ✨ CANDIDATO ADICIONADO: ${dateKey} - ${best.responsible.name} (${best.distance.toFixed(2)}km)`);
+          candidates.push(candidate);
+          addedDays.add(dateKey);
+          res.write(`data: ${JSON.stringify(candidate)}\n\n`);
+        }
       }
+
+      // 🛑 CÓDIGO ANTIGO DESATIVADO (Para referência ou remoção futura)
+      if (false) {
+        for (const responsible of responsibles) {
+          console.log(`🔍 [FIND-DATE] Analisando ${responsible.type} ${responsible.name}`);
+          debugLog(`Analyzing ${responsible.name} (${responsible.type})`);
+
+          // Buscar horários de trabalho
+          let horarioInicioTrabalho: string, horarioFimTrabalho: string, horarioAlmocoMinutos: number, diasTrabalho: string[];
+          let baseAddress: { cep: string, logradouro: string, numero: string, cidade: string, estado: string };
+
+          if (responsible.type === 'technician') {
+            const tech = await storage.getTechnician(responsible.id, userId);
+            if (!tech) continue;
+
+            horarioInicioTrabalho = tech.horarioInicioTrabalho || '08:00';
+            horarioFimTrabalho = tech.horarioFimTrabalho || '18:00';
+            horarioAlmocoMinutos = tech.horarioAlmocoMinutos || 60;
+            diasTrabalho = tech.diasTrabalho || ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
+
+            // Endereço de início (ou da empresa)
+            if (tech.enderecoInicioCep) {
+              baseAddress = {
+                cep: tech.enderecoInicioCep,
+                logradouro: tech.enderecoInicioLogradouro || '',
+                numero: tech.enderecoInicioNumero || '',
+                cidade: tech.enderecoInicioCidade || '',
+                estado: tech.enderecoInicioEstado || ''
+              };
+            } else {
+              baseAddress = {
+                cep: businessRules.enderecoEmpresaCep,
+                logradouro: businessRules.enderecoEmpresaLogradouro,
+                numero: businessRules.enderecoEmpresaNumero,
+                cidade: businessRules.enderecoEmpresaCidade,
+                estado: businessRules.enderecoEmpresaEstado
+              };
+            }
+          } else {
+            const team = await storage.getTeam(responsible.id, userId);
+            if (!team) continue;
+
+            horarioInicioTrabalho = team.horarioInicioTrabalho || '08:00';
+            horarioFimTrabalho = team.horarioFimTrabalho || '18:00';
+            horarioAlmocoMinutos = team.horarioAlmocoMinutos || 60;
+            diasTrabalho = team.diasTrabalho || ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
+
+            // Endereço de início (ou da empresa)
+            if (team.enderecoInicioCep) {
+              baseAddress = {
+                cep: team.enderecoInicioCep,
+                logradouro: team.enderecoInicioLogradouro || '',
+                numero: team.enderecoInicioNumero || '',
+                cidade: team.enderecoInicioCidade || '',
+                estado: team.enderecoInicioEstado || ''
+              };
+            } else {
+              baseAddress = {
+                cep: businessRules.enderecoEmpresaCep,
+                logradouro: businessRules.enderecoEmpresaLogradouro,
+                numero: businessRules.enderecoEmpresaNumero,
+                cidade: businessRules.enderecoEmpresaCidade,
+                estado: businessRules.enderecoEmpresaEstado
+              };
+            }
+          }
+
+          const dayNames = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+
+          console.log(`📋 [FIND-DATE] Endereço base de ${responsible.name}: ${baseAddress.logradouro}, ${baseAddress.numero} - ${baseAddress.cidade} (${baseAddress.cep})`);
+          console.log(`⏰ [FIND-DATE] Horário: ${horarioInicioTrabalho} às ${horarioFimTrabalho} (${horarioAlmocoMinutos}min almoço)`);
+          console.log(`📅 [FIND-DATE] Dias de trabalho: ${diasTrabalho.join(', ')}`);
+          console.log(`🎯 [FIND-DATE] Limites: ${maxDistanceBetweenPoints}km entre pontos, ${maxDistanceServed}km da base`);
+
+          // 🚀 OTIMIZAÇÃO: Pré-calcular todas as datas e buscar disponibilidades em batch
+          const datesToCheck: Date[] = [];
+          for (let daysAhead = 0; daysAhead < maxDaysAhead; daysAhead++) {
+            const candidateDate = new Date(searchStartDate);
+            candidateDate.setDate(searchStartDate.getDate() + daysAhead);
+            candidateDate.setHours(0, 0, 0, 0);
+
+            // Verificar se é dia de trabalho
+            const dayOfWeek = candidateDate.getDay();
+            const currentDayName = dayNames[dayOfWeek];
+
+            // 🐛 DEBUG: Log para verificar filtro de dias
+            if (daysAhead < 10) { // Log apenas primeiros 10 dias
+              console.log(`  🗓️  ${candidateDate.toISOString().split('T')[0]} (${currentDayName}) - Dia de trabalho? ${diasTrabalho.includes(currentDayName)}`);
+            }
+
+            if (diasTrabalho.includes(currentDayName)) {
+              datesToCheck.push(candidateDate);
+            }
+          }
+
+          console.log(`🔍 [FIND-DATE] Verificando ${datesToCheck.length} dias de trabalho...`);
+
+          // 🚀 Buscar todas as disponibilidades de uma vez
+          const availabilities = await db.query.dailyAvailability.findMany({
+            where: and(
+              eq(dailyAvailability.userId, userId),
+              eq(dailyAvailability.responsibleType, responsible.type),
+              eq(dailyAvailability.responsibleId, responsible.id)
+            ),
+          });
+
+          // Criar map de disponibilidades por data para acesso rápido
+          const availabilityMap = new Map<string, typeof availabilities[0]>();
+          for (const avail of availabilities) {
+            const dateKey = new Date(avail.date).toISOString().split('T')[0];
+            availabilityMap.set(dateKey, avail);
+          }
+
+          // 🚀 CRITICAL FIX: Sempre atualizar disponibilidade para garantir que regras de colisão (Técnico x Equipe) sejam aplicadas
+          // (A otimização anterior ignorava datas já existentes, mantendo dados obsoletos que não consideravam o vínculo)
+          console.log(`📊 [FIND-DATE] Atualizando disponibilidade para ${datesToCheck.length} dias verificados...`);
+          for (const date of datesToCheck) {
+            await updateDailyAvailability(userId, date, responsible.type, responsible.id);
+          }
+
+          // Re-buscar disponibilidades atualizadas (agora com cross-check correto)
+          const newAvailabilities = await db.query.dailyAvailability.findMany({
+            where: and(
+              eq(dailyAvailability.userId, userId),
+              eq(dailyAvailability.responsibleType, responsible.type),
+              eq(dailyAvailability.responsibleId, responsible.id)
+            ),
+          });
+
+          // Atualizar o map
+          availabilityMap.clear();
+          for (const avail of newAvailabilities) {
+            const dateKey = new Date(avail.date).toISOString().split('T')[0];
+            availabilityMap.set(dateKey, avail);
+          }
+
+          // Iterar pelos dias de trabalho
+          let skippedNotWorkDay = maxDaysAhead - datesToCheck.length;
+          stats.skippedNotWorkDay += skippedNotWorkDay;
+
+          for (const candidateDate of datesToCheck) {
+            // ⚡ OTIMIZAÇÃO: Parar se já encontramos 10 candidatos
+            if (candidates.length >= 10) {
+              console.log(`⚡ [FIND-DATE] Já encontramos 10 candidatos, parando busca!`);
+              break;
+            }
+
+            stats.checkedDays++;
+            const dateKey = candidateDate.toISOString().split('T')[0];
+            const availability = availabilityMap.get(dateKey);
+
+            if (!availability || availability.availableMinutes < service.duration) {
+              // Não há tempo suficiente
+              stats.skippedNoTime++;
+              debugLog(`  ❌ ${dateKey}: No Time (Free: ${availability?.availableMinutes || 0}m, Need: ${service.duration}m, Status: ${availability?.status})`);
+              continue;
+            }
+
+            // Buscar agendamentos do responsável no dia (para cálculo de rota/distância)
+            const startOfDay = new Date(candidateDate);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(candidateDate);
+            endOfDay.setHours(23, 59, 59, 999);
+
+            // Buscar agendamentos diretos
+            let dayAppointments = await db.query.appointments.findMany({
+              where: and(
+                eq(appointments.userId, userId),
+                responsible.type === 'technician'
+                  ? eq(appointments.technicianId, responsible.id)
+                  : eq(appointments.teamId, responsible.id),
+                sql`${appointments.scheduledDate} >= ${startOfDay.toISOString()}`,
+                sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`
+              ),
+            });
+
+            // 🆕 FIX: Se for técnico, incluir agendamentos das equipes que ele participa
+            // (Pois ele estará fisicamente nesses locais)
+            if (responsible.type === 'technician') {
+              const techTeams = await db.query.teamMembers.findMany({
+                where: eq(teamMembers.technicianId, responsible.id)
+              });
+
+              for (const tm of techTeams) {
+                const teamAppts = await db.query.appointments.findMany({
+                  where: and(
+                    eq(appointments.userId, userId),
+                    eq(appointments.teamId, tm.teamId),
+                    sql`${appointments.scheduledDate} >= ${startOfDay.toISOString()}`,
+                    sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`
+                  ),
+                });
+
+                if (teamAppts.length > 0) {
+                  dayAppointments = [...dayAppointments, ...teamAppts];
+                }
+              }
+            }
+
+            // Calcular distância
+            let minDistance = Number.POSITIVE_INFINITY;
+            let distanceType: 'between_points' | 'from_base' = 'from_base';
+            const dateStr = candidateDate.toISOString().split('T')[0];
+
+            if (dayAppointments.length > 0) {
+              // Calcular distância até o agendamento mais próximo
+              console.log(`  📅 ${dateStr}: ${dayAppointments.length} agendamento(s) no dia`);
+              for (const apt of dayAppointments) {
+                if (!apt.clientId) continue;
+                const aptClient = await db.query.clients.findFirst({
+                  where: eq(clients.id, apt.clientId),
+                });
+
+                if (aptClient?.lat && aptClient?.lng) {
+                  const dist = haversineDistance(aptClient.lat, aptClient.lng, targetLat, targetLng);
+                  if (dist < minDistance) {
+                    minDistance = dist;
+                    distanceType = 'between_points';
+                  }
+                }
+              }
+
+              console.log(`  📏 Distância até ponto mais próximo: ${minDistance.toFixed(2)}km (limite: ${maxDistanceBetweenPoints}km)`);
+
+              // Verificar limite de distância entre pontos
+              if (minDistance > maxDistanceBetweenPoints) {
+                console.log(`  ❌ Rejeitado: distância ${minDistance.toFixed(2)}km > limite ${maxDistanceBetweenPoints}km`);
+                debugLog(`  ❌ ${dateKey}: Distance ${minDistance.toFixed(2)} > MaxPoints ${maxDistanceBetweenPoints}`);
+                stats.skippedTooFar++;
+                continue; // Muito longe dos agendamentos existentes
+              }
+              console.log(`  ✅ Aceito: dentro do limite de distância entre pontos`);
+              debugLog(`  ✅ ${dateKey}: Candidate Accepted! Distance: ${minDistance.toFixed(2)} (${distanceType})`);
+            } else {
+              // Sem agendamentos no dia - calcular distância da base
+              console.log(`  📅 ${dateStr}: dia totalmente livre`);
+              const baseFullAddress = `${baseAddress.logradouro}, ${baseAddress.numero}, ${baseAddress.cidade}, ${baseAddress.cep}, Brasil`;
+              console.log(`  📍 Geocodificando base: ${baseFullAddress}`);
+
+              try {
+                await sleep(1000); // Rate limit Nominatim
+                const baseCoords = await geocodeWithNominatim(baseFullAddress);
+                console.log(`  📍 Coordenadas da base: ${baseCoords.lat}, ${baseCoords.lng}`);
+
+                minDistance = haversineDistance(baseCoords.lat, baseCoords.lng, targetLat, targetLng);
+                distanceType = 'from_base';
+
+                console.log(`  📏 Distância da base: ${minDistance.toFixed(2)}km (limite: ${maxDistanceServed}km)`);
+
+                // Verificar limite de distância máxima atendida
+                // Verificar limite de distância máxima atendida
+                if (minDistance > maxDistanceServed) {
+                  console.log(`  ❌ Rejeitado: distância ${minDistance.toFixed(2)}km > limite ${maxDistanceServed}km`);
+                  debugLog(`  ❌ ${dateKey}: Distance ${minDistance.toFixed(2)} > MaxBase ${maxDistanceServed}`);
+                  stats.skippedTooFar++;
+                  continue; // Muito longe da base
+                }
+                console.log(`  ✅ Aceito: dentro do limite de distância da base`);
+                debugLog(`  ✅ ${dateKey}: Candidate Accepted! Distance: ${minDistance.toFixed(2)} (${distanceType})`);
+              } catch (error: any) {
+                console.warn(`  ⚠️ Erro ao geocodificar base: ${error.message}`);
+                console.warn(`  ⚠️ Erro ao geocodificar base: ${error.message}`);
+                // skippedGeocodeError++;
+                stats.skippedGeocodeError++;
+                continue;
+              }
+            }
+
+            // Adicionar candidato e enviar imediatamente via streaming
+            const candidate = {
+              date: candidateDate.toISOString().split('T')[0],
+              responsibleType: responsible.type,
+              responsibleId: responsible.id,
+              responsibleName: responsible.name,
+              availableMinutes: availability.availableMinutes,
+              totalMinutes: availability.totalMinutes,
+              usedMinutes: availability.usedMinutes,
+              distance: minDistance,
+              distanceType,
+            };
+
+            console.log(`  ✨ CANDIDATO ADICIONADO: ${dateStr} - ${minDistance.toFixed(2)}km (${availability.availableMinutes}min livres)`);
+            candidates.push(candidate);
+
+            // 🌊 Enviar candidato imediatamente via SSE
+            res.write(`data: ${JSON.stringify(candidate)}\n\n`);
+          }
+
+        }
+      }
+
+      // Resumo final acumulado
+      const responsiblesChecked = responsibles.length;
+      console.log(`\n📊 [FIND-DATE] Resumo Final (${responsiblesChecked} prestadores analisados):`);
+      console.log(`  - Dias verificados: ${stats.checkedDays}`);
+      console.log(`  - Rejeitados (não é dia de trabalho): ${stats.skippedNotWorkDay}`);
+      console.log(`  - Rejeitados (sem tempo livre): ${stats.skippedNoTime}`);
+      console.log(`  - Rejeitados (distância): ${stats.skippedTooFar}`);
+      console.log(`  - Erros geocodificação: ${stats.skippedGeocodeError}`);
+      console.log(`  - ✅ Candidatos encontrados: ${candidates.length}`);
 
       console.log(`✅ [FIND-DATE] Total de ${candidates.length} candidatos encontrados`);
 
@@ -2304,8 +2614,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.end();
     } catch (error: any) {
       console.error("❌ [FIND-DATE] Erro:", error);
-      res.write(`data: {"error": "${error.message || 'Erro ao buscar datas disponíveis'}"}\n\n`);
-      res.end();
+      if (res.headersSent) {
+        res.write(`data: {"error": "${error.message || 'Erro ao buscar datas disponíveis'}"}\n\n`);
+        res.end();
+      } else {
+        res.status(500).json({ message: error.message || 'Erro ao buscar datas disponíveis' });
+      }
     }
   });
 

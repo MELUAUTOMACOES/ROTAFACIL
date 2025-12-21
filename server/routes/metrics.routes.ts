@@ -27,17 +27,21 @@ export async function trackFeatureUsage(
     companyId?: number | null,
     metadata?: object
 ): Promise<void> {
+    console.log(`📊 [METRICS] Rastreando: ${feature}.${action} (User: ${userId}, Company: ${companyId})`);
     try {
-        await storage.createFeatureUsage({
+        const result = await storage.createFeatureUsage({
             userId,
             companyId: companyId || null,
             feature,
             action,
             metadata: metadata || null,
         });
-    } catch (error) {
-        // Log silencioso - não deve quebrar a requisição principal
-        console.error("[trackFeatureUsage] Erro ao registrar uso:", error);
+        console.log(`✅ [METRICS] Salvo com sucesso! ID: ${result.id}`);
+    } catch (error: any) {
+        // Log detalhado para debug
+        console.error("❌ [METRICS] Erro FATAL ao salvar métrica:", error.message);
+        if (error.code) console.error("   Code:", error.code);
+        if (error.detail) console.error("   Detail:", error.detail);
     }
 }
 

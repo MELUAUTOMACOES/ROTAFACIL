@@ -337,6 +337,15 @@ export default function FindDate() {
           </div>
         </CardHeader>
 
+        {isFiltersCollapsed && isSearching && (
+          <CardContent>
+            <div className="flex items-center justify-center py-8 space-x-3">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-burnt-yellow"></div>
+              <p className="text-lg text-gray-600">Aguarde, buscando as melhores datas...</p>
+            </div>
+          </CardContent>
+        )}
+
         {!isFiltersCollapsed && (
           <CardContent>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

@@ -827,9 +827,11 @@ export function registerRoutesAPI(app: Express) {
           .leftJoin(clients, eq(appointments.clientId, clients.id))
           .where(eq(appointments.userId, req.user.userId));
 
-        const selectedAppointments = appointmentList.filter((app) =>
-          appointmentIdsNorm.includes(app.id),
-        );
+        // Reordenar conforme a lista de IDs recebida (para respeitar a seleção do usuário)
+        const appointmentMap = new Map(appointmentList.map((app) => [app.id, app]));
+        const selectedAppointments = appointmentIdsNorm
+          .map((id) => appointmentMap.get(id))
+          .filter((app): app is typeof appointmentList[0] => app !== undefined);
 
         if (selectedAppointments.length === 0) {
           console.log("❌ ERRO: Nenhum agendamento encontrado");
@@ -1280,49 +1282,76 @@ export function registerRoutesAPI(app: Express) {
 
         console.log("📍 Coordenadas preparadas (OSRM [lng,lat]):", coordinates);
 
-        // 4. Obter matriz de distâncias/tempos do OSRM
-        console.log("🧮 Calculando matriz OSRM...");
-        const { durations, distances } = await getOSRMMatrix(coordinates);
-
-        // 5. Resolver TSP ou manter ordem original
-        let tourOrder: number[];
-        if (skipOptimization) {
-          console.log("⏩ Pulando otimização - mantendo ordem original dos agendamentos");
-          // Manter ordem original: [0 (depot), 1, 2, 3, ..., n]
-          tourOrder = Array.from({ length: coordinates.length }, (_, i) => i);
-        } else {
-          console.log("🔄 Resolvendo TSP...");
-          tourOrder = solveTSP(distances, endAtStart);
-        }
-
-        // 6. Calcular totais
+        // 4. Obter matriz de distâncias/tempos do OSRM (APENAS SE OTIMIZAR)
+        let durations: number[][] | null = null;
+        let distances: number[][] | null = null;
+        let tourOrder: number[] = [];
         let totalDistance = 0;
         let totalDuration = 0;
 
-        for (let i = 0; i < tourOrder.length - 1; i++) {
-          const from = tourOrder[i];
-          const to = tourOrder[i + 1];
-          totalDistance += distances[from][to];
-          totalDuration += durations[from][to];
+        if (skipOptimization) {
+          console.log("⏩ Pulando otimização (skipOptimization=true)");
+
+          // Manter ordem original: [0 (depot), 1, 2, 3, ..., n]
+          tourOrder = Array.from({ length: coordinates.length }, (_, i) => i);
+          if (endAtStart) {
+            tourOrder.push(0);
+          }
+
+          // NÃO chamamos getOSRMMatrix aqui para economizar requisições
+        } else {
+          console.log("🧮 Calculando matriz OSRM...");
+          const matrixData = await getOSRMMatrix(coordinates);
+          durations = matrixData.durations;
+          distances = matrixData.distances;
+
+          console.log("🔄 Resolvendo TSP...");
+          tourOrder = solveTSP(distances, endAtStart);
+
+          // Calcular totais baseados na matriz (cálculo inicial)
+          for (let i = 0; i < tourOrder.length - 1; i++) {
+            const from = tourOrder[i];
+            const to = tourOrder[i + 1];
+            totalDistance += distances[from][to];
+            totalDuration += durations[from][to];
+          }
         }
 
-        console.log(
-          "📊 Totais calculados - Distância:",
-          totalDistance,
-          "m, Duração:",
-          totalDuration,
-          "s",
-        );
+        console.log("📊 Totais preliminares:", totalDistance, "m,", totalDuration, "s");
 
-        // 7. Gerar polyline GeoJSON
+        // 7. Gerar polyline GeoJSON E atualizar totais finais
         const routeCoordinates = tourOrder.map((idx) => coordinates[idx]);
         let polylineGeoJson: any = null;
 
         try {
-          polylineGeoJson = await getOSRMRoute(routeCoordinates);
-          console.log("🗺️ Polyline gerada com sucesso");
-        } catch (error) {
-          console.log("⚠️ Erro ao gerar polyline:", error);
+          const OSRM_URL_ROUTE = getOsrmUrl()?.replace(/\/$/, "") || null;
+          if (OSRM_URL_ROUTE) {
+            const coordStr = routeCoordinates.map((c) => c.join(",")).join(";");
+            const osrmUrl = `${OSRM_URL_ROUTE}/route/v1/driving/${coordStr}?overview=full&geometries=geojson`;
+            console.log("🗺️ Chamando OSRM route:", osrmUrl);
+
+            const response = await fetch(osrmUrl);
+            const data = await response.json();
+
+            if (data.routes && data.routes.length > 0) {
+              polylineGeoJson = data.routes[0].geometry;
+
+              // Usar os totais precisos retornados pela API de rotas
+              const osrmDist = Number(data.routes[0].distance);
+              const osrmDur = Number(data.routes[0].duration);
+
+              if (Number.isFinite(osrmDist)) totalDistance = osrmDist;
+              if (Number.isFinite(osrmDur)) totalDuration = osrmDur;
+
+              console.log("🗺️ Polyline gerada com sucesso. Totais finais:", totalDistance, totalDuration);
+            } else {
+              console.warn("⚠️ OSRM não retornou rota válida.");
+            }
+          } else {
+            throw new Error("OSRM URL não configurado");
+          }
+        } catch (error: any) {
+          console.log("⚠️ Erro ao gerar polyline:", error.message);
         }
 
         // 8. Preparar dados da rota
