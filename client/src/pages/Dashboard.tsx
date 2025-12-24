@@ -15,9 +15,11 @@ import {
   BarChart3,
   MapPin,
   Clock,
-  TrendingUp
+  TrendingUp,
+  TrendingDown,
+  Timer
 } from "lucide-react";
-import type { Appointment, Client, Technician } from "@shared/schema";
+import type { Appointment, Client, Technician, Service, Route as RouteType } from "@shared/schema";
 import { VehiclesAttentionCard } from "@/components/dashboard/VehiclesAttentionCard";
 import { UpcomingMaintenancesCard } from "@/components/dashboard/UpcomingMaintenancesCard";
 import { MaintenanceCostsCard } from "@/components/dashboard/MaintenanceCostsCard";
@@ -27,6 +29,10 @@ interface DashboardStats {
   activeTechnicians: number;
   completionRate: number;
   monthRevenue: number;
+  avgExecutionTime: number; // em minutos
+  todayVariation: number; // % variação vs ontem
+  completionVariation: number; // % variação vs mês passado
+  revenueVariation: number; // % variação vs mês passado
 }
 
 interface TodayAppointment {
@@ -54,23 +60,99 @@ export default function Dashboard() {
     queryKey: ["/api/technicians"],
   });
 
-  // Calculate stats
-  const today = new Date().toDateString();
-  const todayAppointments = appointments.filter((apt: Appointment) =>
-    new Date(apt.scheduledDate).toDateString() === today
-  );
+  const { data: services = [] } = useQuery<Service[]>({
+    queryKey: ["/api/services"],
+  });
 
+  // Helpers de data
+  const today = new Date();
+  const todayStr = today.toDateString();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toDateString();
+
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+
+  // Filtrar agendamentos por período
+  const todayAppointments = appointments.filter((apt: Appointment) =>
+    new Date(apt.scheduledDate).toDateString() === todayStr
+  );
+  const yesterdayAppointments = appointments.filter((apt: Appointment) =>
+    new Date(apt.scheduledDate).toDateString() === yesterdayStr
+  );
+  const thisMonthAppointments = appointments.filter((apt: Appointment) => {
+    const date = new Date(apt.scheduledDate);
+    return date >= startOfMonth && date <= today;
+  });
+  const lastMonthAppointments = appointments.filter((apt: Appointment) => {
+    const date = new Date(apt.scheduledDate);
+    return date >= startOfLastMonth && date <= endOfLastMonth;
+  });
+
+  // Técnicos ativos
   const activeTechnicians = technicians.filter((tech: Technician) => tech.isActive);
-  const completedAppointments = appointments.filter((apt: Appointment) => apt.status === "completed");
-  const completionRate = appointments.length > 0
-    ? Math.round((completedAppointments.length / appointments.length) * 100)
+
+  // Taxa de conclusão (este mês vs mês passado)
+  const thisMonthCompleted = thisMonthAppointments.filter((apt: Appointment) => apt.status === "completed" || apt.executionStatus === "concluido");
+  const lastMonthCompleted = lastMonthAppointments.filter((apt: Appointment) => apt.status === "completed" || apt.executionStatus === "concluido");
+
+  const thisMonthRate = thisMonthAppointments.length > 0
+    ? Math.round((thisMonthCompleted.length / thisMonthAppointments.length) * 100)
+    : 0;
+  const lastMonthRate = lastMonthAppointments.length > 0
+    ? Math.round((lastMonthCompleted.length / lastMonthAppointments.length) * 100)
+    : 0;
+
+  // Receita do mês (baseada em serviços dos agendamentos concluídos)
+  const calculateRevenue = (appts: Appointment[]) => {
+    return appts
+      .filter((apt: Appointment) => apt.status === "completed" || apt.executionStatus === "concluido")
+      .reduce((total: number, apt: Appointment) => {
+        const service = services.find((s: Service) => s.id === apt.serviceId);
+        return total + (service?.price ? parseFloat(String(service.price)) : 0);
+      }, 0);
+  };
+
+  const thisMonthRevenue = calculateRevenue(thisMonthAppointments);
+  const lastMonthRevenue = calculateRevenue(lastMonthAppointments);
+
+  // Tempo médio de execução (baseado em executionStartedAt e executionFinishedAt)
+  const calculateAvgExecutionTime = (appts: Appointment[]) => {
+    const aptsWithTime = appts.filter((apt: any) => apt.executionStartedAt && apt.executionFinishedAt);
+    if (aptsWithTime.length === 0) return 0;
+
+    const totalMinutes = aptsWithTime.reduce((sum: number, apt: any) => {
+      const start = new Date(apt.executionStartedAt);
+      const end = new Date(apt.executionFinishedAt);
+      const diffMs = end.getTime() - start.getTime();
+      return sum + (diffMs / 1000 / 60); // converter para minutos
+    }, 0);
+
+    return Math.round(totalMinutes / aptsWithTime.length);
+  };
+
+  const avgExecutionTime = calculateAvgExecutionTime(thisMonthCompleted);
+
+  // Calcular variações
+  const todayVariation = yesterdayAppointments.length > 0
+    ? Math.round(((todayAppointments.length - yesterdayAppointments.length) / yesterdayAppointments.length) * 100)
+    : 0;
+  const completionVariation = lastMonthRate > 0 ? thisMonthRate - lastMonthRate : 0;
+  const revenueVariation = lastMonthRevenue > 0
+    ? Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
     : 0;
 
   const stats: DashboardStats = {
     todayAppointments: todayAppointments.length,
     activeTechnicians: activeTechnicians.length,
-    completionRate,
-    monthRevenue: 24500, // This would come from a real calculation
+    completionRate: thisMonthRate,
+    monthRevenue: thisMonthRevenue,
+    avgExecutionTime,
+    todayVariation,
+    completionVariation,
+    revenueVariation,
   };
 
   const getStatusColor = (status: string) => {
@@ -112,7 +194,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-8">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -125,8 +207,14 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="mt-4 flex items-center">
-              <TrendingUp className="h-4 w-4 text-green-600" />
-              <span className="text-green-600 text-sm font-medium ml-1">+8%</span>
+              {stats.todayVariation >= 0 ? (
+                <TrendingUp className="h-4 w-4 text-green-600" />
+              ) : (
+                <TrendingDown className="h-4 w-4 text-red-600" />
+              )}
+              <span className={`text-sm font-medium ml-1 ${stats.todayVariation >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {stats.todayVariation >= 0 ? '+' : ''}{stats.todayVariation}%
+              </span>
               <span className="text-gray-600 text-sm ml-2">vs. ontem</span>
             </div>
           </CardContent>
@@ -165,9 +253,15 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="mt-4 flex items-center">
-              <TrendingUp className="h-4 w-4 text-green-600" />
-              <span className="text-green-600 text-sm font-medium ml-1">+5%</span>
-              <span className="text-gray-600 text-sm ml-2">este mês</span>
+              {stats.completionVariation >= 0 ? (
+                <TrendingUp className="h-4 w-4 text-green-600" />
+              ) : (
+                <TrendingDown className="h-4 w-4 text-red-600" />
+              )}
+              <span className={`text-sm font-medium ml-1 ${stats.completionVariation >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {stats.completionVariation >= 0 ? '+' : ''}{stats.completionVariation}%
+              </span>
+              <span className="text-gray-600 text-sm ml-2">vs. mês passado</span>
             </div>
           </CardContent>
         </Card>
@@ -184,9 +278,35 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="mt-4 flex items-center">
-              <TrendingUp className="h-4 w-4 text-green-600" />
-              <span className="text-green-600 text-sm font-medium ml-1">+12%</span>
+              {stats.revenueVariation >= 0 ? (
+                <TrendingUp className="h-4 w-4 text-green-600" />
+              ) : (
+                <TrendingDown className="h-4 w-4 text-red-600" />
+              )}
+              <span className={`text-sm font-medium ml-1 ${stats.revenueVariation >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {stats.revenueVariation >= 0 ? '+' : ''}{stats.revenueVariation}%
+              </span>
               <span className="text-gray-600 text-sm ml-2">vs. mês passado</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Tempo Médio de Execução */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Tempo Médio</p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {stats.avgExecutionTime > 0 ? `${stats.avgExecutionTime} min` : '--'}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-orange-50 rounded-lg flex items-center justify-center">
+                <Timer className="text-orange-600 h-6 w-6" />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center">
+              <span className="text-gray-600 text-sm">por atendimento concluído</span>
             </div>
           </CardContent>
         </Card>
@@ -417,7 +537,7 @@ export default function Dashboard() {
                               {statusLabel}
                             </Badge>
                             <span className="text-xs text-gray-500">
-                              {activity.updatedAt ? new Date(activity.updatedAt).toLocaleDateString('pt-BR') : ''}
+                              {(activity as any).updatedAt ? new Date((activity as any).updatedAt).toLocaleDateString('pt-BR') : (activity.createdAt ? new Date(activity.createdAt).toLocaleDateString('pt-BR') : '')}
                             </span>
                           </div>
                         </div>

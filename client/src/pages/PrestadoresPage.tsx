@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
     MapPin, Calendar, Navigation, CheckCircle, Clock,
-    AlertTriangle, ChevronRight, QrCode, LogOut, Map as MapIcon, ClipboardCheck
+    AlertTriangle, ChevronRight, QrCode, LogOut, Map as MapIcon, ClipboardCheck, PlayCircle, Home, UserCheck, Timer
 } from 'lucide-react';
 import QRCode from "react-qr-code";
 
@@ -32,6 +32,7 @@ export default function PrestadoresPage() {
     const [showQRModal, setShowQRModal] = useState(false);
     const [finalizeStatus, setFinalizeStatus] = useState('finalizado');
     const [finalizeMotivo, setFinalizeMotivo] = useState('');
+    const [routeEndLocation, setRouteEndLocation] = useState<'last_client' | 'company_home'>('last_client');
 
     const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
@@ -103,12 +104,116 @@ export default function PrestadoresPage() {
         }
     });
 
+    // Mutation para iniciar rota
+    const startRouteMutation = useMutation({
+        mutationFn: async (id: string) => {
+            const res = await apiRequest("PATCH", `/api/routes/${id}/start`);
+            return res.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['/api/provider/route'] });
+            toast({
+                title: "Rota iniciada!",
+                description: "Bom trabalho! Agora você pode registrar os atendimentos.",
+            });
+        },
+        onError: (error: any) => {
+            toast({
+                title: "Erro",
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    });
+
+    // Verificar se há algum atendimento em andamento (iniciou mas não finalizou)
+    const inProgressAppointment = routeData?.stops?.find((s: any) =>
+        s.appointment?.executionStartedAt && !s.appointment?.executionFinishedAt && !s.appointment?.executionStatus
+    );
+
+    // Timer global para atendimento em andamento
+    const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+    // Timer para tempo total da rota (desde routeStartedAt)
+    const [routeElapsedSeconds, setRouteElapsedSeconds] = useState(0);
+
+    useEffect(() => {
+        if (!routeData?.route?.routeStartedAt) {
+            setRouteElapsedSeconds(0);
+            return;
+        }
+
+        const startTime = new Date(routeData.route.routeStartedAt).getTime();
+
+        const updateTimer = () => {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            setRouteElapsedSeconds(elapsed);
+        };
+
+        updateTimer();
+        const interval = setInterval(updateTimer, 1000);
+        return () => clearInterval(interval);
+    }, [routeData?.route?.routeStartedAt]);
+
+    useEffect(() => {
+        if (!inProgressAppointment?.appointment?.executionStartedAt) {
+            setElapsedSeconds(0);
+            return;
+        }
+
+        const startTime = new Date(inProgressAppointment.appointment.executionStartedAt).getTime();
+
+        const updateTimer = () => {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            setElapsedSeconds(elapsed);
+        };
+
+        updateTimer();
+        const interval = setInterval(updateTimer, 1000);
+        return () => clearInterval(interval);
+    }, [inProgressAppointment?.appointment?.executionStartedAt]);
+
+    const formatTime = (seconds: number) => {
+        const hrs = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = seconds % 60;
+
+        if (hrs > 0) {
+            return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
     const handleAppointmentClick = (apt: any) => {
         // Se a rota já estiver finalizada, não permite editar
         if (routeData?.route?.status === 'finalizado' || routeData?.route?.status === 'cancelado') {
             return;
         }
+        // Se a rota não foi iniciada, não permite abrir agendamentos
+        if (!routeData?.route?.routeStartedAt) {
+            toast({
+                title: "Rota não iniciada",
+                description: "Clique em 'Iniciar Rota' para começar os atendimentos.",
+                variant: "destructive",
+            });
+            return;
+        }
+        // Bloquear se há outro atendimento em andamento (exceto se for o mesmo)
+        if (inProgressAppointment && inProgressAppointment.appointment?.id !== apt.appointment?.id) {
+            toast({
+                title: "Atendimento em andamento",
+                description: `Finalize o atendimento de "${inProgressAppointment.appointment?.clientName}" antes de iniciar outro.`,
+                variant: "destructive",
+            });
+            return;
+        }
         setSelectedAppointment(apt);
+    };
+
+    const handleStartRoute = async () => {
+        if (routeData?.route?.id) {
+            await startRouteMutation.mutateAsync(routeData.route.id);
+        }
     };
 
     const handleSaveAppointment = async (data: any) => {
@@ -136,7 +241,8 @@ export default function PrestadoresPage() {
                 id: routeData.route.id,
                 data: {
                     status: finalStatus,
-                    motivo: finalMotivo
+                    motivo: finalMotivo,
+                    routeEndLocation: routeEndLocation // Onde finalizou o dia
                 }
             });
         }
@@ -314,6 +420,12 @@ export default function PrestadoresPage() {
                         <Clock className="w-4 h-4 text-orange-600" />
                         <span>{Math.round(route.durationTotal / 60)} min</span>
                     </div>
+                    {route.routeStartedAt && !isRouteFinalized && (
+                        <div className="flex items-center gap-1 ml-auto">
+                            <Timer className="w-4 h-4 text-purple-600" />
+                            <span className="font-mono font-semibold text-purple-600">{formatTime(routeElapsedSeconds)}</span>
+                        </div>
+                    )}
                 </div>
             </header>
 
@@ -345,57 +457,81 @@ export default function PrestadoresPage() {
 
                     {/* Stops List */}
                     <div className="px-4 space-y-3">
-                        {stops.map((stop: any, index: number) => (
-                            <Card
-                                key={stop.id}
-                                className={`overflow-hidden transition-all active:scale-[0.98] ${stop.appointment?.status === 'completed' ? 'opacity-75' : ''}`}
-                                onClick={() => handleAppointmentClick(stop)}
-                            >
-                                <div className="flex">
-                                    {/* Order Indicator */}
-                                    <div className="w-10 bg-gray-100 flex items-center justify-center border-r font-bold text-gray-500">
-                                        #{stop.order}
+                        {stops.map((stop: any, index: number) => {
+                            const isInProgress = stop.appointment?.executionStartedAt && !stop.appointment?.executionFinishedAt && !stop.appointment?.executionStatus;
+
+                            return (
+                                <Card
+                                    key={stop.id}
+                                    className={`overflow-hidden transition-all active:scale-[0.98] ${stop.appointment?.status === 'completed' ? 'opacity-75' : ''} ${isInProgress ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                                    onClick={() => handleAppointmentClick(stop)}
+                                >
+                                    <div className="flex">
+                                        {/* Order Indicator */}
+                                        <div className={`w-10 flex items-center justify-center border-r font-bold ${isInProgress ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                                            #{stop.order}
+                                        </div>
+
+                                        <div className="flex-1 p-3">
+                                            <div className="flex justify-between items-start mb-1">
+                                                <span className="font-semibold text-gray-900 line-clamp-1">
+                                                    {stop.appointment?.clientName}
+                                                </span>
+                                                {/* Timer se em andamento, senão status */}
+                                                {isInProgress ? (
+                                                    <div className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-mono font-bold animate-pulse">
+                                                        <Timer className="w-3 h-3" />
+                                                        {formatTime(elapsedSeconds)}
+                                                    </div>
+                                                ) : (
+                                                    <Badge variant="outline" className={`text-xs ${getExecutionStatusColor(stop.appointment?.executionStatus)}`}>
+                                                        {getExecutionStatusLabel(stop.appointment?.executionStatus)}
+                                                    </Badge>
+                                                )}
+                                            </div>
+
+                                            <p className="text-sm text-gray-600 mb-1 line-clamp-1">{stop.appointment?.serviceName}</p>
+
+                                            <div className="flex items-start gap-1 text-xs text-gray-500 mt-2">
+                                                <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                                                <span className="line-clamp-2">{stop.address}</span>
+                                            </div>
+                                        </div>
+
+                                        {!isRouteFinalized && (
+                                            <div className="flex items-center px-2 text-gray-300">
+                                                <ChevronRight className="w-5 h-5" />
+                                            </div>
+                                        )}
                                     </div>
-
-                                    <div className="flex-1 p-3">
-                                        <div className="flex justify-between items-start mb-1">
-                                            <span className="font-semibold text-gray-900 line-clamp-1">
-                                                {stop.appointment?.clientName}
-                                            </span>
-                                            {/* Mostra status da execução por padrão, mas fallback para status administrativo se não tiver execução */}
-                                            <Badge variant="outline" className={`text-xs ${getExecutionStatusColor(stop.appointment?.executionStatus)}`}>
-                                                {getExecutionStatusLabel(stop.appointment?.executionStatus)}
-                                            </Badge>
-                                        </div>
-
-                                        <p className="text-sm text-gray-600 mb-1 line-clamp-1">{stop.appointment?.serviceName}</p>
-
-                                        <div className="flex items-start gap-1 text-xs text-gray-500 mt-2">
-                                            <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                                            <span className="line-clamp-2">{stop.address}</span>
-                                        </div>
-                                    </div>
-
-                                    {!isRouteFinalized && (
-                                        <div className="flex items-center px-2 text-gray-300">
-                                            <ChevronRight className="w-5 h-5" />
-                                        </div>
-                                    )}
-                                </div>
-                            </Card>
-                        ))}
+                                </Card>
+                            );
+                        })}
                     </div>
 
                     {/* Footer Actions */}
                     {!isRouteFinalized && (
                         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg">
-                            <Button
-                                className="w-full bg-gray-900 hover:bg-gray-800 text-white h-12 text-lg"
-                                onClick={handleOpenFinalizeModal}
-                            >
-                                <CheckCircle className="w-5 h-5 mr-2" />
-                                Fechar Romaneio
-                            </Button>
+                            {!route.routeStartedAt ? (
+                                // Rota não iniciada - mostrar botão Iniciar
+                                <Button
+                                    className="w-full bg-[#DAA520] hover:bg-[#B8860B] text-white h-12 text-lg"
+                                    onClick={handleStartRoute}
+                                    disabled={startRouteMutation.isPending}
+                                >
+                                    <PlayCircle className="w-5 h-5 mr-2" />
+                                    {startRouteMutation.isPending ? 'Iniciando...' : 'Iniciar Rota'}
+                                </Button>
+                            ) : (
+                                // Rota iniciada - mostrar botão Fechar Romaneio
+                                <Button
+                                    className="w-full bg-gray-900 hover:bg-gray-800 text-white h-12 text-lg"
+                                    onClick={handleOpenFinalizeModal}
+                                >
+                                    <CheckCircle className="w-5 h-5 mr-2" />
+                                    Fechar Romaneio
+                                </Button>
+                            )}
                         </div>
                     )}
                 </TabsContent>
@@ -412,6 +548,13 @@ export default function PrestadoresPage() {
                     onClose={() => setSelectedAppointment(null)}
                     appointment={selectedAppointment.appointment}
                     onSave={handleSaveAppointment}
+                    onStartExecution={async (appointmentId: number) => {
+                        // Persistir executionStartedAt no banco
+                        await updateAppointmentMutation.mutateAsync({
+                            id: appointmentId,
+                            data: { executionStartedAt: new Date().toISOString() }
+                        });
+                    }}
                 />
             )}
 
@@ -447,6 +590,39 @@ export default function PrestadoresPage() {
                                 onChange={(e) => setFinalizeMotivo(e.target.value)}
                                 placeholder="Se houve algum problema, descreva aqui..."
                             />
+                        </div>
+
+                        {/* Opção de local de finalização */}
+                        <div className="space-y-3 pt-2">
+                            <Label className="font-medium">Onde você finalizou o dia?</Label>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setRouteEndLocation('last_client')}
+                                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${routeEndLocation === 'last_client'
+                                        ? 'border-[#DAA520] bg-[#DAA520]/10'
+                                        : 'border-gray-200 hover:border-gray-300'
+                                        }`}
+                                >
+                                    <UserCheck className={`w-8 h-8 mb-2 ${routeEndLocation === 'last_client' ? 'text-[#DAA520]' : 'text-gray-400'}`} />
+                                    <span className={`text-sm font-medium ${routeEndLocation === 'last_client' ? 'text-[#DAA520]' : 'text-gray-600'}`}>
+                                        Último Cliente
+                                    </span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setRouteEndLocation('company_home')}
+                                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${routeEndLocation === 'company_home'
+                                        ? 'border-[#DAA520] bg-[#DAA520]/10'
+                                        : 'border-gray-200 hover:border-gray-300'
+                                        }`}
+                                >
+                                    <Home className={`w-8 h-8 mb-2 ${routeEndLocation === 'company_home' ? 'text-[#DAA520]' : 'text-gray-400'}`} />
+                                    <span className={`text-sm font-medium ${routeEndLocation === 'company_home' ? 'text-[#DAA520]' : 'text-gray-600'}`}>
+                                        Empresa/Casa
+                                    </span>
+                                </button>
+                            </div>
                         </div>
                     </div>
 

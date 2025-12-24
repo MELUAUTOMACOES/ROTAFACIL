@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import {
   insertVehicleSchema,
+  fuelTypeLabels,
   type InsertVehicle,
   type Vehicle,
   type Technician,
@@ -24,7 +25,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Car, Calendar, User, Users, FileText } from "lucide-react";
+import { Car, Calendar, User, Users, FileText, Fuel, Gauge } from "lucide-react";
 import VehicleDocumentsSection from "./VehicleDocumentsSection";
 
 interface VehicleFormProps {
@@ -55,24 +56,49 @@ export default function VehicleForm({
 
   const form = useForm<InsertVehicle>({
     resolver: zodResolver(insertVehicleSchema),
-    defaultValues: vehicle
-      ? {
+    defaultValues: {
+      plate: "",
+      model: "",
+      brand: "",
+      year: new Date().getFullYear(),
+      fuelType: "gasolina",
+      fuelConsumption: undefined,
+      tankCapacity: undefined,
+      technicianId: undefined,
+      teamId: undefined,
+    },
+  });
+
+  // Resetar form quando o veículo muda (correção de bug de cache)
+  useEffect(() => {
+    if (vehicle) {
+      form.reset({
         plate: vehicle.plate,
         model: vehicle.model,
         brand: vehicle.brand,
         year: vehicle.year,
+        fuelType: (vehicle as any).fuelType || "gasolina",
+        fuelConsumption: (vehicle as any).fuelConsumption || undefined,
+        tankCapacity: (vehicle as any).tankCapacity || undefined,
         technicianId: vehicle.technicianId || undefined,
         teamId: vehicle.teamId || undefined,
-      }
-      : {
+      });
+      setAssignmentType(vehicle.technicianId ? "technician" : vehicle.teamId ? "team" : "technician");
+    } else {
+      form.reset({
         plate: "",
         model: "",
         brand: "",
         year: new Date().getFullYear(),
+        fuelType: "gasolina",
+        fuelConsumption: undefined,
+        tankCapacity: undefined,
         technicianId: undefined,
         teamId: undefined,
-      },
-  });
+      });
+      setAssignmentType("technician");
+    }
+  }, [vehicle, form]);
 
   const createVehicleMutation = useMutation({
     mutationFn: async (data: InsertVehicle) => {
@@ -236,24 +262,79 @@ export default function VehicleForm({
           </div>
         </div>
 
-        <div>
-          <Label htmlFor="year" className="flex items-center">
-            <Calendar className="h-4 w-4 mr-1" />
-            Ano *
+        {/* Seção de Combustível */}
+        <div className="border-t pt-4 mt-4">
+          <Label className="text-base font-medium flex items-center mb-3">
+            <Fuel className="h-4 w-4 mr-2" />
+            Combustível e Consumo
           </Label>
-          <Input
-            {...form.register("year", { valueAsNumber: true })}
-            type="number"
-            min="1900"
-            max={new Date().getFullYear() + 1}
-            placeholder="2020"
-            className="mt-1"
-          />
-          {form.formState.errors.year && (
-            <p className="text-sm text-red-600 mt-1">
-              {form.formState.errors.year.message}
-            </p>
-          )}
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <Label htmlFor="fuelType">Tipo de Combustível *</Label>
+              <Select
+                value={form.watch("fuelType") || "gasolina"}
+                onValueChange={(value) =>
+                  form.setValue("fuelType", value as any, { shouldValidate: true })
+                }
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(fuelTypeLabels).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.fuelType && (
+                <p className="text-sm text-red-600 mt-1">
+                  {form.formState.errors.fuelType.message}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="fuelConsumption" className="flex items-center">
+                <Gauge className="h-4 w-4 mr-1" />
+                Consumo ({form.watch("fuelType") === "eletrico" ? "km/kWh" : "km/L"})
+              </Label>
+              <Input
+                type="number"
+                step="0.1"
+                min="1"
+                max="100"
+                placeholder="Ex: 12.5"
+                className="mt-1"
+                value={form.watch("fuelConsumption") || ""}
+                onChange={(e) => form.setValue("fuelConsumption", e.target.value || undefined, { shouldValidate: true })}
+              />
+              {form.formState.errors.fuelConsumption && (
+                <p className="text-sm text-red-600 mt-1">
+                  {form.formState.errors.fuelConsumption.message}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="tankCapacity">Capacidade Tanque (L)</Label>
+              <Input
+                type="number"
+                min="10"
+                max="500"
+                placeholder="Ex: 50"
+                className="mt-1"
+                value={form.watch("tankCapacity") || ""}
+                onChange={(e) => form.setValue("tankCapacity", e.target.value ? parseInt(e.target.value) : undefined, { shouldValidate: true })}
+              />
+              {form.formState.errors.tankCapacity && (
+                <p className="text-sm text-red-600 mt-1">
+                  {form.formState.errors.tankCapacity.message}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="space-y-4">

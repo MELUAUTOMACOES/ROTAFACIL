@@ -419,17 +419,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/provider/appointments/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { status, feedback, photos, signature, executionStatus, executionNotes } = req.body;
+      const { status, feedback, photos, signature, executionStatus, executionNotes, executionStartedAt, executionFinishedAt } = req.body;
 
-      // 🔒 Validar se a rota pai já está finalizada
+      // 🔒 Validar se a rota pai já está finalizada (apenas finalizado/cancelado bloqueiam)
       const appointmentStops = await db.select().from(routeStops).where(eq(routeStops.appointmentNumericId, id));
 
-      // Se houver múltiplas rotas (raro), verifica todas. Se alguma estiver finalizada, bloqueia.
+      // Verificar se existe pelo menos uma rota ativa (não finalizada) para este agendamento
+      // Isso permite editar agendamentos que foram reutilizados em novas rotas
+      let hasActiveRoute = false;
       for (const stop of appointmentStops) {
         const [r] = await db.select().from(routes).where(eq(routes.id, stop.routeId));
-        if (r && ['finalizado', 'cancelado', 'incompleto'].includes(r.status)) {
-          return res.status(400).json({ message: "Não é possível editar um agendamento de uma rota já finalizada." });
+        console.log(`[DEBUG] Rota ${stop.routeId} status: ${r?.status}`);
+        if (r && !['finalizado', 'cancelado'].includes(r.status)) {
+          hasActiveRoute = true;
+          break; // Encontrou uma rota ativa, pode editar
         }
+      }
+
+      // Só bloqueia se NÃO houver nenhuma rota ativa E houver rotas finalizadas
+      if (!hasActiveRoute && appointmentStops.length > 0) {
+        return res.status(400).json({ message: "Não é possível editar um agendamento de uma rota já finalizada." });
       }
 
       const updated = await storage.updateAppointmentExecution(id, {
@@ -438,7 +447,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         photos,
         signature,
         executionStatus,
-        executionNotes
+        executionNotes,
+        executionStartedAt,
+        executionFinishedAt
       }, req.user.userId);
 
       res.json(updated);
@@ -448,11 +459,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 2.5 Iniciar rota (registrar routeStartedAt)
+  app.patch("/api/routes/:id/start", authenticateToken, async (req: any, res) => {
+    try {
+      const { id } = req.params; // UUID
+
+      // Verificar se rota existe
+      const existingRoute = await db.query.routes.findFirst({
+        where: eq(routes.id, id)
+      });
+
+      if (!existingRoute) {
+        return res.status(404).json({ message: "Rota não encontrada" });
+      }
+
+      // Verificar se já foi iniciada
+      if (existingRoute.routeStartedAt) {
+        return res.status(400).json({ message: "Rota já foi iniciada" });
+      }
+
+      // ⏱️ Registrar timestamp de início
+      const [route] = await db.update(routes)
+        .set({
+          routeStartedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(routes.id, id))
+        .returning();
+
+      console.log(`✅ [PROVIDER] Rota ${id} iniciada às ${route.routeStartedAt}`);
+      res.json(route);
+    } catch (error: any) {
+      console.error("❌ [PROVIDER] Erro ao iniciar rota:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // 3. Finalizar rota
   app.post("/api/provider/route/:id/finalize", authenticateToken, async (req: any, res) => {
     try {
       const { id } = req.params; // UUID
-      const { status, motivo } = req.body; // status: finalizado, incompleto, cancelado
+      const { status, motivo, routeEndLocation } = req.body; // status: finalizado, incompleto, cancelado
 
       // Validar status permitido
       if (!['finalizado', 'incompleto', 'cancelado'].includes(status)) {
@@ -482,7 +529,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const route = await storage.finalizeRoute(id, status, req.user.userId);
+      // ⏱️ Salvar timestamp de finalização e local
+      const updateData: any = {
+        status,
+        routeFinishedAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      if (routeEndLocation && ['last_client', 'company_home'].includes(routeEndLocation)) {
+        updateData.routeEndLocation = routeEndLocation;
+      }
+
+      const [route] = await db.update(routes)
+        .set(updateData)
+        .where(eq(routes.id, id))
+        .returning();
 
       if (motivo) {
         // Se quiser salvar motivo na rota, precisaria de coluna "notes" na tabela routes
@@ -2460,295 +2521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // 🛑 CÓDIGO ANTIGO DESATIVADO (Para referência ou remoção futura)
-      if (false) {
-        for (const responsible of responsibles) {
-          console.log(`🔍 [FIND-DATE] Analisando ${responsible.type} ${responsible.name}`);
-          debugLog(`Analyzing ${responsible.name} (${responsible.type})`);
-
-          // Buscar horários de trabalho
-          let horarioInicioTrabalho: string, horarioFimTrabalho: string, horarioAlmocoMinutos: number, diasTrabalho: string[];
-          let baseAddress: { cep: string, logradouro: string, numero: string, cidade: string, estado: string };
-
-          if (responsible.type === 'technician') {
-            const tech = await storage.getTechnician(responsible.id, userId);
-            if (!tech) continue;
-
-            horarioInicioTrabalho = tech.horarioInicioTrabalho || '08:00';
-            horarioFimTrabalho = tech.horarioFimTrabalho || '18:00';
-            horarioAlmocoMinutos = tech.horarioAlmocoMinutos || 60;
-            diasTrabalho = tech.diasTrabalho || ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
-
-            // Endereço de início (ou da empresa)
-            if (tech.enderecoInicioCep) {
-              baseAddress = {
-                cep: tech.enderecoInicioCep,
-                logradouro: tech.enderecoInicioLogradouro || '',
-                numero: tech.enderecoInicioNumero || '',
-                cidade: tech.enderecoInicioCidade || '',
-                estado: tech.enderecoInicioEstado || ''
-              };
-            } else {
-              baseAddress = {
-                cep: businessRules.enderecoEmpresaCep,
-                logradouro: businessRules.enderecoEmpresaLogradouro,
-                numero: businessRules.enderecoEmpresaNumero,
-                cidade: businessRules.enderecoEmpresaCidade,
-                estado: businessRules.enderecoEmpresaEstado
-              };
-            }
-          } else {
-            const team = await storage.getTeam(responsible.id, userId);
-            if (!team) continue;
-
-            horarioInicioTrabalho = team.horarioInicioTrabalho || '08:00';
-            horarioFimTrabalho = team.horarioFimTrabalho || '18:00';
-            horarioAlmocoMinutos = team.horarioAlmocoMinutos || 60;
-            diasTrabalho = team.diasTrabalho || ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
-
-            // Endereço de início (ou da empresa)
-            if (team.enderecoInicioCep) {
-              baseAddress = {
-                cep: team.enderecoInicioCep,
-                logradouro: team.enderecoInicioLogradouro || '',
-                numero: team.enderecoInicioNumero || '',
-                cidade: team.enderecoInicioCidade || '',
-                estado: team.enderecoInicioEstado || ''
-              };
-            } else {
-              baseAddress = {
-                cep: businessRules.enderecoEmpresaCep,
-                logradouro: businessRules.enderecoEmpresaLogradouro,
-                numero: businessRules.enderecoEmpresaNumero,
-                cidade: businessRules.enderecoEmpresaCidade,
-                estado: businessRules.enderecoEmpresaEstado
-              };
-            }
-          }
-
-          const dayNames = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
-
-          console.log(`📋 [FIND-DATE] Endereço base de ${responsible.name}: ${baseAddress.logradouro}, ${baseAddress.numero} - ${baseAddress.cidade} (${baseAddress.cep})`);
-          console.log(`⏰ [FIND-DATE] Horário: ${horarioInicioTrabalho} às ${horarioFimTrabalho} (${horarioAlmocoMinutos}min almoço)`);
-          console.log(`📅 [FIND-DATE] Dias de trabalho: ${diasTrabalho.join(', ')}`);
-          console.log(`🎯 [FIND-DATE] Limites: ${maxDistanceBetweenPoints}km entre pontos, ${maxDistanceServed}km da base`);
-
-          // 🚀 OTIMIZAÇÃO: Pré-calcular todas as datas e buscar disponibilidades em batch
-          const datesToCheck: Date[] = [];
-          for (let daysAhead = 0; daysAhead < maxDaysAhead; daysAhead++) {
-            const candidateDate = new Date(searchStartDate);
-            candidateDate.setDate(searchStartDate.getDate() + daysAhead);
-            candidateDate.setHours(0, 0, 0, 0);
-
-            // Verificar se é dia de trabalho
-            const dayOfWeek = candidateDate.getDay();
-            const currentDayName = dayNames[dayOfWeek];
-
-            // 🐛 DEBUG: Log para verificar filtro de dias
-            if (daysAhead < 10) { // Log apenas primeiros 10 dias
-              console.log(`  🗓️  ${candidateDate.toISOString().split('T')[0]} (${currentDayName}) - Dia de trabalho? ${diasTrabalho.includes(currentDayName)}`);
-            }
-
-            if (diasTrabalho.includes(currentDayName)) {
-              datesToCheck.push(candidateDate);
-            }
-          }
-
-          console.log(`🔍 [FIND-DATE] Verificando ${datesToCheck.length} dias de trabalho...`);
-
-          // 🚀 Buscar todas as disponibilidades de uma vez
-          const availabilities = await db.query.dailyAvailability.findMany({
-            where: and(
-              eq(dailyAvailability.userId, userId),
-              eq(dailyAvailability.responsibleType, responsible.type),
-              eq(dailyAvailability.responsibleId, responsible.id)
-            ),
-          });
-
-          // Criar map de disponibilidades por data para acesso rápido
-          const availabilityMap = new Map<string, typeof availabilities[0]>();
-          for (const avail of availabilities) {
-            const dateKey = new Date(avail.date).toISOString().split('T')[0];
-            availabilityMap.set(dateKey, avail);
-          }
-
-          // 🚀 CRITICAL FIX: Sempre atualizar disponibilidade para garantir que regras de colisão (Técnico x Equipe) sejam aplicadas
-          // (A otimização anterior ignorava datas já existentes, mantendo dados obsoletos que não consideravam o vínculo)
-          console.log(`📊 [FIND-DATE] Atualizando disponibilidade para ${datesToCheck.length} dias verificados...`);
-          for (const date of datesToCheck) {
-            await updateDailyAvailability(userId, date, responsible.type, responsible.id);
-          }
-
-          // Re-buscar disponibilidades atualizadas (agora com cross-check correto)
-          const newAvailabilities = await db.query.dailyAvailability.findMany({
-            where: and(
-              eq(dailyAvailability.userId, userId),
-              eq(dailyAvailability.responsibleType, responsible.type),
-              eq(dailyAvailability.responsibleId, responsible.id)
-            ),
-          });
-
-          // Atualizar o map
-          availabilityMap.clear();
-          for (const avail of newAvailabilities) {
-            const dateKey = new Date(avail.date).toISOString().split('T')[0];
-            availabilityMap.set(dateKey, avail);
-          }
-
-          // Iterar pelos dias de trabalho
-          let skippedNotWorkDay = maxDaysAhead - datesToCheck.length;
-          stats.skippedNotWorkDay += skippedNotWorkDay;
-
-          for (const candidateDate of datesToCheck) {
-            // ⚡ OTIMIZAÇÃO: Parar se já encontramos 10 candidatos
-            if (candidates.length >= 10) {
-              console.log(`⚡ [FIND-DATE] Já encontramos 10 candidatos, parando busca!`);
-              break;
-            }
-
-            stats.checkedDays++;
-            const dateKey = candidateDate.toISOString().split('T')[0];
-            const availability = availabilityMap.get(dateKey);
-
-            if (!availability || availability.availableMinutes < service.duration) {
-              // Não há tempo suficiente
-              stats.skippedNoTime++;
-              debugLog(`  ❌ ${dateKey}: No Time (Free: ${availability?.availableMinutes || 0}m, Need: ${service.duration}m, Status: ${availability?.status})`);
-              continue;
-            }
-
-            // Buscar agendamentos do responsável no dia (para cálculo de rota/distância)
-            const startOfDay = new Date(candidateDate);
-            startOfDay.setHours(0, 0, 0, 0);
-            const endOfDay = new Date(candidateDate);
-            endOfDay.setHours(23, 59, 59, 999);
-
-            // Buscar agendamentos diretos
-            let dayAppointments = await db.query.appointments.findMany({
-              where: and(
-                eq(appointments.userId, userId),
-                responsible.type === 'technician'
-                  ? eq(appointments.technicianId, responsible.id)
-                  : eq(appointments.teamId, responsible.id),
-                sql`${appointments.scheduledDate} >= ${startOfDay.toISOString()}`,
-                sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`
-              ),
-            });
-
-            // 🆕 FIX: Se for técnico, incluir agendamentos das equipes que ele participa
-            // (Pois ele estará fisicamente nesses locais)
-            if (responsible.type === 'technician') {
-              const techTeams = await db.query.teamMembers.findMany({
-                where: eq(teamMembers.technicianId, responsible.id)
-              });
-
-              for (const tm of techTeams) {
-                const teamAppts = await db.query.appointments.findMany({
-                  where: and(
-                    eq(appointments.userId, userId),
-                    eq(appointments.teamId, tm.teamId),
-                    sql`${appointments.scheduledDate} >= ${startOfDay.toISOString()}`,
-                    sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`
-                  ),
-                });
-
-                if (teamAppts.length > 0) {
-                  dayAppointments = [...dayAppointments, ...teamAppts];
-                }
-              }
-            }
-
-            // Calcular distância
-            let minDistance = Number.POSITIVE_INFINITY;
-            let distanceType: 'between_points' | 'from_base' = 'from_base';
-            const dateStr = candidateDate.toISOString().split('T')[0];
-
-            if (dayAppointments.length > 0) {
-              // Calcular distância até o agendamento mais próximo
-              console.log(`  📅 ${dateStr}: ${dayAppointments.length} agendamento(s) no dia`);
-              for (const apt of dayAppointments) {
-                if (!apt.clientId) continue;
-                const aptClient = await db.query.clients.findFirst({
-                  where: eq(clients.id, apt.clientId),
-                });
-
-                if (aptClient?.lat && aptClient?.lng) {
-                  const dist = haversineDistance(aptClient.lat, aptClient.lng, targetLat, targetLng);
-                  if (dist < minDistance) {
-                    minDistance = dist;
-                    distanceType = 'between_points';
-                  }
-                }
-              }
-
-              console.log(`  📏 Distância até ponto mais próximo: ${minDistance.toFixed(2)}km (limite: ${maxDistanceBetweenPoints}km)`);
-
-              // Verificar limite de distância entre pontos
-              if (minDistance > maxDistanceBetweenPoints) {
-                console.log(`  ❌ Rejeitado: distância ${minDistance.toFixed(2)}km > limite ${maxDistanceBetweenPoints}km`);
-                debugLog(`  ❌ ${dateKey}: Distance ${minDistance.toFixed(2)} > MaxPoints ${maxDistanceBetweenPoints}`);
-                stats.skippedTooFar++;
-                continue; // Muito longe dos agendamentos existentes
-              }
-              console.log(`  ✅ Aceito: dentro do limite de distância entre pontos`);
-              debugLog(`  ✅ ${dateKey}: Candidate Accepted! Distance: ${minDistance.toFixed(2)} (${distanceType})`);
-            } else {
-              // Sem agendamentos no dia - calcular distância da base
-              console.log(`  📅 ${dateStr}: dia totalmente livre`);
-              const baseFullAddress = `${baseAddress.logradouro}, ${baseAddress.numero}, ${baseAddress.cidade}, ${baseAddress.cep}, Brasil`;
-              console.log(`  📍 Geocodificando base: ${baseFullAddress}`);
-
-              try {
-                await sleep(1000); // Rate limit Nominatim
-                const baseCoords = await geocodeWithNominatim(baseFullAddress);
-                console.log(`  📍 Coordenadas da base: ${baseCoords.lat}, ${baseCoords.lng}`);
-
-                minDistance = haversineDistance(baseCoords.lat, baseCoords.lng, targetLat, targetLng);
-                distanceType = 'from_base';
-
-                console.log(`  📏 Distância da base: ${minDistance.toFixed(2)}km (limite: ${maxDistanceServed}km)`);
-
-                // Verificar limite de distância máxima atendida
-                // Verificar limite de distância máxima atendida
-                if (minDistance > maxDistanceServed) {
-                  console.log(`  ❌ Rejeitado: distância ${minDistance.toFixed(2)}km > limite ${maxDistanceServed}km`);
-                  debugLog(`  ❌ ${dateKey}: Distance ${minDistance.toFixed(2)} > MaxBase ${maxDistanceServed}`);
-                  stats.skippedTooFar++;
-                  continue; // Muito longe da base
-                }
-                console.log(`  ✅ Aceito: dentro do limite de distância da base`);
-                debugLog(`  ✅ ${dateKey}: Candidate Accepted! Distance: ${minDistance.toFixed(2)} (${distanceType})`);
-              } catch (error: any) {
-                console.warn(`  ⚠️ Erro ao geocodificar base: ${error.message}`);
-                console.warn(`  ⚠️ Erro ao geocodificar base: ${error.message}`);
-                // skippedGeocodeError++;
-                stats.skippedGeocodeError++;
-                continue;
-              }
-            }
-
-            // Adicionar candidato e enviar imediatamente via streaming
-            const candidate = {
-              date: candidateDate.toISOString().split('T')[0],
-              responsibleType: responsible.type,
-              responsibleId: responsible.id,
-              responsibleName: responsible.name,
-              availableMinutes: availability.availableMinutes,
-              totalMinutes: availability.totalMinutes,
-              usedMinutes: availability.usedMinutes,
-              distance: minDistance,
-              distanceType,
-            };
-
-            console.log(`  ✨ CANDIDATO ADICIONADO: ${dateStr} - ${minDistance.toFixed(2)}km (${availability.availableMinutes}min livres)`);
-            candidates.push(candidate);
-
-            // 🌊 Enviar candidato imediatamente via SSE
-            res.write(`data: ${JSON.stringify(candidate)}\n\n`);
-          }
-
-        }
-      }
+      // 🛑 CÓDIGO ANTIGO REMOVIDO (era desativado com if (false))
 
       // Resumo final acumulado
       const responsiblesChecked = responsibles.length;

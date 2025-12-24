@@ -156,12 +156,14 @@ export interface IStorage {
   // Provider Flow
   getProviderActiveRoute(userId: number, date: Date): Promise<Route | undefined>;
   updateAppointmentExecution(id: number, data: {
-    status: string;
+    status?: string;
     feedback?: string | null;
     photos?: string[] | null;
     signature?: string | null;
     executionStatus?: string | null;
     executionNotes?: string | null;
+    executionStartedAt?: string | null;
+    executionFinishedAt?: string | null;
   }, userId: number): Promise<Appointment>;
   finalizeRoute(id: string, status: string, userId: number): Promise<Route>;
   updateRouteDate(id: string, date: Date, userId: number): Promise<Route>;
@@ -618,7 +620,7 @@ export class DatabaseStorage implements IStorage {
 
     const [vehicle] = await db
       .insert(vehicles)
-      .values({ ...insertVehicle, userId })
+      .values({ ...insertVehicle, userId } as any)
       .returning();
     return vehicle;
   }
@@ -663,7 +665,7 @@ export class DatabaseStorage implements IStorage {
 
     const [vehicle] = await db
       .update(vehicles)
-      .set(vehicleData)
+      .set(vehicleData as any)
       .where(and(eq(vehicles.id, id), eq(vehicles.userId, userId)))
       .returning();
     return vehicle;
@@ -788,7 +790,7 @@ export class DatabaseStorage implements IStorage {
   async createBusinessRules(insertBusinessRules: InsertBusinessRules, userId: number): Promise<BusinessRules> {
     const [rules] = await db
       .insert(businessRules)
-      .values({ ...insertBusinessRules, userId })
+      .values({ ...insertBusinessRules, userId } as any)
       .returning();
     return rules;
   }
@@ -796,7 +798,7 @@ export class DatabaseStorage implements IStorage {
   async updateBusinessRules(id: number, rulesData: Partial<InsertBusinessRules>, userId: number): Promise<BusinessRules> {
     const [rules] = await db
       .update(businessRules)
-      .set(rulesData)
+      .set(rulesData as any)
       .where(and(eq(businessRules.id, id), eq(businessRules.userId, userId)))
       .returning();
     return rules;
@@ -927,12 +929,14 @@ export class DatabaseStorage implements IStorage {
   async updateAppointmentExecution(
     id: number,
     data: {
-      status: string;
+      status?: string;
       feedback?: string | null;
       photos?: string[] | null;
       signature?: string | null;
       executionStatus?: string | null;
       executionNotes?: string | null;
+      executionStartedAt?: string | null;
+      executionFinishedAt?: string | null;
     },
     userId: number
   ): Promise<Appointment> {
@@ -940,15 +944,16 @@ export class DatabaseStorage implements IStorage {
     // (Idealmente verificar se ele é o dono da rota, mas por simplificação vamos confiar no userId do contexto e na existência do agendamento)
 
     // Preparar objeto de atualização
-    const updateData: any = {
-      status: data.status,
-    };
+    const updateData: any = {};
 
+    if (data.status !== undefined) updateData.status = data.status;
     if (data.feedback !== undefined) updateData.feedback = data.feedback;
     if (data.photos !== undefined) updateData.photos = data.photos;
     if (data.signature !== undefined) updateData.signature = data.signature;
     if (data.executionStatus !== undefined) updateData.executionStatus = data.executionStatus;
     if (data.executionNotes !== undefined) updateData.executionNotes = data.executionNotes;
+    if (data.executionStartedAt !== undefined) updateData.executionStartedAt = data.executionStartedAt ? new Date(data.executionStartedAt) : null;
+    if (data.executionFinishedAt !== undefined) updateData.executionFinishedAt = data.executionFinishedAt ? new Date(data.executionFinishedAt) : null;
 
     const [appointment] = await db
       .update(appointments)

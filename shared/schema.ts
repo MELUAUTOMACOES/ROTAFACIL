@@ -175,6 +175,10 @@ export const vehicles = pgTable("vehicles", {
   model: text("model").notNull(),
   brand: text("brand").notNull(),
   year: integer("year").notNull(),
+  // Campos de combustível e consumo
+  fuelType: text("fuel_type").notNull().default("gasolina"), // gasolina, etanol, diesel_s500, diesel_s10, eletrico, hibrido
+  fuelConsumption: decimal("fuel_consumption", { precision: 5, scale: 2 }), // km/L (ou km/kWh para elétrico)
+  tankCapacity: integer("tank_capacity"), // Capacidade do tanque em litros (opcional)
   technicianId: integer("technician_id").references(() => technicians.id),
   teamId: integer("team_id").references(() => teams.id),
   userId: integer("user_id").notNull().references(() => users.id),
@@ -200,6 +204,9 @@ export const appointments = pgTable("appointments", {
   feedback: text("feedback"), // Feedback do prestador sobre o serviço
   executionStatus: text("execution_status"), // concluido, nao_realizado_...
   executionNotes: text("execution_notes"), // Motivo/detalhes obrigatório se não for concluído
+  // Campos de tempo de execução (preenchidos pelo prestador)
+  executionStartedAt: timestamp("execution_started_at"), // Hora que o prestador iniciou o atendimento
+  executionFinishedAt: timestamp("execution_finished_at"), // Hora que o prestador finalizou o atendimento
   cep: text("cep").notNull(),
   logradouro: text("logradouro").notNull(),
   numero: text("numero").notNull(),
@@ -273,6 +280,7 @@ export const vehicleChecklistAudits = pgTable("vehicle_checklist_audits", {
 // Business rules table
 export const businessRules = pgTable("business_rules", {
   id: serial("id").primaryKey(),
+  // Configurações de Rota
   maximoParadasPorRota: integer("maximo_paradas_por_rota").notNull().default(10),
   horarioInicioTrabalho: text("horario_inicio_trabalho").notNull().default("08:00"),
   horarioFimTrabalho: text("horario_fim_trabalho").notNull().default("18:00"),
@@ -281,6 +289,7 @@ export const businessRules = pgTable("business_rules", {
   distanciaMaximaEntrePontos: decimal("distancia_maxima_entre_pontos", { precision: 8, scale: 2 }).notNull().default("50.00"), // in km
   distanciaMaximaAtendida: decimal("distancia_maxima_atendida", { precision: 8, scale: 2 }).notNull().default("100.00"), // in km
   distanciaMaximaEntrePontosDinamico: decimal("distancia_maxima_entre_pontos_dinamico", { precision: 8, scale: 2 }).notNull().default("50.00"), // in km
+  // Endereço da Empresa
   enderecoEmpresaCep: text("endereco_empresa_cep").notNull(),
   enderecoEmpresaLogradouro: text("endereco_empresa_logradouro").notNull(),
   enderecoEmpresaNumero: text("endereco_empresa_numero").notNull(),
@@ -288,6 +297,16 @@ export const businessRules = pgTable("business_rules", {
   enderecoEmpresaBairro: text("endereco_empresa_bairro").notNull(),
   enderecoEmpresaCidade: text("endereco_empresa_cidade").notNull(),
   enderecoEmpresaEstado: text("endereco_empresa_estado").notNull(),
+  // Preços de Combustível (R$/Litro ou R$/kWh)
+  precoCombustivelGasolina: decimal("preco_combustivel_gasolina", { precision: 6, scale: 3 }).default("5.500"),
+  precoCombustivelEtanol: decimal("preco_combustivel_etanol", { precision: 6, scale: 3 }).default("3.800"),
+  precoCombustivelDieselS500: decimal("preco_combustivel_diesel_s500", { precision: 6, scale: 3 }).default("5.200"),
+  precoCombustivelDieselS10: decimal("preco_combustivel_diesel_s10", { precision: 6, scale: 3 }).default("5.800"),
+  precoCombustivelEletrico: decimal("preco_combustivel_eletrico", { precision: 6, scale: 3 }).default("0.800"), // R$/kWh
+  // Metas Operacionais
+  metaVariacaoTempoServico: integer("meta_variacao_tempo_servico").default(15), // % de variação aceitável do tempo previsto do serviço
+  metaUtilizacaoDiaria: integer("meta_utilizacao_diaria").default(80), // % de utilização diária da jornada (tempo em atendimento vs jornada)
+  slaHorasPendencia: integer("sla_horas_pendencia").default(48), // SLA: horas para resolver pendência (tempo entre prestador finalizar e admin resolver)
   userId: integer("user_id").notNull().references(() => users.id),
   companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -343,6 +362,10 @@ export const routes = pgTable("routes", {
   polylineGeoJson: jsonb("polyline_geojson"), // GeoJSON LineString
   displayNumber: integer("display_number").notNull().default(0),
   userId: integer("user_id").references(() => users.id), // 🔒 Isolamento entre empresas (opcional até migration)
+  // ⏱️ Campos de rastreamento de tempo do prestador
+  routeStartedAt: timestamp("route_started_at"), // Quando prestador clicou "Iniciar Rota"
+  routeFinishedAt: timestamp("route_finished_at"), // Quando clicou "Fechar Romaneio"
+  routeEndLocation: varchar("route_end_location", { length: 20 }), // 'last_client' | 'company_home'
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -426,6 +449,17 @@ export const insertTechnicianSchema = createInsertSchema(technicians).omit({
   createdAt: true,
 });
 
+// Enum para tipos de combustível
+export const fuelTypeEnum = z.enum(["gasolina", "etanol", "diesel_s500", "diesel_s10", "eletrico", "hibrido"]);
+export const fuelTypeLabels: Record<string, string> = {
+  gasolina: "Gasolina",
+  etanol: "Etanol",
+  diesel_s500: "Diesel S500",
+  diesel_s10: "Diesel S10",
+  eletrico: "Elétrico",
+  hibrido: "Híbrido (Flex)"
+};
+
 export const insertVehicleSchema = createInsertSchema(vehicles).omit({
   id: true,
   userId: true,
@@ -434,6 +468,9 @@ export const insertVehicleSchema = createInsertSchema(vehicles).omit({
   brand: z.string().min(1, "Marca é obrigatória"),
   model: z.string().min(1, "Modelo é obrigatório"),
   year: z.number().min(1900, "Ano deve ser válido").max(new Date().getFullYear() + 1, "Ano não pode ser no futuro"),
+  fuelType: fuelTypeEnum.default("gasolina"),
+  fuelConsumption: z.string().or(z.number()).optional().nullable(),
+  tankCapacity: z.number().min(1).max(500).optional().nullable(),
 }).refine(
   (d) => (d.technicianId ? !d.teamId : !!d.teamId),
   { message: "Selecione Técnico OU Equipe (apenas um)", path: ["technicianId"] }
@@ -554,6 +591,16 @@ export const insertBusinessRulesSchema = createInsertSchema(businessRules).omit(
   enderecoEmpresaBairro: z.string().min(1, "Bairro é obrigatório"),
   enderecoEmpresaCidade: z.string().min(1, "Cidade é obrigatória"),
   enderecoEmpresaEstado: z.string().min(2, "Estado é obrigatório"),
+  // Preços de combustível
+  precoCombustivelGasolina: z.string().or(z.number()).optional(),
+  precoCombustivelEtanol: z.string().or(z.number()).optional(),
+  precoCombustivelDieselS500: z.string().or(z.number()).optional(),
+  precoCombustivelDieselS10: z.string().or(z.number()).optional(),
+  precoCombustivelEletrico: z.string().or(z.number()).optional(),
+  // Metas operacionais
+  metaVariacaoTempoServico: z.number().min(5).max(100).optional(),
+  metaUtilizacaoDiaria: z.number().min(50).max(100).optional(),
+  slaHorasPendencia: z.number().min(1).max(168).optional(),
 });
 
 // Login schema

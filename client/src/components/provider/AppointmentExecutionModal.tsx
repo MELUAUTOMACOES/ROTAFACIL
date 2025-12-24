@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SignaturePad } from './SignaturePad';
-import { Camera, PenTool, CheckCircle, XCircle, Clock, Save, MapPin, AlertTriangle, HelpCircle } from "lucide-react";
+import { Camera, PenTool, CheckCircle, XCircle, Clock, Save, MapPin, AlertTriangle, HelpCircle, PlayCircle, Timer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface AppointmentExecutionModalProps {
@@ -14,9 +14,10 @@ interface AppointmentExecutionModalProps {
     onClose: () => void;
     appointment: any;
     onSave: (data: any) => Promise<void>;
+    onStartExecution?: (appointmentId: number) => Promise<void>; // Salvar no banco
 }
 
-export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave }: AppointmentExecutionModalProps) {
+export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave, onStartExecution }: AppointmentExecutionModalProps) {
     const { toast } = useToast();
     const [executionStatus, setExecutionStatus] = useState(appointment?.executionStatus || ''); // status da execução
     const [executionNotes, setExecutionNotes] = useState(appointment?.executionNotes || ''); // notas do prestador
@@ -25,6 +26,78 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
     const [photos, setPhotos] = useState<string[]>(appointment?.photos || []);
     const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // ⏱️ Estado para controlar fluxo de 2 etapas
+    const [isStarted, setIsStarted] = useState<boolean>(() => {
+        // Se já tem executionStartedAt, considera iniciado
+        return !!appointment?.executionStartedAt;
+    });
+    const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+    // Registrar hora de início quando o atendimento é iniciado
+    const [executionStartedAt, setExecutionStartedAt] = useState<string | null>(() => {
+        return appointment?.executionStartedAt || null;
+    });
+
+    // Timer para mostrar tempo decorrido
+    useEffect(() => {
+        if (!isStarted || !executionStartedAt) return;
+
+        const startTime = new Date(executionStartedAt).getTime();
+
+        const updateTimer = () => {
+            const now = Date.now();
+            const elapsed = Math.floor((now - startTime) / 1000);
+            setElapsedSeconds(elapsed);
+        };
+
+        updateTimer(); // Atualiza imediatamente
+        const interval = setInterval(updateTimer, 1000);
+
+        return () => clearInterval(interval);
+    }, [isStarted, executionStartedAt]);
+
+    // Formatar tempo como MM:SS ou HH:MM:SS
+    const formatTime = (seconds: number) => {
+        const hrs = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = seconds % 60;
+
+        if (hrs > 0) {
+            return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    // Handler para iniciar atendimento
+    const [isStarting, setIsStarting] = useState(false);
+
+    const handleStartExecution = async () => {
+        try {
+            setIsStarting(true);
+            const now = new Date().toISOString();
+
+            // Se tiver callback, salvar no banco primeiro
+            if (onStartExecution && appointment?.id) {
+                await onStartExecution(appointment.id);
+            }
+
+            setExecutionStartedAt(now);
+            setIsStarted(true);
+            toast({
+                title: "Atendimento iniciado!",
+                description: "O cronômetro começou. Registre o resultado quando terminar.",
+            });
+        } catch (error) {
+            toast({
+                title: "Erro ao iniciar",
+                description: "Não foi possível iniciar o atendimento.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsStarting(false);
+        }
+    };
 
     // Opções de status de execução
     const executionOptions = [
@@ -69,7 +142,10 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
                 executionStatus,
                 executionNotes,
                 signature,
-                photos
+                photos,
+                // Registrar tempos de execução para métricas do dashboard
+                executionStartedAt,
+                executionFinishedAt: new Date().toISOString(),
             });
 
             toast({
@@ -143,81 +219,119 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
             />
             <DialogContent className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>Registrar Visita</DialogTitle>
+                    <DialogTitle>
+                        {isStarted ? 'Registrar Visita' : 'Iniciar Atendimento'}
+                    </DialogTitle>
                     <DialogDescription className="sr-only">Preencha os detalhes da execução do serviço</DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-6 py-4">
-                    {/* Status Execution Selector */}
-                    <div className="space-y-3">
-                        <Label className="text-base">O que aconteceu na visita?</Label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {executionOptions.map((opt) => (
-                                <button
-                                    key={opt.value}
-                                    onClick={() => setExecutionStatus(opt.value)}
-                                    className={`
-                                        flex items-center p-3 rounded-lg border-2 transition-all text-left
-                                        ${executionStatus === opt.value
-                                            ? `border-current ring-1 ring-offset-0 ${opt.color}`
-                                            : 'border-gray-200 hover:border-gray-300 text-gray-600 bg-white'}
-                                    `}
-                                >
-                                    <opt.icon className="w-5 h-5 mr-3 flex-shrink-0" />
-                                    <span className="font-medium">{opt.label}</span>
-                                    {executionStatus === opt.value && <CheckCircle className="w-4 h-4 ml-auto" />}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Execution Notes */}
-                    <div className="space-y-2">
-                        <Label className="flex justify-between">
-                            <span>Relato / Observações</span>
-                            {executionStatus !== 'concluido' && executionStatus !== '' && (
-                                <span className="text-red-500 text-xs font-bold uppercase tracking-wide">Obrigatório</span>
-                            )}
-                        </Label>
-                        <Textarea
-                            placeholder={executionStatus === 'concluido' ? "Observações opcionais..." : "Descreva o motivo de não ter realizado o serviço..."}
-                            value={executionNotes}
-                            onChange={(e) => setExecutionNotes(e.target.value)}
-                            className="min-h-[100px]"
-                        />
-                    </div>
-
-                    {/* Photos & Signature */}
-                    <div className="grid grid-cols-2 gap-3 pt-2">
-                        <Button variant="outline" onClick={handleAddPhoto} className="h-auto py-4 flex flex-col gap-2">
-                            <Camera className="w-6 h-6" />
-                            <span>Adicionar Foto ({photos.length})</span>
-                        </Button>
-
-                        {executionStatus === 'concluido' && (
-                            <Button
-                                variant="outline"
-                                onClick={() => setShowSignaturePad(true)}
-                                className={`h-auto py-4 flex flex-col gap-2 ${signature ? 'border-green-500 bg-green-50 text-green-700' : ''}`}
-                            >
-                                <PenTool className="w-6 h-6" />
-                                <span>{signature ? 'Assinatura Coletada' : 'Coletar Assinatura'}</span>
-                            </Button>
-                        )}
-                    </div>
+                {/* Info do Cliente */}
+                <div className="bg-gray-50 p-3 rounded-lg mb-4">
+                    <p className="font-semibold text-gray-900">{appointment?.clientName}</p>
+                    <p className="text-sm text-gray-600">{appointment?.serviceName}</p>
                 </div>
 
-                <DialogFooter className="gap-2 sm:gap-0 sticky bottom-0 bg-white pt-2 border-t mt-4">
-                    <Button variant="outline" onClick={onClose}>Cancelar</Button>
-                    <Button
-                        onClick={handleSave}
-                        disabled={isSaving}
-                        className="bg-[#DAA520] hover:bg-[#B8860B] text-white"
-                    >
-                        <Save className="w-4 h-4 mr-2" />
-                        {isSaving ? 'Salvando...' : 'Confirmar Registro'}
-                    </Button>
-                </DialogFooter>
+                {!isStarted ? (
+                    /* ETAPA 1: Botão de Iniciar Atendimento */
+                    <div className="flex flex-col items-center justify-center py-8 space-y-6">
+                        <div className="w-24 h-24 bg-[#DAA520]/10 rounded-full flex items-center justify-center">
+                            <PlayCircle className="w-12 h-12 text-[#DAA520]" />
+                        </div>
+                        <div className="text-center">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2">Pronto para iniciar?</h3>
+                            <p className="text-sm text-gray-500">O cronômetro começará quando você clicar no botão abaixo.</p>
+                        </div>
+                        <Button
+                            onClick={handleStartExecution}
+                            disabled={isStarting}
+                            className="w-full max-w-xs h-14 text-lg bg-[#DAA520] hover:bg-[#B8860B] text-white"
+                        >
+                            <PlayCircle className="w-6 h-6 mr-2" />
+                            {isStarting ? 'Iniciando...' : 'Iniciar Atendimento'}
+                        </Button>
+                    </div>
+                ) : (
+                    /* ETAPA 2: Formulário de Registro */
+                    <>
+                        {/* Timer */}
+                        <div className="flex items-center justify-center py-3 bg-blue-50 rounded-lg mb-4">
+                            <Timer className="w-5 h-5 text-blue-600 mr-2" />
+                            <span className="text-2xl font-mono font-bold text-blue-600">{formatTime(elapsedSeconds)}</span>
+                        </div>
+
+                        <div className="space-y-6">
+                            {/* Status Execution Selector */}
+                            <div className="space-y-3">
+                                <Label className="text-base">O que aconteceu na visita?</Label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {executionOptions.map((opt) => (
+                                        <button
+                                            key={opt.value}
+                                            onClick={() => setExecutionStatus(opt.value)}
+                                            className={`
+                                        flex items-center p-3 rounded-lg border-2 transition-all text-left
+                                        ${executionStatus === opt.value
+                                                    ? `border-current ring-1 ring-offset-0 ${opt.color}`
+                                                    : 'border-gray-200 hover:border-gray-300 text-gray-600 bg-white'}
+                                    `}
+                                        >
+                                            <opt.icon className="w-5 h-5 mr-3 flex-shrink-0" />
+                                            <span className="font-medium">{opt.label}</span>
+                                            {executionStatus === opt.value && <CheckCircle className="w-4 h-4 ml-auto" />}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Execution Notes */}
+                            <div className="space-y-2">
+                                <Label className="flex justify-between">
+                                    <span>Relato / Observações</span>
+                                    {executionStatus !== 'concluido' && executionStatus !== '' && (
+                                        <span className="text-red-500 text-xs font-bold uppercase tracking-wide">Obrigatório</span>
+                                    )}
+                                </Label>
+                                <Textarea
+                                    placeholder={executionStatus === 'concluido' ? "Observações opcionais..." : "Descreva o motivo de não ter realizado o serviço..."}
+                                    value={executionNotes}
+                                    onChange={(e) => setExecutionNotes(e.target.value)}
+                                    className="min-h-[100px]"
+                                />
+                            </div>
+
+                            {/* Photos & Signature */}
+                            <div className="grid grid-cols-2 gap-3 pt-2">
+                                <Button variant="outline" onClick={handleAddPhoto} className="h-auto py-4 flex flex-col gap-2">
+                                    <Camera className="w-6 h-6" />
+                                    <span>Adicionar Foto ({photos.length})</span>
+                                </Button>
+
+                                {executionStatus === 'concluido' && (
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setShowSignaturePad(true)}
+                                        className={`h-auto py-4 flex flex-col gap-2 ${signature ? 'border-green-500 bg-green-50 text-green-700' : ''}`}
+                                    >
+                                        <PenTool className="w-6 h-6" />
+                                        <span>{signature ? 'Assinatura Coletada' : 'Coletar Assinatura'}</span>
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+
+                        <DialogFooter className="gap-2 sm:gap-0 sticky bottom-0 bg-white pt-2 border-t mt-4">
+                            <Button variant="outline" onClick={onClose}>Cancelar</Button>
+                            <Button
+                                onClick={handleSave}
+                                disabled={isSaving}
+                                className="bg-[#DAA520] hover:bg-[#B8860B] text-white"
+                            >
+                                <Save className="w-4 h-4 mr-2" />
+                                {isSaving ? 'Salvando...' : 'Confirmar Registro'}
+                            </Button>
+                        </DialogFooter>
+                    </>
+                )}
             </DialogContent>
         </Dialog>
     );

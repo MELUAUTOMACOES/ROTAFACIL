@@ -2428,55 +2428,131 @@ export function registerRoutesAPI(app: Express) {
           console.log(`🔍 [VALIDAÇÃO] IDs de agendamentos a verificar:`, apptIds);
 
           if (apptIds.length > 0) {
-            // Verificar se algum desses agendamentos já está em outro romaneio confirmado/finalizado
-            const conflictingRoutes = await db
+            // 🔧 CORREÇÃO: Verificar status atual dos agendamentos ANTES de validar conflitos
+            // Agendamentos remarcados (status 'scheduled' ou 'rescheduled') PODEM ser usados em novos romaneios
+            // mesmo que tenham histórico em romaneios finalizados
+            const appointmentsStatus = await db
               .select({
-                routeId: routesTbl.id,
-                routeDisplayNumber: routesTbl.displayNumber,
-                routeStatus: routesTbl.status,
-                appointmentNumericId: stopsTbl.appointmentNumericId,
+                id: appointments.id,
+                status: appointments.status,
               })
-              .from(stopsTbl)
-              .innerJoin(routesTbl, eq(stopsTbl.routeId, routesTbl.id))
-              .where(
-                and(
-                  inArray(stopsTbl.appointmentNumericId, apptIds),
-                  or(
-                    eq(routesTbl.status, 'confirmado'),
-                    eq(routesTbl.status, 'finalizado')
-                  ),
-                  ne(routesTbl.id, routeId) // Excluir a rota atual
-                )
-              );
+              .from(appointments)
+              .where(inArray(appointments.id, apptIds));
 
-            console.log(`🔍 [VALIDAÇÃO] Romaneios conflitantes encontrados (${conflictingRoutes.length}):`, conflictingRoutes);
+            console.log(`🔍 [VALIDAÇÃO] Status dos agendamentos:`, appointmentsStatus);
 
-            if (conflictingRoutes.length > 0) {
-              // Agrupar agendamentos únicos e seus romaneios
-              const conflictMap = new Map<number, Set<number>>();
-              conflictingRoutes.forEach(c => {
-                if (!conflictMap.has(c.appointmentNumericId!)) {
-                  conflictMap.set(c.appointmentNumericId!, new Set());
-                }
-                conflictMap.get(c.appointmentNumericId!)!.add(c.routeDisplayNumber);
-              });
+            // Filtrar apenas agendamentos que NÃO podem ser reutilizados:
+            // - 'completed': já foi concluído
+            // - 'in_progress': está em andamento
+            // - 'cancelled': foi cancelado (não pode ser reutilizado)
+            // PERMITE: 'scheduled' e 'rescheduled' (foram remarcados, PODEM ser usados)
+            const nonReusableIds = appointmentsStatus
+              .filter(a => a.status === 'completed' || a.status === 'in_progress' || a.status === 'cancelled')
+              .map(a => a.id);
 
-              // Formatar mensagem concisa
-              const apptIds = Array.from(conflictMap.keys());
-              const firstConflict = conflictingRoutes[0];
+            const rescheduledIds = appointmentsStatus
+              .filter(a => a.status === 'scheduled' || a.status === 'rescheduled')
+              .map(a => a.id);
 
-              const message = apptIds.length === 1
-                ? `Não foi possível ${status === 'confirmado' ? 'confirmar' : 'finalizar'} o romaneio. Agendamento #${apptIds[0]} já está no romaneio #${firstConflict.routeDisplayNumber}.`
-                : `Não foi possível ${status === 'confirmado' ? 'confirmar' : 'finalizar'} o romaneio. Agendamentos #${apptIds.join(', #')} já estão em romaneios confirmados/finalizados.`;
+            if (rescheduledIds.length > 0) {
+              console.log(`✅ [VALIDAÇÃO] Agendamentos remarcados (permitidos):`, rescheduledIds);
+            }
 
-              console.error(`❌ [VALIDAÇÃO] BLOQUEANDO: ${message}`);
-
-              return res.status(400).json({ error: message });
+            // Se não há agendamentos não-reutilizáveis, todos foram remarcados → pode prosseguir
+            if (nonReusableIds.length === 0) {
+              console.log(`✅ [VALIDAÇÃO] Todos os agendamentos foram remarcados, pode prosseguir`);
             } else {
-              console.log(`✅ [VALIDAÇÃO] Nenhum conflito encontrado, pode prosseguir`);
+              console.log(`🔍 [VALIDAÇÃO] Verificando conflitos para agendamentos não-reutilizáveis:`, nonReusableIds);
+
+              // Validar apenas os agendamentos que NÃO podem ser reutilizados
+              const conflictingRoutes = await db
+                .select({
+                  routeId: routesTbl.id,
+                  routeDisplayNumber: routesTbl.displayNumber,
+                  routeStatus: routesTbl.status,
+                  appointmentNumericId: stopsTbl.appointmentNumericId,
+                })
+                .from(stopsTbl)
+                .innerJoin(routesTbl, eq(stopsTbl.routeId, routesTbl.id))
+                .where(
+                  and(
+                    inArray(stopsTbl.appointmentNumericId, nonReusableIds),
+                    or(
+                      eq(routesTbl.status, 'confirmado'),
+                      eq(routesTbl.status, 'finalizado')
+                    ),
+                    ne(routesTbl.id, routeId) // Excluir a rota atual
+                  )
+                );
+
+              console.log(`🔍 [VALIDAÇÃO] Romaneios conflitantes encontrados (${conflictingRoutes.length}):`, conflictingRoutes);
+
+              if (conflictingRoutes.length > 0) {
+                // Agrupar agendamentos únicos e seus romaneios
+                const conflictMap = new Map<number, Set<number>>();
+                conflictingRoutes.forEach(c => {
+                  if (!conflictMap.has(c.appointmentNumericId!)) {
+                    conflictMap.set(c.appointmentNumericId!, new Set());
+                  }
+                  conflictMap.get(c.appointmentNumericId!)!.add(c.routeDisplayNumber);
+                });
+
+                // Formatar mensagem concisa
+                const conflictingApptIds = Array.from(conflictMap.keys());
+                const firstConflict = conflictingRoutes[0];
+
+                const message = conflictingApptIds.length === 1
+                  ? `Não foi possível ${status === 'confirmado' ? 'confirmar' : 'finalizar'} o romaneio. Agendamento #${conflictingApptIds[0]} já está no romaneio #${firstConflict.routeDisplayNumber}.`
+                  : `Não foi possível ${status === 'confirmado' ? 'confirmar' : 'finalizar'} o romaneio. Agendamentos #${conflictingApptIds.join(', #')} já estão em romaneios confirmados/finalizados.`;
+
+                console.error(`❌ [VALIDAÇÃO] BLOQUEANDO: ${message}`);
+
+                return res.status(400).json({ error: message });
+              } else {
+                console.log(`✅ [VALIDAÇÃO] Nenhum conflito encontrado, pode prosseguir`);
+              }
             }
           } else {
             console.log(`⚠️ [VALIDAÇÃO] Nenhum agendamento encontrado nesta rota`);
+          }
+
+          // 🔧 CORREÇÃO: Resetar executionStatus para agendamentos remarcados quando confirmar a rota
+          // Quando uma rota é confirmada, agendamentos com status 'scheduled' ou 'rescheduled'
+          // devem ter seu executionStatus resetado para null, pois são "novos" agendamentos
+          // que ainda precisam ser executados (mesmo que tenham executionStatus antigo de rotas anteriores)
+          if (status === 'confirmado' && apptIds.length > 0) {
+            // Buscar status atual dos agendamentos
+            const appointmentStatusForReset = await db
+              .select({
+                id: appointments.id,
+                status: appointments.status,
+                executionStatus: appointments.executionStatus,
+              })
+              .from(appointments)
+              .where(inArray(appointments.id, apptIds));
+
+            // Filtrar agendamentos que são scheduled/rescheduled E têm executionStatus antigo
+            const toReset = appointmentStatusForReset
+              .filter(a =>
+                (a.status === 'scheduled' || a.status === 'rescheduled') &&
+                a.executionStatus !== null
+              )
+              .map(a => a.id);
+
+            if (toReset.length > 0) {
+              console.log(`🔄 [RESET] Resetando executionStatus de ${toReset.length} agendamentos remarcados:`, toReset);
+
+              // Resetar executionStatus para null
+              await db
+                .update(appointments)
+                .set({
+                  executionStatus: null,
+                  executionNotes: null
+                })
+                .where(inArray(appointments.id, toReset));
+
+              console.log(`✅ [RESET] executionStatus resetado para agendamentos remarcados`);
+            }
           }
         }
 

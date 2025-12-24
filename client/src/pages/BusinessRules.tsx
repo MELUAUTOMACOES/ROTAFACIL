@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
@@ -6,18 +6,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Save, Clock, MapPin, Route } from "lucide-react";
+import { Settings, Save, Clock, MapPin, Route, Fuel, Target, AlertCircle } from "lucide-react";
 import { insertBusinessRulesSchema, type BusinessRules, type InsertBusinessRules } from "@shared/schema";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { buscarEnderecoPorCep } from "@/lib/cep";
 
-export default function BusinessRules() {
+export default function BusinessRulesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("rotas");
 
   const { data: businessRules, isLoading } = useQuery<BusinessRules>({
     queryKey: ['/api/business-rules'],
@@ -40,11 +42,21 @@ export default function BusinessRules() {
       enderecoEmpresaBairro: "",
       enderecoEmpresaCidade: "",
       enderecoEmpresaEstado: "",
+      // Preços de combustível
+      precoCombustivelGasolina: "5.50",
+      precoCombustivelEtanol: "3.80",
+      precoCombustivelDieselS500: "5.20",
+      precoCombustivelDieselS10: "5.80",
+      precoCombustivelEletrico: "0.80",
+      // Metas operacionais
+      metaVariacaoTempoServico: 15,
+      metaUtilizacaoDiaria: 80,
+      slaHorasPendencia: 48,
     },
   });
 
   // Reset form when data loads
-  useState(() => {
+  useEffect(() => {
     if (businessRules) {
       form.reset({
         maximoParadasPorRota: businessRules.maximoParadasPorRota,
@@ -60,15 +72,25 @@ export default function BusinessRules() {
         enderecoEmpresaBairro: businessRules.enderecoEmpresaBairro,
         enderecoEmpresaCidade: businessRules.enderecoEmpresaCidade,
         enderecoEmpresaEstado: businessRules.enderecoEmpresaEstado,
+        // Preços de combustível
+        precoCombustivelGasolina: (businessRules as any).precoCombustivelGasolina || "5.50",
+        precoCombustivelEtanol: (businessRules as any).precoCombustivelEtanol || "3.80",
+        precoCombustivelDieselS500: (businessRules as any).precoCombustivelDieselS500 || "5.20",
+        precoCombustivelDieselS10: (businessRules as any).precoCombustivelDieselS10 || "5.80",
+        precoCombustivelEletrico: (businessRules as any).precoCombustivelEletrico || "0.80",
+        // Metas operacionais
+        metaVariacaoTempoServico: (businessRules as any).metaVariacaoTempoServico || 15,
+        metaUtilizacaoDiaria: (businessRules as any).metaUtilizacaoDiaria || 80,
+        slaHorasPendencia: (businessRules as any).slaHorasPendencia || 48,
       });
     }
-  });
+  }, [businessRules, form]);
 
   const createOrUpdateMutation = useMutation({
     mutationFn: async (data: InsertBusinessRules) => {
       const url = businessRules?.id ? `/api/business-rules/${businessRules.id}` : "/api/business-rules";
       const method = businessRules?.id ? "PATCH" : "POST";
-      
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -129,317 +151,576 @@ export default function BusinessRules() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Configurações de Rota */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Route className="h-5 w-5" />
-                  Configurações de Rota
-                </CardTitle>
-                <CardDescription>
-                  Defina os parâmetros para otimização de rotas
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="maximoParadasPorRota"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Máximo de paradas por rota</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min="1"
-                          max="50"
-                          {...field}
-                          onChange={(e) => field.onChange(parseInt(e.target.value))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-4 max-w-2xl">
+              <TabsTrigger value="rotas" className="flex items-center gap-2">
+                <Route className="h-4 w-4" />
+                Rotas
+              </TabsTrigger>
+              <TabsTrigger value="veiculos" className="flex items-center gap-2">
+                <Fuel className="h-4 w-4" />
+                Veículos
+              </TabsTrigger>
+              <TabsTrigger value="metas" className="flex items-center gap-2">
+                <Target className="h-4 w-4" />
+                Metas
+              </TabsTrigger>
+              <TabsTrigger value="endereco" className="flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Endereço
+              </TabsTrigger>
+            </TabsList>
 
-                <FormField
-                  control={form.control}
-                  name="minutosEntreParadas"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Minutos entre paradas</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min="5"
-                          max="120"
-                          {...field}
-                          onChange={(e) => field.onChange(parseInt(e.target.value))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+            {/* Tab: Rotas */}
+            <TabsContent value="rotas" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Route className="h-5 w-5" />
+                    Configurações de Rota
+                  </CardTitle>
+                  <CardDescription>
+                    Defina os parâmetros para otimização de rotas
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="maximoParadasPorRota"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Máximo de paradas por rota</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="1"
+                              max="50"
+                              {...field}
+                              onChange={(e) => field.onChange(parseInt(e.target.value))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="distanciaMaximaEntrePontos"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Distância máxima entre pontos (km)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="1"
-                          max="200"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="minutosEntreParadas"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Minutos entre paradas</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="5"
+                              max="120"
+                              {...field}
+                              onChange={(e) => field.onChange(parseInt(e.target.value))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="distanciaMaximaAtendida"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Distância máxima atendida (km)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="1"
-                          max="500"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="distanciaMaximaEntrePontos"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Distância máxima entre pontos (km)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="1"
+                              max="200"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="distanciaMaximaEntrePontosDinamico"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Distância máxima entre pontos dinâmico (km)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="1"
-                          max="200"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="distanciaMaximaAtendida"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Distância máxima atendida (km)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="1"
+                              max="500"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="tempoDeslocamentoBuffer"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tempo de deslocamento (buffer em minutos)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min="5"
-                          max="60"
-                          {...field}
-                          onChange={(e) => field.onChange(parseInt(e.target.value))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-          </div>
+                    <FormField
+                      control={form.control}
+                      name="distanciaMaximaEntrePontosDinamico"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Distância máxima entre pontos dinâmico (km)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="1"
+                              max="200"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-          {/* Endereço da Empresa */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                Endereço da Empresa
-              </CardTitle>
-              <CardDescription>
-                Endereço base para cálculo de rotas
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="enderecoEmpresaCep"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>CEP *</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="00000-000"
-                          maxLength={9}
-                          {...field}
-                          onChange={async (e) => {
-                            let value = e.target.value.replace(/\D/g, '');
-                            if (value.length > 5) {
-                              value = value.slice(0, 5) + '-' + value.slice(5, 8);
-                            }
-                            field.onChange(value);
+                    <FormField
+                      control={form.control}
+                      name="tempoDeslocamentoBuffer"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Tempo de deslocamento (buffer em minutos)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="5"
+                              max="60"
+                              {...field}
+                              onChange={(e) => field.onChange(parseInt(e.target.value))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-                            // Busca automática de endereço quando CEP tem 8 dígitos
-                            if (value.replace(/\D/g, '').length === 8) {
-                              try {
-                                const endereco = await buscarEnderecoPorCep(value);
+            {/* Tab: Veículos (Combustível) */}
+            <TabsContent value="veiculos" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Fuel className="h-5 w-5" />
+                    Preços de Combustível
+                  </CardTitle>
+                  <CardDescription>
+                    Configure os preços atuais de combustível para cálculo de custos
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm text-blue-800 font-medium">Dica</p>
+                        <p className="text-sm text-blue-700">
+                          Atualize os preços mensalmente para cálculos precisos de custo por km no dashboard.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
 
-                                // Preenche os campos automaticamente
-                                form.setValue("enderecoEmpresaLogradouro", endereco.logradouro || "");
-                                form.setValue("enderecoEmpresaBairro", endereco.bairro || "");
-                                form.setValue("enderecoEmpresaCidade", endereco.localidade || "");
-                                form.setValue("enderecoEmpresaEstado", endereco.uf || "");
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    <FormField
+                      control={form.control}
+                      name="precoCombustivelGasolina"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Gasolina (R$/L)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0.01"
+                              max="20"
+                              placeholder="5.50"
+                              {...field}
+                              value={field.value || ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                              } catch (err) {
-                                toast({
-                                  title: "CEP não encontrado",
-                                  description: "Preencha o endereço manualmente.",
-                                  variant: "destructive",
-                                });
-                                form.setValue("enderecoEmpresaLogradouro", "");
-                                form.setValue("enderecoEmpresaBairro", "");
-                                form.setValue("enderecoEmpresaCidade", "");
-                                form.setValue("enderecoEmpresaEstado", "");
-                              }
-                            }
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="precoCombustivelEtanol"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Etanol (R$/L)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0.01"
+                              max="20"
+                              placeholder="3.80"
+                              {...field}
+                              value={field.value || ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="enderecoEmpresaNumero"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Número *</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="123"
-                          {...field}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/\D/g, '');
-                            field.onChange(value);
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="precoCombustivelDieselS500"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Diesel S500 (R$/L)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0.01"
+                              max="20"
+                              placeholder="5.20"
+                              {...field}
+                              value={field.value || ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="enderecoEmpresaLogradouro"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Logradouro *</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Rua das Flores"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="precoCombustivelDieselS10"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Diesel S10 (R$/L)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0.01"
+                              max="20"
+                              placeholder="5.80"
+                              {...field}
+                              value={field.value || ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="enderecoEmpresaBairro"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Bairro *</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Centro"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="precoCombustivelEletrico"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Energia Elétrica (R$/kWh)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0.01"
+                              max="5"
+                              placeholder="0.80"
+                              {...field}
+                              value={field.value || ""}
+                            />
+                          </FormControl>
+                          <FormDescription>Para veículos elétricos</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-                <FormField
-                  control={form.control}
-                  name="enderecoEmpresaCidade"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cidade *</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="São Paulo"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+            {/* Tab: Metas Operacionais */}
+            <TabsContent value="metas" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="h-5 w-5" />
+                    Metas Operacionais
+                  </CardTitle>
+                  <CardDescription>
+                    Configure as metas para acompanhamento no dashboard
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="metaVariacaoTempoServico"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Variação aceitável do tempo de serviço (%)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="5"
+                              max="100"
+                              {...field}
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Se o tempo previsto do serviço é 60 min e a variação é 15%,
+                            o tempo real pode ser entre 51 e 69 min para ser considerado dentro da meta.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="enderecoEmpresaEstado"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Estado (UF) *</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="SP"
-                          maxLength={2}
-                          {...field}
-                          onChange={(e) => {
-                            field.onChange(e.target.value.toUpperCase());
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="metaUtilizacaoDiaria"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Meta de utilização diária (%)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="50"
+                              max="100"
+                              {...field}
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Percentual ideal de tempo em atendimento vs jornada total.
+                            Ex: 80% significa 6h24 de atendimentos em uma jornada de 8h.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="enderecoEmpresaComplemento"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Complemento</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Sala 101"
-                          {...field}
-                          value={field.value || ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </CardContent>
-          </Card>
+                    <FormField
+                      control={form.control}
+                      name="slaHorasPendencia"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>SLA de resolução de pendências (horas)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="1"
+                              max="168"
+                              {...field}
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Tempo máximo entre o prestador finalizar um atendimento com pendência
+                            e o administrativo resolver (remarcar, cancelar, etc).
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Tab: Endereço */}
+            <TabsContent value="endereco" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <MapPin className="h-5 w-5" />
+                    Endereço da Empresa
+                  </CardTitle>
+                  <CardDescription>
+                    Endereço base para cálculo de rotas (ponto de partida padrão)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="enderecoEmpresaCep"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>CEP *</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="00000-000"
+                              maxLength={9}
+                              {...field}
+                              onChange={async (e) => {
+                                let value = e.target.value.replace(/\D/g, '');
+                                if (value.length > 5) {
+                                  value = value.slice(0, 5) + '-' + value.slice(5, 8);
+                                }
+                                field.onChange(value);
+
+                                // Busca automática de endereço quando CEP tem 8 dígitos
+                                if (value.replace(/\D/g, '').length === 8) {
+                                  try {
+                                    const endereco = await buscarEnderecoPorCep(value);
+
+                                    // Preenche os campos automaticamente
+                                    form.setValue("enderecoEmpresaLogradouro", endereco.logradouro || "");
+                                    form.setValue("enderecoEmpresaBairro", endereco.bairro || "");
+                                    form.setValue("enderecoEmpresaCidade", endereco.localidade || "");
+                                    form.setValue("enderecoEmpresaEstado", endereco.uf || "");
+
+                                  } catch (err) {
+                                    toast({
+                                      title: "CEP não encontrado",
+                                      description: "Preencha o endereço manualmente.",
+                                      variant: "destructive",
+                                    });
+                                    form.setValue("enderecoEmpresaLogradouro", "");
+                                    form.setValue("enderecoEmpresaBairro", "");
+                                    form.setValue("enderecoEmpresaCidade", "");
+                                    form.setValue("enderecoEmpresaEstado", "");
+                                  }
+                                }
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="enderecoEmpresaNumero"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Número *</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="123"
+                              {...field}
+                              onChange={(e) => {
+                                const value = e.target.value.replace(/\D/g, '');
+                                field.onChange(value);
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="enderecoEmpresaLogradouro"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Logradouro *</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Rua das Flores"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="enderecoEmpresaBairro"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Bairro *</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Centro"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="enderecoEmpresaCidade"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Cidade *</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="São Paulo"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="enderecoEmpresaEstado"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Estado (UF) *</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="SP"
+                              maxLength={2}
+                              {...field}
+                              onChange={(e) => {
+                                field.onChange(e.target.value.toUpperCase());
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="enderecoEmpresaComplemento"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Complemento</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Sala 101"
+                              {...field}
+                              value={field.value || ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
 
           <div className="flex justify-end">
             <Button
