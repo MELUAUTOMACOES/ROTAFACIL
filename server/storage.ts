@@ -30,7 +30,7 @@ import {
   featureUsage,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, ilike, sql, inArray, isNotNull, ne, isNull } from "drizzle-orm";
+import { eq, and, or, ilike, sql, inArray, isNotNull, ne, isNull, gte, lte } from "drizzle-orm";
 import { format } from "date-fns";
 import bcrypt from "bcryptjs";
 
@@ -729,7 +729,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAppointmentsByDate(date: string, userId: number): Promise<Appointment[]> {
-    return await db.select().from(appointments).where(eq(appointments.userId, userId));
+    // Converter string de data para range do dia inteiro
+    const targetDate = new Date(date);
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return await db.select()
+      .from(appointments)
+      .where(and(
+        eq(appointments.userId, userId),
+        gte(appointments.scheduledDate, startOfDay),
+        lte(appointments.scheduledDate, endOfDay)
+      ));
   }
 
   // Checklists
@@ -951,12 +964,13 @@ export class DatabaseStorage implements IStorage {
 
     // 1. Buscar rotas finalizadas (incluindo rotas antigas sem userId para compatibilidade)
     const finalizedRoutes = await db
-      .select({ id: routes.id, status: routes.status, title: routes.title })
+      .select({ id: routes.id, status: routes.status, title: routes.title, date: routes.date })
       .from(routes)
       .where(and(
         or(eq(routes.userId, userId), isNull(routes.userId)), // Aceita rotas do usuário OU rotas sem userId (legado)
         or(eq(routes.status, 'finalizado'), eq(routes.status, 'cancelado'), eq(routes.status, 'incompleto'))
-      ));
+      ))
+      .orderBy(sql`${routes.date} DESC`); // Ordenar por data
 
     const routeIds = finalizedRoutes.map(r => r.id);
 
@@ -978,35 +992,61 @@ export class DatabaseStorage implements IStorage {
       return [];
     }
 
-    // 3. Buscar agendamentos pendentes (não concluídos)
+    // 3. Buscar agendamentos pendentes (não concluídos e não cancelados)
     const pendingAppointments = await db
       .select()
       .from(appointments)
       .where(and(
         inArray(appointments.id, appointmentIds),
-        or(isNull(appointments.executionStatus), ne(appointments.executionStatus, 'concluido'))
+        or(isNull(appointments.executionStatus), ne(appointments.executionStatus, 'concluido')),
+        ne(appointments.status, 'cancelled') // Exclui agendamentos cancelados
       ));
 
-    // 4. Enriquecer com dados da rota e cliente
-    const result = await Promise.all(pendingAppointments.map(async (apt) => {
+    // 4. 🚀 OTIMIZADO: Buscar TODOS os dados relacionados de uma vez (batch)
+    const clientIds = Array.from(new Set(pendingAppointments.map(a => a.clientId).filter((id): id is number => id !== null)));
+    const serviceIds = Array.from(new Set(pendingAppointments.map(a => a.serviceId)));
+    const technicianIds = Array.from(new Set(pendingAppointments.map(a => a.technicianId).filter((id): id is number => id !== null)));
+    const teamIds = Array.from(new Set(pendingAppointments.map(a => a.teamId).filter((id): id is number => id !== null)));
+
+    // Buscar todos de uma vez
+    const [allClients, allServices, allTechnicians, allTeams] = await Promise.all([
+      clientIds.length > 0 ? db.select().from(clients).where(and(inArray(clients.id, clientIds), eq(clients.userId, userId))) : Promise.resolve([]),
+      serviceIds.length > 0 ? db.select().from(services).where(and(inArray(services.id, serviceIds), eq(services.userId, userId))) : Promise.resolve([]),
+      technicianIds.length > 0 ? db.select().from(technicians).where(and(inArray(technicians.id, technicianIds), eq(technicians.userId, userId))) : Promise.resolve([]),
+      teamIds.length > 0 ? db.select().from(teams).where(and(inArray(teams.id, teamIds), eq(teams.userId, userId))) : Promise.resolve([]),
+    ]);
+
+    // Criar maps para lookup rápido
+    const clientsMap = new Map(allClients.map(c => [c.id, c]));
+    const servicesMap = new Map(allServices.map(s => [s.id, s]));
+    const techniciansMap = new Map(allTechnicians.map(t => [t.id, t]));
+    const teamsMap = new Map(allTeams.map(t => [t.id, t]));
+
+    // 5. Enriquecer com dados (agora é apenas lookup, não query)
+    const result = pendingAppointments.map((apt) => {
       const stop = stops.find(s => s.appointmentNumericId === apt.id);
-      const route = await db.select().from(routes).where(eq(routes.id, stop!.routeId)).limit(1);
-      const client = await this.getClient(apt.clientId!, userId);
-      const service = await this.getService(apt.serviceId, userId);
-      const technician = apt.technicianId ? await this.getTechnician(apt.technicianId, userId) : null;
-      const team = apt.teamId ? await this.getTeam(apt.teamId, userId) : null;
+      const route = finalizedRoutes.find(r => r.id === stop!.routeId);
+      const client = apt.clientId ? clientsMap.get(apt.clientId) : undefined;
+      const service = servicesMap.get(apt.serviceId);
+      const technician = apt.technicianId ? techniciansMap.get(apt.technicianId) : null;
+      const team = apt.teamId ? teamsMap.get(apt.teamId) : null;
 
       return {
         ...apt,
-        routeDate: route[0]?.date,
-        routeTitle: route[0]?.title,
+        routeDate: route?.date,
+        routeTitle: route?.title,
         clientName: client?.name,
         serviceName: service?.name,
         responsibleName: technician?.name || team?.name || 'N/A'
       };
-    }));
+    });
 
-    return result;
+    // 6. Ordenar resultado final por data da rota (mais recente primeiro)
+    return result.sort((a, b) => {
+      const dateA = a.routeDate ? new Date(a.routeDate).getTime() : 0;
+      const dateB = b.routeDate ? new Date(b.routeDate).getTime() : 0;
+      return dateB - dateA; // DESC
+    });
   }
 
   async finalizeRoute(id: string, status: string, userId: number): Promise<Route> {

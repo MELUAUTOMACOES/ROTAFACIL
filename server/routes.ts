@@ -5,8 +5,8 @@ import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import crypto from "node:crypto"; // para randomUUID
 import { db } from "./db"; // ajuste o caminho se o seu db estiver noutro arquivo
-import { routes, routeStops, appointments, clients, dailyAvailability, vehicleChecklists, vehicleChecklistItems, teamMembers } from "@shared/schema";
-import { eq, inArray, sql, and, or } from "drizzle-orm";
+import { routes, routeStops, appointments, clients, users, dailyAvailability, vehicleChecklists, vehicleChecklistItems, teamMembers, pendingResolutions, appointmentHistory } from "@shared/schema";
+import { eq, inArray, sql, and, or, gte } from "drizzle-orm";
 import { z } from "zod";
 import { format } from "date-fns";
 import {
@@ -30,6 +30,8 @@ import { registerDateRestrictionsRoutes } from "./routes/date-restrictions.route
 import { registerCompanyRoutes } from "./routes/company.routes";
 import { registerVehicleExtensionRoutes } from "./routes/vehicle-extensions.routes";
 import { registerMetricsRoutes, trackFeatureUsage } from "./routes/metrics.routes";
+import { registerAuditRoutes } from "./routes/audit.routes";
+import { trackCompanyAudit, getAuditDescription } from "./audit.helpers";
 import { isAccessAllowed, getAccessDeniedMessage } from "./access-schedule-validator";
 
 // 🛡️ Rate Limiting para Login (previne brute force)
@@ -922,6 +924,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ipAddress: req.ip || req.headers['x-forwarded-for']?.toString(),
           userAgent: req.headers['user-agent'],
         });
+        // Nova auditoria por empresa
+        trackCompanyAudit({
+          userId: user.id,
+          companyId: companyId || null,
+          userName: user.name,
+          feature: "auth",
+          action: "login",
+          description: "Fez login no sistema",
+          ipAddress: req.ip || req.headers['x-forwarded-for']?.toString() || null,
+        });
       } catch (auditError) {
         console.error('⚠️ Erro ao registrar log de auditoria:', auditError);
         // Não bloquear login por falha no audit
@@ -1080,6 +1092,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const clientData = insertClientSchema.parse(req.body);
       const client = await storage.createClient(clientData, req.user.userId);
       trackFeatureUsage(req.user.userId, "clients", "create", req.user.companyId, { id: client.id });
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "clients",
+        action: "create",
+        resourceId: client.id,
+        description: `Criou cliente "${client.name}"`
+      });
       res.json(client);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1094,6 +1114,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("📝 [PUT /clients] payload após Zod:", clientData); // <- confirma que lat/lng passaram
       const client = await storage.updateClient(id, clientData, req.user.userId);
       trackFeatureUsage(req.user.userId, "clients", "update", req.user.companyId, { id: client.id });
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "clients",
+        action: "update",
+        resourceId: client.id,
+        description: `Atualizou cliente "${client.name}"`
+      });
       res.json(client);
     } catch (error: any) {
       console.error("❌ [PUT /clients] erro:", error);
@@ -1180,6 +1208,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!success) {
         return res.status(404).json({ message: "Client not found" });
       }
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "clients",
+        action: "delete",
+        resourceId: id,
+        description: `Excluiu cliente #${id}`
+      });
       res.json({ message: "Client deleted successfully" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1201,6 +1237,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const serviceData = insertServiceSchema.parse(req.body);
       const service = await storage.createService(serviceData, req.user.userId);
       trackFeatureUsage(req.user.userId, "services", "create", req.user.companyId, { id: service.id });
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "services",
+        action: "create",
+        resourceId: service.id,
+        description: `Criou serviço "${service.name}"`
+      });
       res.json(service);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1225,6 +1269,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!success) {
         return res.status(404).json({ message: "Service not found" });
       }
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "services",
+        action: "delete",
+        resourceId: id,
+        description: `Excluiu serviço #${id}`
+      });
       res.json({ message: "Service deleted successfully" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1256,6 +1308,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("==== LOG FIM: POST /api/technicians (SUCESSO) ====");
 
       trackFeatureUsage(req.user.userId, "technicians", "create", req.user.companyId, { id: technician.id });
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "technicians",
+        action: "create",
+        resourceId: technician.id,
+        description: `Criou técnico "${technician.name}"`
+      });
       res.json(technician);
     } catch (error: any) {
       console.log("❌ ERRO ao criar técnico:");
@@ -1320,6 +1380,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const vehicleData = insertVehicleSchema.parse(req.body);
       const vehicle = await storage.createVehicle(vehicleData, req.user.userId);
       trackFeatureUsage(req.user.userId, "vehicles", "create", req.user.companyId, { id: vehicle.id });
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "vehicles",
+        action: "create",
+        resourceId: vehicle.id,
+        description: `Criou veículo "${vehicle.plate}"`
+      });
       res.json(vehicle);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1604,48 +1672,127 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Appointments routes
   app.get("/api/appointments", authenticateToken, async (req: any, res) => {
     try {
-      const appointments = await storage.getAppointments(req.user.userId);
+      const startTime = Date.now();
 
-      // Adicionar informação sobre romaneio confirmado/finalizado
-      const appointmentsWithRouteStatus = await Promise.all(
-        appointments.map(async (apt) => {
+      // 🚀 OTIMIZAÇÃO: Limitar a agendamentos dos últimos 6 meses por padrão
+      // Pode ser sobrescrito com ?from=YYYY-MM-DD na query string
+      const fromParam = req.query.from;
+      let dateFilter: Date;
 
-          // Verificar se o agendamento está em uma rota confirmada ou finalizada
-          const routeStatus = await db
-            .select({
-              routeId: routes.id,
-              routeStatus: routes.status,
-              routeDisplayNumber: routes.displayNumber,
-            })
-            .from(routeStops)
-            .innerJoin(
-              routes,
-              eq(routeStops.routeId, routes.id)
-            )
-            .where(
-              and(
-                eq(routeStops.appointmentNumericId, apt.id),
-                or(
-                  eq(routes.status, 'confirmado'),
-                  eq(routes.status, 'finalizado')
-                )
-              )
-            )
-            .limit(1);
+      if (fromParam) {
+        dateFilter = new Date(fromParam);
+      } else {
+        // Padrão: últimos 6 meses
+        dateFilter = new Date();
+        dateFilter.setMonth(dateFilter.getMonth() - 6);
+      }
 
-          return {
-            ...apt,
-            routeInfo: routeStatus.length > 0 ? {
-              routeId: routeStatus[0].routeId,
-              status: routeStatus[0].routeStatus,
-              displayNumber: routeStatus[0].routeDisplayNumber,
-            } : null,
-          };
+      // 🚀 OTIMIZAÇÃO: Uma única query com LEFT JOIN ao invés de N+1 queries
+      const appointmentsWithRouteStatus = await db
+        .select({
+          // Campos do appointment
+          id: appointments.id,
+          clientId: appointments.clientId,
+          serviceId: appointments.serviceId,
+          technicianId: appointments.technicianId,
+          teamId: appointments.teamId,
+          scheduledDate: appointments.scheduledDate,
+          allDay: appointments.allDay,
+          status: appointments.status,
+          priority: appointments.priority,
+          notes: appointments.notes,
+          photos: appointments.photos,
+          signature: appointments.signature,
+          feedback: appointments.feedback,
+          executionStatus: appointments.executionStatus,
+          executionNotes: appointments.executionNotes,
+          cep: appointments.cep,
+          logradouro: appointments.logradouro,
+          numero: appointments.numero,
+          complemento: appointments.complemento,
+          bairro: appointments.bairro,
+          cidade: appointments.cidade,
+          userId: appointments.userId,
+          companyId: appointments.companyId,
+          createdAt: appointments.createdAt,
+          // Campos da route (podem ser null se não houver rota)
+          routeId: routes.id,
+          routeStatus: routes.status,
+          routeDisplayNumber: routes.displayNumber,
         })
-      );
+        .from(appointments)
+        .leftJoin(
+          routeStops,
+          eq(routeStops.appointmentNumericId, appointments.id)
+        )
+        .leftJoin(
+          routes,
+          and(
+            eq(routeStops.routeId, routes.id),
+            or(
+              eq(routes.status, 'confirmado'),
+              eq(routes.status, 'finalizado')
+            )
+          )
+        )
+        .where(and(
+          eq(appointments.userId, req.user.userId),
+          gte(appointments.scheduledDate, dateFilter)
+        ));
 
-      console.log(`✅ [APPOINTMENTS] Retornando ${appointmentsWithRouteStatus.length} agendamentos com info de romaneio`);
-      res.json(appointmentsWithRouteStatus);
+      // 🔧 DEDUPLICAÇÃO: Se um appointment estiver em múltiplas rotas, 
+      // o JOIN retorna múltiplas linhas. Vamos manter apenas a primeira ocorrência.
+      const uniqueAppointments = new Map();
+
+      for (const row of appointmentsWithRouteStatus) {
+        // Se já processamos este appointment, pula
+        if (uniqueAppointments.has(row.id)) {
+          continue;
+        }
+
+        uniqueAppointments.set(row.id, {
+          id: row.id,
+          clientId: row.clientId,
+          serviceId: row.serviceId,
+          technicianId: row.technicianId,
+          teamId: row.teamId,
+          scheduledDate: row.scheduledDate,
+          allDay: row.allDay,
+          status: row.status,
+          priority: row.priority,
+          notes: row.notes,
+          photos: row.photos,
+          signature: row.signature,
+          feedback: row.feedback,
+          executionStatus: row.executionStatus,
+          executionNotes: row.executionNotes,
+          cep: row.cep,
+          logradouro: row.logradouro,
+          numero: row.numero,
+          complemento: row.complemento,
+          bairro: row.bairro,
+          cidade: row.cidade,
+          userId: row.userId,
+          companyId: row.companyId,
+          createdAt: row.createdAt,
+          routeInfo: row.routeId ? {
+            routeId: row.routeId,
+            status: row.routeStatus,
+            displayNumber: row.routeDisplayNumber,
+          } : null,
+        });
+      }
+
+      // Converter Map para array
+      const result = Array.from(uniqueAppointments.values());
+
+      const totalTime = Date.now() - startTime;
+      // Log apenas se demorar mais de 1 segundo (para monitorar performance)
+      if (totalTime > 1000) {
+        console.log(`⚠️ [APPOINTMENTS] Consulta lenta: ${result.length} agendamentos em ${totalTime}ms`);
+      }
+
+      res.json(result);
     } catch (error: any) {
       console.error(`❌ [APPOINTMENTS] Erro ao buscar agendamentos:`, error);
       res.status(500).json({ message: error.message });
@@ -1709,6 +1856,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await updateAvailabilityForAppointment(req.user.userId, appointment);
 
       trackFeatureUsage(req.user.userId, "appointments", "create", req.user.companyId, { id: appointment.id });
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "appointments",
+        action: "create",
+        resourceId: appointment.id,
+        description: `Criou agendamento #${appointment.id}`
+      });
       res.json(appointment);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -2609,6 +2764,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`\n🎯 [FIND-DATE] Busca concluída! ${candidates.length} opções encontradas`);
 
+      // 📊 Tracking de métricas
+      trackFeatureUsage(req.user.userId, "find_date", "search", req.user.companyId, {
+        serviceId,
+        candidatesFound: candidates.length,
+        daysSearched: stats.checkedDays,
+      });
+
       // 🌊 Enviar evento de conclusão
       res.write('data: {"done": true}\n\n');
       res.end();
@@ -2659,8 +2821,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Buscar agendamento original para rastrear mudanças
+      const originalAppointment = await storage.getAppointment(id, req.user.userId);
+
       const appointment = await storage.updateAppointment(id, appointmentData, req.user.userId);
       console.log(`✅ [UPDATE] Agendamento atualizado com sucesso: ${appointment.id}`);
+
+      // Criar descrição detalhada das mudanças
+      const changes: string[] = [];
+      let changeType = 'status_changed';
+
+      if (originalAppointment && appointmentData.scheduledDate) {
+        const oldDate = new Date(originalAppointment.scheduledDate);
+        const newDate = new Date(appointmentData.scheduledDate);
+        if (oldDate.toDateString() !== newDate.toDateString()) {
+          changes.push(`data de ${oldDate.toLocaleDateString('pt-BR')} para ${newDate.toLocaleDateString('pt-BR')}`);
+          changeType = 'rescheduled';
+        }
+      }
+
+      if (originalAppointment && appointmentData.technicianId !== undefined && originalAppointment.technicianId !== appointmentData.technicianId) {
+        changes.push('técnico alterado');
+        changeType = 'provider_updated';
+      }
+
+      if (originalAppointment && appointmentData.teamId !== undefined && originalAppointment.teamId !== appointmentData.teamId) {
+        changes.push('equipe alterada');
+        changeType = 'provider_updated';
+      }
+
+      const description = changes.length > 0
+        ? `Alterou ${changes.join(', ')} do agendamento #${appointment.id}`
+        : `Atualizou agendamento #${appointment.id}`;
+
+      // 📝 Registrar no histórico do agendamento
+      if (originalAppointment) {
+        const user = await db.query.users.findFirst({
+          where: eq(users.id, req.user.userId),
+        });
+
+        const changedByName = user?.name || user?.username || 'Usuário';
+
+        await db.insert(appointmentHistory).values({
+          appointmentId: id,
+          userId: req.user.userId, // Campo obrigatório
+          changedBy: req.user.userId,
+          changedByName,
+          changeType,
+          previousData: JSON.stringify({
+            scheduledDate: originalAppointment.scheduledDate,
+            technicianId: originalAppointment.technicianId,
+            teamId: originalAppointment.teamId,
+            status: originalAppointment.status,
+          }),
+          newData: JSON.stringify({
+            scheduledDate: appointment.scheduledDate,
+            technicianId: appointment.technicianId,
+            teamId: appointment.teamId,
+            status: appointment.status,
+          }),
+          reason: changes.length > 0 ? `Manual: ${changes.join(', ')}` : 'Atualização manual',
+        });
+      }
+
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "appointments",
+        action: "update",
+        resourceId: appointment.id,
+        description,
+        metadata: { changes: appointmentData }
+      });
       res.json(appointment);
     } catch (error: any) {
       console.log(`❌ [UPDATE] Erro ao atualizar agendamento:`, error.message);
@@ -2761,6 +2993,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`✅ [PATCH] Agendamento ${id} atualizado com sucesso`);
       console.log("==== LOG FIM: PATCH /api/appointments (SUCESSO) ====");
+
+      // Criar descrição detalhada das mudanças
+      const changes: string[] = [];
+      if (originalAppointment && appointmentData.scheduledDate) {
+        const oldDate = new Date(originalAppointment.scheduledDate);
+        const newDate = new Date(appointmentData.scheduledDate);
+        if (oldDate.toDateString() !== newDate.toDateString()) {
+          changes.push(`data de ${oldDate.toLocaleDateString('pt-BR')} para ${newDate.toLocaleDateString('pt-BR')}`);
+        }
+      }
+
+      const description = changes.length > 0
+        ? `Alterou ${changes.join(', ')} do agendamento #${appointment.id}`
+        : `Atualizou agendamento #${appointment.id}`;
+
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "appointments",
+        action: "update",
+        resourceId: appointment.id,
+        description,
+        metadata: { changes: appointmentData }
+      });
 
       res.json(appointment);
     } catch (error: any) {
@@ -2863,7 +3119,405 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Route optimization
+  // ==============================================
+  // PENDING RESOLUTIONS - Sistema de Resolução de Pendências
+  // ==============================================
+
+  // POST /api/pending-resolutions/resolve - Resolver uma pendênc ia
+  app.post("/api/pending-resolutions/resolve", authenticateToken, async (req: any, res) => {
+    try {
+      const {
+        appointmentId,
+        resolutionAction,
+        originalPendingReason,
+        newScheduledDate,
+        newScheduledTime,
+        newTechnicianId,
+        newTeamId,
+        cancellationReason,
+        providerResolutionDetails,
+        followUpDate,
+        followUpResponsible,
+        addressCorrected,
+        clientAddress,
+        contactedClient,
+        contactChannel,
+        contactDate,
+        resolutionNotes,
+      } = req.body;
+
+      console.log(`🔧 [RESOLVE-PENDING] Iniciando resolução de pendência para agendamento #${appointmentId}`);
+      console.log(`   Ação: ${resolutionAction}, Motivo original: ${originalPendingReason}`);
+      console.log(`   Body recebido:`, JSON.stringify(req.body, null, 2));
+
+      // Validações básicas
+      const missingFields = [];
+      if (!appointmentId) missingFields.push('appointmentId');
+      if (!resolutionAction) missingFields.push('resolutionAction');
+      if (!originalPendingReason) missingFields.push('originalPendingReason');
+
+      if (missingFields.length > 0) {
+        console.log(`❌ [RESOLVE-PENDING] Campos faltando: ${missingFields.join(', ')}`);
+        return res.status(400).json({ message: `Dados obrigatórios faltando: ${missingFields.join(', ')}` });
+      }
+
+      // Buscar agendamento
+      const appointment = await db.query.appointments.findFirst({
+        where: and(
+          eq(appointments.id, appointmentId),
+          eq(appointments.userId, req.user.userId)
+        ),
+      });
+
+      if (!appointment) {
+        return res.status(404).json({ message: "Agendamento não encontrado" });
+      }
+
+      // Snapshot do estado anterior (para auditoria)
+      const previousData = { ...appointment };
+
+      // 🔒 VALIDAÇÃO: Se motivo = "endereco_incorreto" e ação = "rescheduled", endereço DEVE ser corrigido
+      if (originalPendingReason === 'endereco_incorreto' && resolutionAction === 'rescheduled') {
+        if (!addressCorrected || !clientAddress) {
+          return res.status(400).json({
+            message: "É obrigatório corrigir o endereço antes de reagendar quando o motivo é 'Endereço incorreto'"
+          });
+        }
+      }
+
+      let newData: any = {};
+      let changeType = '';
+      let reason = '';
+
+      // === PROCESSAR CADA TIPO DE AÇÃO ===
+
+
+      if (resolutionAction === 'rescheduled') {
+        // REAGENDAR
+        if (!newScheduledDate) {
+          return res.status(400).json({ message: "Nova data é obrigatória para reagendar" });
+        }
+
+        const newDateTime = new Date(`${newScheduledDate}T${newScheduledTime || '00:00'}:00`);
+
+        // 🔧 IMPORTANTE: Remover o agendamento da rota antiga
+        // Isso faz o agendamento aparecer como "Sem romaneio" e remove da lista de pendências
+        await db.delete(routeStops)
+          .where(eq(routeStops.appointmentNumericId, appointmentId));
+
+        console.log(`🗑️ [RESOLVE-PENDING] Agendamento removido da rota antiga`);
+
+        // Atualizar agendamento
+        await db.update(appointments)
+          .set({
+            scheduledDate: newDateTime,
+            status: 'scheduled',
+            executionStatus: null, // Limpa o status de execução anterior
+            ...(newTechnicianId !== undefined && { technicianId: newTechnicianId || null }),
+            ...(newTeamId !== undefined && { teamId: newTeamId || null }),
+          })
+          .where(eq(appointments.id, appointmentId));
+
+        // Se endereço foi corrigido, atualizar cliente
+        if (addressCorrected && clientAddress && appointment.clientId) {
+          await db.update(clients)
+            .set({
+              ...(clientAddress.cep && { cep: clientAddress.cep }),
+              ...(clientAddress.logradouro && { logradouro: clientAddress.logradouro }),
+              ...(clientAddress.numero && { numero: clientAddress.numero }),
+              ...(clientAddress.complemento !== undefined && { complemento: clientAddress.complemento }),
+              ...(clientAddress.bairro && { bairro: clientAddress.bairro }),
+              ...(clientAddress.cidade && { cidade: clientAddress.cidade }),
+              ...(clientAddress.estado && { estado: clientAddress.estado }),
+            })
+            .where(eq(clients.id, appointment.clientId));
+        }
+
+        newData = {
+          scheduledDate: newDateTime,
+          status: 'scheduled',
+          executionStatus: null,
+          technicianId: newTechnicianId || appointment.technicianId,
+          teamId: newTeamId || appointment.teamId,
+        };
+        changeType = 'rescheduled';
+        reason = `Reagendado de ${appointment.scheduledDate.toLocaleString('pt-BR')} para ${newDateTime.toLocaleString('pt-BR')}`;
+
+        if (addressCorrected) {
+          reason += ' (endereço corrigido)';
+        }
+
+        console.log(`✅ [RESOLVE-PENDING] Agendamento reagendado para ${newDateTime.toISOString()}`);
+
+
+      } else if (resolutionAction === 'cancelled') {
+        // CANCELAR
+        if (!cancellationReason) {
+          return res.status(400).json({ message: "Motivo do cancelamento é obrigatório" });
+        }
+
+        await db.update(appointments)
+          .set({ status: 'cancelled' })
+          .where(eq(appointments.id, appointmentId));
+
+        newData = { status: 'cancelled' };
+        changeType = 'cancelled';
+        reason = `Cancelado: ${cancellationReason}`;
+
+        console.log(`✅ [RESOLVE-PENDING] Agendamento cancelado`);
+
+      } else if (resolutionAction === 'resolved_by_provider') {
+        // RESOLVIDO PELO PRESTADOR - marca como concluído para sair da lista de pendências
+        if (!providerResolutionDetails) {
+          return res.status(400).json({ message: "Descrição da resolução é obrigatória" });
+        }
+
+        await db.update(appointments)
+          .set({
+            executionStatus: 'concluido', // Marca como concluído para sair da pendência
+          })
+          .where(eq(appointments.id, appointmentId));
+
+        newData = {
+          executionStatus: 'concluido'
+        };
+        changeType = 'status_changed';
+        reason = `Resolvido pelo prestador: ${providerResolutionDetails}`;
+
+        console.log(`✅ [RESOLVE-PENDING] Marcado como resolvido pelo prestador (concluído)`);
+
+      } else if (resolutionAction === 'awaiting') {
+        // AGUARDANDO RETORNO (não altera appointment, apenas registra a pendência)
+        newData = {};
+        changeType = 'status_changed';
+        reason = `Aguardando retorno${followUpDate ? ` até ${new Date(followUpDate).toLocaleDateString('pt-BR')}` : ''}`;
+
+        console.log(`✅ [RESOLVE-PENDING] Marcado como aguardando retorno`);
+      }
+
+      // Buscar nome do usuário para o histórico
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, req.user.userId),
+      });
+
+      const changedByName = user?.name || user?.username || 'Usuário';
+
+      // Criar registro de resolução de pendência
+      const [resolutionRecord] = await db.insert(pendingResolutions).values({
+        appointmentId,
+        originalPendingReason,
+        resolutionAction,
+        contactedClient: contactedClient || false,
+        contactChannel: contactChannel || null,
+        contactDate: contactDate ? new Date(contactDate) : null,
+        addressCorrected: addressCorrected || false,
+        resolutionNotes: resolutionNotes || null,
+        resolvedBy: req.user.userId,
+        rescheduledFrom: resolutionAction === 'rescheduled' ? appointment.scheduledDate : null,
+        rescheduledTo: resolutionAction === 'rescheduled' && newScheduledDate
+          ? new Date(`${newScheduledDate}T${newScheduledTime || '00:00'}:00`)
+          : null,
+        cancellationReason: resolutionAction === 'cancelled' ? cancellationReason : null,
+        providerResolutionDetails: resolutionAction === 'resolved_by_provider' ? providerResolutionDetails : null,
+        awaitingFollowUpDate: resolutionAction === 'awaiting' && followUpDate ? new Date(followUpDate) : null,
+        awaitingResponsible: resolutionAction === 'awaiting' && followUpResponsible ? followUpResponsible : null,
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+      }).returning();
+
+      // Criar registro de histórico de agendamento
+      await db.insert(appointmentHistory).values({
+        appointmentId,
+        changedBy: req.user.userId,
+        changedByName,
+        changeType,
+        previousData: JSON.stringify(previousData),
+        newData: JSON.stringify(newData),
+        reason,
+        notes: resolutionNotes || null,
+        pendingResolutionId: resolutionRecord.id,
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+      });
+
+      // Atualizar disponibilidade se reagendou
+      if (resolutionAction === 'rescheduled' && newScheduledDate) {
+        const updatedAppointment = await db.query.appointments.findFirst({
+          where: eq(appointments.id, appointmentId),
+        });
+        if (updatedAppointment) {
+          await updateAvailabilityForAppointment(req.user.userId, updatedAppointment);
+        }
+      }
+
+      // Audit log
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "pending_resolutions",
+        action: "resolve",
+        resourceId: appointmentId.toString(),
+        description: `Resolveu pendência do agendamento #${appointmentId} com ação: ${resolutionAction}`,
+        metadata: { resolutionAction, originalPendingReason }
+      });
+
+      console.log(`✅✅ [RESOLVE-PENDING] Resolução concluída com sucesso`);
+
+      res.json({
+        success: true,
+        message: "Pendência resolvida com sucesso",
+        resolutionId: resolutionRecord.id,
+      });
+
+    } catch (error: any) {
+      console.error(`❌ [RESOLVE-PENDING] Erro ao resolver pendência:`, error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // GET /api/appointments/:id/history - Buscar histórico de um agendamento
+  app.get("/api/appointments/:id/history", authenticateToken, async (req: any, res) => {
+    try {
+      const appointmentId = parseInt(req.params.id);
+
+      if (isNaN(appointmentId)) {
+        return res.status(400).json({ message: "ID inválido" });
+      }
+
+      // Verificar se agendamento existe e pertence ao usuário
+      const appointment = await db.query.appointments.findFirst({
+        where: and(
+          eq(appointments.id, appointmentId),
+          eq(appointments.userId, req.user.userId)
+        ),
+      });
+
+      if (!appointment) {
+        return res.status(404).json({ message: "Agendamento não encontrado" });
+      }
+
+      // Buscar histórico completo
+      const history = await db.query.appointmentHistory.findMany({
+        where: and(
+          eq(appointmentHistory.appointmentId, appointmentId),
+          eq(appointmentHistory.userId, req.user.userId)
+        ),
+        orderBy: (appointmentHistory, { desc }) => [desc(appointmentHistory.changedAt)],
+      });
+
+      // Buscar informações adicionais de resolução de pendências
+      const historyWithDetails = await Promise.all(
+        history.map(async (h) => {
+          let resolutionDetails = null;
+          if (h.pendingResolutionId) {
+            const resolution = await db.query.pendingResolutions.findFirst({
+              where: eq(pendingResolutions.id, h.pendingResolutionId),
+            });
+            if (resolution) {
+              resolutionDetails = {
+                action: resolution.resolutionAction,
+                originalReason: resolution.originalPendingReason,
+                contactedClient: resolution.contactedClient,
+                contactChannel: resolution.contactChannel,
+                notes: resolution.resolutionNotes,
+              };
+            }
+          }
+
+          return {
+            ...h,
+            resolutionDetails,
+          };
+        })
+      );
+
+      res.json(historyWithDetails);
+
+    } catch (error: any) {
+      console.error(`❌ [APPOINTMENT-HISTORY] Erro:`, error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // GET /api/pending-resolutions/stats - Estatísticas de pendências
+  app.get("/api/pending-resolutions/stats", authenticateToken, async (req: any, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+
+      let whereConditions = [eq(pendingResolutions.userId, req.user.userId)];
+
+      if (startDate) {
+        whereConditions.push(sql`${pendingResolutions.resolvedAt} >= ${new Date(startDate as string)}`);
+      }
+      if (endDate) {
+        whereConditions.push(sql`${pendingResolutions.resolvedAt} <= ${new Date(endDate as string)}`);
+      }
+
+      // Buscar todas as resoluções no período
+      const resolutions = await db.query.pendingResolutions.findMany({
+        where: and(...whereConditions),
+      });
+
+      // Calcular estatísticas
+      const total = resolutions.length;
+      const byReason: Record<string, number> = {};
+      const byAction: Record<string, number> = {};
+      const cancellationReasons: Record<string, number> = {};
+
+      resolutions.forEach((r) => {
+        // Por motivo original
+        byReason[r.originalPendingReason] = (byReason[r.originalPendingReason] || 0) + 1;
+
+        // Por ação de resolução
+        byAction[r.resolutionAction] = (byAction[r.resolutionAction] || 0) + 1;
+
+        // Motivos de cancelamento
+        if (r.resolutionAction === 'cancelled' && r.cancellationReason) {
+          cancellationReasons[r.cancellationReason] = (cancellationReasons[r.cancellationReason] || 0) + 1;
+        }
+      });
+
+      // Calcular tempo médio de resolução (em horas)
+      const resolutionTimes = resolutions
+        .filter(r => r.resolvedAt && r.createdAt)
+        .map(r => (r.resolvedAt!.getTime() - r.createdAt.getTime()) / (1000 * 60 * 60)); // em horas
+
+      const avgResolutionTimeHours = resolutionTimes.length > 0
+        ? resolutionTimes.reduce((a, b) => a + b, 0) / resolutionTimes.length
+        : 0;
+
+      // Formatar para percentagem
+      const byReasonWithPercentage = Object.entries(byReason).map(([reason, count]) => ({
+        reason,
+        count,
+        percentage: total > 0 ? (count / total) * 100 : 0,
+      }));
+
+      const topCancellationReasons = Object.entries(cancellationReasons)
+        .map(([reason, count]) => ({ reason, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+
+      res.json({
+        totalResolved: total,
+        avgResolutionTimeHours: Math.round(avgResolutionTimeHours * 100) / 100,
+        byReason: byReasonWithPercentage,
+        byResolutionAction: {
+          rescheduled: byAction.rescheduled || 0,
+          cancelled: byAction.cancelled || 0,
+          resolved_by_provider: byAction.resolved_by_provider || 0,
+          awaiting: byAction.awaiting || 0,
+        },
+        topCancellationReasons,
+      });
+
+    } catch (error: any) {
+      console.error(`❌ [PENDING-STATS] Erro:`, error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Checklists routes
   app.post("/api/gerar-rota", authenticateToken, async (req: any, res) => {
     try {
       const { appointmentIds } = req.body;
@@ -3371,8 +4025,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/routes/:id/available-appointments
-  // Retorna apenas agendamentos "do mesmo dia da rota", do usuário logado,
-  // com status 'scheduled' e que AINDA NÃO estão nessa rota.
+  // Retorna agendamentos do mesmo dia da rota, do usuário logado,
+  // com status 'scheduled' que NÃO estão em rotas confirmadas ou finalizadas
   app.get("/api/routes/:id/available-appointments", authenticateToken, async (req: any, res) => {
     try {
       const routeId = req.params.id as string;
@@ -3381,82 +4035,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [routeRow] = await db.select().from(routes).where(eq(routes.id, routeId)).limit(1);
       if (!routeRow) return res.status(404).json({ error: "Rota não encontrada" });
 
-      // 2) Quais agendamentos já estão nessa rota?
-      const usedRows = await db
-        .select({ aid: routeStops.appointmentNumericId })
+      // 2) Define range do dia
+      const routeDay = new Date(routeRow.date);
+      const start = new Date(routeDay);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(routeDay);
+      end.setHours(23, 59, 59, 999);
+
+      // 3) Busca candidatos: agendamentos do dia com status scheduled
+      const { and, gte, lte, inArray } = await import("drizzle-orm");
+      const candidatesFull = await db
+        .select({
+          id: appointments.id,
+          clientId: appointments.clientId,
+          scheduledDate: appointments.scheduledDate,
+          status: appointments.status,
+          logradouro: appointments.logradouro,
+          numero: appointments.numero,
+          bairro: appointments.bairro,
+          cidade: appointments.cidade,
+          cep: appointments.cep,
+          clientName: clients.name,
+          lat: clients.lat,
+          lng: clients.lng,
+        })
+        .from(appointments)
+        .leftJoin(clients, eq(appointments.clientId, clients.id))
+        .where(
+          and(
+            eq(appointments.userId, req.user.userId),
+            gte(appointments.scheduledDate, start),
+            lte(appointments.scheduledDate, end),
+            eq(appointments.status, "scheduled")
+          )
+        )
+        .orderBy(appointments.scheduledDate);
+
+      if (candidatesFull.length === 0) return res.json([]);
+
+      const candidateIds = candidatesFull.map((c) => c.id);
+
+      // 4a) Busca agendamentos que já estão na MESMA rota (para não duplicar)
+      const usedInThisRoute = await db
+        .select({ numericId: routeStops.appointmentNumericId })
         .from(routeStops)
         .where(eq(routeStops.routeId, routeId));
 
-      const usedIds: number[] = usedRows
-        .map((r) => r.aid as number | null)
-        .filter((x): x is number => Number.isFinite(x));
+      const usedInThisRouteIds = new Set(
+        usedInThisRoute.map((s) => s.numericId).filter((x): x is number => x !== null)
+      );
 
-      // 3) Monta as condições (mesmo dia da rota, usuário, status scheduled, NOT IN usados)
-      //    Evita ambiguidade de tipos no Postgres usando comparação explícita por ::date
-      const routeDay = new Date(routeRow.date);
-      const conditions: any[] = [
-        eq(appointments.userId, req.user.userId),
-        sql`${appointments.scheduledDate}::date = ${routeDay}::date`,
-        eq(appointments.status, "scheduled"),
-      ];
-
-      // notInArray só quando há IDs; se não, pula a condição
-      if (usedIds.length > 0) {
-        const { notInArray, and } = await import("drizzle-orm");
-        const joined = await db
-          .select({
-            id: appointments.id,
-            clientId: appointments.clientId,
-            scheduledDate: appointments.scheduledDate,
-            status: appointments.status,
-            // campos úteis pra exibir
-            logradouro: appointments.logradouro,
-            numero: appointments.numero,
-            bairro: appointments.bairro,
-            cidade: appointments.cidade,
-            cep: appointments.cep,
-
-            clientName: clients.name,
-            lat: clients.lat,
-            lng: clients.lng,
-          })
-          .from(appointments)
-          .leftJoin(clients, eq(appointments.clientId, clients.id))
-          .where(
-            and(
-              ...conditions,
-              notInArray(appointments.id, usedIds),
-            )
+      // 4b) Busca bloqueios: agendamentos em rotas CONFIRMADAS ou FINALIZADAS
+      const blockedStops = await db
+        .select({ numericId: routeStops.appointmentNumericId })
+        .from(routeStops)
+        .innerJoin(routes, eq(routeStops.routeId, routes.id))
+        .where(
+          and(
+            inArray(routeStops.appointmentNumericId, candidateIds),
+            inArray(routes.status, ["confirmado", "finalizado"])
           )
-          .orderBy(appointments.scheduledDate);
+        );
 
-        return res.json(joined);
-      } else {
-        // Sem usados — condição mais simples
-        const { and } = await import("drizzle-orm");
-        const joined = await db
-          .select({
-            id: appointments.id,
-            clientId: appointments.clientId,
-            scheduledDate: appointments.scheduledDate,
-            status: appointments.status,
-            logradouro: appointments.logradouro,
-            numero: appointments.numero,
-            bairro: appointments.bairro,
-            cidade: appointments.cidade,
-            cep: appointments.cep,
+      const blockedIds = new Set(blockedStops.map((s) => s.numericId));
 
-            clientName: clients.name,
-            lat: clients.lat,
-            lng: clients.lng,
-          })
-          .from(appointments)
-          .leftJoin(clients, eq(appointments.clientId, clients.id))
-          .where(and(...conditions))
-          .orderBy(appointments.scheduledDate);
+      // 5) Filtra candidatos:
+      //    - Remove os que já estão na MESMA rota
+      //    - Remove os que estão em rotas confirmadas/finalizadas
+      const available = candidatesFull.filter(
+        (c) => !usedInThisRouteIds.has(c.id) && !blockedIds.has(c.id)
+      );
 
-        return res.json(joined);
-      }
+      // DEBUG LOG
+      console.log("[available-appointments] candidateIds:", candidateIds);
+      console.log("[available-appointments] usedInThisRouteIds:", Array.from(usedInThisRouteIds));
+      console.log("[available-appointments] blockedIds:", Array.from(blockedIds));
+      console.log("[available-appointments] available count:", available.length);
+
+      return res.json(available);
     } catch (err: any) {
       console.error("❌ [/api/routes/:id/available-appointments] ERRO:", err?.message);
       return res.status(500).json({ error: "Falha ao listar agendamentos disponíveis para a rota" });
@@ -3673,6 +4329,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Registrar rotas de métricas (apenas superadmin)
   registerMetricsRoutes(app, authenticateToken);
+
+  // Registrar rotas de auditoria (admin de empresa)
+  registerAuditRoutes(app, authenticateToken);
 
   const httpServer = createServer(app);
   // CEP Proxy to avoid CORS

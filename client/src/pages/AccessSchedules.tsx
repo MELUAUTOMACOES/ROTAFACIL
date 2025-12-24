@@ -122,12 +122,12 @@ export default function AccessSchedules() {
         summary.push(`${dayNames[day]}: ${times}`);
       }
     }
-    
+
     return summary.length > 0 ? summary.join(' | ') : 'Nenhum horário configurado';
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
+    <div className="space-y-6">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <CardTitle className="text-2xl font-bold flex items-center gap-2">
@@ -182,7 +182,7 @@ export default function AccessSchedules() {
                         <div className="flex items-center gap-3">
                           <h3 className="font-semibold text-lg">{schedule.name}</h3>
                         </div>
-                        
+
                         <div className="text-sm text-muted-foreground">
                           {formatTimeWindow(schedule.schedules)}
                         </div>

@@ -1553,8 +1553,12 @@ export function registerRoutesAPI(app: Express) {
 
       const conditions = [];
 
-      // 🔒 Filtro de userId será aplicado após migration (quando a coluna userId existir)
-      // Por enquanto, mantemos compatibilidade com bancos sem a coluna
+      // 🔒 Filtro de userId para isolamento entre empresas
+      // Aceita rotas do usuário OU rotas sem userId (legado/compatibilidade)
+      conditions.push(or(
+        eq(routesTbl.userId, req.user.userId),
+        sql`${routesTbl.userId} IS NULL`
+      ));
 
       if (from) {
         conditions.push(gte(routesTbl.date, new Date(from as string)));
@@ -1761,7 +1765,121 @@ export function registerRoutesAPI(app: Express) {
     },
   );
 
-  // POST /api/routes/:routeId/stops - adiciona agendamentos como paradas
+  // GET /api/routes/:id/available-appointments
+  app.get(
+    "/api/routes/:id/available-appointments",
+    authenticateToken,
+    async (req: any, res: Response) => {
+      try {
+        const routeId = req.params.id;
+
+        // 1. Obter a rota para saber a data
+        const [route] = await db
+          .select({
+            id: routesTbl.id,
+            date: routesTbl.date,
+            userId: routesTbl.userId,
+            responsibleType: routesTbl.responsibleType,
+            responsibleId: routesTbl.responsibleId,
+          })
+          .from(routesTbl)
+          .where(eq(routesTbl.id, routeId))
+          .limit(1);
+
+        if (!route) {
+          return res.status(404).json({ message: "Rota não encontrada" });
+        }
+
+        // 2. Definir range do dia
+        const routeDate = new Date(route.date);
+        const start = new Date(routeDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(routeDate);
+        end.setHours(23, 59, 59, 999);
+
+        // 3. Buscar candidates: Agendamentos do dia, status scheduled/rescheduled, mesmo userId
+        const candidatesFull = await db
+          .select({
+            id: appointments.id,
+            clientId: appointments.clientId,
+            scheduledDate: appointments.scheduledDate,
+            status: appointments.status,
+            cep: appointments.cep,
+            logradouro: appointments.logradouro,
+            numero: appointments.numero,
+            bairro: appointments.bairro,
+            cidade: appointments.cidade,
+            clientName: clients.name,
+          })
+          .from(appointments)
+          .leftJoin(clients, eq(appointments.clientId, clients.id))
+          .where(
+            and(
+              eq(appointments.userId, req.user.userId),
+              gte(appointments.scheduledDate, start),
+              lte(appointments.scheduledDate, end),
+              or(
+                eq(appointments.status, "scheduled"),
+                eq(appointments.status, "rescheduled")
+              )
+            )
+          );
+
+        if (candidatesFull.length === 0) return res.json([]);
+
+        const candidateIds = candidatesFull.map((c) => c.id);
+
+        // 4. Buscar bloqueios (appointments em rotas bloqueadas)
+        //    Regra atualizada: "o unico que pode aparecer são agendamentos em romaneios como rascunho" (além de sem rota).
+        //    Ou seja, devemos excluir apenas se estiver em 'confirmado' ou 'finalizado'.
+        //    'draft' e 'cancelado' não bloqueiam o agendamento de ser listado.
+
+        const activeStops = await db
+          .select({
+            numericId: stopsTbl.appointmentNumericId,
+          })
+          .from(stopsTbl)
+          .innerJoin(routesTbl, eq(stopsTbl.routeId, routesTbl.id))
+          .where(
+            and(
+              inArray(stopsTbl.appointmentNumericId, candidateIds),
+              inArray(routesTbl.status, ["confirmado", "finalizado"])
+            )
+          );
+
+        const occupiedSet = new Set(activeStops.map((s) => s.numericId));
+
+        // 🔍 DEBUG LOGS - ENHANCED
+        console.log("==================== [available-appointments] DEBUG ====================");
+        console.log("[available-appointments] Route ID:", routeId);
+        console.log("[available-appointments] Route Date:", route.date);
+        console.log("[available-appointments] Date Range:", start.toISOString(), "to", end.toISOString());
+        console.log("[available-appointments] candidateIds:", candidateIds);
+        console.log("[available-appointments] Is ID 24 in candidates?", candidateIds.includes(24));
+        console.log("[available-appointments] activeStops (blocked by ID):", activeStops);
+        console.log("[available-appointments] occupiedSet:", Array.from(occupiedSet));
+        console.log("[available-appointments] Is ID 24 in occupiedSet?", occupiedSet.has(24));
+
+        // 5. Filtrar APENAS por appointment ID
+        // NÃO bloquear por cliente - usuário pode ter múltiplos agendamentos para o mesmo cliente
+        const available = candidatesFull.filter(
+          (c) => !occupiedSet.has(c.id)
+        );
+
+        console.log("[available-appointments] available (final):", available.map(a => ({ id: a.id, clientName: a.clientName })));
+        console.log("[available-appointments] Is ID 24 in final list?", available.some(a => a.id === 24));
+        console.log("========================================================================");
+
+        res.json(available);
+      } catch (error: any) {
+        console.error("❌ Erro ao buscar agendamentos disponíveis:", error);
+        res
+          .status(500)
+          .json({ message: "Erro ao buscar agendamentos disponíveis" });
+      }
+    }
+  );
+
   app.post(
     "/api/routes/:routeId/stops",
     authenticateToken,
@@ -1807,6 +1925,32 @@ export function registerRoutesAPI(app: Express) {
         const toInsertNums = idsNum.filter((n) => !alreadyNums.has(n));
         if (toInsertNums.length === 0) {
           return res.json({ ok: true, inserted: 0, skipped: idsNum.length });
+        }
+
+        // 🔒 VALIDAÇÃO: Bloquear agendamentos que já estão em rotas confirmadas/finalizadas
+        // NÃO bloquear por cliente - usuário pode ter múltiplos agendamentos para o mesmo cliente
+        const blockedCheck = await db
+          .select({
+            numericId: stopsTbl.appointmentNumericId,
+          })
+          .from(stopsTbl)
+          .innerJoin(routesTbl, eq(stopsTbl.routeId, routesTbl.id))
+          .where(
+            and(
+              inArray(stopsTbl.appointmentNumericId, toInsertNums),
+              inArray(routesTbl.status, ["confirmado", "finalizado"])
+            )
+          );
+
+        const blockedApptIds = new Set(blockedCheck.map(s => s.numericId));
+
+        const blocked = toInsertNums.filter(id => blockedApptIds.has(id));
+
+        if (blocked.length > 0) {
+          return res.status(400).json({
+            message: `Não é possível adicionar: ${blocked.length} agendamento(s) já está(ão) em rota confirmada ou finalizada.`,
+            blockedIds: blocked,
+          });
         }
 
         // busca dados dos agendamentos + cliente

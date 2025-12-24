@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import AppointmentForm from "@/components/forms/AppointmentForm";
 import AvailabilityCalendar from "@/components/AvailabilityCalendar";
 import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
+import { AppointmentHistoryModal } from "@/components/modals/AppointmentHistoryModal";
 import { cn } from "@/lib/utils";
 import {
   format,
@@ -50,6 +51,7 @@ import {
   ChevronDown,
   Wrench,
   FilterX,
+  Eye,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
@@ -83,6 +85,11 @@ export default function Appointments() {
     useState<Appointment | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [prefilledData, setPrefilledData] = useState<any>(null);
+
+  // Estados para histórico de agendamento
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyAppointmentId, setHistoryAppointmentId] = useState<number | null>(null);
+  const [appointmentHistory, setAppointmentHistory] = useState<any[]>([]);
 
   // Estados para filtros (agora arrays para multi-seleção)
   const [selectedDate, setSelectedDate] = useState<string>("");
@@ -2230,6 +2237,30 @@ export default function Appointments() {
     });
   };
 
+  // Handler para visualizar histórico
+  const handleViewHistory = async (appointmentId: number) => {
+    try {
+      const response = await fetch(`/api/appointments/${appointmentId}/history`, {
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao carregar histórico');
+      }
+
+      const data = await response.json();
+      setAppointmentHistory(data);
+      setHistoryAppointmentId(appointmentId);
+      setShowHistoryModal(true);
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar histórico do agendamento",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -2689,6 +2720,17 @@ export default function Appointments() {
                               </div>
 
                               <div className="flex space-x-2 ml-4">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    stop(e);
+                                    handleViewHistory(appointment.id);
+                                  }}
+                                  title="Ver histórico de alterações"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -3228,6 +3270,14 @@ export default function Appointments() {
         onConfirm={confirmDelete}
         title="Excluir Agendamento"
         description="Tem certeza que deseja excluir este agendamento?"
+      />
+
+      {/* Modal de Histórico */}
+      <AppointmentHistoryModal
+        isOpen={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        appointmentId={historyAppointmentId || 0}
+        history={appointmentHistory}
       />
     </div>
   );

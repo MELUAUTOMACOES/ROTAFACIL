@@ -16,11 +16,12 @@ import {
   Search,
   History,
   Shield,
-  Clock,
+
   ChevronLeft,
   ChevronRight,
   Truck,
-  BarChart3
+  BarChart3,
+  FileSearch
 } from "lucide-react";
 import {
   Tooltip,
@@ -41,12 +42,11 @@ const navigation = [
   { name: "Agendamentos", href: "/appointments", icon: Calendar },
   { name: "Ache uma data", href: "/find-date", icon: Search },
   { name: "Romaneios - Histórico de Rotas", href: "/routes-history", icon: History },
+  { name: "Prestadores", href: "/prestadores", icon: Truck },
   { name: "Clientes", href: "/clients", icon: Users },
   { name: "Técnicos/Equipes", href: "/technicians", icon: UserCog },
   { name: "Veículos", href: "/vehicles", icon: Car },
   { name: "Serviços", href: "/services", icon: Wrench },
-  { name: "Regras de Negócio", href: "/business-rules", icon: FileText },
-  { name: "Prestadores", href: "/prestadores", icon: Truck },
 ];
 
 export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCollapse }: SidebarProps) {
@@ -66,7 +66,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
     ? [
       ...navigation,
       { name: "Gestão de Usuários", href: "/users", icon: Shield },
-      { name: "Tabelas de Horário", href: "/access-schedules", icon: Clock }
+      { name: "Auditoria", href: "/admin/audit", icon: FileSearch },
+      { name: "Regras de Negócio", href: "/business-rules", icon: FileText }
     ]
     : navigation;
 

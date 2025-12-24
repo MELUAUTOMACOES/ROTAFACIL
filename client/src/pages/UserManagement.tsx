@@ -20,6 +20,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import AccessSchedules from "./AccessSchedules";
 
 export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -151,7 +153,7 @@ export default function UserManagement() {
       enterprise: 'Empresarial',
       custom: 'Personalizado'
     };
-    
+
     const colors: Record<string, string> = {
       basic: 'bg-gray-500',
       professional: 'bg-blue-500',
@@ -168,143 +170,156 @@ export default function UserManagement() {
 
   return (
     <div className="container mx-auto p-6 max-w-7xl">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle className="text-2xl font-bold flex items-center gap-2">
-            <Shield className="w-6 h-6" />
-            Gerenciamento de Usuários
-          </CardTitle>
-          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={handleNew}>
-                <Plus className="w-4 h-4 mr-2" />
-                Novo Usuário
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  {selectedUser ? 'Editar Usuário' : 'Novo Usuário'}
-                </DialogTitle>
-              </DialogHeader>
-              <UserForm
-                user={selectedUser}
-                onSuccess={() => {
-                  setIsFormOpen(false);
-                  setSelectedUser(null);
-                  queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-                }}
-                onCancel={() => {
-                  setIsFormOpen(false);
-                  setSelectedUser(null);
-                }}
-              />
-            </DialogContent>
-          </Dialog>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8">Carregando usuários...</div>
-          ) : users.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Nenhum usuário cadastrado ainda.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {users.map((user: User) => (
-                <Card key={user.id} className="overflow-hidden">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-3">
-                          <h3 className="font-semibold text-lg">{user.name}</h3>
-                          {getRoleBadge(user.role)}
-                          {getPlanBadge(user.plan)}
-                          {user.isActive ? (
-                            <Badge variant="outline" className="text-green-600 border-green-600">
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Ativo
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-red-600 border-red-600">
-                              <XCircle className="w-3 h-3 mr-1" />
-                              Inativo
-                            </Badge>
-                          )}
-                        </div>
-                        
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Mail className="w-4 h-4" />
-                            {user.email}
-                          </div>
-                          <div>
-                            Username: <span className="font-mono">{user.username}</span>
-                          </div>
-                        </div>
+      <Tabs defaultValue="users" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="users">Usuários</TabsTrigger>
+          <TabsTrigger value="schedules">Tabelas de Horário</TabsTrigger>
+        </TabsList>
 
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {user.emailVerified ? (
-                            <Badge variant="outline" className="text-green-600 border-green-600">
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Email Verificado
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-orange-600 border-orange-600">
-                              <Mail className="w-3 h-3 mr-1" />
-                              Email Pendente
-                            </Badge>
-                          )}
-                          
-                          {user.requirePasswordChange && (
-                            <Badge variant="outline" className="text-blue-600 border-blue-600">
-                              Requer Troca de Senha
-                            </Badge>
-                          )}
-                        </div>
+        <TabsContent value="users" className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+              <CardTitle className="text-2xl font-bold flex items-center gap-2">
+                <Shield className="w-6 h-6" />
+                Gerenciamento de Usuários
+              </CardTitle>
+              <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={handleNew}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Novo Usuário
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>
+                      {selectedUser ? 'Editar Usuário' : 'Novo Usuário'}
+                    </DialogTitle>
+                  </DialogHeader>
+                  <UserForm
+                    user={selectedUser}
+                    onSuccess={() => {
+                      setIsFormOpen(false);
+                      setSelectedUser(null);
+                      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+                    }}
+                    onCancel={() => {
+                      setIsFormOpen(false);
+                      setSelectedUser(null);
+                    }}
+                  />
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="text-center py-8">Carregando usuários...</div>
+              ) : users.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  Nenhum usuário cadastrado ainda.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {users.map((user: User) => (
+                    <Card key={user.id} className="overflow-hidden">
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-3">
+                              <h3 className="font-semibold text-lg">{user.name}</h3>
+                              {getRoleBadge(user.role)}
+                              {getPlanBadge(user.plan)}
+                              {user.isActive ? (
+                                <Badge variant="outline" className="text-green-600 border-green-600">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Ativo
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-red-600 border-red-600">
+                                  <XCircle className="w-3 h-3 mr-1" />
+                                  Inativo
+                                </Badge>
+                              )}
+                            </div>
 
-                        {user.lastLoginAt && (
-                          <div className="text-xs text-muted-foreground">
-                            Último acesso: {new Date(user.lastLoginAt).toLocaleString('pt-BR')}
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <div className="flex items-center gap-1">
+                                <Mail className="w-4 h-4" />
+                                {user.email}
+                              </div>
+                              <div>
+                                Username: <span className="font-mono">{user.username}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {user.emailVerified ? (
+                                <Badge variant="outline" className="text-green-600 border-green-600">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Email Verificado
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                  <Mail className="w-3 h-3 mr-1" />
+                                  Email Pendente
+                                </Badge>
+                              )}
+
+                              {user.requirePasswordChange && (
+                                <Badge variant="outline" className="text-blue-600 border-blue-600">
+                                  Requer Troca de Senha
+                                </Badge>
+                              )}
+                            </div>
+
+                            {user.lastLoginAt && (
+                              <div className="text-xs text-muted-foreground">
+                                Último acesso: {new Date(user.lastLoginAt).toLocaleString('pt-BR')}
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
 
-                      <div className="flex items-center gap-2">
-                        {!user.emailVerified && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleResendEmail(user.id)}
-                            disabled={resendEmailMutation.isPending}
-                          >
-                            <RefreshCw className={`w-4 h-4 ${resendEmailMutation.isPending ? 'animate-spin' : ''}`} />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(user)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(user)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                          <div className="flex items-center gap-2">
+                            {!user.emailVerified && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleResendEmail(user.id)}
+                                disabled={resendEmailMutation.isPending}
+                              >
+                                <RefreshCw className={`w-4 h-4 ${resendEmailMutation.isPending ? 'animate-spin' : ''}`} />
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(user)}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(user)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="schedules" className="space-y-4">
+          <AccessSchedules />
+        </TabsContent>
+      </Tabs>
 
       {/* Dialog de confirmação de exclusão */}
       <AlertDialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>

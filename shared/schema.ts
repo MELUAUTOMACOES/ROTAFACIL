@@ -812,6 +812,26 @@ export const insertFeatureUsageSchema = createInsertSchema(featureUsage).omit({
   createdAt: true,
 });
 
+// Company Audit Logs - Auditoria completa por empresa (para admins de empresa)
+export const companyAuditLogs = pgTable("company_audit_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'set null' }),
+  companyId: integer("company_id").references(() => companies.id, { onDelete: 'cascade' }),
+  userName: text("user_name"), // Nome do usuário (para manter histórico mesmo se usuário for deletado)
+  feature: text("feature").notNull(), // 'clients', 'appointments', 'vehicles', 'auth', etc.
+  action: text("action").notNull(), // 'create', 'update', 'delete', 'login', 'logout'
+  resourceId: text("resource_id"), // ID do recurso afetado (opcional)
+  description: text("description"), // Descrição legível da ação
+  metadata: jsonb("metadata"), // Dados extras (ex: campos alterados)
+  ipAddress: text("ip_address"), // Apenas para login/logout
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertCompanyAuditLogSchema = createInsertSchema(companyAuditLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Vehicle Documents - Documentos anexados ao veículo (CRLV, seguro, etc.)
 export const vehicleDocuments = pgTable("vehicle_documents", {
   id: serial("id").primaryKey(),
@@ -916,6 +936,86 @@ export const insertMaintenanceWarrantySchema = createInsertSchema(maintenanceWar
   }),
 });
 
+// Pending Resolutions - Resolução de pendências reportadas por prestadores
+export const pendingResolutions = pgTable("pending_resolutions", {
+  id: serial("id").primaryKey(),
+  appointmentId: integer("appointment_id").notNull().references(() => appointments.id, { onDelete: 'cascade' }),
+  originalPendingReason: text("original_pending_reason").notNull(), // cliente_ausente, pediu_remarcacao, problema_tecnico, endereco_incorreto, cliente_recusou, outro_motivo
+  resolutionAction: text("resolution_action").notNull(), // rescheduled, cancelled, resolved_by_provider, awaiting
+  contactedClient: boolean("contacted_client").notNull().default(false),
+  contactChannel: text("contact_channel"), // phone, whatsapp, email, presencial
+  contactDate: timestamp("contact_date"),
+  addressCorrected: boolean("address_corrected").notNull().default(false),
+  resolutionNotes: text("resolution_notes"), // Observações do administrativo
+  resolvedBy: integer("resolved_by").notNull().references(() => users.id), // Quem resolveu
+  resolvedAt: timestamp("resolved_at").defaultNow().notNull(),
+  // Dados específicos por tipo de ação
+  rescheduledFrom: timestamp("rescheduled_from"), // Data original
+  rescheduledTo: timestamp("rescheduled_to"), // Nova data
+  cancellationReason: text("cancellation_reason"), // Motivo do cancelamento
+  providerResolutionDetails: text("provider_resolution_details"), // Se "resolvido pelo prestador"
+  awaitingFollowUpDate: timestamp("awaiting_follow_up_date"), // Data de retorno (se aguardando)
+  awaitingResponsible: integer("awaiting_responsible").references(() => users.id), // Responsável pelo follow-up
+  userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPendingResolutionSchema = createInsertSchema(pendingResolutions).omit({
+  id: true,
+  userId: true,
+  companyId: true,
+  createdAt: true,
+}).extend({
+  rescheduledFrom: z.union([z.string(), z.date(), z.null(), z.undefined()]).transform((val) => {
+    if (!val) return null;
+    if (typeof val === 'string') return new Date(val);
+    return val;
+  }).optional().nullable(),
+  rescheduledTo: z.union([z.string(), z.date(), z.null(), z.undefined()]).transform((val) => {
+    if (!val) return null;
+    if (typeof val === 'string') return new Date(val);
+    return val;
+  }).optional().nullable(),
+  contactDate: z.union([z.string(), z.date(), z.null(), z.undefined()]).transform((val) => {
+    if (!val) return null;
+    if (typeof val === 'string') return new Date(val);
+    return val;
+  }).optional().nullable(),
+  awaitingFollowUpDate: z.union([z.string(), z.date(), z.null(), z.undefined()]).transform((val) => {
+    if (!val) return null;
+    if (typeof val === 'string') return new Date(val);
+    return val;
+  }).optional().nullable(),
+});
+
+// Appointment History - Auditoria completa de alterações em agendamentos
+export const appointmentHistory = pgTable("appointment_history", {
+  id: serial("id").primaryKey(),
+  appointmentId: integer("appointment_id").notNull().references(() => appointments.id, { onDelete: 'cascade' }),
+  changedBy: integer("changed_by").notNull().references(() => users.id),
+  changedByName: text("changed_by_name").notNull(), // Nome do usuário (snapshot)
+  changedAt: timestamp("changed_at").defaultNow().notNull(),
+  changeType: text("change_type").notNull(), // created, rescheduled, cancelled, status_changed, address_corrected, provider_updated
+  // Snapshot dos dados antes e depois (para comparação)
+  previousData: jsonb("previous_data"), // Estado anterior
+  newData: jsonb("new_data"), // Estado novo
+  reason: text("reason"), // Motivo da mudança
+  notes: text("notes"), // Observações
+  // Referência à resolução de pendência, se houver
+  pendingResolutionId: integer("pending_resolution_id").references(() => pendingResolutions.id),
+  userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertAppointmentHistorySchema = createInsertSchema(appointmentHistory).omit({
+  id: true,
+  userId: true,
+  companyId: true,
+  createdAt: true,
+});
+
 // Types
 export type Company = typeof companies.$inferSelect;
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
@@ -986,3 +1086,9 @@ export type VehicleChecklistAudit = typeof vehicleChecklistAudits.$inferSelect;
 export type InsertVehicleChecklistAudit = z.infer<typeof insertVehicleChecklistAuditSchema>;
 export type FeatureUsage = typeof featureUsage.$inferSelect;
 export type InsertFeatureUsage = z.infer<typeof insertFeatureUsageSchema>;
+export type CompanyAuditLog = typeof companyAuditLogs.$inferSelect;
+export type InsertCompanyAuditLog = z.infer<typeof insertCompanyAuditLogSchema>;
+export type PendingResolution = typeof pendingResolutions.$inferSelect;
+export type InsertPendingResolution = z.infer<typeof insertPendingResolutionSchema>;
+export type AppointmentHistory = typeof appointmentHistory.$inferSelect;
+export type InsertAppointmentHistory = z.infer<typeof insertAppointmentHistorySchema>;

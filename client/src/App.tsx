@@ -18,7 +18,6 @@ import Services from "./pages/Services";
 import BusinessRules from "./pages/BusinessRules";
 import RoutesHistoryPage from "./pages/routes-history/RoutesHistoryPage";
 import UserManagement from "./pages/UserManagement";
-import AccessSchedules from "./pages/AccessSchedules";
 import VerifyEmail from "./pages/VerifyEmail";
 import SetPassword from "./pages/SetPassword";
 import ChangePassword from "./pages/ChangePassword";
@@ -28,6 +27,7 @@ import SignupCompany from "./pages/SignupCompany";
 import AcceptInvite from "./pages/AcceptInvite";
 import CompanyUsers from "./pages/CompanyUsers";
 import AdminMetrics from "./pages/AdminMetrics";
+import AdminAudit from "./pages/AdminAudit";
 import Layout from "./components/Layout";
 import NotFound from "@/pages/not-found";
 
@@ -92,7 +92,7 @@ function AppRoutes() {
             <Route path="/users" component={UserManagement} />
             <Route path="/company/users" component={CompanyUsers} />
             <Route path="/convite/:token" component={AcceptInvite} />
-            <Route path="/access-schedules" component={AccessSchedules} />
+            <Route path="/admin/audit" component={AdminAudit} />
 
             <Route path="/change-password" component={() => <ChangePassword isRequired={false} />} />
             <Route component={NotFound} />

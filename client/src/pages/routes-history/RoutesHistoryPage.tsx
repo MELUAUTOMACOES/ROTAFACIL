@@ -18,6 +18,8 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import OptimizedRouteMap from "@/components/maps/OptimizedRouteMap";
 import RouteAuditModal from "@/components/RouteAuditModal";
+import { ResolvePendingModal } from "@/components/modals/ResolvePendingModal";
+import { AppointmentHistoryModal } from "@/components/modals/AppointmentHistoryModal";
 import {
   History,
   Search,
@@ -268,6 +270,13 @@ export default function RoutesHistoryPage() {
 
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
   const [auditRouteId, setAuditRouteId] = useState<string | null>(null);
+
+  // Estados para resolução de pendências
+  const [resolvePendingOpen, setResolvePendingOpen] = useState(false);
+  const [selectedPendingAppt, setSelectedPendingAppt] = useState<any | null>(null);
+  const [appointmentHistoryOpen, setAppointmentHistoryOpen] = useState(false);
+  const [selectedHistoryApptId, setSelectedHistoryApptId] = useState<number | null>(null);
+  const [appointmentHistory, setAppointmentHistory] = useState<any[]>([]);
 
   // Função para verificar URL params e abrir automaticamente a modal
   useEffect(() => {
@@ -836,6 +845,75 @@ export default function RoutesHistoryPage() {
     // limpa memória local para não reaproveitar indevidamente
     setLastRemoved(null);
   };
+
+  // ========== FUNÇÕES PARA RESOLUÇÃO DE PENDÊNCIAS ==========
+
+  // Abrir modal de resolução de pendência
+  const handleResolvePending = (appt: any) => {
+    setSelectedPendingAppt(appt);
+    setResolvePendingOpen(true);
+  };
+
+  // Submeter resolução de pendência
+  const handleResolveSubmit = async (resolutionData: any) => {
+    try {
+      const response = await apiRequest("POST", "/api/pending-resolutions/resolve", resolutionData);
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Erro ao resolver pendência");
+      }
+
+      toast({
+        title: "Pendência resolvida",
+        description: "A pendência foi resolvida com sucesso.",
+      });
+
+      // Fecha modal
+      setResolvePendingOpen(false);
+      setSelectedPendingAppt(null);
+
+      // Invalida queries para atualizar a lista
+      await queryClient.invalidateQueries({ queryKey: ['/api/pending-appointments'] });
+      await queryClient.refetchQueries({ queryKey: ['/api/pending-appointments'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/routes'] });
+
+    } catch (error: any) {
+      toast({
+        title: "Erro ao resolver pendência",
+        description: error.message,
+        variant: "destructive",
+      });
+      throw error; // re-throw para o modal tratar
+    }
+  };
+
+  // Buscar e exibir histórico de um agendamento
+  const handleViewHistory = async (appointmentId: number) => {
+    try {
+      const response = await fetch(`/api/appointments/${appointmentId}/history`, {
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error("Erro ao buscar histórico");
+      }
+
+      const history = await response.json();
+      setAppointmentHistory(history);
+      setSelectedHistoryApptId(appointmentId);
+      setAppointmentHistoryOpen(true);
+
+    } catch (error: any) {
+      toast({
+        title: "Erro ao buscar histórico",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
 
   const { data: teams = [] } = useQuery({
     queryKey: ['/api/teams'],
@@ -1893,12 +1971,11 @@ export default function RoutesHistoryPage() {
                       </TableCell>
                       <TableCell className="max-w-[200px] truncate" title={apt.executionNotes}>{apt.executionNotes || '-'}</TableCell>
                       <TableCell>
-                        <Button variant="outline" size="sm" onClick={() => {
-                          // Redirecionar para tela de agendamentos com filtro (implementação futura ou simples redirect)
-                          // Por enquanto, apenas avisa
-                          // setLocation(`/appointments?search=${apt.clientName}`);
-                          toast({ title: "Em breve", description: "Funcionalidade de resolução direta será implementada." });
-                        }}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleResolvePending(apt)}
+                        >
                           Resolver
                         </Button>
                       </TableCell>
@@ -2461,6 +2538,32 @@ export default function RoutesHistoryPage() {
         routeId={auditRouteId}
         open={!!auditRouteId}
         onOpenChange={(open) => !open && setAuditRouteId(null)}
+      />
+
+      {/* Modal de resolução de pendências */}
+      {selectedPendingAppt && (
+        <ResolvePendingModal
+          isOpen={resolvePendingOpen}
+          onClose={() => {
+            setResolvePendingOpen(false);
+            setSelectedPendingAppt(null);
+          }}
+          appointment={selectedPendingAppt}
+          pendingReason={selectedPendingAppt.executionStatus || 'nao_realizado_outro'}
+          onResolve={handleResolveSubmit}
+        />
+      )}
+
+      {/* Modal de histórico de agendamento */}
+      <AppointmentHistoryModal
+        isOpen={appointmentHistoryOpen}
+        onClose={() => {
+          setAppointmentHistoryOpen(false);
+          setSelectedHistoryApptId(null);
+          setAppointmentHistory([]);
+        }}
+        appointmentId={selectedHistoryApptId || 0}
+        history={appointmentHistory}
       />
 
     </div>
