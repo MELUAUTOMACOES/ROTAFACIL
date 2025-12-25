@@ -97,6 +97,7 @@ export function useLocationTracker({ userId, routeId, enabled, providerId }: Loc
         setIsTracking(true);
 
         const track = async () => {
+            console.log('📍 [TRACKER] Executing tracking loop...', { enabled, routeId });
             try {
                 const position = await getCurrentLocation();
 

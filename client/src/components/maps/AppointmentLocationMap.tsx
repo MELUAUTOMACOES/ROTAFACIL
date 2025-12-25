@@ -57,9 +57,9 @@ interface AppointmentLocationMapProps {
 
 export default function AppointmentLocationMap({ clientLocation, executionStart, executionEnd, height = "300px" }: AppointmentLocationMapProps) {
     const points: [number, number][] = [];
-    if (clientLocation) points.push([clientLocation.lat, clientLocation.lng]);
-    if (executionStart) points.push([executionStart.lat, executionStart.lng]);
-    if (executionEnd) points.push([executionEnd.lat, executionEnd.lng]);
+    if (clientLocation && typeof clientLocation.lat === 'number' && typeof clientLocation.lng === 'number') points.push([clientLocation.lat, clientLocation.lng]);
+    if (executionStart && typeof executionStart.lat === 'number' && typeof executionStart.lng === 'number') points.push([executionStart.lat, executionStart.lng]);
+    if (executionEnd && typeof executionEnd.lat === 'number' && typeof executionEnd.lng === 'number') points.push([executionEnd.lat, executionEnd.lng]);
 
     // Filtrar pontos únicos para o bound não quebrar se for tudo igual
     const uniquePoints = points.filter((v, i, a) => a.findIndex(t => (t[0] === v[0] && t[1] === v[1])) === i);

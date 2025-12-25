@@ -300,7 +300,7 @@ export function AppointmentDetailsModal({ isOpen, onClose, appointmentId }: Appo
                                             {executionEnd && (
                                                 <div className="bg-gray-50 p-3 rounded border">
                                                     <span className="text-xs text-gray-500 block">Local da Finalização (GPS)</span>
-                                                    <span className="text-sm font-medium">Lat: {executionEnd.lat.toFixed(5)}, Lng: {executionEnd.lng.toFixed(5)}</span>
+                                                    <span className="text-sm font-medium">Lat: {Number(executionEnd.lat).toFixed(5)}, Lng: {Number(executionEnd.lng).toFixed(5)}</span>
                                                     <span className="text-xs text-gray-400 block mt-1">
                                                         Precisão: {appointment.executionEndLocation?.accuracy ? `±${Math.round(appointment.executionEndLocation.accuracy)}m` : 'N/A'}
                                                     </span>

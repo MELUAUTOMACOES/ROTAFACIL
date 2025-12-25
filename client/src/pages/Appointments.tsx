@@ -2566,8 +2566,8 @@ export default function Appointments() {
                             }`}
                         >
                           <CardContent className="p-6">
-                            <div className="flex items-start justify-between">
-                              <div className="flex items-start space-x-3">
+                            <div className="flex flex-col md:flex-row items-start justify-between gap-4 md:gap-0">
+                              <div className="flex items-start space-x-3 w-full md:flex-1">
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
@@ -2578,8 +2578,8 @@ export default function Appointments() {
                                   }
                                   className="w-4 h-4 text-burnt-yellow bg-gray-100 border-gray-300 rounded focus:ring-burnt-yellow focus:ring-2 mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
-                                <div className="flex-1">
-                                  <div className="flex items-center space-x-3 mb-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2 mb-3">
                                     <h3 className="text-lg font-semibold text-gray-900">
                                       {client?.name || "Cliente não encontrado"}
                                       <span className="ml-2 text-sm font-normal text-gray-500">#{appointment.id}</span>
@@ -2737,7 +2737,7 @@ export default function Appointments() {
                                 </div>
                               </div>
 
-                              <div className="flex space-x-2 ml-4">
+                              <div className="flex space-x-2 w-full md:w-auto justify-end md:ml-4">
                                 <Button
                                   variant="outline"
                                   size="sm"

@@ -4349,6 +4349,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerAuditRoutes(app, authenticateToken);
 
   const httpServer = createServer(app);
+  // RASTREAMENTO DE LOCALIZAÇÃO (GPS)
+  // Recebe pontos de localização do app do prestador
+  app.post("/api/tracking/location", authenticateToken, async (req, res) => {
+    try {
+      const { points } = req.body;
+      console.log(`📍 [TRACKING] Recebendo ${points?.length || 0} pontos de user ${req.user.userId}`);
+
+      if (!points || !Array.isArray(points)) {
+        return res.status(400).json({ message: "Payload inválido" });
+      }
+
+      // Validar e inserir
+      for (const point of points) {
+        if (!point.latitude || !point.longitude) continue;
+
+        await storage.createTrackingLocation({
+          userId: req.user.userId,
+          routeId: point.routeId || null,
+          latitude: point.latitude,
+          longitude: point.longitude,
+          timestamp: new Date(point.timestamp || Date.now()),
+          accuracy: point.accuracy,
+          batteryLevel: point.batteryLevel,
+          speed: point.speed,
+          heading: point.heading,
+          providerId: req.user.userId // Assumindo provider = user
+        });
+      }
+
+      console.log(`✅ [TRACKING] Sucesso ao salvar pontos`);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("❌ [TRACKING] Erro ao salvar localização:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Recupera histórico de localização de uma rota
+  app.get("/api/tracking/route/:routeId", authenticateToken, async (req, res) => {
+    try {
+      const { routeId } = req.params;
+      console.log(`🗺️ [TRACKING] Buscando rastro da rota ${routeId}`);
+
+      const locations = await storage.getRouteTrackingLocations(routeId);
+
+      console.log(`✅ [TRACKING] Retornados ${locations.length} pontos`);
+      res.json(locations);
+    } catch (error: any) {
+      console.error("❌ [TRACKING] Erro ao buscar rastro:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // CEP Proxy to avoid CORS
   app.get("/api/cep/:cep", async (req, res) => {
     try {
