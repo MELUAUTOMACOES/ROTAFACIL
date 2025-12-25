@@ -173,7 +173,7 @@ export interface IStorage {
   getRouteStops(routeId: string): Promise<RouteStop[]>;
   getPendingAppointments(userId: number): Promise<any[]>;
   getAppointmentHistory(appointmentId: number): Promise<AppointmentHistory[]>;
-  createAppointmentHistory(data: InsertAppointmentHistory, userId: number): Promise<AppointmentHistory>;
+  createAppointmentHistory(data: InsertAppointmentHistory, changedBy: number, ownerId: number): Promise<AppointmentHistory>;
 
   // Vehicle Documents
   getVehicleDocuments(vehicleId: number, userId: number): Promise<VehicleDocument[]>;
@@ -404,15 +404,17 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(appointmentHistory.changedAt));
   }
 
-  async createAppointmentHistory(data: InsertAppointmentHistory, userId: number): Promise<AppointmentHistory> {
+  async createAppointmentHistory(data: InsertAppointmentHistory, changedBy: number, ownerId: number): Promise<AppointmentHistory> {
     const [history] = await db.insert(appointmentHistory).values({
       appointmentId: data.appointmentId,
-      changedBy: userId,
+      changedBy: changedBy,
       changedByName: data.changedByName,
       changeType: data.changeType,
       reason: data.reason,
       previousData: data.previousData,
-      newData: data.newData
+      newData: data.newData,
+      userId: ownerId, // Dono do dado
+      notes: data.notes
     }).returning();
     return history;
   }
@@ -962,6 +964,8 @@ export class DatabaseStorage implements IStorage {
       executionNotes?: string | null;
       executionStartedAt?: string | null;
       executionFinishedAt?: string | null;
+      executionStartLocation?: any;
+      executionEndLocation?: any;
     },
     userId: number
   ): Promise<Appointment> {
@@ -978,14 +982,19 @@ export class DatabaseStorage implements IStorage {
     const [currentAppointment] = await db.select().from(appointments).where(eq(appointments.id, id));
 
     if (currentAppointment) {
-      await this.createAppointmentHistory({
+      // Dummy object para satisfazer o type InsertAppointmentHistory que exige changedBy
+      // mas será sobrescrito pelo argumento explicito
+      const historyData: any = {
         appointmentId: id,
-        changedByName: "Prestador (App)", // Poderíamos pegar o nome do usuário se tivéssemos acesso fácil aqui, mas userId serve
+        changedByName: "Prestador (App)",
+        changedBy: userId, // Satisfazendo Zod schema type, embora createAppointmentHistory use o argumento explicito
         changeType: "execution_update",
         reason: "Atualização de status/execução pelo prestador",
         previousData: currentAppointment,
         newData: updateData
-      }, userId);
+      };
+
+      await this.createAppointmentHistory(historyData, userId, currentAppointment.userId);
     }
 
     const [updated] = await db

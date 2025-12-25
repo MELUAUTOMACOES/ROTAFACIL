@@ -66,9 +66,9 @@ export function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
     };
 
     return (
-        <div className="flex flex-col h-full bg-white overflow-hidden">
-            {/* Área de assinatura - ocupa espaço disponível */}
-            <div ref={containerRef} className="flex-1 border-2 border-dashed border-gray-300 rounded-md m-1 relative bg-gray-50 min-h-[200px] max-h-[calc(100vh-150px)]">
+        <div className="flex flex-col h-full bg-white overflow-hidden relative">
+            {/* Área de assinatura - ocupa espaço disponível com margem para os botões */}
+            <div ref={containerRef} className="flex-1 border-2 border-dashed border-gray-300 rounded-md m-1 relative bg-gray-50 mb-[80px] min-h-[300px]">
                 {canvasSize.width > 0 && (
                     <SignatureCanvas
                         ref={sigCanvas}
@@ -88,8 +88,8 @@ export function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
                 )}
             </div>
 
-            {/* Botões - sempre visíveis no final */}
-            <div className="p-3 border-t flex gap-2 justify-between bg-white sticky bottom-0 shrink-0">
+            {/* Botões - fixos na parte inferior */}
+            <div className="absolute bottom-0 left-0 right-0 p-3 border-t flex gap-2 justify-between bg-white z-10">
                 <Button variant="outline" onClick={onCancel} className="flex-1 h-12">
                     <X className="w-4 h-4 mr-1" />
                     Cancelar
