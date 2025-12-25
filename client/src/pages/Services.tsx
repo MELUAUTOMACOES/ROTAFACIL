@@ -8,16 +8,17 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import ServiceForm from "@/components/forms/ServiceForm";
-import { Plus, Wrench, Clock, DollarSign, Edit, Trash2, FileText, Award } from "lucide-react";
+import { Plus, Wrench, Clock, DollarSign, Edit, Trash2, FileText, Award, Search as SelectIcon, ClipboardList } from "lucide-react";
 import { useSafeNavigation } from "@/hooks/useSafeNavigation";
 import type { Service } from "@shared/schema";
 
 export default function Services() {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   // Hook de navegação segura
   const { isSafeToOperate } = useSafeNavigation({
     componentName: 'SERVICES',
@@ -25,7 +26,7 @@ export default function Services() {
       {
         isOpen: isFormOpen,
         setIsOpen: setIsFormOpen,
-        resetState: () => setSelectedService(null)
+        resetState: () => { setSelectedService(null); setSearchTerm(""); }
       }
     ]
   });
@@ -38,6 +39,16 @@ export default function Services() {
       });
       return response.json();
     },
+  });
+
+  // Filtragem de serviços
+  const filteredServices = services.filter((service: Service) => {
+    if (!searchTerm) return true;
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      service.name.toLowerCase().includes(searchLower) ||
+      service.description?.toLowerCase().includes(searchLower)
+    );
   });
 
   const deleteServiceMutation = useMutation({
@@ -77,7 +88,7 @@ export default function Services() {
       console.log('⚠️ [SERVICES] Componente desmontado, operação cancelada');
       return;
     }
-    
+
     setIsFormOpen(false);
     setSelectedService(null);
   };
@@ -85,7 +96,7 @@ export default function Services() {
   const formatDuration = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    
+
     if (hours > 0) {
       return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`;
     }
@@ -114,10 +125,10 @@ export default function Services() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Serviços</h1>
-          <p className="text-gray-600">Gerencie o catálogo de serviços oferecidos</p>
+          <p className="text-gray-600">Gerencie os tipos de serviços oferecidos</p>
         </div>
-        
-        <Button 
+
+        <Button
           className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
           onClick={() => {
             setSelectedService(null);
@@ -129,30 +140,50 @@ export default function Services() {
         </Button>
       </div>
 
+      {/* Search Filter */}
+      <Card className="p-4 bg-white">
+        <div className="relative">
+          <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Buscar por nome ou descrição..."
+            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </Card>
+
       {/* Services List */}
-      {services.length === 0 ? (
+      {filteredServices.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <Wrench className="h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum serviço cadastrado</h3>
+            <ClipboardList className="h-12 w-12 text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {searchTerm ? "Nenhum serviço encontrado" : "Nenhum serviço cadastrado"}
+            </h3>
             <p className="text-gray-600 text-center mb-6">
-              Crie seu catálogo de serviços para organizar os tipos de atendimento oferecidos.
+              {searchTerm
+                ? "Tente buscar com outros termos."
+                : "Cadastre os serviços que sua empresa oferece para utilizá-los nos agendamentos."}
             </p>
-            <Button 
-              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-              onClick={() => {
-                setSelectedService(null);
-                setIsFormOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar Primeiro Serviço
-            </Button>
+            {!searchTerm && (
+              <Button
+                className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                onClick={() => {
+                  setSelectedService(null);
+                  setIsFormOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar Primeiro Serviço
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {services.map((service: Service) => (
+          {filteredServices.map((service: Service) => (
             <Card key={service.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="border-b border-gray-100">
                 <div className="flex items-center justify-between">
@@ -177,44 +208,43 @@ export default function Services() {
                 </div>
               </CardHeader>
               <CardContent className="p-6">
-                <div className="space-y-3">
-                  {service.description && (
-                    <div className="flex items-start space-x-2 text-sm text-gray-600">
-                      <FileText className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                      <span className="leading-relaxed">{service.description}</span>
-                    </div>
-                  )}
-                  
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <Clock className="h-4 w-4" />
-                    <span>Duração: {formatDuration(service.duration)}</span>
+                <p className="text-sm text-gray-600 mb-4 h-10 line-clamp-2">
+                  {service.description || "Sem descrição"}
+                </p>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500 flex items-center">
+                      <Clock className="h-4 w-4 mr-1" /> Duração
+                    </span>
+                    <span className="font-medium">{service.duration} min</span>
                   </div>
-                  
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <DollarSign className="h-4 w-4" />
-                    <span>Preço: {formatPrice(service.price)}</span>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500 flex items-center">
+                      <DollarSign className="h-4 w-4 mr-1" /> Preço
+                    </span>
+                    <span className="font-medium">
+                      {new Intl.NumberFormat('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL'
+                      }).format(Number(service.price) || 0)}
+                    </span>
                   </div>
-                  
-                  {/* Mostra pontos/remuneração quando disponível */}
+
                   {service.points && (
-                    <div className="flex items-center space-x-2 text-sm text-gray-600">
-                      <Award className="h-4 w-4" />
-                      <span>Pontos: {service.points}</span>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500">Pontos/Remuneração</span>
+                      <span className="font-medium">{service.points}</span>
                     </div>
                   )}
-                </div>
-                
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <p className="text-xs text-gray-500">
-                    Cadastrado em {new Date(service.createdAt).toLocaleDateString('pt-BR')}
-                  </p>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
-      
+
       {/* Centralized Dialog for All Service Forms */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent>

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import ClientForm from "@/components/forms/ClientForm";
-import { Plus, Users, Mail, Phone, MapPin, Edit, Trash2, Upload, Download } from "lucide-react";
+import { Plus, Users, Mail, Phone, MapPin, Edit, Trash2, Upload, Download, Search as SelectIcon } from "lucide-react";
 import { downloadCSV, downloadReport, downloadWithConfirmation } from "@/lib/download";
 import { useSafeNavigation } from "@/hooks/useSafeNavigation";
 import type { Client, InsertClient } from "@shared/schema";
@@ -15,9 +15,10 @@ import type { Client, InsertClient } from "@shared/schema";
 export default function Clients() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   // Hook de navegação segura
   const { isSafeToOperate } = useSafeNavigation({
     componentName: 'CLIENTS',
@@ -38,6 +39,19 @@ export default function Clients() {
       });
       return response.json();
     },
+  });
+
+  // Filtragem de clientes
+  const filteredClients = clients.filter((client: Client) => {
+    if (!searchTerm) return true;
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      client.name.toLowerCase().includes(searchLower) ||
+      client.email?.toLowerCase().includes(searchLower) ||
+      client.cpf.includes(searchLower) ||
+      client.phone1?.includes(searchLower) ||
+      client.cidade.toLowerCase().includes(searchLower)
+    );
   });
 
   const deleteClientMutation = useMutation({
@@ -70,9 +84,9 @@ export default function Clients() {
       if (data.errors > 0) {
         const errorMessage = data.detailedErrors
           ? data.detailedErrors.slice(0, 2).join('\n') +
-            (data.detailedErrors.length > 2
-              ? `\n... e mais ${data.detailedErrors.length - 2} erros`
-              : '')
+          (data.detailedErrors.length > 2
+            ? `\n... e mais ${data.detailedErrors.length - 2} erros`
+            : '')
           : `${data.errors} erros encontrados`;
 
         toast({
@@ -194,7 +208,7 @@ export default function Clients() {
                 "-".repeat(30),
                 "• Nome (coluna 1)",
                 "• CPF (coluna 2)",
-                "• Telefone 1 (coluna 4)", 
+                "• Telefone 1 (coluna 4)",
                 "• CEP (coluna 5)",
                 "• Bairro (coluna 6)",
                 "• Cidade (coluna 7)",
@@ -210,7 +224,7 @@ export default function Clients() {
 
               // Download seguro do relatório de erros
               const filename = `relatorio_erros_clientes_${new Date().toISOString().split('T')[0]}_${new Date().toTimeString().split(' ')[0].replace(/:/g, '')}.txt`;
-              
+
               setTimeout(() => {
                 downloadWithConfirmation(
                   errorReport,
@@ -358,7 +372,7 @@ export default function Clients() {
       console.log('⚠️ [CLIENTS] Componente desmontado, operação cancelada');
       return;
     }
-    
+
     console.log("Dialog de cliente fechado - resetando cliente selecionado!");
     setIsFormOpen(false);
     setSelectedClient(null);
@@ -383,42 +397,45 @@ export default function Clients() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
           <p className="text-gray-600">Gerencie sua base de clientes</p>
         </div>
-        
-        <div className="flex gap-2">
+
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
           <Button
             variant="outline"
             onClick={downloadCSVTemplate}
             disabled={importClientsMutation.isPending}
+            className="flex-1 md:flex-none"
           >
             <Download className="h-4 w-4 mr-2" />
-            Baixar CSV Modelo
+            Baixar Modelo
           </Button>
-          
+
           <Button
             variant="outline"
             onClick={handleImportCSV}
             disabled={importClientsMutation.isPending}
+            className="flex-1 md:flex-none"
           >
             <Upload className="h-4 w-4 mr-2" />
-            Importar CSV
+            Importar
           </Button>
-          
+
           <Button
             variant="outline"
             onClick={exportToCSV}
             disabled={clients.length === 0}
+            className="flex-1 md:flex-none"
           >
             <Download className="h-4 w-4 mr-2" />
-            Exportar CSV
+            Exportar
           </Button>
-          
-          <Button 
-            className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+
+          <Button
+            className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white flex-1 md:flex-none"
             onClick={() => {
               setSelectedClient(null);
               setIsFormOpen(true);
@@ -430,30 +447,50 @@ export default function Clients() {
         </div>
       </div>
 
+      {/* Search Filter */}
+      <Card className="p-4 bg-white">
+        <div className="relative">
+          <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Buscar por nome, email, CPF, telefone ou cidade..."
+            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </Card>
+
       {/* Clients List */}
-      {clients.length === 0 ? (
+      {filteredClients.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Users className="h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum cliente cadastrado</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {searchTerm ? "Nenhum cliente encontrado" : "Nenhum cliente cadastrado"}
+            </h3>
             <p className="text-gray-600 text-center mb-6">
-              Comece adicionando seus primeiros clientes para organizar seus atendimentos.
+              {searchTerm
+                ? "Tente buscar com outros termos."
+                : "Comece adicionando seus primeiros clientes para organizar seus atendimentos."}
             </p>
-            <Button 
-              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-              onClick={() => {
-                setSelectedClient(null);
-                setIsFormOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar Primeiro Cliente
-            </Button>
+            {!searchTerm && (
+              <Button
+                className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                onClick={() => {
+                  setSelectedClient(null);
+                  setIsFormOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar Primeiro Cliente
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {clients.map((client: Client) => (
+          {filteredClients.map((client: Client) => (
             <Card key={client.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="border-b border-gray-100">
                 <div className="flex items-center justify-between">
@@ -485,32 +522,32 @@ export default function Clients() {
                       <span>{client.email}</span>
                     </div>
                   )}
-                  
+
                   {client.phone1 && (
                     <div className="flex items-center space-x-2 text-sm text-gray-600">
                       <Phone className="h-4 w-4" />
                       <span>{client.phone1}</span>
                     </div>
                   )}
-                  
+
                   {client.phone2 && (
                     <div className="flex items-center space-x-2 text-sm text-gray-600">
                       <Phone className="h-4 w-4" />
                       <span>{client.phone2}</span>
                     </div>
                   )}
-                  
+
                   <div className="flex items-start space-x-2 text-sm text-gray-600">
                     <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
                     <span className="leading-relaxed">
-                      {client.logradouro}, {client.numero}, {client.bairro}, {client.cidade} 
+                      {client.logradouro}, {client.numero}, {client.bairro}, {client.cidade}
                       {client.complemento && `, ${client.complemento}`}
                       <br />
                       CEP: {client.cep}
                     </span>
                   </div>
                 </div>
-                
+
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <p className="text-xs text-gray-500">
                     Cadastrado em {new Date(client.createdAt).toLocaleDateString('pt-BR')}
@@ -521,7 +558,7 @@ export default function Clients() {
           ))}
         </div>
       )}
-      
+
       {/* Centralized Dialog for All Client Forms */}
       <Dialog open={isFormOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent>

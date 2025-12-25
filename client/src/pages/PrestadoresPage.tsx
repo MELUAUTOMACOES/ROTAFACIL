@@ -5,13 +5,14 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
     MapPin, Calendar, Navigation, CheckCircle, Clock,
-    AlertTriangle, ChevronRight, QrCode, LogOut, Map as MapIcon, ClipboardCheck, PlayCircle, Home, UserCheck, Timer
+    AlertTriangle, ChevronRight, QrCode, LogOut, Map as MapIcon, ClipboardCheck, PlayCircle, Home, UserCheck, Timer, Coffee, Wrench, Fuel, FileWarning
 } from 'lucide-react';
 import QRCode from "react-qr-code";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,6 +35,13 @@ export default function PrestadoresPage() {
     const [finalizeMotivo, setFinalizeMotivo] = useState('');
     const [routeEndLocation, setRouteEndLocation] = useState<'last_client' | 'company_home'>('last_client');
 
+    // Estado para modal de ocorrência
+    const [showOccurrenceModal, setShowOccurrenceModal] = useState(false);
+    const [occurrenceType, setOccurrenceType] = useState<string>('');
+    const [occurrenceNotes, setOccurrenceNotes] = useState('');
+    const [occurrenceTime, setOccurrenceTime] = useState(''); // Horário aproximado HH:mm
+    const [occurrenceDuration, setOccurrenceDuration] = useState(''); // Duração em minutos
+
     const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
     // Buscar lista de prestadores ativos (apenas admin)
@@ -44,6 +52,15 @@ export default function PrestadoresPage() {
             return res.json();
         },
         enabled: user?.role === 'admin'
+    });
+
+    // Buscar regras de negócio para mensagem WhatsApp
+    const { data: businessRules } = useQuery({
+        queryKey: ['/api/business-rules'],
+        queryFn: async () => {
+            const res = await apiRequest("GET", "/api/business-rules");
+            return res.json();
+        }
     });
 
     // Se for admin e tiver prestadores, seleciona o primeiro automaticamente se nenhum selecionado
@@ -126,6 +143,40 @@ export default function PrestadoresPage() {
         }
     });
 
+    const createOccurrenceMutation = useMutation({
+        mutationFn: async ({ routeId, type, notes, approximateTime, durationMinutes }: {
+            routeId: string;
+            type: string;
+            notes: string;
+            approximateTime?: string;
+            durationMinutes?: number;
+        }) => {
+            const res = await apiRequest("POST", `/api/provider/route/${routeId}/occurrence`, {
+                type,
+                notes,
+                approximateTime,
+                durationMinutes
+            });
+            return res.json();
+        },
+        onSuccess: () => {
+            setShowOccurrenceModal(false);
+            setOccurrenceType('');
+            setOccurrenceNotes('');
+            toast({
+                title: "Ocorrência registrada!",
+                description: "A pausa foi registrada com sucesso.",
+            });
+        },
+        onError: (error: any) => {
+            toast({
+                title: "Erro",
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    });
+
     // Verificar se há algum atendimento em andamento (iniciou mas não finalizou)
     const inProgressAppointment = routeData?.stops?.find((s: any) =>
         s.appointment?.executionStartedAt && !s.appointment?.executionFinishedAt && !s.appointment?.executionStatus
@@ -182,6 +233,31 @@ export default function PrestadoresPage() {
             return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    // Gerar link WhatsApp com mensagem personalizada
+    const generateWhatsAppLink = (phone: string, appointment: any) => {
+        // Limpar telefone (remover caracteres não numéricos)
+        const cleanPhone = phone?.replace(/\D/g, '') || '';
+        if (!cleanPhone) return null;
+
+        // Adicionar código do Brasil se não tiver
+        const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+
+        // Template padrão ou da configuração
+        let message = businessRules?.whatsappMessageTemplate ||
+            "Olá, {nome_cliente}! Sou da {nome_empresa}, estou a caminho para realizar o serviço {nome_servico}. Previsão de chegada: {horario_estimado}.";
+
+        // Substituir variáveis
+        message = message
+            .replace(/{nome_cliente}/g, appointment?.clientName || 'Cliente')
+            .replace(/{nome_empresa}/g, (user as any)?.companyName || user?.name || 'Empresa')
+            .replace(/{nome_servico}/g, appointment?.serviceName || 'serviço')
+            .replace(/{data_agendamento}/g, appointment?.scheduledDate ? format(new Date(appointment.scheduledDate), 'dd/MM/yyyy') : '')
+            .replace(/{horario_estimado}/g, appointment?.scheduledTime || 'em breve')
+            .replace(/{endereco}/g, appointment?.clientAddress || '');
+
+        return `https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`;
     };
 
     const handleAppointmentClick = (apt: any) => {
@@ -360,6 +436,10 @@ export default function PrestadoresPage() {
     const { route, stops, summary } = routeData;
     const isRouteFinalized = ['finalizado', 'cancelado', 'incompleto'].includes(route.status);
 
+    // Contar agendamentos sem status de execução
+    const pendingAppointments = stops?.filter((s: any) => !s.appointment?.executionStatus)?.length || 0;
+    const canCloseRoute = pendingAppointments === 0;
+
     return (
         <div className="min-h-screen bg-gray-50 pb-20">
             {/* Header */}
@@ -444,15 +524,25 @@ export default function PrestadoresPage() {
 
                 <TabsContent value="routes" className="mt-0">
                     {/* Map Actions */}
-                    <div className="p-4 grid grid-cols-2 gap-3">
-                        <Button variant="outline" className="w-full" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${stops[0]?.lat},${stops[0]?.lng}`, '_blank')}>
-                            <MapIcon className="w-4 h-4 mr-2" />
-                            Abrir Mapa
+                    <div className="p-4 grid grid-cols-3 gap-2">
+                        <Button variant="outline" className="w-full text-xs" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${stops[0]?.lat},${stops[0]?.lng}`, '_blank')}>
+                            <MapIcon className="w-4 h-4 mr-1" />
+                            Mapa
                         </Button>
-                        <Button variant="outline" className="w-full" onClick={() => setShowQRModal(true)}>
-                            <QrCode className="w-4 h-4 mr-2" />
-                            Ver QR Code
+                        <Button variant="outline" className="w-full text-xs" onClick={() => setShowQRModal(true)}>
+                            <QrCode className="w-4 h-4 mr-1" />
+                            QR Code
                         </Button>
+                        {route.routeStartedAt && !isRouteFinalized && (
+                            <Button
+                                variant="outline"
+                                className="w-full text-xs border-orange-300 text-orange-600 hover:bg-orange-50"
+                                onClick={() => setShowOccurrenceModal(true)}
+                            >
+                                <FileWarning className="w-4 h-4 mr-1" />
+                                Ocorrência
+                            </Button>
+                        )}
                     </div>
 
                     {/* Stops List */}
@@ -492,9 +582,41 @@ export default function PrestadoresPage() {
 
                                             <p className="text-sm text-gray-600 mb-1 line-clamp-1">{stop.appointment?.serviceName}</p>
 
-                                            <div className="flex items-start gap-1 text-xs text-gray-500 mt-2">
-                                                <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                                                <span className="line-clamp-2">{stop.address}</span>
+                                            <div className="flex items-center justify-between mt-2">
+                                                <div className="flex items-start gap-1 text-xs text-gray-500 flex-1">
+                                                    <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                                                    <span className="line-clamp-1">{stop.address}</span>
+                                                </div>
+
+                                                {/* Botões WhatsApp */}
+                                                <div className="flex gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
+                                                    {stop.appointment?.phone1 && generateWhatsAppLink(stop.appointment.phone1, stop.appointment) && (
+                                                        <a
+                                                            href={generateWhatsAppLink(stop.appointment.phone1, stop.appointment)!}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="p-2 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors"
+                                                            title={`WhatsApp: ${stop.appointment.phone1}`}
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                                                            </svg>
+                                                        </a>
+                                                    )}
+                                                    {stop.appointment?.phone2 && generateWhatsAppLink(stop.appointment.phone2, stop.appointment) && (
+                                                        <a
+                                                            href={generateWhatsAppLink(stop.appointment.phone2, stop.appointment)!}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="p-2 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors"
+                                                            title={`WhatsApp: ${stop.appointment.phone2}`}
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                                                            </svg>
+                                                        </a>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
 
@@ -524,13 +646,21 @@ export default function PrestadoresPage() {
                                 </Button>
                             ) : (
                                 // Rota iniciada - mostrar botão Fechar Romaneio
-                                <Button
-                                    className="w-full bg-gray-900 hover:bg-gray-800 text-white h-12 text-lg"
-                                    onClick={handleOpenFinalizeModal}
-                                >
-                                    <CheckCircle className="w-5 h-5 mr-2" />
-                                    Fechar Romaneio
-                                </Button>
+                                <div className="flex flex-col gap-2">
+                                    <Button
+                                        className={`w-full h-12 text-lg ${canCloseRoute ? 'bg-gray-900 hover:bg-gray-800' : 'bg-gray-400 cursor-not-allowed'} text-white`}
+                                        onClick={handleOpenFinalizeModal}
+                                        disabled={!canCloseRoute}
+                                    >
+                                        <CheckCircle className="w-5 h-5 mr-2" />
+                                        Fechar Romaneio
+                                    </Button>
+                                    {!canCloseRoute && (
+                                        <p className="text-center text-sm text-orange-600">
+                                            ⚠️ Finalize {pendingAppointments} atendimento{pendingAppointments > 1 ? 's' : ''} pendente{pendingAppointments > 1 ? 's' : ''}
+                                        </p>
+                                    )}
+                                </div>
                             )}
                         </div>
                     )}
@@ -654,6 +784,128 @@ export default function PrestadoresPage() {
                     <p className="text-sm text-gray-500 text-center mt-2">
                         Escaneie para abrir no Google Maps
                     </p>
+                </DialogContent>
+            </Dialog>
+
+            {/* Occurrence Modal */}
+            <Dialog open={showOccurrenceModal} onOpenChange={setShowOccurrenceModal}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <FileWarning className="w-5 h-5 text-orange-500" />
+                            Registrar Ocorrência
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-4">
+                        <Label className="font-medium">Tipo de Ocorrência</Label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setOccurrenceType('almoco')}
+                                className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${occurrenceType === 'almoco'
+                                    ? 'border-orange-500 bg-orange-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                            >
+                                <Coffee className={`w-8 h-8 mb-2 ${occurrenceType === 'almoco' ? 'text-orange-500' : 'text-gray-400'}`} />
+                                <span className={`text-sm font-medium ${occurrenceType === 'almoco' ? 'text-orange-600' : 'text-gray-600'}`}>
+                                    Almoço
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setOccurrenceType('problema_tecnico')}
+                                className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${occurrenceType === 'problema_tecnico'
+                                    ? 'border-orange-500 bg-orange-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                            >
+                                <Wrench className={`w-8 h-8 mb-2 ${occurrenceType === 'problema_tecnico' ? 'text-orange-500' : 'text-gray-400'}`} />
+                                <span className={`text-sm font-medium ${occurrenceType === 'problema_tecnico' ? 'text-orange-600' : 'text-gray-600'}`}>
+                                    Problema Técnico
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setOccurrenceType('abastecimento')}
+                                className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${occurrenceType === 'abastecimento'
+                                    ? 'border-orange-500 bg-orange-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                            >
+                                <Fuel className={`w-8 h-8 mb-2 ${occurrenceType === 'abastecimento' ? 'text-orange-500' : 'text-gray-400'}`} />
+                                <span className={`text-sm font-medium ${occurrenceType === 'abastecimento' ? 'text-orange-600' : 'text-gray-600'}`}>
+                                    Abastecimento
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setOccurrenceType('outro')}
+                                className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${occurrenceType === 'outro'
+                                    ? 'border-orange-500 bg-orange-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                            >
+                                <AlertTriangle className={`w-8 h-8 mb-2 ${occurrenceType === 'outro' ? 'text-orange-500' : 'text-gray-400'}`} />
+                                <span className={`text-sm font-medium ${occurrenceType === 'outro' ? 'text-orange-600' : 'text-gray-600'}`}>
+                                    Outro
+                                </span>
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-2">
+                                <Label>Horário Aproximado</Label>
+                                <Input
+                                    type="time"
+                                    value={occurrenceTime}
+                                    onChange={(e) => setOccurrenceTime(e.target.value)}
+                                    placeholder="HH:mm"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Duração (minutos)</Label>
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    value={occurrenceDuration}
+                                    onChange={(e) => setOccurrenceDuration(e.target.value)}
+                                    placeholder="Ex: 60"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Observações (opcional)</Label>
+                            <Textarea
+                                placeholder="Descreva a ocorrência..."
+                                value={occurrenceNotes}
+                                onChange={(e) => setOccurrenceNotes(e.target.value)}
+                                rows={3}
+                            />
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowOccurrenceModal(false)}>Cancelar</Button>
+                        <Button
+                            onClick={() => {
+                                const durationNum = occurrenceDuration ? parseInt(occurrenceDuration) : undefined;
+                                createOccurrenceMutation.mutate({
+                                    routeId: route.id,
+                                    type: occurrenceType,
+                                    notes: occurrenceNotes,
+                                    approximateTime: occurrenceTime || undefined,
+                                    durationMinutes: durationNum
+                                });
+                            }}
+                            disabled={!occurrenceType || createOccurrenceMutation.isPending}
+                            className="bg-orange-500 hover:bg-orange-600 text-white"
+                        >
+                            {createOccurrenceMutation.isPending ? 'Registrando...' : 'Registrar'}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

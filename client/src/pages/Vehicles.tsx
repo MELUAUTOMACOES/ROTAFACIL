@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import VehicleForm from "@/components/forms/VehicleForm";
 import VehicleMaintenanceForm from "@/components/forms/VehicleMaintenanceForm";
-import { Plus, Car, Calendar, User, Users, Edit, Trash2, Wrench, FileText, ClipboardCheck, Search } from "lucide-react";
+import { Plus, Car, Calendar, User, Users, Edit, Trash2, Wrench, FileText, ClipboardCheck, Search, Search as SelectIcon } from "lucide-react";
 import type { Vehicle, Technician, Team, VehicleMaintenance } from "@shared/schema";
 import VehicleChecklistAuditTab from "@/components/vehicles/VehicleChecklistAuditTab";
 
@@ -24,6 +24,11 @@ export default function Vehicles() {
   const [isMaintenanceFormOpen, setIsMaintenanceFormOpen] = useState(false);
   const [selectedVehicleForMaintenance, setSelectedVehicleForMaintenance] = useState<Vehicle | null>(null);
   const [selectedMaintenance, setSelectedMaintenance] = useState<VehicleMaintenance | null>(null);
+
+  // Estados de filtro
+  const [vehicleSearch, setVehicleSearch] = useState("");
+  const [vehicleResponsibility, setVehicleResponsibility] = useState<"all" | "assigned" | "unassigned">("all");
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -67,6 +72,36 @@ export default function Vehicles() {
     },
   });
 
+  const getTechnician = (technicianId: number | null) => {
+    if (!technicianId) return null;
+    return technicians.find((t: Technician) => t.id === technicianId);
+  };
+
+  const getTeam = (teamId: number | null) => {
+    if (!teamId) return null;
+    return teams.find((t: Team) => t.id === teamId);
+  };
+
+  // Filtragem de veículos
+  const filteredVehicles = vehicles.filter((vehicle: Vehicle) => {
+    // Filtro de texto (Placa, Marca, Modelo)
+    const searchLower = vehicleSearch.toLowerCase();
+    const matchesSearch =
+      !vehicleSearch ||
+      vehicle.plate.toLowerCase().includes(searchLower) ||
+      vehicle.brand.toLowerCase().includes(searchLower) ||
+      vehicle.model.toLowerCase().includes(searchLower);
+
+    // Filtro de responsabilidade
+    const hasAssignment = vehicle.technicianId || vehicle.teamId;
+    const matchesResponsibility =
+      vehicleResponsibility === "all" ||
+      (vehicleResponsibility === "assigned" && hasAssignment) ||
+      (vehicleResponsibility === "unassigned" && !hasAssignment);
+
+    return matchesSearch && matchesResponsibility;
+  });
+
   const deleteVehicleMutation = useMutation({
     mutationFn: async (id: number) => {
       await apiRequest("DELETE", `/api/vehicles/${id}`, undefined);
@@ -101,16 +136,6 @@ export default function Vehicles() {
   const handleFormClose = () => {
     setIsFormOpen(false);
     setSelectedVehicle(null);
-  };
-
-  const getTechnician = (technicianId: number | null) => {
-    if (!technicianId) return null;
-    return technicians.find((t: Technician) => t.id === technicianId);
-  };
-
-  const getTeam = (teamId: number | null) => {
-    if (!teamId) return null;
-    return teams.find((t: Team) => t.id === teamId);
   };
 
   if (isLoading) {
@@ -164,30 +189,64 @@ export default function Vehicles() {
         </TabsList>
 
         {/* Tab: Veículos */}
-        <TabsContent value="veiculos" className="mt-4">
-          {vehicles.length === 0 ? (
+        <TabsContent value="veiculos" className="mt-4 space-y-4">
+
+          {/* Filtros de Veículos */}
+          <Card className="p-4 bg-white">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="relative flex-1">
+                <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por placa, marca ou modelo..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
+                  value={vehicleSearch}
+                  onChange={(e) => setVehicleSearch(e.target.value)}
+                />
+              </div>
+              <div className="w-full md:w-48">
+                <select
+                  className="w-full h-full p-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent bg-white"
+                  value={vehicleResponsibility}
+                  onChange={(e) => setVehicleResponsibility(e.target.value as any)}
+                >
+                  <option value="all">Todos os veículos</option>
+                  <option value="assigned">Com Responsável</option>
+                  <option value="unassigned">Sem Responsável</option>
+                </select>
+              </div>
+            </div>
+          </Card>
+
+          {filteredVehicles.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Car className="h-12 w-12 text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum veículo cadastrado</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {vehicleSearch || vehicleResponsibility !== 'all' ? "Nenhum veículo encontrado" : "Nenhum veículo cadastrado"}
+                </h3>
                 <p className="text-gray-600 text-center mb-6">
-                  Adicione veículos à sua frota para otimizar os atendimentos técnicos.
+                  {vehicleSearch || vehicleResponsibility !== 'all'
+                    ? "Tente ajustar os filtros de busca."
+                    : "Adicione veículos à sua frota para otimizar os atendimentos técnicos."}
                 </p>
-                <Button
-                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                  onClick={() => {
-                    setSelectedVehicle(null);
-                    setIsFormOpen(true);
-                  }}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Primeiro Veículo
-                </Button>
+                {!vehicleSearch && vehicleResponsibility === 'all' && (
+                  <Button
+                    className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                    onClick={() => {
+                      setSelectedVehicle(null);
+                      setIsFormOpen(true);
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar Primeiro Veículo
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {vehicles.map((vehicle: Vehicle) => {
+              {filteredVehicles.map((vehicle: Vehicle) => {
                 const assignedTechnician = getTechnician(vehicle.technicianId);
                 const assignedTeam = getTeam(vehicle.teamId);
                 const hasAssignment = assignedTechnician || assignedTeam;

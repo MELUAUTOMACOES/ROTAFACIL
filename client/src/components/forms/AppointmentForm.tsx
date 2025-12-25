@@ -61,7 +61,15 @@ export default function AppointmentForm({
   // Verificar se o agendamento está em romaneio confirmado/finalizado
   const routeInfo = (appointment as any)?.routeInfo;
   const isInConfirmedRoute = routeInfo && (routeInfo.status === 'confirmado' || routeInfo.status === 'finalizado');
-  const isReadOnly = isInConfirmedRoute || false;
+
+  // Verificar se o status do agendamento permite edição
+  // Apenas agendamentos com status 'scheduled' ou 'rescheduled' podem ser editados
+  const editableStatuses = ['scheduled', 'rescheduled'];
+  const isStatusEditable = !appointment || editableStatuses.includes(appointment.status);
+  const isStatusBlocked = appointment && !isStatusEditable;
+
+  const isReadOnly = isInConfirmedRoute || isStatusBlocked || false;
+
 
   const form = useForm<InsertAppointment>({
     resolver: zodResolver(extendedInsertAppointmentSchema),
@@ -410,6 +418,23 @@ export default function AppointmentForm({
           </div>
         </div>
       )}
+
+      {/* Alerta de Status não editável */}
+      {isStatusBlocked && !isInConfirmedRoute && (
+        <div className="bg-gray-50 border border-gray-300 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-gray-600 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <h4 className="font-semibold text-gray-900 mb-1">
+              🔒 Agendamento não editável
+            </h4>
+            <p className="text-sm text-gray-700">
+              Este agendamento está com status <strong>"{appointment?.status === 'completed' ? 'Concluído' : appointment?.status === 'cancelled' ? 'Cancelado' : appointment?.status === 'in_progress' ? 'Em Andamento' : appointment?.status}"</strong> e não pode ser editado.
+              Apenas agendamentos com status "Agendado" ou "Remarcado" podem ser alterados.
+            </p>
+          </div>
+        </div>
+      )}
+
 
       <div className="flex gap-2 mb-4">
         <NewClientDialog onClientCreated={handleClientCreated}>

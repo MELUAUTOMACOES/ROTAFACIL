@@ -20,6 +20,7 @@ import OptimizedRouteMap from "@/components/maps/OptimizedRouteMap";
 import RouteAuditModal from "@/components/RouteAuditModal";
 import { ResolvePendingModal } from "@/components/modals/ResolvePendingModal";
 import { AppointmentHistoryModal } from "@/components/modals/AppointmentHistoryModal";
+import { AppointmentDetailsModal } from "@/components/modals/AppointmentDetailsModal";
 import {
   History,
   Search,
@@ -277,6 +278,7 @@ export default function RoutesHistoryPage() {
   const [appointmentHistoryOpen, setAppointmentHistoryOpen] = useState(false);
   const [selectedHistoryApptId, setSelectedHistoryApptId] = useState<number | null>(null);
   const [appointmentHistory, setAppointmentHistory] = useState<any[]>([]);
+  const [appointmentDetailsId, setAppointmentDetailsId] = useState<number | null>(null);
 
   // Função para verificar URL params e abrir automaticamente a modal
   useEffect(() => {
@@ -2292,23 +2294,38 @@ export default function RoutesHistoryPage() {
                                       </div>
                                     )}
                                   </div>
-                                  {/* Botão remover */}
-                                  {isRouteEditable(routeDetail.route?.status) && (
-                                    <button
-                                      onClick={() => {
-                                        setStopToRemove({
-                                          id: stop.id,
-                                          clientName: stop.clientName || undefined
-                                        });
-                                        setRemoveOpen(true);
-                                      }}
-                                      className="ml-2 rounded-md p-1 text-gray-500 hover:text-red-600 hover:bg-red-50"
-                                      title="Remover da rota"
-                                      aria-label="Remover da rota"
-                                    >
-                                      <X className="h-4 w-4" />
-                                    </button>
-                                  )}
+                                  {/* Botões olho e remover */}
+                                  <div className="flex items-center gap-1">
+                                    {stop.appointmentNumericId && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setAppointmentDetailsId(stop.appointmentNumericId || null);
+                                        }}
+                                        className="rounded-md p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50"
+                                        title="Ver detalhes do atendimento"
+                                        aria-label="Ver detalhes"
+                                      >
+                                        <Eye className="h-4 w-4" />
+                                      </button>
+                                    )}
+                                    {isRouteEditable(routeDetail.route?.status) && (
+                                      <button
+                                        onClick={() => {
+                                          setStopToRemove({
+                                            id: stop.id,
+                                            clientName: stop.clientName || undefined
+                                          });
+                                          setRemoveOpen(true);
+                                        }}
+                                        className="rounded-md p-1 text-gray-500 hover:text-red-600 hover:bg-red-50"
+                                        title="Remover da rota"
+                                        aria-label="Remover da rota"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </SortableStopItem>
                             ))}
@@ -2332,6 +2349,20 @@ export default function RoutesHistoryPage() {
                                 </div>
                               )}
                             </div>
+                            {/* Botão olho */}
+                            {stop.appointmentNumericId && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAppointmentDetailsId(stop.appointmentNumericId || null);
+                                }}
+                                className="rounded-md p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50"
+                                title="Ver detalhes do atendimento"
+                                aria-label="Ver detalhes"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
                         ))
                       )}
@@ -2564,6 +2595,13 @@ export default function RoutesHistoryPage() {
         }}
         appointmentId={selectedHistoryApptId || 0}
         history={appointmentHistory}
+      />
+
+      {/* Modal de detalhes do agendamento */}
+      <AppointmentDetailsModal
+        isOpen={!!appointmentDetailsId}
+        onClose={() => setAppointmentDetailsId(null)}
+        appointmentId={appointmentDetailsId}
       />
 
     </div>

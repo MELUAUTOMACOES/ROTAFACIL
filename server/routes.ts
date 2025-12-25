@@ -5,8 +5,8 @@ import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import crypto from "node:crypto"; // para randomUUID
 import { db } from "./db"; // ajuste o caminho se o seu db estiver noutro arquivo
-import { routes, routeStops, appointments, clients, users, dailyAvailability, vehicleChecklists, vehicleChecklistItems, teamMembers, pendingResolutions, appointmentHistory } from "@shared/schema";
-import { eq, inArray, sql, and, or, gte } from "drizzle-orm";
+import { routes, routeStops, appointments, clients, users, dailyAvailability, vehicleChecklists, vehicleChecklistItems, teamMembers, pendingResolutions, appointmentHistory, routeOccurrences } from "@shared/schema";
+import { eq, inArray, sql, and, or, gte, desc } from "drizzle-orm";
 import { z } from "zod";
 import { format } from "date-fns";
 import {
@@ -338,6 +338,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           appointment: {
             ...apt,
             clientName: client?.name || "Cliente não encontrado",
+            phone1: client?.phone1 || null,
+            phone2: client?.phone2 || null,
+            address: client ? `${client.logradouro}, ${client.numero}${client.complemento ? ` - ${client.complemento}` : ''}` : null,
             serviceName: service?.name || "Serviço não encontrado",
             serviceDuration: service?.duration || 0,
           }
@@ -552,6 +555,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(route);
     } catch (error: any) {
       console.error("❌ [PROVIDER] Erro ao finalizar rota:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // 3.5 Registrar ocorrência na rota (pausas como almoço, abastecimento, etc.)
+  app.post("/api/provider/route/:id/occurrence", authenticateToken, async (req: any, res) => {
+    try {
+      const { id } = req.params; // UUID da rota
+      const { type, notes, approximateTime, durationMinutes } = req.body;
+
+      // Validar tipo
+      const validTypes = ['almoco', 'problema_tecnico', 'abastecimento', 'outro'];
+      if (!type || !validTypes.includes(type)) {
+        return res.status(400).json({ message: "Tipo de ocorrência inválido" });
+      }
+
+      // Validar campos de tempo (opcional)
+      if (approximateTime && !/^\d{2}:\d{2}$/.test(approximateTime)) {
+        return res.status(400).json({ message: "Formato de hora inválido. Use HH:mm" });
+      }
+
+      // Inserir ocorrência
+      const [occurrence] = await db.insert(routeOccurrences).values({
+        routeId: id,
+        userId: req.user.userId,
+        type,
+        startedAt: new Date(),
+        notes: notes || null,
+        approximateTime: approximateTime || null,
+        durationMinutes: durationMinutes || null
+      }).returning();
+
+      res.json(occurrence);
+    } catch (error: any) {
+      console.error("❌ [PROVIDER] Erro ao registrar ocorrência:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // 3.6 Listar ocorrências da rota
+  app.get("/api/provider/route/:id/occurrences", authenticateToken, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      const occurrences = await db.select()
+        .from(routeOccurrences)
+        .where(eq(routeOccurrences.routeId, id))
+        .orderBy(desc(routeOccurrences.startedAt));
+
+      res.json(occurrences);
+    } catch (error: any) {
+      console.error("❌ [PROVIDER] Erro ao listar ocorrências:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // 3.7 Finalizar ocorrência (marcar hora de fim)
+  app.patch("/api/provider/occurrence/:id/finish", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+
+      const [occurrence] = await db.update(routeOccurrences)
+        .set({ finishedAt: new Date() })
+        .where(eq(routeOccurrences.id, id))
+        .returning();
+
+      if (!occurrence) {
+        return res.status(404).json({ message: "Ocorrência não encontrada" });
+      }
+
+      res.json(occurrence);
+    } catch (error: any) {
+      console.error("❌ [PROVIDER] Erro ao finalizar ocorrência:", error);
       res.status(500).json({ message: error.message });
     }
   });
@@ -1748,109 +1824,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dateFilter.setMonth(dateFilter.getMonth() - 6);
       }
 
-      // 🚀 OTIMIZAÇÃO: Uma única query com LEFT JOIN ao invés de N+1 queries
-      const appointmentsWithRouteStatus = await db
-        .select({
-          // Campos do appointment
-          id: appointments.id,
-          clientId: appointments.clientId,
-          serviceId: appointments.serviceId,
-          technicianId: appointments.technicianId,
-          teamId: appointments.teamId,
-          scheduledDate: appointments.scheduledDate,
-          allDay: appointments.allDay,
-          status: appointments.status,
-          priority: appointments.priority,
-          notes: appointments.notes,
-          photos: appointments.photos,
-          signature: appointments.signature,
-          feedback: appointments.feedback,
-          executionStatus: appointments.executionStatus,
-          executionNotes: appointments.executionNotes,
-          cep: appointments.cep,
-          logradouro: appointments.logradouro,
-          numero: appointments.numero,
-          complemento: appointments.complemento,
-          bairro: appointments.bairro,
-          cidade: appointments.cidade,
-          userId: appointments.userId,
-          companyId: appointments.companyId,
-          createdAt: appointments.createdAt,
-          // Campos da route (podem ser null se não houver rota)
-          routeId: routes.id,
-          routeStatus: routes.status,
-          routeDisplayNumber: routes.displayNumber,
-        })
+      // 🚀 ETAPA 1: Buscar agendamentos (query SIMPLES, sem joins pesados)
+      const appointmentsList = await db
+        .select()
         .from(appointments)
-        .leftJoin(
-          routeStops,
-          eq(routeStops.appointmentNumericId, appointments.id)
-        )
-        .leftJoin(
-          routes,
-          and(
-            eq(routeStops.routeId, routes.id),
-            or(
-              eq(routes.status, 'confirmado'),
-              eq(routes.status, 'finalizado')
-            )
-          )
-        )
         .where(and(
           eq(appointments.userId, req.user.userId),
           gte(appointments.scheduledDate, dateFilter)
         ));
 
-      // 🔧 DEDUPLICAÇÃO: Se um appointment estiver em múltiplas rotas, 
-      // o JOIN retorna múltiplas linhas. Vamos manter apenas a primeira ocorrência.
-      const uniqueAppointments = new Map();
-
-      for (const row of appointmentsWithRouteStatus) {
-        // Se já processamos este appointment, pula
-        if (uniqueAppointments.has(row.id)) {
-          continue;
-        }
-
-        uniqueAppointments.set(row.id, {
-          id: row.id,
-          clientId: row.clientId,
-          serviceId: row.serviceId,
-          technicianId: row.technicianId,
-          teamId: row.teamId,
-          scheduledDate: row.scheduledDate,
-          allDay: row.allDay,
-          status: row.status,
-          priority: row.priority,
-          notes: row.notes,
-          photos: row.photos,
-          signature: row.signature,
-          feedback: row.feedback,
-          executionStatus: row.executionStatus,
-          executionNotes: row.executionNotes,
-          cep: row.cep,
-          logradouro: row.logradouro,
-          numero: row.numero,
-          complemento: row.complemento,
-          bairro: row.bairro,
-          cidade: row.cidade,
-          userId: row.userId,
-          companyId: row.companyId,
-          createdAt: row.createdAt,
-          routeInfo: row.routeId ? {
-            routeId: row.routeId,
-            status: row.routeStatus,
-            displayNumber: row.routeDisplayNumber,
-          } : null,
-        });
+      // Early return se não houver agendamentos
+      if (appointmentsList.length === 0) {
+        console.log(`✅ [APPOINTMENTS] Nenhum agendamento encontrado em ${Date.now() - startTime}ms`);
+        return res.json([]);
       }
 
-      // Converter Map para array
-      const result = Array.from(uniqueAppointments.values());
+      // 🚀 ETAPA 2: Buscar info de rotas em BATCH (uma única query)
+      const appointmentIds = appointmentsList.map(a => a.id);
+
+      const routeInfos = await db
+        .select({
+          appointmentId: routeStops.appointmentNumericId,
+          routeId: routes.id,
+          routeStatus: routes.status,
+          routeDisplayNumber: routes.displayNumber,
+        })
+        .from(routeStops)
+        .innerJoin(routes, eq(routeStops.routeId, routes.id))
+        .where(and(
+          inArray(routeStops.appointmentNumericId, appointmentIds),
+          or(eq(routes.status, 'confirmado'), eq(routes.status, 'finalizado'))
+        ));
+
+      // 🚀 ETAPA 3: Criar map para lookup O(1)
+      const routeInfoMap = new Map<number, { routeId: string; status: string | null; displayNumber: number | null }>();
+      for (const ri of routeInfos) {
+        // Só adiciona se ainda não existe (pega o primeiro, que é o mais relevante)
+        if (ri.appointmentId && !routeInfoMap.has(ri.appointmentId)) {
+          routeInfoMap.set(ri.appointmentId, {
+            routeId: ri.routeId,
+            status: ri.routeStatus,
+            displayNumber: ri.routeDisplayNumber,
+          });
+        }
+      }
+
+      // 🚀 ETAPA 4: Montar resultado final
+      const result = appointmentsList.map(apt => ({
+        ...apt,
+        routeInfo: routeInfoMap.get(apt.id) || null,
+      }));
 
       const totalTime = Date.now() - startTime;
       // Log apenas se demorar mais de 1 segundo (para monitorar performance)
       if (totalTime > 1000) {
         console.log(`⚠️ [APPOINTMENTS] Consulta lenta: ${result.length} agendamentos em ${totalTime}ms`);
+      } else {
+        console.log(`✅ [APPOINTMENTS] Retornando ${result.length} agendamentos em ${totalTime}ms`);
       }
 
       res.json(result);
@@ -2565,8 +2595,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`🔧 [UPDATE] Atualizando agendamento ${id}:`, appointmentData);
 
+      // 🔒 VALIDAÇÃO: Só permite edição de agendamentos com status 'scheduled' ou 'rescheduled'
+      const existingAppointment = await storage.getAppointment(id, req.user.userId);
+      if (!existingAppointment) {
+        return res.status(404).json({ message: "Agendamento não encontrado" });
+      }
+
+      const editableStatuses = ['scheduled', 'rescheduled'];
+      if (!editableStatuses.includes(existingAppointment.status)) {
+        return res.status(400).json({
+          message: `Não é possível editar agendamentos com status "${existingAppointment.status}". Apenas agendamentos com status "Agendado" ou "Remarcado" podem ser editados.`
+        });
+      }
+
       // Corrigir campo scheduledDate se presente
       if (appointmentData.scheduledDate) {
+
         console.log(`📅 [UPDATE] Data recebida (tipo: ${typeof appointmentData.scheduledDate}):`, appointmentData.scheduledDate);
 
         // Se já é uma string ISO, manter como está
@@ -2745,6 +2789,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (!workScheduleValidation.valid) {
           return res.status(400).json({ message: workScheduleValidation.message });
+        }
+      }
+
+      // ⚠️ Se a data mudou, salvar histórico ANTES de limpar dados
+      // Isso preserva fotos, assinaturas e status do romaneio antigo para auditoria
+      if (dateChanged) {
+        console.log(`📸 [PATCH] Salvando histórico do agendamento ${id} antes de remarcar`);
+
+        // Salvar estado atual no histórico
+        await db.insert(appointmentHistory).values({
+          appointmentId: id,
+          changedBy: req.user.userId,
+          changedByName: req.user.name || req.user.username,
+          changeType: 'rescheduled',
+          previousData: originalAppointment, // Estado completo com fotos, assinatura, etc.
+          newData: { ...originalAppointment, ...appointmentData }, // Novo estado
+          reason: 'Agendamento remarcado para outra data',
+          userId: req.user.userId,
+          companyId: req.user.companyId,
+        });
+
+        console.log(`🧹 [PATCH] Limpando dados de execução do agendamento ${id} devido à remarcação`);
+        appointmentData.executionStatus = null;
+        appointmentData.executionNotes = null;
+        appointmentData.executionStartedAt = null;
+        appointmentData.executionFinishedAt = null;
+        appointmentData.photos = null;
+        appointmentData.signature = null;
+        // Também resetar status para scheduled se estava em algum status de execução
+        if (originalAppointment.status !== 'scheduled') {
+          appointmentData.status = 'scheduled';
         }
       }
 
@@ -2980,16 +3055,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         console.log(`🗑️ [RESOLVE-PENDING] Agendamento removido da rota antiga`);
 
-        // Atualizar agendamento
+        // Atualizar agendamento - usa status 'rescheduled' para diferenciar de novo agendamento
         await db.update(appointments)
           .set({
             scheduledDate: newDateTime,
-            status: 'scheduled',
+            status: 'rescheduled', // 🔧 CORREÇÃO: Usar 'rescheduled' para rastreabilidade
             executionStatus: null, // Limpa o status de execução anterior
             ...(newTechnicianId !== undefined && { technicianId: newTechnicianId || null }),
             ...(newTeamId !== undefined && { teamId: newTeamId || null }),
           })
           .where(eq(appointments.id, appointmentId));
+
 
         // Se endereço foi corrigido, atualizar cliente
         if (addressCorrected && clientAddress && appointment.clientId) {

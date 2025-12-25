@@ -2553,8 +2553,26 @@ export function registerRoutesAPI(app: Express) {
 
               console.log(`✅ [RESET] executionStatus resetado para agendamentos remarcados`);
             }
+
+            // 🔧 CORREÇÃO: Atualizar status dos agendamentos para 'confirmed' quando romaneio for confirmado
+            // Isso indica que o agendamento está em um romaneio confirmado e próximo de ser executado
+            const scheduledOrRescheduledIds = appointmentStatusForReset
+              .filter(a => a.status === 'scheduled' || a.status === 'rescheduled')
+              .map(a => a.id);
+
+            if (scheduledOrRescheduledIds.length > 0) {
+              console.log(`🔄 [CONFIRM] Atualizando ${scheduledOrRescheduledIds.length} agendamentos para status 'confirmed'`);
+
+              await db
+                .update(appointments)
+                .set({ status: 'confirmed' })
+                .where(inArray(appointments.id, scheduledOrRescheduledIds));
+
+              console.log(`✅ [CONFIRM] Agendamentos atualizados para status 'confirmed'`);
+            }
           }
         }
+
 
         const [updated] = await db
           .update(routesTbl)

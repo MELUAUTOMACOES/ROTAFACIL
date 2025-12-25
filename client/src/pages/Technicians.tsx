@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import TechnicianForm from "@/components/forms/TechnicianForm";
 import TempTeamForm from "@/components/forms/TempTeamForm";
-import { Plus, UserCog, Mail, Phone, Wrench, Edit, Trash2, CheckCircle, XCircle, Users } from "lucide-react";
+import { Plus, UserCog, Mail, Phone, Wrench, Edit, Trash2, CheckCircle, XCircle, Users, Search as SelectIcon } from "lucide-react";
 import { useSafeNavigation } from "@/hooks/useSafeNavigation";
 import type { Technician, Team, Service } from "@shared/schema";
 
@@ -19,9 +19,15 @@ export default function Technicians() {
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [isTechnicianFormOpen, setIsTechnicianFormOpen] = useState(false);
   const [isTeamFormOpen, setIsTeamFormOpen] = useState(false);
+
+  // Estados de filtro
+  const [technicianSearch, setTechnicianSearch] = useState("");
+  const [technicianStatus, setTechnicianStatus] = useState<"all" | "active" | "inactive">("all");
+  const [teamSearch, setTeamSearch] = useState("");
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   // Hook de navegação segura
   const { isSafeToOperate } = useSafeNavigation({
     componentName: 'TECHNICIANS',
@@ -54,6 +60,25 @@ export default function Technicians() {
     },
   });
 
+  // Filtragem de técnicos
+  const filteredTechnicians = technicians.filter((tech: Technician) => {
+    // Filtro de texto
+    const searchLower = technicianSearch.toLowerCase();
+    const matchesSearch =
+      !technicianSearch ||
+      tech.name.toLowerCase().includes(searchLower) ||
+      tech.email?.toLowerCase().includes(searchLower) ||
+      tech.phone.includes(searchLower);
+
+    // Filtro de status
+    const matchesStatus =
+      technicianStatus === "all" ||
+      (technicianStatus === "active" && tech.isActive) ||
+      (technicianStatus === "inactive" && !tech.isActive);
+
+    return matchesSearch && matchesStatus;
+  });
+
   // Queries para equipes
   const { data: teams = [], isLoading: teamsLoading } = useQuery({
     queryKey: ["/api/teams"],
@@ -67,6 +92,12 @@ export default function Technicians() {
       const data = await response.json();
       return Array.isArray(data) ? data : [];
     },
+  });
+
+  // Filtragem de equipes
+  const filteredTeams = teams.filter((team: Team) => {
+    if (!teamSearch) return true;
+    return team.name.toLowerCase().includes(teamSearch.toLowerCase());
   });
 
   // Query para serviços (necessário para formulários)
@@ -89,7 +120,7 @@ export default function Technicians() {
     queryKey: ["/api/all-team-members"],
     queryFn: async () => {
       if (teams.length === 0) return [];
-      
+
       const memberPromises = teams.map(async (team: Team) => {
         const response = await fetch(`/api/team-members/${team.id}`, {
           headers: getAuthHeaders(),
@@ -98,7 +129,7 @@ export default function Technicians() {
         const members = await response.json();
         return members.map((member: any) => ({ ...member, teamId: team.id }));
       });
-      
+
       const allMembers = await Promise.all(memberPromises);
       return allMembers.flat();
     },
@@ -120,11 +151,11 @@ export default function Technicians() {
   // Função para formatar endereço de início (técnico ou empresa)
   const formatStartAddress = (entity: Technician | Team) => {
     // Verificar se tem endereço de início próprio
-    const hasOwnStartAddress = entity.enderecoInicioCep && 
-                               entity.enderecoInicioLogradouro && 
-                               entity.enderecoInicioBairro && 
-                               entity.enderecoInicioCidade && 
-                               entity.enderecoInicioEstado;
+    const hasOwnStartAddress = entity.enderecoInicioCep &&
+      entity.enderecoInicioLogradouro &&
+      entity.enderecoInicioBairro &&
+      entity.enderecoInicioCidade &&
+      entity.enderecoInicioEstado;
 
     if (hasOwnStartAddress) {
       // Usar endereço de início próprio
@@ -218,14 +249,14 @@ export default function Technicians() {
 
   const handleTechnicianFormClose = () => {
     console.log('🚪 Technicians - Iniciando fechamento do formulário de técnico');
-    console.log('🔍 Technicians - Estado atual:', { 
-      isTechnicianFormOpen, 
-      selectedTechnician: selectedTechnician?.id || 'null' 
+    console.log('🔍 Technicians - Estado atual:', {
+      isTechnicianFormOpen,
+      selectedTechnician: selectedTechnician?.id || 'null'
     });
-    
+
     // Fechar o diálogo imediatamente para evitar conflitos DOM
     setIsTechnicianFormOpen(false);
-    
+
     // Usar requestAnimationFrame para garantir que o DOM seja atualizado
     requestAnimationFrame(() => {
       console.log('🧹 Technicians - Limpando estado após DOM render');
@@ -283,14 +314,14 @@ export default function Technicians() {
 
         {/* Aba de Técnicos - Mantém funcionalidade existente */}
         <TabsContent value="technicians" className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Técnicos Cadastrados</h2>
               <p className="text-sm text-gray-600">Gerencie os técnicos da sua empresa</p>
             </div>
-            
-            <Button 
-              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+
+            <Button
+              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white w-full md:w-auto"
               onClick={handleNewTechnician}
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -298,27 +329,60 @@ export default function Technicians() {
             </Button>
           </div>
 
+          {/* Filtros de Técnicos */}
+          <Card className="p-4 bg-white">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="relative flex-1">
+                <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por nome, email ou telefone..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
+                  value={technicianSearch}
+                  onChange={(e) => setTechnicianSearch(e.target.value)}
+                />
+              </div>
+              <div className="w-full md:w-48">
+                <select
+                  className="w-full h-full p-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent bg-white"
+                  value={technicianStatus}
+                  onChange={(e) => setTechnicianStatus(e.target.value as any)}
+                >
+                  <option value="all">Todos os status</option>
+                  <option value="active">Ativos</option>
+                  <option value="inactive">Inativos</option>
+                </select>
+              </div>
+            </div>
+          </Card>
+
           {/* Lista de Técnicos */}
-          {technicians.length === 0 ? (
+          {filteredTechnicians.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <UserCog className="h-12 w-12 text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum técnico cadastrado</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {technicianSearch || technicianStatus !== 'all' ? "Nenhum técnico encontrado" : "Nenhum técnico cadastrado"}
+                </h3>
                 <p className="text-gray-600 text-center mb-6">
-                  Comece adicionando técnicos à sua equipe para realizar os atendimentos.
+                  {technicianSearch || technicianStatus !== 'all'
+                    ? "Tente ajustar os filtros de busca."
+                    : "Comece adicionando técnicos à sua equipe para realizar os atendimentos."}
                 </p>
-                <Button 
-                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                  onClick={handleNewTechnician}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Primeiro Técnico
-                </Button>
+                {!technicianSearch && technicianStatus === 'all' && (
+                  <Button
+                    className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                    onClick={handleNewTechnician}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar Primeiro Técnico
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {technicians.map((technician: Technician) => (
+              {filteredTechnicians.map((technician: Technician) => (
                 <Card key={technician.id} className="hover:shadow-md transition-shadow">
                   <CardHeader className="border-b border-gray-100">
                     <div className="flex items-center justify-between">
@@ -348,10 +412,10 @@ export default function Technicians() {
                         </Button>
                       </div>
                     </div>
-                    <Badge 
+                    <Badge
                       className={
-                        technician.isActive 
-                          ? "bg-green-100 text-green-800" 
+                        technician.isActive
+                          ? "bg-green-100 text-green-800"
                           : "bg-red-100 text-red-800"
                       }
                     >
@@ -374,12 +438,12 @@ export default function Technicians() {
                           <span>{technician.email}</span>
                         </div>
                       )}
-                      
+
                       <div className="flex items-center space-x-2 text-sm text-gray-600">
                         <Phone className="h-4 w-4" />
                         <span>{technician.phone}</span>
                       </div>
-                      
+
                       {technician.specialization && (
                         <div className="flex items-center space-x-2 text-sm text-gray-600">
                           <Wrench className="h-4 w-4" />
@@ -387,7 +451,7 @@ export default function Technicians() {
                         </div>
                       )}
                     </div>
-                    
+
                     <div className="mt-4 pt-4 border-t border-gray-100">
                       <p className="text-xs text-gray-500">
                         Cadastrado em {new Date(technician.createdAt).toLocaleDateString('pt-BR')}
@@ -419,14 +483,14 @@ export default function Technicians() {
 
         {/* Aba de Equipes - Nova funcionalidade */}
         <TabsContent value="teams" className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Equipes Cadastradas</h2>
               <p className="text-sm text-gray-600">Organize técnicos em equipes especializadas</p>
             </div>
-            
-            <Button 
-              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+
+            <Button
+              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white w-full md:w-auto"
               onClick={handleNewTeam}
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -434,27 +498,47 @@ export default function Technicians() {
             </Button>
           </div>
 
+          {/* Filtro de Equipes */}
+          <Card className="p-4 bg-white">
+            <div className="relative">
+              <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar equipe por nome..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
+                value={teamSearch}
+                onChange={(e) => setTeamSearch(e.target.value)}
+              />
+            </div>
+          </Card>
+
           {/* Lista de Equipes */}
-          {teams.length === 0 ? (
+          {filteredTeams.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Users className="h-12 w-12 text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma equipe cadastrada</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {teamSearch ? "Nenhuma equipe encontrada" : "Nenhuma equipe cadastrada"}
+                </h3>
                 <p className="text-gray-600 text-center mb-6">
-                  Crie equipes especializadas para organizar melhor seus técnicos e serviços.
+                  {teamSearch
+                    ? "Tente buscar por outro nome."
+                    : "Crie equipes especializadas para organizar melhor seus técnicos e serviços."}
                 </p>
-                <Button 
-                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                  onClick={handleNewTeam}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Criar Primeira Equipe
-                </Button>
+                {!teamSearch && (
+                  <Button
+                    className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                    onClick={handleNewTeam}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Criar Primeira Equipe
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {teams.map((team: Team) => (
+              {filteredTeams.map((team: Team) => (
                 <Card key={team.id} className="hover:shadow-md transition-shadow">
                   <CardHeader className="border-b border-gray-100">
                     <div className="flex items-center justify-between">
@@ -536,7 +620,7 @@ export default function Technicians() {
                         })()}
                       </div>
                     </div>
-                    
+
                     <div className="mt-4 pt-4 border-t border-gray-100">
                       <p className="text-xs text-gray-500">
                         Criada em {new Date(team.createdAt).toLocaleDateString('pt-BR')}
@@ -547,7 +631,7 @@ export default function Technicians() {
               ))}
             </div>
           )}
-          
+
           {/* Centralized Dialog for All Team Forms */}
           <Dialog open={isTeamFormOpen} onOpenChange={setIsTeamFormOpen}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden">

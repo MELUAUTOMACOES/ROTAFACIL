@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Save, Clock, MapPin, Route, Fuel, Target, AlertCircle } from "lucide-react";
+import { Settings, Save, Clock, MapPin, Route, Fuel, Target, AlertCircle, MessageCircle } from "lucide-react";
 import { insertBusinessRulesSchema, type BusinessRules, type InsertBusinessRules } from "@shared/schema";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -52,6 +52,8 @@ export default function BusinessRulesPage() {
       metaVariacaoTempoServico: 15,
       metaUtilizacaoDiaria: 80,
       slaHorasPendencia: 48,
+      // Mensagem WhatsApp
+      whatsappMessageTemplate: "Olá, {nome_cliente}! Sou da {nome_empresa}, estou a caminho para realizar o serviço {nome_servico}. Previsão de chegada: {horario_estimado}.",
     },
   });
 
@@ -82,6 +84,8 @@ export default function BusinessRulesPage() {
         metaVariacaoTempoServico: (businessRules as any).metaVariacaoTempoServico || 15,
         metaUtilizacaoDiaria: (businessRules as any).metaUtilizacaoDiaria || 80,
         slaHorasPendencia: (businessRules as any).slaHorasPendencia || 48,
+        // Mensagem WhatsApp
+        whatsappMessageTemplate: (businessRules as any).whatsappMessageTemplate || "Olá, {nome_cliente}! Sou da {nome_empresa}, estou a caminho para realizar o serviço {nome_servico}. Previsão de chegada: {horario_estimado}.",
       });
     }
   }, [businessRules, form]);
@@ -152,7 +156,7 @@ export default function BusinessRulesPage() {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4 max-w-2xl">
+            <TabsList className="grid w-full grid-cols-5 max-w-3xl">
               <TabsTrigger value="rotas" className="flex items-center gap-2">
                 <Route className="h-4 w-4" />
                 Rotas
@@ -168,6 +172,10 @@ export default function BusinessRulesPage() {
               <TabsTrigger value="endereco" className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
                 Endereço
+              </TabsTrigger>
+              <TabsTrigger value="comunicacao" className="flex items-center gap-2">
+                <MessageCircle className="h-4 w-4" />
+                Comunicação
               </TabsTrigger>
             </TabsList>
 
@@ -716,6 +724,71 @@ export default function BusinessRulesPage() {
                         </FormItem>
                       )}
                     />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Tab: Comunicação */}
+            <TabsContent value="comunicacao" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <MessageCircle className="h-5 w-5" />
+                    Mensagem WhatsApp para Prestadores
+                  </CardTitle>
+                  <CardDescription>
+                    Configure a mensagem padrão que será enviada aos clientes via WhatsApp
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <FormField
+                    control={form.control}
+                    name="whatsappMessageTemplate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Mensagem Padrão</FormLabel>
+                        <FormControl>
+                          <textarea
+                            className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            placeholder="Digite sua mensagem..."
+                            {...field}
+                            value={field.value || ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-blue-800 mb-2">Variáveis Disponíveis:</h4>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <code className="bg-blue-100 px-2 py-0.5 rounded text-blue-700">{'{nome_cliente}'}</code>
+                        <span className="text-blue-600">Nome do cliente</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <code className="bg-blue-100 px-2 py-0.5 rounded text-blue-700">{'{nome_empresa}'}</code>
+                        <span className="text-blue-600">Nome da empresa</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <code className="bg-blue-100 px-2 py-0.5 rounded text-blue-700">{'{nome_servico}'}</code>
+                        <span className="text-blue-600">Serviço agendado</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <code className="bg-blue-100 px-2 py-0.5 rounded text-blue-700">{'{data_agendamento}'}</code>
+                        <span className="text-blue-600">Data do serviço</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <code className="bg-blue-100 px-2 py-0.5 rounded text-blue-700">{'{horario_estimado}'}</code>
+                        <span className="text-blue-600">Horário previsto</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <code className="bg-blue-100 px-2 py-0.5 rounded text-blue-700">{'{endereco}'}</code>
+                        <span className="text-blue-600">Endereço do cliente</span>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

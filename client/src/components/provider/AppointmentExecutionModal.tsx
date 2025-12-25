@@ -232,23 +232,61 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
                 </div>
 
                 {!isStarted ? (
-                    /* ETAPA 1: Botão de Iniciar Atendimento */
-                    <div className="flex flex-col items-center justify-center py-8 space-y-6">
-                        <div className="w-24 h-24 bg-[#DAA520]/10 rounded-full flex items-center justify-center">
-                            <PlayCircle className="w-12 h-12 text-[#DAA520]" />
+                    /* ETAPA 1: Botão de Iniciar Atendimento + Foto opcional */
+                    <div className="flex flex-col items-center justify-center py-6 space-y-4">
+                        <div className="w-20 h-20 bg-[#DAA520]/10 rounded-full flex items-center justify-center">
+                            <PlayCircle className="w-10 h-10 text-[#DAA520]" />
                         </div>
                         <div className="text-center">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-2">Pronto para iniciar?</h3>
-                            <p className="text-sm text-gray-500">O cronômetro começará quando você clicar no botão abaixo.</p>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-1">Pronto para iniciar?</h3>
+                            <p className="text-sm text-gray-500">O cronômetro começará ao clicar em iniciar.</p>
                         </div>
-                        <Button
-                            onClick={handleStartExecution}
-                            disabled={isStarting}
-                            className="w-full max-w-xs h-14 text-lg bg-[#DAA520] hover:bg-[#B8860B] text-white"
-                        >
-                            <PlayCircle className="w-6 h-6 mr-2" />
-                            {isStarting ? 'Iniciando...' : 'Iniciar Atendimento'}
-                        </Button>
+
+                        {/* Fotos da chegada (opcional) */}
+                        {photos.length > 0 && (
+                            <div className="w-full">
+                                <Label className="text-sm text-gray-600 mb-2 block">Fotos da chegada:</Label>
+                                <div className="flex flex-wrap gap-2">
+                                    {photos.map((photo, idx) => (
+                                        <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border">
+                                            <img src={photo} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
+                                            <button
+                                                onClick={() => setPhotos(photos.filter((_, i) => i !== idx))}
+                                                className="absolute top-0 right-0 bg-red-500 text-white rounded-bl-lg p-0.5"
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex gap-3 w-full max-w-xs">
+                            {/* Botão de foto na chegada */}
+                            <Button
+                                variant="outline"
+                                onClick={handleAddPhoto}
+                                className="flex-1 h-12"
+                            >
+                                <Camera className="w-5 h-5 mr-1" />
+                                Foto
+                            </Button>
+
+                            {/* Botão de iniciar */}
+                            <Button
+                                onClick={handleStartExecution}
+                                disabled={isStarting}
+                                className="flex-[2] h-12 text-lg bg-[#DAA520] hover:bg-[#B8860B] text-white"
+                            >
+                                <PlayCircle className="w-5 h-5 mr-1" />
+                                {isStarting ? 'Iniciando...' : 'Iniciar'}
+                            </Button>
+                        </div>
+
+                        <p className="text-xs text-gray-400 text-center">
+                            A foto é opcional - registre a chegada ao local
+                        </p>
                     </div>
                 ) : (
                     /* ETAPA 2: Formulário de Registro */

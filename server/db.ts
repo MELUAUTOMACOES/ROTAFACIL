@@ -11,5 +11,13 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  // 🚀 Otimizações para Supabase remoto
+  max: 10,                           // Máximo de conexões no pool
+  idleTimeoutMillis: 30000,          // 30s antes de liberar conexão ociosa
+  connectionTimeoutMillis: 5000,     // 5s timeout para nova conexão
+  keepAlive: true,                   // Manter conexões ativas
+  keepAliveInitialDelayMillis: 10000, // Delay antes do primeiro keepalive
+});
 export const db = drizzle(pool, { schema });

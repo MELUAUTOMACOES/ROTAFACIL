@@ -307,6 +307,8 @@ export const businessRules = pgTable("business_rules", {
   metaVariacaoTempoServico: integer("meta_variacao_tempo_servico").default(15), // % de variação aceitável do tempo previsto do serviço
   metaUtilizacaoDiaria: integer("meta_utilizacao_diaria").default(80), // % de utilização diária da jornada (tempo em atendimento vs jornada)
   slaHorasPendencia: integer("sla_horas_pendencia").default(48), // SLA: horas para resolver pendência (tempo entre prestador finalizar e admin resolver)
+  // Mensagem WhatsApp para prestadores
+  whatsappMessageTemplate: text("whatsapp_message_template").default("Olá, {nome_cliente}! Sou da {nome_empresa}, estou a caminho para realizar o serviço {nome_servico}. Previsão de chegada: {horario_estimado}."),
   userId: integer("user_id").notNull().references(() => users.id),
   companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -390,6 +392,20 @@ export const routeAudits = pgTable("route_audits", {
   action: varchar("action", { length: 32 }).notNull(), // reorder, add_stop, remove_stop, optimize
   description: text("description").notNull(), // Descrição legível da ação
   metadata: jsonb("metadata"), // Dados extras opcionais (ex: endereços adicionados/removidos)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Route occurrences table - Registro de pausas/ocorrências durante a rota
+export const routeOccurrences = pgTable("route_occurrences", {
+  id: serial("id").primaryKey(),
+  routeId: uuid("route_id").references(() => routes.id).notNull(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  type: varchar("type", { length: 32 }).notNull(), // almoco, problema_tecnico, abastecimento, outro
+  startedAt: timestamp("started_at").notNull(), // Quando iniciou a pausa/ocorrência
+  finishedAt: timestamp("finished_at"), // Quando finalizou (opcional se ainda em andamento)
+  approximateTime: varchar("approximate_time", { length: 5 }), // Horário aproximado em formato HH:mm
+  durationMinutes: integer("duration_minutes"), // Tempo decorrente em minutos
+  notes: text("notes"), // Observações
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

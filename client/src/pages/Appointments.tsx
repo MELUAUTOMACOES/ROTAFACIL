@@ -96,8 +96,8 @@ export default function Appointments() {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [selectedTechnicians, setSelectedTechnicians] = useState<string[]>([]); // IDs de técnicos e equipes misturados
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [inRouteFilter, setInRouteFilter] = useState<string>("no"); // "all", "yes", "no"
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['scheduled', 'rescheduled']); // Filtro padrão: apenas agendados e remarcados
+  const [inRouteFilter, setInRouteFilter] = useState<string>("all"); // "all", "yes", "no" - Padrão: Todos
 
   // Estado para controlar visualização (lista ou calendário)
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
@@ -1140,6 +1140,8 @@ export default function Appointments() {
         return "bg-yellow-100 text-yellow-800";
       case "scheduled":
         return "bg-blue-100 text-blue-800";
+      case "confirmed":
+        return "bg-cyan-100 text-cyan-800";
       case "cancelled":
         return "bg-red-100 text-red-800";
       case "rescheduled":
@@ -1157,6 +1159,8 @@ export default function Appointments() {
         return "Em Andamento";
       case "scheduled":
         return "Agendado";
+      case "confirmed":
+        return "Confirmado";
       case "cancelled":
         return "Cancelado";
       case "rescheduled":
@@ -1311,6 +1315,7 @@ export default function Appointments() {
           return false;
         }
       }
+
 
       return true;
     });
@@ -2372,6 +2377,7 @@ export default function Appointments() {
             title="Status"
             options={[
               { label: "Agendado", value: "scheduled" },
+              { label: "Confirmado", value: "confirmed" },
               { label: "Em Andamento", value: "in_progress" },
               { label: "Concluído", value: "completed" },
               { label: "Cancelado", value: "cancelled" },
@@ -2381,6 +2387,7 @@ export default function Appointments() {
             onSelectionChange={setSelectedStatuses}
             className="w-[140px]"
           />
+
 
           <Select
             value={inRouteFilter}
@@ -2578,74 +2585,85 @@ export default function Appointments() {
                                       <span className="ml-2 text-sm font-normal text-gray-500">#{appointment.id}</span>
                                     </h3>
 
-                                    {/* Dropdown de Status */}
-                                    <DropdownMenu>
-                                      <DropdownMenuTrigger asChild>
-                                        <button
-                                          onClick={stop}
-                                          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium transition-colors hover:opacity-80 ${getStatusColor(appointment.status)}`}
-                                        >
-                                          {getStatusText(appointment.status)}
-                                          <ChevronDown className="h-3 w-3" />
-                                        </button>
-                                      </DropdownMenuTrigger>
-                                      <DropdownMenuContent onClick={stop}>
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            updateStatusMutation.mutate({
-                                              id: appointment.id,
-                                              status: "scheduled",
-                                            })
-                                          }
-                                        >
-                                          Agendado
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            updateStatusMutation.mutate({
-                                              id: appointment.id,
-                                              status: "in_progress",
-                                            })
-                                          }
-                                        >
-                                          Em Andamento
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            updateStatusMutation.mutate({
-                                              id: appointment.id,
-                                              status: "completed",
-                                            })
-                                          }
-                                        >
-                                          Concluído
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            updateStatusMutation.mutate({
-                                              id: appointment.id,
-                                              status: "cancelled",
-                                            })
-                                          }
-                                        >
-                                          Cancelado
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            updateStatusMutation.mutate({
-                                              id: appointment.id,
-                                              status: "rescheduled",
-                                            })
-                                          }
-                                        >
-                                          Remarcado
-                                        </DropdownMenuItem>
-                                      </DropdownMenuContent>
-                                    </DropdownMenu>
+                                    {/* Dropdown de Status - só editável para scheduled/rescheduled */}
+                                    {(appointment.status === 'scheduled' || appointment.status === 'rescheduled') ? (
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <button
+                                            onClick={stop}
+                                            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium transition-colors hover:opacity-80 ${getStatusColor(appointment.status)}`}
+                                          >
+                                            {getStatusText(appointment.status)}
+                                            <ChevronDown className="h-3 w-3" />
+                                          </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent onClick={stop}>
+                                          <DropdownMenuItem
+                                            onClick={() =>
+                                              updateStatusMutation.mutate({
+                                                id: appointment.id,
+                                                status: "scheduled",
+                                              })
+                                            }
+                                          >
+                                            Agendado
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() =>
+                                              updateStatusMutation.mutate({
+                                                id: appointment.id,
+                                                status: "in_progress",
+                                              })
+                                            }
+                                          >
+                                            Em Andamento
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() =>
+                                              updateStatusMutation.mutate({
+                                                id: appointment.id,
+                                                status: "completed",
+                                              })
+                                            }
+                                          >
+                                            Concluído
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() =>
+                                              updateStatusMutation.mutate({
+                                                id: appointment.id,
+                                                status: "cancelled",
+                                              })
+                                            }
+                                          >
+                                            Cancelado
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() =>
+                                              updateStatusMutation.mutate({
+                                                id: appointment.id,
+                                                status: "rescheduled",
+                                              })
+                                            }
+                                          >
+                                            Remarcado
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    ) : (
+                                      // Badge estático para status não editáveis (confirmed, in_progress, completed, cancelled)
+                                      <span
+                                        className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(appointment.status)}`}
+                                        title="Status não pode ser alterado manualmente"
+                                      >
+                                        {getStatusText(appointment.status)}
+                                      </span>
+                                    )}
 
                                     <Badge className={getPriorityColor(appointment.priority)}>
                                       {getPriorityText(appointment.priority)}
                                     </Badge>
+
 
                                     {/* Badge de Romaneio Confirmado/Finalizado */}
                                     {(appointment as any).routeInfo && (

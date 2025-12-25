@@ -66,8 +66,9 @@ export function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
     };
 
     return (
-        <div className="flex flex-col h-full bg-white">
-            <div ref={containerRef} className="flex-1 border-2 border-dashed border-gray-300 rounded-md m-1 relative bg-gray-50 min-h-[250px]">
+        <div className="flex flex-col h-full bg-white overflow-hidden">
+            {/* Área de assinatura - ocupa espaço disponível */}
+            <div ref={containerRef} className="flex-1 border-2 border-dashed border-gray-300 rounded-md m-1 relative bg-gray-50 min-h-[200px] max-h-[calc(100vh-150px)]">
                 {canvasSize.width > 0 && (
                     <SignatureCanvas
                         ref={sigCanvas}
@@ -87,19 +88,20 @@ export function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
                 )}
             </div>
 
-            <div className="p-4 border-t flex gap-3 justify-between bg-white">
-                <Button variant="outline" onClick={onCancel} className="flex-1">
-                    <X className="w-4 h-4 mr-2" />
+            {/* Botões - sempre visíveis no final */}
+            <div className="p-3 border-t flex gap-2 justify-between bg-white sticky bottom-0 shrink-0">
+                <Button variant="outline" onClick={onCancel} className="flex-1 h-12">
+                    <X className="w-4 h-4 mr-1" />
                     Cancelar
                 </Button>
 
-                <Button variant="secondary" onClick={clear} disabled={isEmpty} className="flex-1">
-                    <Eraser className="w-4 h-4 mr-2" />
+                <Button variant="secondary" onClick={clear} disabled={isEmpty} className="flex-1 h-12">
+                    <Eraser className="w-4 h-4 mr-1" />
                     Limpar
                 </Button>
 
-                <Button onClick={save} disabled={isEmpty} className="flex-1 bg-[#DAA520] hover:bg-[#B8860B] text-white">
-                    <Check className="w-4 h-4 mr-2" />
+                <Button onClick={save} disabled={isEmpty} className="flex-1 h-12 bg-[#DAA520] hover:bg-[#B8860B] text-white">
+                    <Check className="w-4 h-4 mr-1" />
                     Confirmar
                 </Button>
             </div>
