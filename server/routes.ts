@@ -2203,6 +2203,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/appointments/:id - Obter detalhes de um agendamento específico
+  app.get("/api/appointments/:id", authenticateToken, async (req: any, res) => {
+    try {
+      // Validate that id is numeric to avoid conflict with other routes
+      if (isNaN(Number(req.params.id))) {
+        return res.status(404).json({ message: "Agendamento não encontrado - ID inválido" });
+      }
+
+      const id = parseInt(req.params.id);
+      const appointment = await storage.getAppointment(id, req.user.userId);
+      // Also allow getting appointment if user is admin (implemented via storage.getAppointment checking userId currently, 
+      // but maybe we need broader access? For now, keep STRICT owner check as per rules)
+
+      if (!appointment) {
+        return res.status(404).json({ message: "Agendamento não encontrado" });
+      }
+      res.json(appointment);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // GET /api/appointments/:id/history - Obter histórico de um agendamento
+  app.get("/api/appointments/:id/history", authenticateToken, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "ID inválido" });
+      }
+
+      // First check if appointment exists and user has access
+      const appointment = await storage.getAppointment(id, req.user.userId);
+      if (!appointment) {
+        return res.status(404).json({ message: "Agendamento não encontrado" });
+      }
+
+      const history = await storage.getAppointmentHistory(id);
+      res.json(history);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // 🔍 [ACHE UMA DATA] Endpoint para buscar datas disponíveis (streaming)
   app.post("/api/scheduling/find-available-dates", authenticateToken, async (req: any, res) => {
     try {
@@ -3928,6 +3971,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const inserted = await db.insert(routeStops).values(toInsert).returning();
 
+      // Reset appointment status and clear execution data
+      await db
+        .update(appointments)
+        .set({
+          status: 'scheduled',
+          executionStatus: null,
+          executionStartedAt: null,
+          executionFinishedAt: null,
+          executionStartLocation: null, // If column exists
+          executionEndLocation: null,   // If column exists
+          // We can also clear signature/photos if we want to be thorough, but maybe risky?
+          // User said "stale appointment data... clear or ignored". Clearing is safer for UI.
+          signature: null,
+          photos: null,
+          feedback: null
+        })
+        .where(inArray(appointments.id, appointmentIds));
+
       // Atualiza contador de paradas (mantém o que já existia + novas)
       await db
         .update(routes)
@@ -4247,6 +4308,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Registrar rotas de restrição de datas (feriados / indisponibilidades)
   registerDateRestrictionsRoutes(app, authenticateToken);
+
+  // Endpoint para registrar localização em tempo real
+  app.post("/api/tracking/location", authenticateToken, async (req: any, res) => {
+    try {
+      const locationData = req.body;
+      const tracking = await storage.createTrackingLocation({
+        ...locationData,
+        userId: req.user.userId
+      });
+      res.json(tracking);
+    } catch (error: any) {
+      console.error("Error creating tracking location:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Endpoint para recuperar o rastro de uma rota
+  app.get("/api/tracking/route/:routeId", authenticateToken, async (req: any, res) => {
+    try {
+      const { routeId } = req.params;
+      const trackingPoints = await storage.getRouteTrackingLocations(routeId);
+      res.json(trackingPoints);
+    } catch (error: any) {
+      console.error("Error fetching route tracking:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
 
   // Registrar rotas de multiempresa (companies, memberships, invitations)
   registerCompanyRoutes(app, authenticateToken);

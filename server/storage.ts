@@ -29,6 +29,7 @@ import {
   auditLogs,
   vehicleDocuments, vehicleMaintenances, maintenanceWarranties,
   featureUsage,
+  trackingLocations
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, ilike, sql, inArray, isNotNull, ne, isNull, gte, lte, desc } from "drizzle-orm";
@@ -198,6 +199,12 @@ export interface IStorage {
   getTopFeatures(limit: number, startDate?: Date, endDate?: Date): Promise<{ feature: string; action: string; count: number }[]>;
   getUsersActivityByDay(startDate: Date, endDate: Date): Promise<{ date: string; activeUsers: number; totalActions: number }[]>;
   getMetricsOverview(): Promise<{ totalUsers: number; totalCompanies: number; totalActionsToday: number; totalActionsWeek: number }>;
+
+  // Tracking Locations
+  createTrackingLocation(data: { userId: number; routeId?: string; latitude: number; longitude: number; accuracy?: number; batteryLevel?: number; speed?: number; heading?: number; providerId?: number }): Promise<any>;
+  getRouteTrackingLocations(routeId: string): Promise<any[]>;
+
+
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1563,6 +1570,19 @@ export class DatabaseStorage implements IStorage {
       totalActionsToday: todayCount?.count || 0,
       totalActionsWeek: weekCount?.count || 0,
     };
+  }
+
+  // Tracking Locations Implementation
+  async createTrackingLocation(data: { userId: number; routeId?: string; latitude: number; longitude: number; accuracy?: number; batteryLevel?: number; speed?: number; heading?: number; providerId?: number }): Promise<any> {
+    const [location] = await db.insert(trackingLocations).values(data).returning();
+    return location;
+  }
+
+  async getRouteTrackingLocations(routeId: string): Promise<any[]> {
+    return await db.select()
+      .from(trackingLocations)
+      .where(eq(trackingLocations.routeId, routeId))
+      .orderBy(trackingLocations.timestamp);
   }
 }
 
