@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { getAuthHeaders } from '@/lib/auth';
 
 interface LocationTrackerOptions {
@@ -21,18 +21,38 @@ interface LocationPoint {
 
 export function useLocationTracker({ userId, routeId, enabled, providerId }: LocationTrackerOptions) {
     const [isTracking, setIsTracking] = useState(false);
-    const [lastPosition, setLastPosition] = useState<GeolocationPosition | null>(null);
-    const [stationaryChecks, setStationaryChecks] = useState(0);
-    const watchIdRef = useRef<number | null>(null);
+
+    // 🔧 Use refs instead of state to avoid re-triggering the effect
+    const lastPositionRef = useRef<GeolocationPosition | null>(null);
+    const stationaryChecksRef = useRef(0);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Prevent duplicate effect runs
+    const isInitializedRef = useRef(false);
 
     // Configurações de intervalo
     const MOVING_INTERVAL = 60000; // 1 minuto
     const STATIONARY_INTERVAL = 120000; // 2 minutos
     const STATIONARY_THRESHOLD_METERS = 20; // Se mover menos que isso, considera parado
 
+    // Função para obter localização atual (avulsa)
+    const getCurrentLocation = useCallback((): Promise<GeolocationPosition> => {
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                reject(new Error('Geolocalização não suportada'));
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            });
+        });
+    }, []);
+
     // Envia localização para o backend
-    const sendLocation = async (position: GeolocationPosition) => {
+    const sendLocation = useCallback(async (position: GeolocationPosition) => {
         try {
             // Tentar obter nível de bateria (Chrome/Android)
             let batteryLevel = null;
@@ -65,43 +85,37 @@ export function useLocationTracker({ userId, routeId, enabled, providerId }: Loc
         } catch (error) {
             console.error('❌ [TRACKER] Erro ao enviar localização:', error);
         }
-    };
-
-    // Função para obter localização atual (avulsa)
-    const getCurrentLocation = (): Promise<GeolocationPosition> => {
-        return new Promise((resolve, reject) => {
-            if (!navigator.geolocation) {
-                reject(new Error('Geolocalização não suportada'));
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0
-            });
-        });
-    };
+    }, [routeId]);
 
     // Efeito para iniciar/parar o rastreamento contínuo
     useEffect(() => {
+        // Clear any existing interval first
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
+
         if (!enabled || !routeId) {
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
             setIsTracking(false);
+            isInitializedRef.current = false;
             return;
         }
 
+        // Prevent duplicate initialization
+        if (isInitializedRef.current) {
+            return;
+        }
+        isInitializedRef.current = true;
+
         setIsTracking(true);
+        console.log('📍 [TRACKER] Tracking started for route:', routeId);
 
         const track = async () => {
-            console.log('📍 [TRACKER] Executing tracking loop...', { enabled, routeId });
             try {
                 const position = await getCurrentLocation();
 
-                // Verificar se está parado
+                // Verificar se está parado usando refs
+                const lastPosition = lastPositionRef.current;
                 if (lastPosition) {
                     const dist = calculateDistance(
                         lastPosition.coords.latitude,
@@ -111,13 +125,13 @@ export function useLocationTracker({ userId, routeId, enabled, providerId }: Loc
                     );
 
                     if (dist < STATIONARY_THRESHOLD_METERS) {
-                        setStationaryChecks(prev => prev + 1);
+                        stationaryChecksRef.current += 1;
                     } else {
-                        setStationaryChecks(0); // Resetar se moveu
+                        stationaryChecksRef.current = 0; // Resetar se moveu
                     }
                 }
 
-                setLastPosition(position);
+                lastPositionRef.current = position;
                 sendLocation(position);
 
             } catch (error) {
@@ -128,22 +142,24 @@ export function useLocationTracker({ userId, routeId, enabled, providerId }: Loc
         // Executar imediatamente
         track();
 
-        // Configurar intervalo (adaptativo)
-        const currentInterval = stationaryChecks >= 3 ? STATIONARY_INTERVAL : MOVING_INTERVAL;
-
-        intervalRef.current = setInterval(track, currentInterval);
+        // Configurar intervalo fixo (simplificado para evitar complexidade)
+        // O intervalo adaptativo causava problemas de re-render
+        intervalRef.current = setInterval(track, MOVING_INTERVAL);
 
         return () => {
+            console.log('📍 [TRACKER] Tracking stopped for route:', routeId);
             if (intervalRef.current) {
                 clearInterval(intervalRef.current);
+                intervalRef.current = null;
             }
+            isInitializedRef.current = false;
         };
-    }, [enabled, routeId, stationaryChecks]); // stationaryChecks na dep array faz o intervalo ajustar
+    }, [enabled, routeId, getCurrentLocation, sendLocation]); // Removed stationaryChecks from deps
 
     return {
         isTracking,
         getCurrentLocation,
-        lastPosition
+        lastPosition: lastPositionRef.current
     };
 }
 

@@ -39,6 +39,24 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
         return appointment?.executionStartedAt || null;
     });
 
+    // 🆕 Effect: Sincroniza estado local se a prop appointment mudar
+    // IMPORTANTE: Só sincroniza se o valor do servidor for mais "completo" que o local
+    // para evitar resetar estado após o usuário clicar em "Iniciar"
+    useEffect(() => {
+        if (appointment) {
+            // Se o servidor tem executionStartedAt e o local não, sincroniza
+            // Se o local já tem executionStartedAt, mantém (pode ser mais recente que o servidor)
+            if (appointment.executionStartedAt && !executionStartedAt) {
+                setIsStarted(true);
+                setExecutionStartedAt(appointment.executionStartedAt);
+            } else if (!appointment.executionStartedAt && !executionStartedAt) {
+                // Ambos null - garante estado inicial consistente
+                setIsStarted(false);
+            }
+            // Se executionStartedAt local já existe, NÃO sobrescreve com null do servidor
+        }
+    }, [appointment?.executionStartedAt, appointment?.id]);
+
     // Timer para mostrar tempo decorrido
     useEffect(() => {
         if (!isStarted || !executionStartedAt) return;

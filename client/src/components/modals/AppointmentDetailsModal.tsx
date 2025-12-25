@@ -90,14 +90,18 @@ export function AppointmentDetailsModal({ isOpen, onClose, appointmentId }: Appo
         ? { lat: parseFloat(appointment.latitude), lng: parseFloat(appointment.longitude) }
         : undefined;
 
-    const executionEnd = appointment?.executionEndLocation
-        ? {
-            lat: appointment.executionEndLocation.latitude,
-            lng: appointment.executionEndLocation.longitude,
-            timestamp: appointment.executionEndLocation.timestamp
-        } : undefined;
+    const executionEnd = (() => {
+        if (!appointment?.executionEndLocation) return undefined;
+        const loc = appointment.executionEndLocation;
+        // Handle both naming conventions: lat/lng or latitude/longitude
+        const lat = parseFloat(loc.lat ?? loc.latitude);
+        const lng = parseFloat(loc.lng ?? loc.longitude);
+        if (isNaN(lat) || isNaN(lng)) return undefined;
+        return { lat, lng, timestamp: loc.timestamp };
+    })();
 
-    const hasLocationData = !!clientLocation || !!executionEnd;
+    // Mostrar aba do mapa se houver QUALQUER dado de localização (mesmo se inválido para exibição)
+    const hasLocationData = !!clientLocation || !!executionEnd || !!appointment?.executionEndLocation;
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -208,18 +212,23 @@ export function AppointmentDetailsModal({ isOpen, onClose, appointmentId }: Appo
                                             if (Array.isArray(appointment.photos)) {
                                                 photos = appointment.photos;
                                             } else if (typeof appointment.photos === 'string') {
-                                                // Check if it looks like a JSON array
-                                                if (appointment.photos.trim().startsWith('[')) {
-                                                    photos = JSON.parse(appointment.photos);
-                                                } else {
-                                                    // It might be a single URL or data URI stored as string
-                                                    photos = [appointment.photos];
+                                                const raw = appointment.photos.trim();
+                                                if (raw.startsWith('[') && raw.endsWith(']')) {
+                                                    try {
+                                                        const parsed = JSON.parse(raw);
+                                                        if (Array.isArray(parsed)) photos = parsed;
+                                                    } catch (err) {
+                                                        console.warn("Failed to parse photos JSON:", err);
+                                                        // Fallback? If it looks like JSON but failed, maybe it's corrupted.
+                                                    }
+                                                } else if (raw.length > 0) {
+                                                    // Treat as single URL
+                                                    photos = [raw];
                                                 }
                                             }
                                         } catch (e) {
-                                            console.error("Error parsing photos:", e);
-                                            // Fallback: treat as single entry if string, or empty
-                                            if (typeof appointment.photos === 'string') photos = [appointment.photos];
+                                            console.error("Critical error handling photos:", e);
+                                            photos = [];
                                         }
 
                                         if (!photos || photos.length === 0) return null;

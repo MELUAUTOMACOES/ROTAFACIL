@@ -2619,13 +2619,13 @@ export default function RoutesHistoryPage() {
 
       {/* Modal de Rastreamento */}
       <Dialog open={!!trackingRouteId} onOpenChange={(open) => !open && setTrackingRouteId(null)}>
-        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Rastreamento da Rota</DialogTitle>
             <DialogDescription>Trajeto percorrido e pontos registrados pelo GPS</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 min-h-0 bg-gray-50 rounded-lg overflow-hidden relative">
-            {trackingRouteId && <RouteTrackingMap routeId={trackingRouteId} height="100%" />}
+          <div className="flex-1 rounded-lg overflow-hidden relative" style={{ minHeight: '500px' }}>
+            {trackingRouteId && <RouteTrackingMap routeId={trackingRouteId} height="500px" />}
           </div>
         </DialogContent>
       </Dialog>

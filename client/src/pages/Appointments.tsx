@@ -96,7 +96,7 @@ export default function Appointments() {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [selectedTechnicians, setSelectedTechnicians] = useState<string[]>([]); // IDs de técnicos e equipes misturados
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['scheduled', 'rescheduled']); // Filtro padrão: apenas agendados e remarcados
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['scheduled', 'rescheduled', 'in_progress']); // Filtro padrão: agendados, remarcados e em andamento
   const [inRouteFilter, setInRouteFilter] = useState<string>("all"); // "all", "yes", "no" - Padrão: Todos
 
   // Estado para controlar visualização (lista ou calendário)

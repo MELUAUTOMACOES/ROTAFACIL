@@ -928,8 +928,8 @@ export class DatabaseStorage implements IStorage {
         // Comparar Apenas a DATA (ignorando hora/timezone)
         sql`DATE(${routes.date}) = DATE(${format(date, "yyyy-MM-dd")})`,
 
-        // Status confirmado ou em andamento
-        or(eq(routes.status, 'confirmado'), eq(routes.status, 'em_andamento')),
+        // Status confirmado, em andamento ou in_progress (legado)
+        or(eq(routes.status, 'confirmado'), eq(routes.status, 'em_andamento'), eq(routes.status, 'in_progress')),
         // Responsável
         or(
           // Caso 1: Responsável é o técnico (usuário logado)
@@ -955,6 +955,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(routes)
       .where(and(...conditions))
+      .orderBy(desc(routes.updatedAt)) // 🆕 Preferir a rota modificada mais recentemente (ex: iniciada)
       .limit(1);
 
     return route || undefined;

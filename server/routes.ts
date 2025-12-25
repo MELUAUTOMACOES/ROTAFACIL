@@ -470,6 +470,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         signature,
         executionStatus,
         executionNotes,
+        executionStartedAt, // 🆕 Adicionado para persistir o horário de início
         executionFinishedAt,
         executionStartLocation,
         executionEndLocation
@@ -511,6 +512,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .where(eq(routes.id, id))
         .returning();
+
+      // 🔄 Atualizar status dos agendamentos para 'in_progress'
+      // Buscar todos os appointments desta rota que estão com status 'scheduled' ou 'rescheduled'
+      const stops = await db.select().from(routeStops).where(eq(routeStops.routeId, id));
+
+      console.log(`🔍 [START-ROUTE] Rota ${id} tem ${stops.length} paradas.`);
+
+      const appointmentIds = stops
+        .map(s => s.appointmentNumericId)
+        .filter((id): id is number => id !== null);
+
+      console.log(`🔍 [START-ROUTE] IDs de agendamentos encontrados (validados):`, appointmentIds);
+
+      if (appointmentIds.length > 0) {
+        // Log para ver status atuais antes de tentar update
+        const currentStatuses = await db
+          .select({ id: appointments.id, status: appointments.status })
+          .from(appointments)
+          .where(inArray(appointments.id, appointmentIds));
+
+        console.log(`🔍 [START-ROUTE] Status atuais dos agendamentos:`, currentStatuses);
+
+        const result = await db.update(appointments)
+          .set({
+            status: 'in_progress',
+            // Opcional: registrar que "aguarda execução" no executionStatus se quiser, 
+            // mas o padrão é deixar null até o prestador mexer.
+          })
+          .where(and(
+            inArray(appointments.id, appointmentIds),
+            or(
+              eq(appointments.status, 'scheduled'),
+              eq(appointments.status, 'rescheduled')
+            )
+          ))
+          .returning();
+
+        console.log(`🔄 [ROTA] ${result.length} agendamentos foram EFETIVAMENTE atualizados para 'in_progress' na rota ${id}`);
+        console.log(`   IDs atualizados:`, result.map(a => a.id));
+      } else {
+        console.log(`⚠️ [START-ROUTE] Nenhum ID numérico de agendamento encontrado nas paradas da rota.`);
+      }
 
       console.log(`✅ [PROVIDER] Rota ${id} iniciada às ${route.routeStartedAt}`);
       res.json(route);
@@ -4349,58 +4392,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerAuditRoutes(app, authenticateToken);
 
   const httpServer = createServer(app);
-  // RASTREAMENTO DE LOCALIZAÇÃO (GPS)
-  // Recebe pontos de localização do app do prestador
-  app.post("/api/tracking/location", authenticateToken, async (req, res) => {
-    try {
-      const { points } = req.body;
-      console.log(`📍 [TRACKING] Recebendo ${points?.length || 0} pontos de user ${req.user.userId}`);
-
-      if (!points || !Array.isArray(points)) {
-        return res.status(400).json({ message: "Payload inválido" });
-      }
-
-      // Validar e inserir
-      for (const point of points) {
-        if (!point.latitude || !point.longitude) continue;
-
-        await storage.createTrackingLocation({
-          userId: req.user.userId,
-          routeId: point.routeId || null,
-          latitude: point.latitude,
-          longitude: point.longitude,
-          timestamp: new Date(point.timestamp || Date.now()),
-          accuracy: point.accuracy,
-          batteryLevel: point.batteryLevel,
-          speed: point.speed,
-          heading: point.heading,
-          providerId: req.user.userId // Assumindo provider = user
-        });
-      }
-
-      console.log(`✅ [TRACKING] Sucesso ao salvar pontos`);
-      res.json({ success: true });
-    } catch (error: any) {
-      console.error("❌ [TRACKING] Erro ao salvar localização:", error);
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  // Recupera histórico de localização de uma rota
-  app.get("/api/tracking/route/:routeId", authenticateToken, async (req, res) => {
-    try {
-      const { routeId } = req.params;
-      console.log(`🗺️ [TRACKING] Buscando rastro da rota ${routeId}`);
-
-      const locations = await storage.getRouteTrackingLocations(routeId);
-
-      console.log(`✅ [TRACKING] Retornados ${locations.length} pontos`);
-      res.json(locations);
-    } catch (error: any) {
-      console.error("❌ [TRACKING] Erro ao buscar rastro:", error);
-      res.status(500).json({ message: error.message });
-    }
-  });
 
   // CEP Proxy to avoid CORS
   app.get("/api/cep/:cep", async (req, res) => {

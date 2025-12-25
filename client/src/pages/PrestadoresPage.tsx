@@ -29,7 +29,9 @@ export default function PrestadoresPage() {
     const { user } = useAuth();
     const { toast } = useToast();
     const queryClient = useQueryClient();
-    const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
+
+    // Alterado para usar ID para evitar estado stale
+    const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | number | null>(null);
     const [showFinalizeModal, setShowFinalizeModal] = useState(false);
     const [showQRModal, setShowQRModal] = useState(false);
     const [finalizeStatus, setFinalizeStatus] = useState('finalizado');
@@ -85,18 +87,28 @@ export default function PrestadoresPage() {
         enabled: user?.role !== 'admin' || !!selectedRouteId // Admin só busca se tiver selecionado
     });
 
+    // 🆕 Derived State: Garante que os dados do modal estejam sempre frescos vindo do React Query
+    const selectedAppointmentData = React.useMemo(() => {
+        if (!selectedAppointmentId || !routeData?.stops) return null;
+        // The ID stored might be the stop.id (UUID) or appointment.id (number)
+        return routeData.stops.find((s: any) => s.id === selectedAppointmentId || s.appointment?.id === selectedAppointmentId) || null;
+    }, [selectedAppointmentId, routeData?.stops]);
+
     // Hook de rastreamento de localização
     const tracker = useLocationTracker({
-        // Adicionando suporte a em_andamento (DB) e in_progress (Legado)
+        // Adicionando suporte a em_andamento (DB), in_progress (Legado) ou Confirmado com Start (Atual)
         enabled: (user?.role === 'provider' || user?.role === 'driver' || user?.role === 'admin') &&
             !!routeData?.route &&
-            (routeData.route.status === 'em_andamento' || routeData.route.status === 'in_progress'),
+            (
+                routeData.route.status === 'em_andamento' ||
+                routeData.route.status === 'in_progress' ||
+                (routeData.route.status === 'confirmado' && !!routeData.route.routeStartedAt)
+            ),
         userId: user?.id,
         routeId: routeData?.route?.id
     });
 
     // Mutation para atualizar agendamento
-
     const updateAppointmentMutation = useMutation({
         mutationFn: async ({ id, data }: { id: number, data: any }) => {
             const res = await apiRequest("PUT", `/api/provider/appointments/${id}`, data);
@@ -295,7 +307,8 @@ export default function PrestadoresPage() {
             });
             return;
         }
-        setSelectedAppointment(apt);
+        // Usando ID ao invés do objeto direto
+        setSelectedAppointmentId(apt.id);
     };
 
     const handleStartRoute = async () => {
@@ -314,7 +327,7 @@ export default function PrestadoresPage() {
     };
 
     const handleSaveAppointment = async (data: any) => {
-        if (selectedAppointment) {
+        if (selectedAppointmentData) {
             // Se for conclusão ou falha, tenta pegar localização final
             let endLocation = undefined;
             if (data.executionStatus && ['concluido', 'nao_realizado_cliente_ausente', 'nao_realizado_cliente_pediu_remarcacao', 'nao_realizado_problema_tecnico', 'nao_realizado_endereco_incorreto', 'nao_realizado_cliente_recusou', 'nao_realizado_outro'].includes(data.executionStatus)) {
@@ -326,7 +339,7 @@ export default function PrestadoresPage() {
             }
 
             await updateAppointmentMutation.mutateAsync({
-                id: selectedAppointment.appointment.id,
+                id: selectedAppointmentData.appointment.id,
                 data: {
                     ...data,
                     executionEndLocation: endLocation
@@ -383,28 +396,6 @@ export default function PrestadoresPage() {
             case 'nao_realizado_cliente_recusou': return 'Recusou';
             case 'nao_realizado_outro': return 'Outro';
             default: return 'Pendente';
-        }
-    };
-
-    // Antigos helpers mantidos para compatibilidade se necessário, ou removidos se não usados
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'completed': return 'bg-green-100 text-green-800 border-green-200';
-            case 'in_progress': return 'bg-blue-100 text-blue-800 border-blue-200';
-            case 'cancelled': return 'bg-red-100 text-red-800 border-red-200';
-            case 'rescheduled': return 'bg-orange-100 text-orange-800 border-orange-200';
-            default: return 'bg-gray-100 text-gray-800 border-gray-200';
-        }
-    };
-
-    const getStatusLabel = (status: string) => {
-        switch (status) {
-            case 'completed': return 'Concluído';
-            case 'in_progress': return 'Em Andamento';
-            case 'cancelled': return 'Cancelado';
-            case 'rescheduled': return 'Remarcado';
-            case 'scheduled': return 'Pendente';
-            default: return status;
         }
     };
 
@@ -684,39 +675,38 @@ export default function PrestadoresPage() {
                         })}
                     </div>
 
-                    {/* Footer Actions */}
-                    {!isRouteFinalized && (
-                        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg">
-                            {!route.routeStartedAt ? (
-                                // Rota não iniciada - mostrar botão Iniciar
+                    {/* Footer for Start/End Route */}
+                    <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg z-20">
+                        {(!route.routeStartedAt) ? (
+                            // Rota não iniciada - mostrar botão Iniciar
+                            <Button
+                                className="w-full bg-[#DAA520] hover:bg-[#B8860B] text-white h-12 text-lg"
+                                onClick={handleStartRoute}
+                                disabled={startRouteMutation.isPending}
+                            >
+                                <PlayCircle className="w-5 h-5 mr-2" />
+                                {startRouteMutation.isPending ? 'Iniciando...' : 'Iniciar Rota'}
+                            </Button>
+                        ) : (
+                            // Rota iniciada - mostrar botão Fechar Romaneio
+                            <div className="flex flex-col gap-2">
                                 <Button
-                                    className="w-full bg-[#DAA520] hover:bg-[#B8860B] text-white h-12 text-lg"
-                                    onClick={handleStartRoute}
-                                    disabled={startRouteMutation.isPending}
+                                    className={`w-full h-12 text-lg ${canCloseRoute ? 'bg-gray-900 hover:bg-gray-800' : 'bg-gray-400 cursor-not-allowed'} text-white`}
+                                    onClick={handleOpenFinalizeModal}
+                                    disabled={!canCloseRoute}
+                                    type="button"
                                 >
-                                    <PlayCircle className="w-5 h-5 mr-2" />
-                                    {startRouteMutation.isPending ? 'Iniciando...' : 'Iniciar Rota'}
+                                    <CheckCircle className="w-5 h-5 mr-2" />
+                                    Fechar Romaneio
                                 </Button>
-                            ) : (
-                                // Rota iniciada - mostrar botão Fechar Romaneio
-                                <div className="flex flex-col gap-2">
-                                    <Button
-                                        className={`w-full h-12 text-lg ${canCloseRoute ? 'bg-gray-900 hover:bg-gray-800' : 'bg-gray-400 cursor-not-allowed'} text-white`}
-                                        onClick={handleOpenFinalizeModal}
-                                        disabled={!canCloseRoute}
-                                    >
-                                        <CheckCircle className="w-5 h-5 mr-2" />
-                                        Fechar Romaneio
-                                    </Button>
-                                    {!canCloseRoute && (
-                                        <p className="text-center text-sm text-orange-600">
-                                            ⚠️ Finalize {pendingAppointments} atendimento{pendingAppointments > 1 ? 's' : ''} pendente{pendingAppointments > 1 ? 's' : ''}
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    )}
+                                {!canCloseRoute && (
+                                    <p className="text-center text-sm text-orange-600">
+                                        ⚠️ Finalize {pendingAppointments} atendimento{pendingAppointments > 1 ? 's' : ''} pendente{pendingAppointments > 1 ? 's' : ''}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </TabsContent>
 
                 <TabsContent value="checklist" className="mt-0">
@@ -725,11 +715,11 @@ export default function PrestadoresPage() {
             </Tabs>
 
             {/* Appointment Execution Modal */}
-            {selectedAppointment && (
+            {selectedAppointmentData && (
                 <AppointmentExecutionModal
-                    isOpen={!!selectedAppointment}
-                    onClose={() => setSelectedAppointment(null)}
-                    appointment={selectedAppointment.appointment}
+                    isOpen={!!selectedAppointmentData}
+                    onClose={() => setSelectedAppointmentId(null)}
+                    appointment={selectedAppointmentData.appointment}
                     onSave={handleSaveAppointment}
                     onStartExecution={async (appointmentId: number) => {
                         // Persistir executionStartedAt no banco + Location
