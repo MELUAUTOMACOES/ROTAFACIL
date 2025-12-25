@@ -471,7 +471,7 @@ export default function PrestadoresPage() {
 
     // Contar agendamentos sem status de execução
     const pendingAppointments = stops?.filter((s: any) => !s.appointment?.executionStatus)?.length || 0;
-    const canCloseRoute = pendingAppointments === 0;
+    const canCloseRoute = pendingAppointments === 0 && !isRouteFinalized;
 
     return (
         <div className="min-h-screen bg-gray-50 pb-20">
@@ -701,7 +701,10 @@ export default function PrestadoresPage() {
                                 </Button>
                                 {!canCloseRoute && (
                                     <p className="text-center text-sm text-orange-600">
-                                        ⚠️ Finalize {pendingAppointments} atendimento{pendingAppointments > 1 ? 's' : ''} pendente{pendingAppointments > 1 ? 's' : ''}
+                                        {isRouteFinalized
+                                            ? '✓ Romaneio já foi encerrado'
+                                            : `⚠️ Finalize ${pendingAppointments} atendimento${pendingAppointments > 1 ? 's' : ''} pendente${pendingAppointments > 1 ? 's' : ''}`
+                                        }
                                     </p>
                                 )}
                             </div>
