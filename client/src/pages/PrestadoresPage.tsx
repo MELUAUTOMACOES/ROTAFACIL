@@ -87,7 +87,10 @@ export default function PrestadoresPage() {
 
     // Hook de rastreamento de localização
     const tracker = useLocationTracker({
-        enabled: (user?.role === 'provider' || user?.role === 'driver') && !!routeData?.route && routeData.route.status === 'in_progress',
+        // Adicionando suporte a em_andamento (DB) e in_progress (Legado)
+        enabled: (user?.role === 'provider' || user?.role === 'driver' || user?.role === 'admin') &&
+            !!routeData?.route &&
+            (routeData.route.status === 'em_andamento' || routeData.route.status === 'in_progress'),
         userId: user?.id,
         routeId: routeData?.route?.id
     });
@@ -628,13 +631,24 @@ export default function PrestadoresPage() {
                                                 </div>
 
                                                 {/* Botões WhatsApp */}
-                                                <div className="flex gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
+                                                <div className="flex gap-2 ml-2" onClick={(e) => e.stopPropagation()}>
+                                                    {/* Botão Google Maps */}
+                                                    <a
+                                                        href={`https://www.google.com/maps/dir/?api=1&destination=${stop.lat && stop.lng ? `${stop.lat},${stop.lng}` : encodeURIComponent(stop.address || stop.appointment?.address || '')}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="p-2 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition-colors shadow-sm"
+                                                        title="Abrir no Google Maps"
+                                                    >
+                                                        <MapIcon size={18} />
+                                                    </a>
+
                                                     {stop.appointment?.phone1 && generateWhatsAppLink(stop.appointment.phone1, stop.appointment) && (
                                                         <a
                                                             href={generateWhatsAppLink(stop.appointment.phone1, stop.appointment)!}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="p-2 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors"
+                                                            className="p-2 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors shadow-sm"
                                                             title={`WhatsApp: ${stop.appointment.phone1}`}
                                                         >
                                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -647,7 +661,7 @@ export default function PrestadoresPage() {
                                                             href={generateWhatsAppLink(stop.appointment.phone2, stop.appointment)!}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="p-2 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors"
+                                                            className="p-2 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors shadow-sm"
                                                             title={`WhatsApp: ${stop.appointment.phone2}`}
                                                         >
                                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">

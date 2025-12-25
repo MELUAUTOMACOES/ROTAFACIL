@@ -202,32 +202,55 @@ export function AppointmentDetailsModal({ isOpen, onClose, appointmentId }: Appo
                         <TabsContent value="photos" className="flex-1 overflow-auto">
                             <ScrollArea className="h-full pr-4">
                                 <div className="space-y-6 p-1">
-                                    {appointment.photos && JSON.parse(appointment.photos).length > 0 && (
-                                        <>
-                                            <div>
-                                                <Label className="text-base font-semibold mb-3 block flex items-center gap-2">
-                                                    <Image className="w-4 h-4" />
-                                                    Fotos ({JSON.parse(appointment.photos).length})
-                                                </Label>
-                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                                    {JSON.parse(appointment.photos).map((photo: string, idx: number) => (
-                                                        <a
-                                                            key={idx}
-                                                            href={photo}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="relative aspect-square rounded-lg overflow-hidden border group"
-                                                        >
-                                                            <img src={photo} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
-                                                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-sm font-medium">
-                                                                Abrir
-                                                            </div>
-                                                        </a>
-                                                    ))}
+                                    {(() => {
+                                        let photos: string[] = [];
+                                        try {
+                                            if (Array.isArray(appointment.photos)) {
+                                                photos = appointment.photos;
+                                            } else if (typeof appointment.photos === 'string') {
+                                                // Check if it looks like a JSON array
+                                                if (appointment.photos.trim().startsWith('[')) {
+                                                    photos = JSON.parse(appointment.photos);
+                                                } else {
+                                                    // It might be a single URL or data URI stored as string
+                                                    photos = [appointment.photos];
+                                                }
+                                            }
+                                        } catch (e) {
+                                            console.error("Error parsing photos:", e);
+                                            // Fallback: treat as single entry if string, or empty
+                                            if (typeof appointment.photos === 'string') photos = [appointment.photos];
+                                        }
+
+                                        if (!photos || photos.length === 0) return null;
+
+                                        return (
+                                            <>
+                                                <div>
+                                                    <Label className="text-base font-semibold mb-3 block flex items-center gap-2">
+                                                        <Image className="w-4 h-4" />
+                                                        Fotos ({photos.length})
+                                                    </Label>
+                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                                        {photos.map((photo: string, idx: number) => (
+                                                            <a
+                                                                key={idx}
+                                                                href={photo}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="relative aspect-square rounded-lg overflow-hidden border group"
+                                                            >
+                                                                <img src={photo} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
+                                                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-sm font-medium">
+                                                                    Abrir
+                                                                </div>
+                                                            </a>
+                                                        ))}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </>
-                                    )}
+                                            </>
+                                        );
+                                    })()}
 
                                     {appointment.signature && (
                                         <>
