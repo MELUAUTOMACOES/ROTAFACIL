@@ -5,8 +5,12 @@ import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import crypto from "node:crypto"; // para randomUUID
 import { db } from "./db"; // ajuste o caminho se o seu db estiver noutro arquivo
-import { routes, routeStops, appointments, clients, users, dailyAvailability, vehicleChecklists, vehicleChecklistItems, teamMembers, pendingResolutions, appointmentHistory, routeOccurrences } from "@shared/schema";
-import { eq, inArray, sql, and, or, gte, desc } from "drizzle-orm";
+import {
+  routes, routeStops, appointments, clients, users, dailyAvailability, vehicleChecklists, vehicleChecklistItems, teamMembers, pendingResolutions, appointmentHistory,
+  routeOccurrences,
+  trackingLocations
+} from "@shared/schema";
+import { asc, desc, eq, inArray, sql, and, or, gte } from "drizzle-orm";
 import { z } from "zod";
 import { format } from "date-fns";
 import {
@@ -422,7 +426,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/provider/appointments/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { status, feedback, photos, signature, executionStatus, executionNotes, executionStartedAt, executionFinishedAt } = req.body;
+      const { status, feedback, photos, signature, executionStatus, executionNotes, executionStartedAt, executionFinishedAt, executionStartLocation, executionEndLocation } = req.body;
 
       // 🔒 Validar se a rota pai já está finalizada (apenas finalizado/cancelado bloqueiam)
       const appointmentStops = await db.select().from(routeStops).where(eq(routeStops.appointmentNumericId, id));
@@ -451,8 +455,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         signature,
         executionStatus,
         executionNotes,
-        executionStartedAt,
-        executionFinishedAt
+        executionFinishedAt,
+        executionStartLocation,
+        executionEndLocation
       }, req.user.userId);
 
       res.json(updated);
@@ -466,6 +471,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/routes/:id/start", authenticateToken, async (req: any, res) => {
     try {
       const { id } = req.params; // UUID
+      const { startLocationData } = req.body; // { lat, lng, address, timestamp }
 
       // Verificar se rota existe
       const existingRoute = await db.query.routes.findFirst({
@@ -485,6 +491,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [route] = await db.update(routes)
         .set({
           routeStartedAt: new Date(),
+          startLocationData: startLocationData || null,
           updatedAt: new Date()
         })
         .where(eq(routes.id, id))
@@ -502,7 +509,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/provider/route/:id/finalize", authenticateToken, async (req: any, res) => {
     try {
       const { id } = req.params; // UUID
-      const { status, motivo, routeEndLocation } = req.body; // status: finalizado, incompleto, cancelado
+      const { status, motivo, routeEndLocation, endLocationData } = req.body; // endLocationData: { lat, lng, address, timestamp }
 
       // Validar status permitido
       if (!['finalizado', 'incompleto', 'cancelado'].includes(status)) {
@@ -541,6 +548,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (routeEndLocation && ['last_client', 'company_home'].includes(routeEndLocation)) {
         updateData.routeEndLocation = routeEndLocation;
+      }
+
+      if (endLocationData) {
+        updateData.endLocationData = endLocationData;
       }
 
       const [route] = await db.update(routes)
@@ -607,6 +618,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(occurrences);
     } catch (error: any) {
       console.error("❌ [PROVIDER] Erro ao listar ocorrências:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // 🛰️ GEOLOCALIZAÇÃO: Receber Tracking Points
+  app.post("/api/tracking/location", authenticateToken, async (req: any, res) => {
+    try {
+      const { points } = req.body; // Aceita um array de pontos ou um único ponto
+
+      if (!points) {
+        return res.status(400).json({ message: "Dados de localização inválidos" });
+      }
+
+      const locations = Array.isArray(points) ? points : [points];
+
+      // Mapear para insert
+      const insertData = locations.map((loc: any) => ({
+        userId: req.user.userId,
+        routeId: loc.routeId || null,
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        timestamp: new Date(loc.timestamp),
+        accuracy: loc.accuracy || null,
+        batteryLevel: loc.batteryLevel || null,
+        speed: loc.speed || null,
+        heading: loc.heading || null,
+        providerId: req.user.entityId || null // Opcional
+      }));
+
+      await db.insert(trackingLocations).values(insertData);
+
+      console.log(`📍 [TRACKING] ${insertData.length} pontos salvos para user ${req.user.userId}`);
+      res.json({ success: true, count: insertData.length });
+    } catch (error: any) {
+      console.error("❌ [TRACKING] Erro ao salvar localização:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // 🛰️ GEOLOCALIZAÇÃO: Buscar rota percorrida
+  app.get("/api/tracking/route/:routeId", authenticateToken, async (req: any, res) => {
+    try {
+      const { routeId } = req.params;
+
+      const points = await db.select()
+        .from(trackingLocations)
+        .where(eq(trackingLocations.routeId, routeId))
+        .orderBy(asc(trackingLocations.timestamp));
+
+      res.json(points);
+    } catch (error: any) {
+      console.error("❌ [TRACKING] Erro ao buscar rota:", error);
       res.status(500).json({ message: error.message });
     }
   });

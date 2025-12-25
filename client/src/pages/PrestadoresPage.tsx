@@ -23,6 +23,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { AppointmentExecutionModal } from "@/components/provider/AppointmentExecutionModal";
 import VehicleChecklistTab from "@/components/provider/VehicleChecklistTab";
 import { useAuth } from "@/lib/auth";
+import { useLocationTracker } from "@/hooks/useLocationTracker";
 
 export default function PrestadoresPage() {
     const { user } = useAuth();
@@ -84,7 +85,15 @@ export default function PrestadoresPage() {
         enabled: user?.role !== 'admin' || !!selectedRouteId // Admin só busca se tiver selecionado
     });
 
+    // Hook de rastreamento de localização
+    const tracker = useLocationTracker({
+        enabled: (user?.role === 'provider' || user?.role === 'driver') && !!routeData?.route && routeData.route.status === 'in_progress',
+        userId: user?.id,
+        routeId: routeData?.route?.id
+    });
+
     // Mutation para atualizar agendamento
+
     const updateAppointmentMutation = useMutation({
         mutationFn: async ({ id, data }: { id: number, data: any }) => {
             const res = await apiRequest("PUT", `/api/provider/appointments/${id}`, data);
@@ -123,8 +132,8 @@ export default function PrestadoresPage() {
 
     // Mutation para iniciar rota
     const startRouteMutation = useMutation({
-        mutationFn: async (id: string) => {
-            const res = await apiRequest("PATCH", `/api/routes/${id}/start`);
+        mutationFn: async ({ id, startLocationData }: { id: string, startLocationData?: any }) => {
+            const res = await apiRequest("PATCH", `/api/routes/${id}/start`, { startLocationData });
             return res.json();
         },
         onSuccess: () => {
@@ -288,15 +297,37 @@ export default function PrestadoresPage() {
 
     const handleStartRoute = async () => {
         if (routeData?.route?.id) {
-            await startRouteMutation.mutateAsync(routeData.route.id);
+            let location = null;
+            try {
+                location = await tracker.getCurrentLocation();
+            } catch (e) {
+                console.warn("Não foi possível obter localização ao iniciar rota", e);
+            }
+            await startRouteMutation.mutateAsync({
+                id: routeData.route.id,
+                startLocationData: location
+            });
         }
     };
 
     const handleSaveAppointment = async (data: any) => {
         if (selectedAppointment) {
+            // Se for conclusão ou falha, tenta pegar localização final
+            let endLocation = undefined;
+            if (data.executionStatus && ['concluido', 'nao_realizado_cliente_ausente', 'nao_realizado_cliente_pediu_remarcacao', 'nao_realizado_problema_tecnico', 'nao_realizado_endereco_incorreto', 'nao_realizado_cliente_recusou', 'nao_realizado_outro'].includes(data.executionStatus)) {
+                try {
+                    endLocation = await tracker.getCurrentLocation();
+                } catch (e) {
+                    console.warn("Sem localização de fim de atendimento");
+                }
+            }
+
             await updateAppointmentMutation.mutateAsync({
                 id: selectedAppointment.appointment.id,
-                data
+                data: {
+                    ...data,
+                    executionEndLocation: endLocation
+                }
             });
         }
     };
@@ -313,12 +344,20 @@ export default function PrestadoresPage() {
                 finalMotivo = finalizeMotivo ? `[Finalizado com Pendências] ${finalizeMotivo}` : '[Finalizado com Pendências]';
             }
 
+            let routeEndLocationData = null;
+            try {
+                routeEndLocationData = await tracker.getCurrentLocation();
+            } catch (e) {
+                console.warn("Não foi possível obter localização ao finalizar rota", e);
+            }
+
             await finalizeRouteMutation.mutateAsync({
                 id: routeData.route.id,
                 data: {
                     status: finalStatus,
                     motivo: finalMotivo,
-                    routeEndLocation: routeEndLocation // Onde finalizou o dia
+                    routeEndLocation: routeEndLocation, // Onde finalizou o dia (tipo)
+                    endLocationData: routeEndLocationData // Coordenadas GPS
                 }
             });
         }
@@ -679,10 +718,18 @@ export default function PrestadoresPage() {
                     appointment={selectedAppointment.appointment}
                     onSave={handleSaveAppointment}
                     onStartExecution={async (appointmentId: number) => {
-                        // Persistir executionStartedAt no banco
+                        // Persistir executionStartedAt no banco + Location
+                        let startLocation = undefined;
+                        try {
+                            startLocation = await tracker.getCurrentLocation();
+                        } catch (e) { console.warn("Sem localização de inicio"); }
+
                         await updateAppointmentMutation.mutateAsync({
                             id: appointmentId,
-                            data: { executionStartedAt: new Date().toISOString() }
+                            data: {
+                                executionStartedAt: new Date().toISOString(),
+                                executionStartLocation: startLocation
+                            }
                         });
                     }}
                 />

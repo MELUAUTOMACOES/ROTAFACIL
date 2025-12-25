@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import OptimizedRouteMap from "@/components/maps/OptimizedRouteMap";
+import RouteTrackingMap from "@/components/maps/RouteTrackingMap";
 import RouteAuditModal from "@/components/RouteAuditModal";
 import { ResolvePendingModal } from "@/components/modals/ResolvePendingModal";
 import { AppointmentHistoryModal } from "@/components/modals/AppointmentHistoryModal";
@@ -216,6 +217,10 @@ const fmtDateList = (input: string | Date) => {
 
 
 export default function RoutesHistoryPage() {
+  // Rastreamento
+  const [trackingRouteId, setTrackingRouteId] = useState<string | null>(null);
+
+  // Estados dos filtros
   const [filters, setFilters] = useState<RouteFilters>({
     dateFrom: '',
     dateTo: '',
@@ -1926,6 +1931,14 @@ export default function RoutesHistoryPage() {
                                 >
                                   <FileText className="h-4 w-4" />
                                 </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setTrackingRouteId(route.id)}
+                                  title="Ver Rastreamento GPS"
+                                >
+                                  <MapPin className="h-4 w-4" />
+                                </Button>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -2604,6 +2617,18 @@ export default function RoutesHistoryPage() {
         appointmentId={appointmentDetailsId}
       />
 
+      {/* Modal de Rastreamento */}
+      <Dialog open={!!trackingRouteId} onOpenChange={(open) => !open && setTrackingRouteId(null)}>
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Rastreamento da Rota</DialogTitle>
+            <DialogDescription>Trajeto percorrido e pontos registrados pelo GPS</DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 bg-gray-50 rounded-lg overflow-hidden relative">
+            {trackingRouteId && <RouteTrackingMap routeId={trackingRouteId} height="100%" />}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

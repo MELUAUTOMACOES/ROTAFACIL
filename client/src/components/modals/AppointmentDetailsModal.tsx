@@ -5,7 +5,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Clock, FileText, Image, PenTool, History } from 'lucide-react';
+import { Clock, FileText, Image, PenTool, History, MapPin } from 'lucide-react';
+import AppointmentLocationMap from '../maps/AppointmentLocationMap';
 import { getAuthHeaders } from '@/lib/auth';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -84,6 +85,20 @@ export function AppointmentDetailsModal({ isOpen, onClose, appointmentId }: Appo
         }
     };
 
+    // Dados de localização
+    const clientLocation = (appointment?.latitude && appointment?.longitude)
+        ? { lat: parseFloat(appointment.latitude), lng: parseFloat(appointment.longitude) }
+        : undefined;
+
+    const executionEnd = appointment?.executionEndLocation
+        ? {
+            lat: appointment.executionEndLocation.latitude,
+            lng: appointment.executionEndLocation.longitude,
+            timestamp: appointment.executionEndLocation.timestamp
+        } : undefined;
+
+    const hasLocationData = !!clientLocation || !!executionEnd;
+
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -105,9 +120,22 @@ export function AppointmentDetailsModal({ isOpen, onClose, appointmentId }: Appo
                     <div className="text-center py-8 text-gray-500">Agendamento não encontrado</div>
                 ) : (
                     <Tabs defaultValue="current" className="flex-1 overflow-hidden flex flex-col">
-                        <TabsList className="grid w-full grid-cols-2">
+                        <TabsList className={`grid w-full grid-cols-${2 + (hasLocationData ? 1 : 0)}`}>
                             <TabsTrigger value="current">Dados Atuais</TabsTrigger>
-                            <TabsTrigger value="history">Histórico ({history.length})</TabsTrigger>
+                            <TabsTrigger value="photos" className="flex items-center gap-2">
+                                <Image className="w-4 h-4" />
+                                Fotos/Assinatura
+                            </TabsTrigger>
+                            {hasLocationData && (
+                                <TabsTrigger value="map" className="flex items-center gap-2">
+                                    <MapPin className="w-4 h-4" />
+                                    Mapa
+                                </TabsTrigger>
+                            )}
+                            <TabsTrigger value="history" className="flex items-center gap-2">
+                                <History className="w-4 h-4" />
+                                Histórico ({history.length})
+                            </TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="current" className="flex-1 overflow-auto">
@@ -167,10 +195,15 @@ export function AppointmentDetailsModal({ isOpen, onClose, appointmentId }: Appo
                                             </div>
                                         </>
                                     )}
+                                </div>
+                            </ScrollArea>
+                        </TabsContent>
 
+                        <TabsContent value="photos" className="flex-1 overflow-auto">
+                            <ScrollArea className="h-full pr-4">
+                                <div className="space-y-6 p-1">
                                     {appointment.photos && JSON.parse(appointment.photos).length > 0 && (
                                         <>
-                                            <Separator />
                                             <div>
                                                 <Label className="text-base font-semibold mb-3 block flex items-center gap-2">
                                                     <Image className="w-4 h-4" />
@@ -214,7 +247,49 @@ export function AppointmentDetailsModal({ isOpen, onClose, appointmentId }: Appo
                             </ScrollArea>
                         </TabsContent>
 
-                        <TabsContent value="history" className="flex-1 overflow-auto">
+                        {hasLocationData && (
+                            <TabsContent value="map" className="mt-0 h-full">
+                                <ScrollArea className="h-full">
+                                    <div className="p-4 space-y-4">
+                                        <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                                            <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                                                <MapPin className="w-5 h-5" />
+                                                Registro de Localização
+                                            </h3>
+                                            <p className="text-sm text-blue-700">
+                                                O mapa mostra a comparação entre o endereço cadastrado do cliente (Azul) e o local onde o serviço foi finalizado (Verde).
+                                            </p>
+                                        </div>
+
+                                        <AppointmentLocationMap
+                                            clientLocation={clientLocation}
+                                            executionEnd={executionEnd}
+                                            height="400px"
+                                        />
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                            {clientLocation && (
+                                                <div className="bg-gray-50 p-3 rounded border">
+                                                    <span className="text-xs text-gray-500 block">Endereço Cadastrado</span>
+                                                    <span className="text-sm font-medium">{appointment.clientAddress || 'Endereço não informado'}</span>
+                                                </div>
+                                            )}
+                                            {executionEnd && (
+                                                <div className="bg-gray-50 p-3 rounded border">
+                                                    <span className="text-xs text-gray-500 block">Local da Finalização (GPS)</span>
+                                                    <span className="text-sm font-medium">Lat: {executionEnd.lat.toFixed(5)}, Lng: {executionEnd.lng.toFixed(5)}</span>
+                                                    <span className="text-xs text-gray-400 block mt-1">
+                                                        Precisão: {appointment.executionEndLocation?.accuracy ? `±${Math.round(appointment.executionEndLocation.accuracy)}m` : 'N/A'}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </ScrollArea>
+                            </TabsContent>
+                        )}
+
+                        <TabsContent value="history" className="mt-0 h-full">
                             <ScrollArea className="h-full pr-4">
                                 <div className="space-y-4 p-1">
                                     {history.length === 0 ? (

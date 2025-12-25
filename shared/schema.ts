@@ -207,6 +207,8 @@ export const appointments = pgTable("appointments", {
   // Campos de tempo de execução (preenchidos pelo prestador)
   executionStartedAt: timestamp("execution_started_at"), // Hora que o prestador iniciou o atendimento
   executionFinishedAt: timestamp("execution_finished_at"), // Hora que o prestador finalizou o atendimento
+  executionStartLocation: jsonb("execution_start_location"), // { lat, lng, address, timestamp }
+  executionEndLocation: jsonb("execution_end_location"), // { lat, lng, address, timestamp }
   cep: text("cep").notNull(),
   logradouro: text("logradouro").notNull(),
   numero: text("numero").notNull(),
@@ -368,6 +370,8 @@ export const routes = pgTable("routes", {
   routeStartedAt: timestamp("route_started_at"), // Quando prestador clicou "Iniciar Rota"
   routeFinishedAt: timestamp("route_finished_at"), // Quando clicou "Fechar Romaneio"
   routeEndLocation: varchar("route_end_location", { length: 20 }), // 'last_client' | 'company_home'
+  startLocationData: jsonb("start_location_data"), // { lat, lng, address, timestamp }
+  endLocationData: jsonb("end_location_data"), // { lat, lng, address, timestamp }
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -424,6 +428,23 @@ export const dailyAvailability = pgTable("daily_availability", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Tracking Locations Table - Histórico de localização dos prestadores
+export const trackingLocations = pgTable("tracking_locations", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  routeId: uuid("route_id").references(() => routes.id), // Pode ser null se não tiver rota ativa
+  latitude: doublePrecision("latitude").notNull(),
+  longitude: doublePrecision("longitude").notNull(),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  accuracy: doublePrecision("accuracy"), // Precisão em metros
+  batteryLevel: integer("battery_level"), // 0-100
+  speed: doublePrecision("speed"), // Velocidade m/s
+  heading: doublePrecision("heading"), // Direção 0-360
+  providerId: integer("provider_id"), // ID do técnico ou equipe (para facilitar queries)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 
 // Date restrictions table - Restrições de datas (feriados/indisponibilidades) por técnico ou equipe
 export const dateRestrictions = pgTable("date_restrictions", {

@@ -20,7 +20,8 @@ import {
   type VehicleMaintenance, type InsertVehicleMaintenance,
   type MaintenanceWarranty, type InsertMaintenanceWarranty,
   type FeatureUsage, type InsertFeatureUsage,
-  users, clients, services, technicians, vehicles, appointments, checklists, businessRules, teams, teamMembers, accessSchedules,
+  type AppointmentHistory, type InsertAppointmentHistory,
+  users, clients, services, technicians, vehicles, appointments, appointmentHistory, checklists, businessRules, teams, teamMembers, accessSchedules,
   companies, memberships, invitations,
   dateRestrictions,
   routes, routeStops,
@@ -30,7 +31,7 @@ import {
   featureUsage,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, ilike, sql, inArray, isNotNull, ne, isNull, gte, lte } from "drizzle-orm";
+import { eq, and, or, ilike, sql, inArray, isNotNull, ne, isNull, gte, lte, desc } from "drizzle-orm";
 import { format } from "date-fns";
 import bcrypt from "bcryptjs";
 
@@ -164,11 +165,15 @@ export interface IStorage {
     executionNotes?: string | null;
     executionStartedAt?: string | null;
     executionFinishedAt?: string | null;
+    executionStartLocation?: any;
+    executionEndLocation?: any;
   }, userId: number): Promise<Appointment>;
   finalizeRoute(id: string, status: string, userId: number): Promise<Route>;
   updateRouteDate(id: string, date: Date, userId: number): Promise<Route>;
   getRouteStops(routeId: string): Promise<RouteStop[]>;
   getPendingAppointments(userId: number): Promise<any[]>;
+  getAppointmentHistory(appointmentId: number): Promise<AppointmentHistory[]>;
+  createAppointmentHistory(data: InsertAppointmentHistory, userId: number): Promise<AppointmentHistory>;
 
   // Vehicle Documents
   getVehicleDocuments(vehicleId: number, userId: number): Promise<VehicleDocument[]>;
@@ -390,6 +395,26 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(routes.id, id), eq(routes.userId, userId))) // Garante isolamento
       .returning();
     return route;
+  }
+
+  async getAppointmentHistory(appointmentId: number): Promise<AppointmentHistory[]> {
+    return db.select()
+      .from(appointmentHistory)
+      .where(eq(appointmentHistory.appointmentId, appointmentId))
+      .orderBy(desc(appointmentHistory.changedAt));
+  }
+
+  async createAppointmentHistory(data: InsertAppointmentHistory, userId: number): Promise<AppointmentHistory> {
+    const [history] = await db.insert(appointmentHistory).values({
+      appointmentId: data.appointmentId,
+      changedBy: userId,
+      changedByName: data.changedByName,
+      changeType: data.changeType,
+      reason: data.reason,
+      previousData: data.previousData,
+      newData: data.newData
+    }).returning();
+    return history;
   }
 
   // Clients
@@ -944,24 +969,32 @@ export class DatabaseStorage implements IStorage {
     // (Idealmente verificar se ele é o dono da rota, mas por simplificação vamos confiar no userId do contexto e na existência do agendamento)
 
     // Preparar objeto de atualização
-    const updateData: any = {};
+    const updateData: any = { ...data };
 
-    if (data.status !== undefined) updateData.status = data.status;
-    if (data.feedback !== undefined) updateData.feedback = data.feedback;
-    if (data.photos !== undefined) updateData.photos = data.photos;
-    if (data.signature !== undefined) updateData.signature = data.signature;
-    if (data.executionStatus !== undefined) updateData.executionStatus = data.executionStatus;
-    if (data.executionNotes !== undefined) updateData.executionNotes = data.executionNotes;
-    if (data.executionStartedAt !== undefined) updateData.executionStartedAt = data.executionStartedAt ? new Date(data.executionStartedAt) : null;
-    if (data.executionFinishedAt !== undefined) updateData.executionFinishedAt = data.executionFinishedAt ? new Date(data.executionFinishedAt) : null;
+    if (data.executionStartedAt) updateData.executionStartedAt = new Date(data.executionStartedAt);
+    if (data.executionFinishedAt) updateData.executionFinishedAt = new Date(data.executionFinishedAt);
 
-    const [appointment] = await db
+    // Salvar histórico antes de atualizar
+    const [currentAppointment] = await db.select().from(appointments).where(eq(appointments.id, id));
+
+    if (currentAppointment) {
+      await this.createAppointmentHistory({
+        appointmentId: id,
+        changedByName: "Prestador (App)", // Poderíamos pegar o nome do usuário se tivéssemos acesso fácil aqui, mas userId serve
+        changeType: "execution_update",
+        reason: "Atualização de status/execução pelo prestador",
+        previousData: currentAppointment,
+        newData: updateData
+      }, userId);
+    }
+
+    const [updated] = await db
       .update(appointments)
       .set(updateData)
-      .where(eq(appointments.id, id)) // Removido filtro de userId estrito para permitir que membros da equipe editem
+      .where(eq(appointments.id, id))
       .returning();
 
-    return appointment;
+    return updated;
   }
 
   async getPendingAppointments(userId: number): Promise<any[]> {
