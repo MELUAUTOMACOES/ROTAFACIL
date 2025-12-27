@@ -46,17 +46,17 @@ export function VehiclesAttentionCard() {
                             {vehiclesWithIssues.slice(0, 5).map((vehicle: any) => (
                                 <div
                                     key={vehicle.id}
-                                    className={`flex items-center justify-between border-l-4 pl-3 py-2 rounded-r ${vehicle.severity === 'critical' ? 'border-red-500 bg-red-50' : 'border-orange-500 bg-orange-50'
+                                    className={`flex items-center justify-between border-l-4 pl-3 py-2 rounded-r ${vehicle.severity === 'critical' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
                                         }`}
                                 >
                                     <div className="flex-1">
-                                        <p className="font-medium text-sm">
+                                        <p className="font-medium text-sm dark:text-zinc-100">
                                             {vehicle.plate} - {vehicle.model}
                                         </p>
-                                        <p className="text-xs text-gray-600">
+                                        <p className="text-xs text-gray-600 dark:text-zinc-400">
                                             Checklist em {format(new Date(vehicle.checklistDate), "dd/MM/yyyy", { locale: ptBR })}
                                         </p>
-                                        <p className="text-xs text-gray-500">
+                                        <p className="text-xs text-gray-500 dark:text-zinc-500">
                                             {vehicle.problematicItemsCount} {vehicle.problematicItemsCount === 1 ? 'item' : 'itens'} com problema
                                         </p>
                                     </div>

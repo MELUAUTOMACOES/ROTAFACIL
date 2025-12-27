@@ -124,8 +124,8 @@ export default function Services() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Serviços</h1>
-          <p className="text-gray-600">Gerencie os tipos de serviços oferecidos</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Serviços</h1>
+          <p className="text-gray-600 dark:text-zinc-400">Gerencie os tipos de serviços oferecidos</p>
         </div>
 
         <Button
@@ -159,7 +159,7 @@ export default function Services() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <ClipboardList className="h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-zinc-100 mb-2">
               {searchTerm ? "Nenhum serviço encontrado" : "Nenhum serviço cadastrado"}
             </h3>
             <p className="text-gray-600 text-center mb-6">
@@ -208,7 +208,7 @@ export default function Services() {
                 </div>
               </CardHeader>
               <CardContent className="p-6">
-                <p className="text-sm text-gray-600 mb-4 h-10 line-clamp-2">
+                <p className="text-sm text-gray-600 dark:text-zinc-400 mb-4 h-10 line-clamp-2">
                   {service.description || "Sem descrição"}
                 </p>
 

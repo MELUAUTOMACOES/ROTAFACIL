@@ -94,7 +94,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
 
       {/* Sidebar */}
       <div className={`
-        fixed inset-y-0 left-0 z-50 bg-white shadow-lg transform transition-all duration-300 ease-in-out flex flex-col
+        fixed inset-y-0 left-0 z-50 bg-white dark:bg-zinc-900 shadow-lg transform transition-all duration-300 ease-in-out flex flex-col
         ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
         ${isCollapsed ? 'w-20' : 'w-64'}
       `}>
@@ -103,7 +103,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
           <Button
             variant="secondary"
             size="icon"
-            className="h-6 w-6 rounded-full shadow-md border border-gray-200 bg-white hover:bg-gray-100"
+            className="h-6 w-6 rounded-full shadow-md border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700"
             onClick={toggleCollapse}
           >
             {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
@@ -145,13 +145,13 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
                   className={`
                     flex items-center ${isCollapsed ? 'justify-center px-2' : 'px-4'} py-3 text-sm font-medium rounded-lg transition-colors
                     ${active
-                      ? "bg-gray-100 text-burnt-yellow"
-                      : "text-gray-700 hover:bg-gray-100"
+                      ? "bg-gray-100 dark:bg-zinc-800 text-burnt-yellow"
+                      : "text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800"
                     }
                   `}
                   title={isCollapsed ? item.name : undefined}
                 >
-                  <Icon className={`h-5 w-5 ${isCollapsed ? '' : 'mr-3'} ${active ? "text-burnt-yellow" : "text-gray-600"}`} />
+                  <Icon className={`h-5 w-5 ${isCollapsed ? '' : 'mr-3'} ${active ? "text-burnt-yellow" : "text-gray-600 dark:text-zinc-400"}`} />
                   {!isCollapsed && <span className="truncate">{item.name}</span>}
                 </Link>
               );
@@ -179,13 +179,13 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
 
           {/* Plan info */}
           {!isCollapsed && (
-            <div className="mt-8 pt-8 border-t border-gray-200 mx-4">
+            <div className="mt-8 pt-8 border-t border-gray-200 dark:border-zinc-700 mx-4">
               <div className="py-2">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                <p className="text-xs font-medium text-gray-500 dark:text-zinc-500 uppercase tracking-wide">
                   Plano Atual
                 </p>
                 <div className="mt-2 flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-900 capitalize">
+                  <span className="text-sm font-medium text-gray-900 dark:text-zinc-100 capitalize">
                     {user?.plan || "Básico"}
                   </span>
                   <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-burnt-yellow bg-opacity-10 text-burnt-yellow">
@@ -198,24 +198,24 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
         </nav>
 
         {/* User info - Fixed at bottom */}
-        <div className={`p-4 border-t border-gray-200 bg-white flex-shrink-0 ${isCollapsed ? 'flex justify-center' : ''}`}>
+        <div className={`p-4 border-t border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 flex-shrink-0 ${isCollapsed ? 'flex justify-center' : ''}`}>
           <div className="flex items-center w-full">
-            <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-sm font-medium text-gray-600">
+            <div className="w-8 h-8 bg-gray-300 dark:bg-zinc-700 rounded-full flex items-center justify-center flex-shrink-0">
+              <span className="text-sm font-medium text-gray-600 dark:text-zinc-300">
                 {user?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
               </span>
             </div>
             {!isCollapsed && (
               <div className="ml-3 flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-700 truncate">{user?.name}</p>
-                <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-zinc-200 truncate">{user?.name}</p>
+                <p className="text-xs text-gray-500 dark:text-zinc-400 truncate">{user?.email}</p>
               </div>
             )}
             {!isCollapsed && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-gray-400 hover:text-gray-600 ml-1"
+                className="text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 ml-1"
                 onClick={logout}
               >
                 <LogOut className="h-4 w-4" />

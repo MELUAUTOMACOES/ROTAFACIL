@@ -45,24 +45,24 @@ export function UpcomingMaintenancesCard() {
                             {upcomingMaintenances.slice(0, 5).map((maintenance: any) => (
                                 <div
                                     key={maintenance.id}
-                                    className="flex items-center justify-between border-l-4 border-blue-500 pl-3 py-2 rounded-r hover:bg-blue-50 transition-colors"
+                                    className="flex items-center justify-between border-l-4 border-blue-500 pl-3 py-2 rounded-r hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
                                 >
                                     <div className="flex-1">
-                                        <p className="font-medium text-sm">
+                                        <p className="font-medium text-sm dark:text-zinc-100">
                                             #{maintenance.id} - {maintenance.vehicle.plate}
                                         </p>
-                                        <p className="text-xs text-gray-600">
+                                        <p className="text-xs text-gray-600 dark:text-zinc-400">
                                             {maintenance.vehicle.brand} {maintenance.vehicle.model}
                                         </p>
                                         <div className="flex items-center gap-2 mt-1">
-                                            <Calendar className="w-3 h-3 text-gray-500" />
-                                            <p className="text-xs text-gray-500">
+                                            <Calendar className="w-3 h-3 text-gray-500 dark:text-zinc-500" />
+                                            <p className="text-xs text-gray-500 dark:text-zinc-500">
                                                 {format(new Date(maintenance.scheduledDate), "dd/MM/yyyy", { locale: ptBR })}
                                                 {maintenance.location && ` • ${maintenance.location}`}
                                             </p>
                                         </div>
                                         {maintenance.description && (
-                                            <p className="text-xs text-gray-600 mt-1 line-clamp-1">
+                                            <p className="text-xs text-gray-600 dark:text-zinc-400 mt-1 line-clamp-1">
                                                 {maintenance.description}
                                             </p>
                                         )}

@@ -46,14 +46,14 @@ export function VehicleDocumentsAlertsCard() {
                             {documentAlerts.slice(0, 5).map((alert: any, index: number) => (
                                 <div
                                     key={index}
-                                    className={`flex items-center justify-between border-l-4 pl-3 py-2 rounded-r ${alert.severity === 'critical' ? 'border-red-500 bg-red-50' : 'border-orange-500 bg-orange-50'
+                                    className={`flex items-center justify-between border-l-4 pl-3 py-2 rounded-r ${alert.severity === 'critical' ? 'border-red-500 dark:border-red-800 bg-red-50 dark:bg-red-900/20' : 'border-orange-500 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20'
                                         }`}
                                 >
                                     <div className="flex-1">
-                                        <p className="font-medium text-sm">
+                                        <p className="font-medium text-sm dark:text-zinc-100">
                                             {alert.title}
                                         </p>
-                                        <p className="text-xs text-gray-600">
+                                        <p className="text-xs text-gray-600 dark:text-zinc-400">
                                             {alert.description}
                                         </p>
                                     </div>

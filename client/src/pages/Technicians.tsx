@@ -295,8 +295,8 @@ export default function Technicians() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Técnicos/Equipes</h1>
-        <p className="text-gray-600">Gerencie sua equipe técnica e organize equipes especializadas</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Técnicos/Equipes</h1>
+        <p className="text-gray-600 dark:text-zinc-400">Gerencie sua equipe técnica e organize equipes especializadas</p>
       </div>
 
       {/* Tabs para Técnicos e Equipes */}
@@ -316,7 +316,7 @@ export default function Technicians() {
         <TabsContent value="technicians" className="space-y-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Técnicos Cadastrados</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-zinc-100">Técnicos Cadastrados</h2>
               <p className="text-sm text-gray-600">Gerencie os técnicos da sua empresa</p>
             </div>
 
@@ -485,7 +485,7 @@ export default function Technicians() {
         <TabsContent value="teams" className="space-y-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Equipes Cadastradas</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-zinc-100">Equipes Cadastradas</h2>
               <p className="text-sm text-gray-600">Organize técnicos em equipes especializadas</p>
             </div>
 

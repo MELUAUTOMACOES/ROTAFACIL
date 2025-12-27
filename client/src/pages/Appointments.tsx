@@ -2279,8 +2279,8 @@ export default function Appointments() {
       {/* Header - Mobile-First Responsive */}
       <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Agendamentos</h1>
-          <p className="text-gray-600">Gerencie todos os seus agendamentos</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Agendamentos</h1>
+          <p className="text-gray-600 dark:text-zinc-400">Gerencie todos os seus agendamentos</p>
         </div>
 
         {/* Action Buttons - Stack on mobile */}
@@ -2323,7 +2323,7 @@ export default function Appointments() {
       </div>
 
       {/* New Compact Filter Bar */}
-      <div className="bg-white border-b sticky top-0 z-10 px-6 py-3 shadow-sm space-y-3">
+      <div className="bg-white dark:bg-zinc-900 border-b dark:border-zinc-800 sticky top-0 z-10 px-6 py-3 shadow-sm space-y-3">
         {/* Filter Row */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
@@ -2332,7 +2332,7 @@ export default function Appointments() {
               placeholder="Buscar cliente..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-8 pl-8 text-xs bg-gray-50 border-gray-200 focus:bg-white transition-colors"
+              className="h-8 pl-8 text-xs bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 focus:bg-white dark:focus:bg-zinc-700 transition-colors dark:text-zinc-100 dark:placeholder-zinc-500"
             />
           </div>
 
@@ -2425,15 +2425,15 @@ export default function Appointments() {
       </div>
 
       {/* View Mode Toggle (Centered) */}
-      <div className="flex justify-center py-1 bg-gray-50/50 border-b border-gray-100">
-        <div className="bg-white p-1 rounded-lg border shadow-sm flex items-center gap-1">
+      <div className="flex justify-center py-1 bg-gray-50/50 dark:bg-zinc-900/50 border-b border-gray-100 dark:border-zinc-800">
+        <div className="bg-white dark:bg-zinc-800 p-1 rounded-lg border dark:border-zinc-700 shadow-sm flex items-center gap-1">
           <Button
             variant={viewMode === "list" ? "default" : "ghost"}
             size="sm"
             onClick={() => setViewMode("list")}
             className={cn(
               "h-8 px-4 text-xs font-medium transition-all",
-              viewMode === "list" ? "bg-burnt-yellow text-white shadow-md" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              viewMode === "list" ? "bg-burnt-yellow text-white shadow-md" : "text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 hover:bg-gray-100 dark:hover:bg-zinc-700"
             )}
           >
             <List className="h-3.5 w-3.5 mr-2" />
@@ -2445,7 +2445,7 @@ export default function Appointments() {
             onClick={() => setViewMode("calendar")}
             className={cn(
               "h-8 px-4 text-xs font-medium transition-all",
-              viewMode === "calendar" ? "bg-burnt-yellow text-white shadow-md" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              viewMode === "calendar" ? "bg-burnt-yellow text-white shadow-md" : "text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 hover:bg-gray-100 dark:hover:bg-zinc-700"
             )}
           >
             <Calendar className="h-3.5 w-3.5 mr-2" />
@@ -2487,7 +2487,7 @@ export default function Appointments() {
         ) : (
           <div className="space-y-4">
             {/* Selection Header */}
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
+            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 rounded-lg border dark:border-zinc-800">
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
                   <input
@@ -2498,17 +2498,17 @@ export default function Appointments() {
                       if (el) el.indeterminate = isPartiallySelected;
                     }}
                     onChange={(e) => handleSelectAll(e.target.checked)}
-                    className="w-4 h-4 text-burnt-yellow bg-gray-100 border-gray-300 rounded focus:ring-burnt-yellow focus:ring-2"
+                    className="w-4 h-4 text-burnt-yellow bg-gray-100 dark:bg-zinc-800 border-gray-300 dark:border-zinc-600 rounded focus:ring-burnt-yellow focus:ring-2"
                   />
                   <label
                     htmlFor="select-all"
-                    className="text-sm font-medium text-gray-700"
+                    className="text-sm font-medium text-gray-700 dark:text-zinc-300"
                   >
                     Selecionar Todos
                   </label>
                 </div>
                 {selectedAppointmentIds.length > 0 && (
-                  <span className="text-sm text-gray-600">
+                  <span className="text-sm text-gray-600 dark:text-zinc-400">
                     {selectedAppointmentIds.length} de{" "}
                     {filteredAppointments.length} selecionados
                   </span>
@@ -2523,11 +2523,11 @@ export default function Appointments() {
                 <div key={group.date} className="space-y-4">
                   {/* Linha de separação com a data */}
                   <div className="flex items-center gap-4">
-                    <div className="flex-1 border-t border-gray-300"></div>
+                    <div className="flex-1 border-t border-gray-300 dark:border-zinc-700"></div>
                     <div className="px-4 py-2 bg-burnt-yellow text-white font-semibold rounded-lg shadow-sm">
                       {group.date}
                     </div>
-                    <div className="flex-1 border-t border-gray-300"></div>
+                    <div className="flex-1 border-t border-gray-300 dark:border-zinc-700"></div>
                   </div>
 
                   {/* Agendamentos do dia */}
@@ -2576,13 +2576,13 @@ export default function Appointments() {
                                   onChange={(e) =>
                                     handleAppointmentSelection(appointment.id, e.target.checked)
                                   }
-                                  className="w-4 h-4 text-burnt-yellow bg-gray-100 border-gray-300 rounded focus:ring-burnt-yellow focus:ring-2 mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="w-4 h-4 text-burnt-yellow bg-gray-100 dark:bg-zinc-800 border-gray-300 dark:border-zinc-600 rounded focus:ring-burnt-yellow focus:ring-2 mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
                                 <div className="flex-1 min-w-0">
                                   <div className="flex flex-wrap items-center gap-2 mb-3">
-                                    <h3 className="text-lg font-semibold text-gray-900">
+                                    <h3 className="text-lg font-semibold text-gray-900 dark:text-zinc-100">
                                       {client?.name || "Cliente não encontrado"}
-                                      <span className="ml-2 text-sm font-normal text-gray-500">#{appointment.id}</span>
+                                      <span className="ml-2 text-sm font-normal text-gray-500 dark:text-zinc-500">#{appointment.id}</span>
                                     </h3>
 
                                     {/* Dropdown de Status - só editável para scheduled/rescheduled */}
@@ -2675,7 +2675,7 @@ export default function Appointments() {
                                     )}
                                   </div>
 
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 dark:text-zinc-400">
                                     <div className="flex items-center space-x-2">
                                       <Calendar className="h-4 w-4" />
                                       {appointment.allDay ? (
@@ -2730,8 +2730,8 @@ export default function Appointments() {
                                   </div>
 
                                   {appointment.notes && (
-                                    <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                                      <p className="text-sm text-gray-700">{appointment.notes}</p>
+                                    <div className="mt-3 p-3 bg-gray-50 dark:bg-zinc-800 rounded-lg">
+                                      <p className="text-sm text-gray-700 dark:text-zinc-300">{appointment.notes}</p>
                                     </div>
                                   )}
                                 </div>
@@ -2849,10 +2849,10 @@ export default function Appointments() {
         <DialogContent className="w-[95vw] md:w-[80vw] max-w-5xl max-h-[90vh] overflow-y-auto">
           <div className="space-y-4">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-zinc-100">
                 Restrição de data
               </h2>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 dark:text-zinc-400">
                 Selecione o intervalo de datas, os técnicos/equipes afetados e o motivo. Esses dias ficarão indisponíveis para novos agendamentos.
               </p>
             </div>
@@ -3041,8 +3041,8 @@ export default function Appointments() {
           >
             <div className="flex h-full flex-col">
               {/* Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-zinc-100 flex items-center">
                   <Navigation className="h-5 w-5 mr-2 text-burnt-yellow" />
                   {optimizedRoute?.route?.id || savedInfo ? "Rota Otimizada" : "Visualização de Rota"}
                 </h2>
@@ -3079,7 +3079,7 @@ export default function Appointments() {
 
                     {/* Summary */}
                     <div className="bg-[#DAA520]/10 rounded-lg p-4">
-                      <h3 className="font-semibold text-gray-900 mb-2">
+                      <h3 className="font-semibold text-gray-900 dark:text-zinc-100 mb-2">
                         Resumo da Rota
                       </h3>
                       <div className="space-y-2 text-sm">
@@ -3112,20 +3112,20 @@ export default function Appointments() {
 
                     {/* Ordem Otimizada */}
                     <div>
-                      <h3 className="font-semibold text-gray-900 mb-4">
+                      <h3 className="font-semibold text-gray-900 dark:text-zinc-100 mb-4">
                         Ordem Otimizada
                       </h3>
 
                       {/* Início da rota (endereço da empresa) */}
                       {optimizedRoute.start && (
-                        <div className="bg-gray-50 rounded-lg p-4 mb-3">
+                        <div className="bg-gray-50 dark:bg-zinc-800 rounded-lg p-4 mb-3">
                           <div className="flex items-start space-x-3">
                             <div className="flex-shrink-0 w-6 h-6 bg-gray-400 text-white rounded-full flex items-center justify-center">
                               <img src="/brand/rotafacil-pin.png" alt="Início" className="w-3.5 h-3.5" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <h4 className="font-medium text-gray-900 truncate">Início da rota</h4>
-                              <p className="text-sm text-gray-600 truncate">{optimizedRoute.start.address}</p>
+                              <h4 className="font-medium text-gray-900 dark:text-zinc-100 truncate">Início da rota</h4>
+                              <p className="text-sm text-gray-600 dark:text-zinc-400 truncate">{optimizedRoute.start.address}</p>
                             </div>
                           </div>
                         </div>
@@ -3150,27 +3150,27 @@ export default function Appointments() {
                             return (
                               <div
                                 key={`${stop.appointmentId}-${index}`}
-                                className="bg-gray-50 rounded-lg p-4"
+                                className="bg-gray-50 dark:bg-zinc-800 rounded-lg p-4"
                               >
                                 <div className="flex items-start space-x-3">
                                   <div className="flex-shrink-0 w-6 h-6 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-medium">
                                     {index + 1}
                                   </div>
                                   <div className="flex-1 min-w-0">
-                                    <h4 className="font-medium text-gray-900 truncate">
+                                    <h4 className="font-medium text-gray-900 dark:text-zinc-100 truncate">
                                       {stop.clientName || "Cliente"}
                                     </h4>
                                     {stop.serviceName && (
-                                      <p className="text-sm text-gray-600 truncate">
+                                      <p className="text-sm text-gray-600 dark:text-zinc-400 truncate">
                                         {stop.serviceName}
                                       </p>
                                     )}
                                     {dt && (
-                                      <p className="text-sm text-gray-500">
+                                      <p className="text-sm text-gray-500 dark:text-zinc-500">
                                         {date} às {time}
                                       </p>
                                     )}
-                                    <p className="text-sm text-gray-500 truncate">
+                                    <p className="text-sm text-gray-500 dark:text-zinc-500 truncate">
                                       {stop.address}
                                     </p>
                                   </div>

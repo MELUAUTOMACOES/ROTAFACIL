@@ -52,7 +52,7 @@ export function FuelCostEvolutionCard({ vehicleIds, fuelTypes }: FuelCostEvoluti
                     <CardTitle className="text-lg">Evolução Mensal</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="animate-pulse h-40 bg-gray-200 rounded" />
+                    <div className="animate-pulse h-40 bg-gray-200 dark:bg-zinc-700 rounded" />
                 </CardContent>
             </Card>
         );
@@ -95,7 +95,7 @@ export function FuelCostEvolutionCard({ vehicleIds, fuelTypes }: FuelCostEvoluti
             </CardHeader>
             <CardContent>
                 {monthlyData.length === 0 || monthlyData.every((m) => m.totalSpent === 0) ? (
-                    <div className="text-center py-6 text-gray-500">
+                    <div className="text-center py-6 text-gray-500 dark:text-zinc-500">
                         <BarChart3 className="h-10 w-10 mx-auto mb-2 opacity-50" />
                         <p>Sem dados de evolução</p>
                     </div>
@@ -109,7 +109,7 @@ export function FuelCostEvolutionCard({ vehicleIds, fuelTypes }: FuelCostEvoluti
                                     <div key={month.month} className="flex-1 flex flex-col items-center">
                                         <div className="w-full flex flex-col items-center justify-end h-24">
                                             {month.totalSpent > 0 && (
-                                                <span className="text-xs text-gray-600 mb-1">
+                                                <span className="text-xs text-gray-600 dark:text-zinc-400 mb-1">
                                                     R$ {month.totalSpent.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}
                                                 </span>
                                             )}
@@ -118,7 +118,7 @@ export function FuelCostEvolutionCard({ vehicleIds, fuelTypes }: FuelCostEvoluti
                                                 style={{ height: `${Math.max(heightPercent, 2)}%`, minHeight: month.totalSpent > 0 ? "8px" : "2px" }}
                                             />
                                         </div>
-                                        <span className="text-xs text-gray-500 mt-1">{formatMonthLabel(month.month)}</span>
+                                        <span className="text-xs text-gray-500 dark:text-zinc-500 mt-1">{formatMonthLabel(month.month)}</span>
                                     </div>
                                 );
                             })}
@@ -127,13 +127,13 @@ export function FuelCostEvolutionCard({ vehicleIds, fuelTypes }: FuelCostEvoluti
                         {/* Totals summary */}
                         <div className="pt-3 border-t flex justify-between text-sm">
                             <div>
-                                <span className="text-gray-500">Total 6 meses:</span>
+                                <span className="text-gray-500 dark:text-zinc-500">Total 6 meses:</span>
                                 <span className="font-semibold ml-2">
                                     R$ {monthlyData.reduce((sum, m) => sum + m.totalSpent, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                                 </span>
                             </div>
                             <div>
-                                <span className="text-gray-500">Litros:</span>
+                                <span className="text-gray-500 dark:text-zinc-500">Litros:</span>
                                 <span className="font-semibold ml-2">
                                     {monthlyData.reduce((sum, m) => sum + m.totalLiters, 0).toLocaleString("pt-BR", { minimumFractionDigits: 0 })} L
                                 </span>

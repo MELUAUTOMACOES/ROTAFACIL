@@ -76,22 +76,22 @@ export function RoutesInProgressCard() {
                                 return (
                                     <div
                                         key={route.id}
-                                        className="border-l-4 border-blue-500 pl-3 py-2 bg-blue-50/50 rounded-r"
+                                        className="border-l-4 border-blue-500 pl-3 py-2 bg-blue-50/50 dark:bg-blue-900/20 rounded-r"
                                     >
                                         <div className="flex items-start justify-between">
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2">
-                                                    <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                                                    <Users className="w-4 h-4 text-gray-500 dark:text-zinc-500 flex-shrink-0" />
                                                     <p className="font-medium text-sm truncate">
                                                         {route.responsibleName}
                                                     </p>
                                                 </div>
                                                 <div className="flex items-center gap-3 mt-1">
-                                                    <span className="text-xs text-gray-600 flex items-center gap-1">
+                                                    <span className="text-xs text-gray-600 dark:text-zinc-400 flex items-center gap-1">
                                                         <MapPin className="w-3 h-3" />
                                                         {route.completedStops}/{route.totalStops} paradas
                                                     </span>
-                                                    <span className="text-xs text-gray-600 flex items-center gap-1">
+                                                    <span className="text-xs text-gray-600 dark:text-zinc-400 flex items-center gap-1">
                                                         <Clock className="w-3 h-3" />
                                                         {formatElapsedTime(route.elapsedMinutes)}
                                                     </span>
@@ -105,7 +105,7 @@ export function RoutesInProgressCard() {
                                             </Badge>
                                         </div>
                                         {/* Progress bar */}
-                                        <div className="mt-2 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                        <div className="mt-2 h-1.5 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden">
                                             <div
                                                 className="h-full bg-blue-500 transition-all duration-300"
                                                 style={{ width: `${progress}%` }}

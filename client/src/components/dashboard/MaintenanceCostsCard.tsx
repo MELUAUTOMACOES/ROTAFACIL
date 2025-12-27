@@ -81,27 +81,27 @@ export function MaintenanceCostsCard() {
                     ) : (
                         <div className="grid grid-cols-2 gap-4">
                             {/* Card do Mês */}
-                            <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200">
-                                <div className="flex items-center gap-2 text-blue-700 mb-2">
+                            <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/40 dark:to-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 mb-2">
                                     <CalendarDays className="w-4 h-4" />
                                     <span className="text-sm font-medium capitalize">
                                         {data?.monthName || "Mês atual"}
                                     </span>
                                 </div>
-                                <p className="text-2xl font-bold text-blue-900">
+                                <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
                                     {formatCurrency(data?.monthTotal || 0)}
                                 </p>
                             </div>
 
                             {/* Card do Ano */}
-                            <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200">
-                                <div className="flex items-center gap-2 text-green-700 mb-2">
+                            <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/40 dark:to-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                                <div className="flex items-center gap-2 text-green-700 dark:text-green-300 mb-2">
                                     <CalendarRange className="w-4 h-4" />
                                     <span className="text-sm font-medium">
                                         {data?.year || new Date().getFullYear()}
                                     </span>
                                 </div>
-                                <p className="text-2xl font-bold text-green-900">
+                                <p className="text-2xl font-bold text-green-900 dark:text-green-100">
                                     {formatCurrency(data?.yearTotal || 0)}
                                 </p>
                             </div>

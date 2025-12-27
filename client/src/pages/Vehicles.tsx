@@ -175,7 +175,7 @@ export default function Vehicles() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Veículos</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Veículos</h1>
           <p className="text-gray-600">Gerencie a frota de veículos da empresa</p>
         </div>
 
@@ -251,7 +251,7 @@ export default function Vehicles() {
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Car className="h-12 w-12 text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-zinc-100 mb-2">
                   {vehicleSearch || vehicleResponsibility !== 'all' ? "Nenhum veículo encontrado" : "Nenhum veículo cadastrado"}
                 </h3>
                 <p className="text-gray-600 text-center mb-6">
@@ -321,7 +321,7 @@ export default function Vehicles() {
                     </CardHeader>
                     <CardContent className="p-6">
                       <div className="space-y-3">
-                        <div className="text-lg font-medium text-gray-900">
+                        <div className="text-lg font-medium text-gray-900 dark:text-zinc-100">
                           {vehicle.brand} {vehicle.model}
                         </div>
 
@@ -644,7 +644,7 @@ function MaintenanceTab({
         <Card>
           <CardContent className="py-12 text-center">
             <Wrench className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-zinc-100 mb-2">
               {hasFilters ? "Nenhuma manutenção encontrada com esses filtros" : "Nenhuma manutenção registrada"}
             </h3>
             <p className="text-gray-600">
@@ -681,7 +681,7 @@ function MaintenanceTab({
 
                       {/* Veículo */}
                       {vehicle && (
-                        <p className="text-sm font-medium text-gray-700">
+                        <p className="text-sm font-medium text-gray-700 dark:text-zinc-300">
                           🚗 {vehicle.plate} - {vehicle.brand} {vehicle.model}
                         </p>
                       )}

@@ -64,16 +64,16 @@ export function MultiSelectFilter({
                     role="combobox"
                     aria-expanded={open}
                     className={cn(
-                        "h-8 w-full justify-between bg-white hover:bg-gray-50 border-dashed",
+                        "h-8 w-full justify-between bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 border-dashed dark:border-zinc-600",
                         selectedValues.length > 0 ? "border-solid" : "",
                         className
                     )}
                 >
                     <div className="flex items-center gap-2 truncate">
-                        <span className="text-xs font-medium text-gray-600">{title}</span>
+                        <span className="text-xs font-medium text-gray-600 dark:text-zinc-300">{title}</span>
                         {selectedValues.length > 0 && (
                             <>
-                                <div className="h-4 w-[1px] bg-gray-300" />
+                                <div className="h-4 w-[1px] bg-gray-300 dark:bg-zinc-600" />
                                 <Badge
                                     variant="secondary"
                                     className="rounded-sm px-1 font-normal text-[10px] h-5"
@@ -120,7 +120,7 @@ export function MultiSelectFilter({
                         </CommandGroup>
                         {selectedValues.length > 0 && (
                             <>
-                                <div className="h-[1px] bg-gray-100 my-1" />
+                                <div className="h-[1px] bg-gray-100 dark:bg-zinc-700 my-1" />
                                 <CommandGroup>
                                     <CommandItem
                                         onSelect={handleClear}

@@ -79,33 +79,33 @@ export function OperationStatsCard({ startDate, endDate, technicianId, teamId }:
             label: "Agendamentos Hoje",
             value: todayAppointments.length,
             icon: CalendarDays,
-            color: "text-blue-600",
-            bgColor: "bg-blue-50",
-            borderColor: "border-blue-100",
+            color: "text-blue-600 dark:text-blue-400",
+            bgColor: "bg-blue-50 dark:bg-blue-900/20",
+            borderColor: "border-blue-100 dark:border-blue-800",
         },
         {
             label: "Concluídos no Período",
             value: completedCount,
             icon: CalendarCheck,
-            color: "text-green-600",
-            bgColor: "bg-green-50",
-            borderColor: "border-green-100",
+            color: "text-green-600 dark:text-green-400",
+            bgColor: "bg-green-50 dark:bg-green-900/20",
+            borderColor: "border-green-100 dark:border-green-800",
         },
         {
             label: "Cancelados no Período",
             value: cancelledCount,
             icon: CalendarX,
-            color: "text-red-600",
-            bgColor: "bg-red-50",
-            borderColor: "border-red-100",
+            color: "text-red-600 dark:text-red-400",
+            bgColor: "bg-red-50 dark:bg-red-900/20",
+            borderColor: "border-red-100 dark:border-red-800",
         },
         {
             label: "Total no Período",
             value: totalCount,
             icon: Calendar,
-            color: "text-gray-600",
-            bgColor: "bg-gray-50",
-            borderColor: "border-gray-100",
+            color: "text-gray-600 dark:text-zinc-400",
+            bgColor: "bg-gray-50 dark:bg-zinc-800",
+            borderColor: "border-gray-100 dark:border-zinc-700",
         },
     ];
 
@@ -133,7 +133,7 @@ export function OperationStatsCard({ startDate, endDate, technicianId, teamId }:
                 <CardContent>
                     {isLoading ? (
                         <div className="flex items-center justify-center py-8">
-                            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                            <Loader2 className="w-6 h-6 animate-spin text-gray-400 dark:text-zinc-600" />
                         </div>
                     ) : (
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

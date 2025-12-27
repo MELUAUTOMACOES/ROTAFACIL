@@ -14,6 +14,46 @@ interface ProductivityMetrics {
     monthName: string;
 }
 
+const getStatusConfig = (status: string) => {
+    switch (status) {
+        case "excellent":
+            return {
+                label: "Excelente",
+                color: "text-green-600 dark:text-green-300",
+                bgColor: "bg-green-100 dark:bg-green-900/30",
+                icon: <TrendingUp className="w-4 h-4" />,
+            };
+        case "good":
+            return {
+                label: "Bom",
+                color: "text-blue-600 dark:text-blue-300",
+                bgColor: "bg-blue-100 dark:bg-blue-900/30",
+                icon: <TrendingUp className="w-4 h-4" />,
+            };
+        case "warning":
+            return {
+                label: "Atenção",
+                color: "text-orange-600 dark:text-orange-300",
+                bgColor: "bg-orange-100 dark:bg-orange-900/30",
+                icon: <TrendingDown className="w-4 h-4" />,
+            };
+        case "critical":
+            return {
+                label: "Crítico",
+                color: "text-red-600 dark:text-red-300",
+                bgColor: "bg-red-100 dark:bg-red-900/30",
+                icon: <TrendingDown className="w-4 h-4" />,
+            };
+        default:
+            return {
+                label: "--",
+                color: "text-gray-600 dark:text-zinc-400",
+                bgColor: "bg-gray-100 dark:bg-zinc-800",
+                icon: null,
+            };
+    }
+};
+
 export function ProductivityCard() {
     const { data, isLoading } = useQuery<ProductivityMetrics>({
         queryKey: ["/api/dashboard/productivity-metrics"],
@@ -22,46 +62,6 @@ export function ProductivityCard() {
             return res.json();
         },
     });
-
-    const getStatusConfig = (status: string) => {
-        switch (status) {
-            case "excellent":
-                return {
-                    label: "Excelente",
-                    color: "text-green-600",
-                    bgColor: "bg-green-100",
-                    icon: <TrendingUp className="w-4 h-4" />,
-                };
-            case "good":
-                return {
-                    label: "Bom",
-                    color: "text-blue-600",
-                    bgColor: "bg-blue-100",
-                    icon: <TrendingUp className="w-4 h-4" />,
-                };
-            case "warning":
-                return {
-                    label: "Atenção",
-                    color: "text-orange-600",
-                    bgColor: "bg-orange-100",
-                    icon: <TrendingDown className="w-4 h-4" />,
-                };
-            case "critical":
-                return {
-                    label: "Crítico",
-                    color: "text-red-600",
-                    bgColor: "bg-red-100",
-                    icon: <TrendingDown className="w-4 h-4" />,
-                };
-            default:
-                return {
-                    label: "--",
-                    color: "text-gray-600",
-                    bgColor: "bg-gray-100",
-                    icon: null,
-                };
-        }
-    };
 
     const statusConfig = getStatusConfig(data?.efficiencyStatus || "");
 
@@ -96,7 +96,7 @@ export function ProductivityCard() {
                         <div className="space-y-4">
                             {/* Status Badge */}
                             <div className="flex items-center justify-between">
-                                <span className="text-sm text-gray-600 capitalize">
+                                <span className="text-sm text-gray-600 dark:text-zinc-400 capitalize">
                                     {data.monthName}
                                 </span>
                                 <Badge className={`${statusConfig.bgColor} ${statusConfig.color}`}>
@@ -109,11 +109,11 @@ export function ProductivityCard() {
                             <div className="space-y-3">
                                 {/* Tempo Planejado */}
                                 <div>
-                                    <div className="flex justify-between text-xs text-gray-600 mb-1">
+                                    <div className="flex justify-between text-xs text-gray-600 dark:text-zinc-400 mb-1">
                                         <span>Tempo Planejado</span>
                                         <span className="font-medium">{data.avgPlannedMinutes} min</span>
                                     </div>
-                                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div className="h-2 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden">
                                         <div
                                             className="h-full bg-gray-400 rounded-full"
                                             style={{ width: "100%" }}
@@ -123,11 +123,11 @@ export function ProductivityCard() {
 
                                 {/* Tempo Real */}
                                 <div>
-                                    <div className="flex justify-between text-xs text-gray-600 mb-1">
+                                    <div className="flex justify-between text-xs text-gray-600 dark:text-zinc-400 mb-1">
                                         <span>Tempo Real</span>
                                         <span className="font-medium">{data.avgRealMinutes} min</span>
                                     </div>
-                                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div className="h-2 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden">
                                         <div
                                             className={`h-full rounded-full ${data.variationPercent <= 0
                                                 ? "bg-green-500"
@@ -150,7 +150,7 @@ export function ProductivityCard() {
 
                             {/* Variação */}
                             <div className="flex items-center justify-between pt-2 border-t">
-                                <span className="text-sm text-gray-600">Variação</span>
+                                <span className="text-sm text-gray-600 dark:text-zinc-400">Variação</span>
                                 <div className={`flex items-center gap-1 font-medium ${statusConfig.color}`}>
                                     {data.variationPercent >= 0 ? (
                                         <TrendingUp className="w-4 h-4" />

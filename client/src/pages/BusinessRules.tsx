@@ -148,7 +148,7 @@ export default function BusinessRulesPage() {
           <Settings className="h-6 w-6 text-white" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Regras de Negócio</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-zinc-100">Regras de Negócio</h1>
           <p className="text-gray-600">Configure as regras operacionais do seu negócio</p>
         </div>
       </div>

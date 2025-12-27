@@ -15,7 +15,7 @@ export default function Layout({ children }: LayoutProps) {
   useAccessScheduleMonitor();
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-zinc-950">
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}

@@ -331,7 +331,7 @@ export default function VehicleChecklistAuditTab() {
                             <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <span className="font-semibold text-gray-900">
+                                        <span className="font-semibold text-gray-900 dark:text-zinc-100">
                                             {checklist.vehicle?.plate || "N/A"}
                                         </span>
                                         {getSituationBadge(checklist.situation)}
@@ -342,7 +342,7 @@ export default function VehicleChecklistAuditTab() {
                                         )}
                                     </div>
 
-                                    <p className="text-sm text-gray-600 mb-1">
+                                    <p className="text-sm text-gray-600 dark:text-zinc-400 mb-1">
                                         {checklist.vehicle?.brand} {checklist.vehicle?.model}
                                     </p>
 
@@ -374,27 +374,27 @@ export default function VehicleChecklistAuditTab() {
                     {selectedChecklist && (
                         <div className="space-y-4">
                             {/* Resumo do Checklist */}
-                            <Card className="p-4 bg-gray-50">
+                            <Card className="p-4 bg-gray-50 dark:bg-zinc-800">
                                 <h3 className="font-semibold mb-2">Informações do Checklist</h3>
                                 <div className="grid grid-cols-2 gap-2 text-sm">
                                     <div>
-                                        <span className="text-gray-600">Veículo:</span>{" "}
+                                        <span className="text-gray-600 dark:text-zinc-400">Veículo:</span>{" "}
                                         <span className="font-medium">
                                             {selectedChecklist.vehicle?.plate} - {selectedChecklist.vehicle?.model}
                                         </span>
                                     </div>
                                     <div>
-                                        <span className="text-gray-600">Data:</span>{" "}
+                                        <span className="text-gray-600 dark:text-zinc-400">Data:</span>{" "}
                                         <span className="font-medium">
                                             {format(new Date(selectedChecklist.checkDate), "dd/MM/yyyy", { locale: ptBR })}
                                         </span>
                                     </div>
                                     <div>
-                                        <span className="text-gray-600">Responsável:</span>{" "}
+                                        <span className="text-gray-600 dark:text-zinc-400">Responsável:</span>{" "}
                                         <span className="font-medium">{selectedChecklist.responsibleName}</span>
                                     </div>
                                     <div>
-                                        <span className="text-gray-600">KM:</span>{" "}
+                                        <span className="text-gray-600 dark:text-zinc-400">KM:</span>{" "}
                                         <span className="font-medium">{selectedChecklist.vehicleKm.toLocaleString()} km</span>
                                     </div>
                                 </div>

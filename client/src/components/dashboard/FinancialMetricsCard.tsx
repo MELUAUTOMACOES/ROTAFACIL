@@ -81,7 +81,7 @@ export function FinancialMetricsCard({ technicianId, teamId, startDate, endDate 
                                 className="w-3 h-3 rounded-sm"
                                 style={{ backgroundColor: itemsWithData[0].color }}
                             />
-                            <span className="text-gray-600">{itemsWithData[0].label}</span>
+                            <span className="text-gray-600 dark:text-zinc-400">{itemsWithData[0].label}</span>
                         </div>
                     </div>
                 </div>
@@ -132,7 +132,7 @@ export function FinancialMetricsCard({ technicianId, teamId, startDate, endDate 
                                 className="w-3 h-3 rounded-sm"
                                 style={{ backgroundColor: item.color }}
                             />
-                            <span className="text-gray-600">{item.label}</span>
+                            <span className="text-gray-600 dark:text-zinc-400">{item.label}</span>
                         </div>
                     ))}
                 </div>
@@ -168,21 +168,21 @@ export function FinancialMetricsCard({ technicianId, teamId, startDate, endDate 
                         </div>
                     ) : !data || data.totalCount === 0 ? (
                         <div className="text-center py-4">
-                            <DollarSign className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-                            <p className="text-sm text-gray-500">Sem agendamentos no período</p>
-                            <p className="text-xs text-gray-400 mt-1">
+                            <DollarSign className="h-10 w-10 text-gray-300 dark:text-zinc-600 mx-auto mb-2" />
+                            <p className="text-sm text-gray-500 dark:text-zinc-500">Sem agendamentos no período</p>
+                            <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">
                                 Selecione outro período ou verifique os filtros
                             </p>
                         </div>
                     ) : (
                         <div className="space-y-6">
                             {/* Total Expected Revenue */}
-                            <div className="text-center p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
-                                <p className="text-sm text-blue-700 font-medium mb-1">Receita Total Esperada</p>
-                                <p className="text-3xl font-bold text-blue-800">
+                            <div className="text-center p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-900/40 rounded-lg border border-blue-100 dark:border-blue-900">
+                                <p className="text-sm text-blue-700 dark:text-blue-300 font-medium mb-1">Receita Total Esperada</p>
+                                <p className="text-3xl font-bold text-blue-800 dark:text-blue-200">
                                     {formatCurrency(data.totalRevenue)}
                                 </p>
-                                <p className="text-xs text-blue-600 mt-1">
+                                <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
                                     {data.totalCount} agendamento{data.totalCount !== 1 ? "s" : ""} no período
                                 </p>
                             </div>
@@ -199,7 +199,7 @@ export function FinancialMetricsCard({ technicianId, teamId, startDate, endDate 
                                     {data.breakdown.map((item) => (
                                         <div
                                             key={item.status}
-                                            className="flex items-center justify-between p-3 rounded-lg border"
+                                            className="flex items-center justify-between p-3 rounded-lg border dark:border-zinc-700"
                                             style={{
                                                 backgroundColor: `${item.color}10`,
                                                 borderColor: `${item.color}30`
@@ -210,7 +210,7 @@ export function FinancialMetricsCard({ technicianId, teamId, startDate, endDate 
                                                     className="w-3 h-3 rounded-full"
                                                     style={{ backgroundColor: item.color }}
                                                 />
-                                                <span className="text-sm font-medium text-gray-700">
+                                                <span className="text-sm font-medium text-gray-700 dark:text-zinc-300">
                                                     {item.label}
                                                 </span>
                                             </div>
@@ -218,7 +218,7 @@ export function FinancialMetricsCard({ technicianId, teamId, startDate, endDate 
                                                 <p className="text-sm font-bold" style={{ color: item.color }}>
                                                     {formatCurrency(item.revenue)}
                                                 </p>
-                                                <p className="text-xs text-gray-500">
+                                                <p className="text-xs text-gray-500 dark:text-zinc-500">
                                                     {item.count} ({item.percent}%)
                                                 </p>
                                             </div>

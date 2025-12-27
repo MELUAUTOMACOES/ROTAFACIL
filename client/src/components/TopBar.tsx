@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Menu, Bell } from "lucide-react";
 import { useLocation } from "wouter";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -8,7 +9,7 @@ interface TopBarProps {
 
 const pageNames: Record<string, string> = {
   "/": "Dashboard",
-  "/dashboard": "Dashboard", 
+  "/dashboard": "Dashboard",
   "/appointments": "Agendamentos",
   "/routes-history": "Romaneios - Histórico de Rotas",
   "/clients": "Clientes",
@@ -19,7 +20,7 @@ const pageNames: Record<string, string> = {
 
 export default function TopBar({ onMenuClick }: TopBarProps) {
   const [location] = useLocation();
-  
+
   const getCurrentDate = () => {
     return new Date().toLocaleDateString('pt-BR', {
       weekday: 'long',
@@ -32,25 +33,26 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
   const pageName = pageNames[location] || "Dashboard";
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
+    <header className="bg-white dark:bg-zinc-900 shadow-sm border-b border-gray-200 dark:border-zinc-700 px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
           <Button
             variant="ghost"
             size="sm"
-            className="lg:hidden text-gray-600 hover:text-gray-900 mr-4"
+            className="lg:hidden text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 mr-4"
             onClick={onMenuClick}
           >
             <Menu className="h-5 w-5" />
           </Button>
-          <h2 className="text-2xl font-semibold text-gray-900">{pageName}</h2>
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-zinc-100">{pageName}</h2>
         </div>
-        
+
         <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-600">
+          <ThemeToggle />
+          <Button variant="ghost" size="sm" className="text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300">
             <Bell className="h-5 w-5" />
           </Button>
-          <div className="text-sm text-gray-600 capitalize">
+          <div className="text-sm text-gray-600 dark:text-zinc-400 capitalize">
             {getCurrentDate()}
           </div>
         </div>
@@ -58,3 +60,4 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
     </header>
   );
 }
+

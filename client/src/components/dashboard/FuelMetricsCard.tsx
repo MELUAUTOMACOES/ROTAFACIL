@@ -47,8 +47,8 @@ export function FuelMetricsCard({ vehicleIds, fuelTypes }: FuelMetricsCardProps)
                     <Card key={i}>
                         <CardContent className="p-6">
                             <div className="animate-pulse">
-                                <div className="h-4 bg-gray-200 rounded w-24 mb-2" />
-                                <div className="h-8 bg-gray-200 rounded w-32" />
+                                <div className="h-4 bg-gray-200 dark:bg-zinc-700 rounded w-24 mb-2" />
+                                <div className="h-8 bg-gray-200 dark:bg-zinc-700 rounded w-32" />
                             </div>
                         </CardContent>
                     </Card>
@@ -63,8 +63,8 @@ export function FuelMetricsCard({ vehicleIds, fuelTypes }: FuelMetricsCardProps)
             value: stats ? `R$ ${stats.totalSpent.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "--",
             variation: stats?.spentVariation ?? 0,
             icon: DollarSign,
-            iconColor: "text-green-600",
-            iconBg: "bg-green-50",
+            iconColor: "text-green-600 dark:text-green-400",
+            iconBg: "bg-green-50 dark:bg-green-900/20",
             tooltip: "Total gasto em combustível no mês atual",
         },
         {
@@ -72,24 +72,24 @@ export function FuelMetricsCard({ vehicleIds, fuelTypes }: FuelMetricsCardProps)
             value: stats ? `${stats.totalLiters.toLocaleString("pt-BR", { minimumFractionDigits: 1 })} L` : "--",
             variation: stats?.litersVariation ?? 0,
             icon: Droplets,
-            iconColor: "text-blue-600",
-            iconBg: "bg-blue-50",
+            iconColor: "text-blue-600 dark:text-blue-400",
+            iconBg: "bg-blue-50 dark:bg-blue-900/20",
             tooltip: "Total de litros abastecidos no mês atual",
         },
         {
             title: "Eficiência Média",
             value: stats && stats.avgKmPerLiter > 0 ? `${stats.avgKmPerLiter.toFixed(1)} km/L` : "--",
             icon: Gauge,
-            iconColor: "text-orange-600",
-            iconBg: "bg-orange-50",
+            iconColor: "text-orange-600 dark:text-orange-400",
+            iconBg: "bg-orange-50 dark:bg-orange-900/20",
             tooltip: "Média de km/L da frota selecionada (requer odômetro)",
         },
         {
             title: "Custo por Km",
             value: stats && stats.costPerKm > 0 ? `R$ ${stats.costPerKm.toFixed(2)}/km` : "--",
             icon: Fuel,
-            iconColor: "text-purple-600",
-            iconBg: "bg-purple-50",
+            iconColor: "text-purple-600 dark:text-purple-400",
+            iconBg: "bg-purple-50 dark:bg-purple-900/20",
             tooltip: "Custo médio por km rodado (requer odômetro)",
         },
     ];
@@ -103,7 +103,7 @@ export function FuelMetricsCard({ vehicleIds, fuelTypes }: FuelMetricsCardProps)
                             <div>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <p className="text-sm font-medium text-gray-600 cursor-help border-b border-dashed border-gray-400">
+                                        <p className="text-sm font-medium text-gray-600 dark:text-zinc-400 cursor-help border-b border-dashed border-gray-400">
                                             {metric.title}
                                         </p>
                                     </TooltipTrigger>
@@ -111,7 +111,7 @@ export function FuelMetricsCard({ vehicleIds, fuelTypes }: FuelMetricsCardProps)
                                         <p>{metric.tooltip}</p>
                                     </TooltipContent>
                                 </Tooltip>
-                                <p className="text-2xl font-bold text-gray-900 mt-1">{metric.value}</p>
+                                <p className="text-2xl font-bold text-gray-900 dark:text-zinc-100 mt-1">{metric.value}</p>
                             </div>
                             <div className={`w-12 h-12 ${metric.iconBg} rounded-lg flex items-center justify-center`}>
                                 <metric.icon className={`${metric.iconColor} h-6 w-6`} />
@@ -131,7 +131,7 @@ export function FuelMetricsCard({ vehicleIds, fuelTypes }: FuelMetricsCardProps)
                                     {metric.variation >= 0 ? "+" : ""}
                                     {metric.variation}%
                                 </span>
-                                <span className="text-gray-600 text-sm ml-2">vs. mês passado</span>
+                                <span className="text-gray-600 dark:text-zinc-400 text-sm ml-2">vs. mês passado</span>
                             </div>
                         )}
                     </CardContent>

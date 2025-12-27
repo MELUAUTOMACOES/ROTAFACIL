@@ -49,7 +49,7 @@ export function QualityMetricsCard() {
                         cy="48"
                         r="40"
                         fill="none"
-                        stroke="#e5e7eb"
+                        className="stroke-gray-200 dark:stroke-zinc-700"
                         strokeWidth="12"
                     />
                     {/* Completed segment */}
@@ -94,16 +94,16 @@ export function QualityMetricsCard() {
                         <p className="text-sm text-gray-500">Carregando...</p>
                     ) : !data || data.totalFinalized === 0 ? (
                         <div className="text-center py-4">
-                            <CheckCircle className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-                            <p className="text-sm text-gray-500">Sem dados suficientes</p>
-                            <p className="text-xs text-gray-400 mt-1">
+                            <CheckCircle className="h-10 w-10 text-gray-300 dark:text-zinc-600 mx-auto mb-2" />
+                            <p className="text-sm text-gray-500 dark:text-zinc-500">Sem dados suficientes</p>
+                            <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">
                                 Finalize atendimentos para ver métricas
                             </p>
                         </div>
                     ) : (
                         <div className="space-y-4">
                             {/* Month label */}
-                            <div className="text-sm text-gray-600 capitalize text-center">
+                            <div className="text-sm text-gray-600 dark:text-zinc-400 capitalize text-center">
                                 {data.monthName}
                             </div>
 
@@ -116,13 +116,13 @@ export function QualityMetricsCard() {
                                 <div className="space-y-2">
                                     <div className="flex items-center gap-2">
                                         <CheckCircle className="w-4 h-4 text-green-500" />
-                                        <span className="text-sm text-gray-600">
+                                        <span className="text-sm text-gray-600 dark:text-zinc-400">
                                             {data.completed} concluídos
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <XCircle className="w-4 h-4 text-red-500" />
-                                        <span className="text-sm text-gray-600">
+                                        <span className="text-sm text-gray-600 dark:text-zinc-400">
                                             {data.notCompletedCount} não realizados
                                         </span>
                                     </div>
@@ -139,7 +139,7 @@ export function QualityMetricsCard() {
                                                 key={index}
                                                 className="flex items-center justify-between text-xs"
                                             >
-                                                <span className="text-gray-600 truncate flex-1">
+                                                <span className="text-gray-600 dark:text-zinc-400 truncate flex-1">
                                                     {reason.label}
                                                 </span>
                                                 <Badge variant="secondary" className="text-xs ml-2">
@@ -155,7 +155,7 @@ export function QualityMetricsCard() {
                             <div className="flex items-center justify-between pt-2 border-t">
                                 <div className="flex items-center gap-2">
                                     <RefreshCw className="w-4 h-4 text-blue-500" />
-                                    <span className="text-sm text-gray-600">Reagendamentos</span>
+                                    <span className="text-sm text-gray-600 dark:text-zinc-400">Reagendamentos</span>
                                 </div>
                                 <Badge
                                     variant={data.rescheduledRate > 15 ? "destructive" : "secondary"}

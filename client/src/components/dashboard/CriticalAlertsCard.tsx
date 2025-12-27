@@ -30,21 +30,21 @@ export function CriticalAlertsCard() {
         switch (severity) {
             case "critical":
                 return {
-                    border: "border-red-500",
-                    bg: "bg-red-50",
-                    icon: <AlertTriangle className="w-4 h-4 text-red-600" />,
+                    border: "border-red-500 dark:border-red-800",
+                    bg: "bg-red-50 dark:bg-red-900/20",
+                    icon: <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />,
                 };
             case "warning":
                 return {
-                    border: "border-orange-500",
-                    bg: "bg-orange-50",
-                    icon: <AlertCircle className="w-4 h-4 text-orange-600" />,
+                    border: "border-orange-500 dark:border-orange-800",
+                    bg: "bg-orange-50 dark:bg-orange-900/20",
+                    icon: <AlertCircle className="w-4 h-4 text-orange-600 dark:text-orange-400" />,
                 };
             default:
                 return {
-                    border: "border-blue-500",
-                    bg: "bg-blue-50",
-                    icon: <Clock className="w-4 h-4 text-blue-600" />,
+                    border: "border-blue-500 dark:border-blue-800",
+                    bg: "bg-blue-50 dark:bg-blue-900/20",
+                    icon: <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />,
                 };
         }
     };
@@ -105,8 +105,8 @@ export function CriticalAlertsCard() {
                                             <div className="flex items-start gap-2">
                                                 {styles.icon}
                                                 <div className="flex-1">
-                                                    <p className="font-medium text-sm">{alert.title}</p>
-                                                    <p className="text-xs text-gray-600 mt-0.5">
+                                                    <p className="font-medium text-sm dark:text-zinc-100">{alert.title}</p>
+                                                    <p className="text-xs text-gray-600 dark:text-zinc-400 mt-0.5">
                                                         {alert.description}
                                                     </p>
                                                 </div>

@@ -1694,7 +1694,7 @@ export default function RoutesHistoryPage() {
       <div>
         <div className="flex items-center gap-2 mb-2">
           <History className="h-6 w-6 text-burnt-yellow" />
-          <h1 className="text-2xl font-bold text-gray-900">Romaneios - Histórico de Rotas</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Romaneios - Histórico de Rotas</h1>
         </div>
         <p className="text-gray-600">Visualize e gerencie os romaneios e o histórico de rotas otimizadas</p>
       </div>

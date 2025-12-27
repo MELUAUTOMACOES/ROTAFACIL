@@ -106,7 +106,7 @@ export function PendingReasonsCard({ technicians = [], teams = [] }: PendingReas
             "nao_realizado_falta_material": "bg-amber-500",
             "nao_realizado_outro": "bg-purple-500",
         };
-        return colors[reason] || "bg-gray-400";
+        return colors[reason] || "bg-gray-400 dark:bg-gray-600";
     };
 
     return (
@@ -164,13 +164,13 @@ export function PendingReasonsCard({ technicians = [], teams = [] }: PendingReas
                 <CardContent>
                     {isLoading ? (
                         <div className="flex items-center justify-center py-8">
-                            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                            <Loader2 className="w-6 h-6 animate-spin text-gray-400 dark:text-zinc-600" />
                         </div>
                     ) : !data || data.total === 0 ? (
                         <div className="text-center py-4">
                             <CheckCircle className="h-10 w-10 text-green-400 mx-auto mb-2" />
-                            <p className="text-sm text-gray-500">Nenhuma pendência no período</p>
-                            <p className="text-xs text-gray-400 mt-1">
+                            <p className="text-sm text-gray-500 dark:text-zinc-500">Nenhuma pendência no período</p>
+                            <p className="text-xs text-gray-400 dark:text-zinc-600 mt-1">
                                 Todos os atendimentos foram concluídos! 🎉
                             </p>
                         </div>
@@ -183,10 +183,10 @@ export function PendingReasonsCard({ technicians = [], teams = [] }: PendingReas
                                         <div
                                             className={`w-3 h-3 rounded-full ${getReasonColor(reason.reason)}`}
                                         />
-                                        <span className="flex-1 text-sm text-gray-700 truncate">
+                                        <span className="flex-1 text-sm text-gray-700 dark:text-zinc-300 truncate">
                                             {reason.label}
                                         </span>
-                                        <span className="text-sm font-medium text-gray-600">
+                                        <span className="text-sm font-medium text-gray-600 dark:text-zinc-400">
                                             {reason.count}
                                         </span>
                                         <Badge variant="secondary" className="text-xs min-w-[45px] justify-center">
@@ -197,7 +197,7 @@ export function PendingReasonsCard({ technicians = [], teams = [] }: PendingReas
                             </div>
 
                             {/* Barra visual de distribuição */}
-                            <div className="h-3 rounded-full overflow-hidden flex bg-gray-200">
+                            <div className="h-3 rounded-full overflow-hidden flex bg-gray-200 dark:bg-zinc-700">
                                 {data.reasons.map((reason) => (
                                     <div
                                         key={reason.reason}
@@ -210,7 +210,7 @@ export function PendingReasonsCard({ technicians = [], teams = [] }: PendingReas
 
                             {/* Taxa de resolução */}
                             <div className="flex items-center justify-between pt-2 border-t">
-                                <span className="text-sm text-gray-600">Taxa de resolução</span>
+                                <span className="text-sm text-gray-600 dark:text-zinc-400">Taxa de resolução</span>
                                 <Badge
                                     variant={data.resolutionRate >= 80 ? "default" : data.resolutionRate >= 50 ? "secondary" : "destructive"}
                                 >
@@ -221,14 +221,14 @@ export function PendingReasonsCard({ technicians = [], teams = [] }: PendingReas
                             {/* Top responsáveis com mais pendências (se não filtrado) */}
                             {selectedFilter === "all" && data.byResponsible.length > 0 && (
                                 <div className="pt-2 border-t">
-                                    <p className="text-xs text-gray-500 mb-2">Maiores ocorrências:</p>
+                                    <p className="text-xs text-gray-500 dark:text-zinc-500 mb-2">Maiores ocorrências:</p>
                                     <div className="space-y-1">
                                         {data.byResponsible.slice(0, 3).map((responsible) => (
                                             <div
                                                 key={`${responsible.type}-${responsible.id}`}
                                                 className="flex items-center justify-between text-xs"
                                             >
-                                                <span className="flex items-center gap-1 text-gray-600">
+                                                <span className="flex items-center gap-1 text-gray-600 dark:text-zinc-400">
                                                     {responsible.type === "team" ? (
                                                         <Users className="w-3 h-3" />
                                                     ) : (

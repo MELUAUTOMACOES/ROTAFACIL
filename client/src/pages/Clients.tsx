@@ -399,8 +399,8 @@ export default function Clients() {
       {/* Header */}
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
-          <p className="text-gray-600">Gerencie sua base de clientes</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Clientes</h1>
+          <p className="text-gray-600 dark:text-zinc-400">Gerencie sua base de clientes</p>
         </div>
 
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
@@ -466,10 +466,10 @@ export default function Clients() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Users className="h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-zinc-100 mb-2">
               {searchTerm ? "Nenhum cliente encontrado" : "Nenhum cliente cadastrado"}
             </h3>
-            <p className="text-gray-600 text-center mb-6">
+            <p className="text-gray-600 dark:text-zinc-400 text-center mb-6">
               {searchTerm
                 ? "Tente buscar com outros termos."
                 : "Comece adicionando seus primeiros clientes para organizar seus atendimentos."}
@@ -517,27 +517,27 @@ export default function Clients() {
               <CardContent className="p-6">
                 <div className="space-y-3">
                   {client.email && (
-                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-zinc-400">
                       <Mail className="h-4 w-4" />
                       <span>{client.email}</span>
                     </div>
                   )}
 
                   {client.phone1 && (
-                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-zinc-400">
                       <Phone className="h-4 w-4" />
                       <span>{client.phone1}</span>
                     </div>
                   )}
 
                   {client.phone2 && (
-                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-zinc-400">
                       <Phone className="h-4 w-4" />
                       <span>{client.phone2}</span>
                     </div>
                   )}
 
-                  <div className="flex items-start space-x-2 text-sm text-gray-600">
+                  <div className="flex items-start space-x-2 text-sm text-gray-600 dark:text-zinc-400">
                     <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
                     <span className="leading-relaxed">
                       {client.logradouro}, {client.numero}, {client.bairro}, {client.cidade}

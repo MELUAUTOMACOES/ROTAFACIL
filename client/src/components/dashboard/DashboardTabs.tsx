@@ -40,7 +40,7 @@ export function DashboardTabs({ activeTab, onTabChange, children }: DashboardTab
                         <TabsTrigger
                             key={tab.key}
                             value={tab.key}
-                            className="flex items-center gap-2 py-2.5 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                            className="flex items-center gap-2 py-2.5 data-[state=active]:bg-white data-[state=active]:text-zinc-900 data-[state=active]:shadow-sm dark:data-[state=active]:bg-zinc-800 dark:data-[state=active]:text-zinc-100"
                         >
                             <Icon className="w-4 h-4" />
                             <span className="hidden sm:inline">{tab.label}</span>

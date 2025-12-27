@@ -252,16 +252,16 @@ export default function Dashboard() {
                         <div>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <p className="text-sm font-medium text-gray-600 cursor-help border-b border-dashed border-gray-400">Agendamentos Hoje</p>
+                              <p className="text-sm font-medium text-gray-600 dark:text-zinc-400 cursor-help border-b border-dashed border-gray-400 dark:border-zinc-500">Agendamentos Hoje</p>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
                               <p>Total de agendamentos com data de hoje. Inclui todos os status (agendado, em andamento, concluído).</p>
                             </TooltipContent>
                           </Tooltip>
-                          <p className="text-3xl font-bold text-gray-900">{stats.todayAppointments}</p>
+                          <p className="text-3xl font-bold text-gray-900 dark:text-zinc-100">{stats.todayAppointments}</p>
                         </div>
-                        <div className="w-12 h-12 bg-burnt-yellow bg-opacity-10 rounded-lg flex items-center justify-center">
-                          <Calendar className="text-burnt-yellow h-6 w-6" />
+                        <div className="w-12 h-12 bg-burnt-yellow bg-opacity-10 dark:bg-yellow-900/20 rounded-lg flex items-center justify-center">
+                          <Calendar className="text-burnt-yellow dark:text-yellow-500 h-6 w-6" />
                         </div>
                       </div>
                       <div className="mt-4 flex items-center">
@@ -273,7 +273,7 @@ export default function Dashboard() {
                         <span className={`text-sm font-medium ml-1 ${stats.todayVariation >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {stats.todayVariation >= 0 ? '+' : ''}{stats.todayVariation}%
                         </span>
-                        <span className="text-gray-600 text-sm ml-2">vs. ontem</span>
+                        <span className="text-gray-600 dark:text-zinc-400 text-sm ml-2">vs. ontem</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -284,20 +284,20 @@ export default function Dashboard() {
                         <div>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <p className="text-sm font-medium text-gray-600 cursor-help border-b border-dashed border-gray-400">Técnicos Ativos</p>
+                              <p className="text-sm font-medium text-gray-600 dark:text-zinc-400 cursor-help border-b border-dashed border-gray-400 dark:border-zinc-500">Técnicos Ativos</p>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
                               <p>Número de técnicos cadastrados com status "ativo". Abaixo mostra quantos têm agendamentos hoje.</p>
                             </TooltipContent>
                           </Tooltip>
-                          <p className="text-3xl font-bold text-gray-900">{stats.activeTechnicians}</p>
+                          <p className="text-3xl font-bold text-gray-900 dark:text-zinc-100">{stats.activeTechnicians}</p>
                         </div>
-                        <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center">
-                          <Users className="text-blue-600 h-6 w-6" />
+                        <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
+                          <Users className="text-blue-600 dark:text-blue-400 h-6 w-6" />
                         </div>
                       </div>
                       <div className="mt-4 flex items-center">
-                        <span className="text-gray-600 text-sm">
+                        <span className="text-gray-600 dark:text-zinc-400 text-sm">
                           {activeTechnicians.filter((t: Technician) =>
                             todayAppointments.some((a: Appointment) => a.technicianId === t.id)
                           ).length} em campo agora
@@ -312,16 +312,16 @@ export default function Dashboard() {
                         <div>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <p className="text-sm font-medium text-gray-600 cursor-help border-b border-dashed border-gray-400">Taxa de Conclusão</p>
+                              <p className="text-sm font-medium text-gray-600 dark:text-zinc-400 cursor-help border-b border-dashed border-gray-400 dark:border-zinc-500">Taxa de Conclusão</p>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
                               <p>Percentual de agendamentos concluídos no mês atual. Cálculo: (concluídos / total do mês) x 100.</p>
                             </TooltipContent>
                           </Tooltip>
-                          <p className="text-3xl font-bold text-gray-900">{stats.completionRate}%</p>
+                          <p className="text-3xl font-bold text-gray-900 dark:text-zinc-100">{stats.completionRate}%</p>
                         </div>
-                        <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center">
-                          <CheckCircle className="text-green-600 h-6 w-6" />
+                        <div className="w-12 h-12 bg-green-50 dark:bg-green-900/20 rounded-lg flex items-center justify-center">
+                          <CheckCircle className="text-green-600 dark:text-green-400 h-6 w-6" />
                         </div>
                       </div>
                       <div className="mt-4 flex items-center">
@@ -333,7 +333,7 @@ export default function Dashboard() {
                         <span className={`text-sm font-medium ml-1 ${stats.completionVariation >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {stats.completionVariation >= 0 ? '+' : ''}{stats.completionVariation}%
                         </span>
-                        <span className="text-gray-600 text-sm ml-2">vs. mês passado</span>
+                        <span className="text-gray-600 dark:text-zinc-400 text-sm ml-2">vs. mês passado</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -344,16 +344,16 @@ export default function Dashboard() {
                         <div>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <p className="text-sm font-medium text-gray-600 cursor-help border-b border-dashed border-gray-400">Receita do Mês</p>
+                              <p className="text-sm font-medium text-gray-600 dark:text-zinc-400 cursor-help border-b border-dashed border-gray-400 dark:border-zinc-500">Receita do Mês</p>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
                               <p>Soma dos preços dos serviços de todos os agendamentos concluídos no mês atual.</p>
                             </TooltipContent>
                           </Tooltip>
-                          <p className="text-3xl font-bold text-gray-900">R$ {stats.monthRevenue.toLocaleString()}</p>
+                          <p className="text-3xl font-bold text-gray-900 dark:text-zinc-100">R$ {stats.monthRevenue.toLocaleString()}</p>
                         </div>
-                        <div className="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center">
-                          <DollarSign className="text-purple-600 h-6 w-6" />
+                        <div className="w-12 h-12 bg-purple-50 dark:bg-purple-900/20 rounded-lg flex items-center justify-center">
+                          <DollarSign className="text-purple-600 dark:text-purple-400 h-6 w-6" />
                         </div>
                       </div>
                       <div className="mt-4 flex items-center">
@@ -365,7 +365,7 @@ export default function Dashboard() {
                         <span className={`text-sm font-medium ml-1 ${stats.revenueVariation >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {stats.revenueVariation >= 0 ? '+' : ''}{stats.revenueVariation}%
                         </span>
-                        <span className="text-gray-600 text-sm ml-2">vs. mês passado</span>
+                        <span className="text-gray-600 dark:text-zinc-400 text-sm ml-2">vs. mês passado</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -377,22 +377,22 @@ export default function Dashboard() {
                         <div>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <p className="text-sm font-medium text-gray-600 cursor-help border-b border-dashed border-gray-400">Tempo Médio</p>
+                              <p className="text-sm font-medium text-gray-600 dark:text-zinc-400 cursor-help border-b border-dashed border-gray-400 dark:border-zinc-500">Tempo Médio</p>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
                               <p>Média de tempo entre início e fim dos atendimentos concluídos no mês. Calculado a partir dos registros do prestador.</p>
                             </TooltipContent>
                           </Tooltip>
-                          <p className="text-3xl font-bold text-gray-900">
+                          <p className="text-3xl font-bold text-gray-900 dark:text-zinc-100">
                             {stats.avgExecutionTime > 0 ? `${stats.avgExecutionTime} min` : '--'}
                           </p>
                         </div>
-                        <div className="w-12 h-12 bg-orange-50 rounded-lg flex items-center justify-center">
-                          <Timer className="text-orange-600 h-6 w-6" />
+                        <div className="w-12 h-12 bg-orange-50 dark:bg-orange-900/20 rounded-lg flex items-center justify-center">
+                          <Timer className="text-orange-600 dark:text-orange-400 h-6 w-6" />
                         </div>
                       </div>
                       <div className="mt-4 flex items-center">
-                        <span className="text-gray-600 text-sm">por atendimento concluído</span>
+                        <span className="text-gray-600 dark:text-zinc-400 text-sm">por atendimento concluído</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -408,7 +408,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Today's Schedule */}
                   <Card>
-                    <CardHeader className="border-b border-gray-100">
+                    <CardHeader className="border-b border-gray-100 dark:border-zinc-800">
                       <div className="flex items-center justify-between">
                         <CardTitle>Agenda de Hoje</CardTitle>
                         <Button variant="link" className="text-burnt-yellow hover:text-burnt-yellow-dark">
@@ -419,8 +419,8 @@ export default function Dashboard() {
                     <CardContent className="p-6">
                       {todayAppointments.length === 0 ? (
                         <div className="text-center py-8">
-                          <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                          <p className="text-gray-600">Nenhum agendamento para hoje</p>
+                          <Calendar className="h-12 w-12 text-gray-400 dark:text-zinc-600 mx-auto mb-4" />
+                          <p className="text-gray-600 dark:text-zinc-400">Nenhum agendamento para hoje</p>
                         </div>
                       ) : (
                         <div className="space-y-4">
@@ -436,22 +436,22 @@ export default function Dashboard() {
                             ].filter(Boolean).join(', ');
 
                             return (
-                              <div key={appointment.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
+                              <div key={appointment.id} className="flex items-center space-x-4 p-4 bg-gray-50 dark:bg-zinc-800 rounded-lg">
                                 <div className="w-12 h-12 bg-burnt-yellow rounded-lg flex items-center justify-center">
                                   <span className="text-white font-semibold text-sm">
                                     {formatTime(appointment.scheduledDate)}
                                   </span>
                                 </div>
                                 <div className="flex-1">
-                                  <h4 className="font-medium text-gray-900">{client?.name || "Cliente"}</h4>
-                                  <p className="text-sm text-gray-600">{appointment.notes || "Serviço"}</p>
-                                  <p className="text-xs text-gray-500">{addressText}</p>
+                                  <h4 className="font-medium text-gray-900 dark:text-zinc-100">{client?.name || "Cliente"}</h4>
+                                  <p className="text-sm text-gray-600 dark:text-zinc-400">{appointment.notes || "Serviço"}</p>
+                                  <p className="text-xs text-gray-500 dark:text-zinc-500">{addressText}</p>
                                 </div>
                                 <div className="text-right">
                                   <Badge className={getStatusColor(appointment.status)}>
                                     {getStatusText(appointment.status)}
                                   </Badge>
-                                  <p className="text-xs text-gray-500 mt-1">{technician?.name || "Técnico"}</p>
+                                  <p className="text-xs text-gray-500 dark:text-zinc-500 mt-1">{technician?.name || "Técnico"}</p>
                                 </div>
                               </div>
                             );
@@ -463,64 +463,64 @@ export default function Dashboard() {
 
                   {/* Quick Actions */}
                   <Card>
-                    <CardHeader className="border-b border-gray-100">
+                    <CardHeader className="border-b border-gray-100 dark:border-zinc-800">
                       <CardTitle>Ações Rápidas</CardTitle>
                     </CardHeader>
                     <CardContent className="p-6">
                       <div className="grid grid-cols-1 gap-4">
                         <Button
                           variant="outline"
-                          className="flex items-center justify-start p-4 h-auto border-gray-200 hover:bg-gray-50"
+                          className="flex items-center justify-start p-4 h-auto border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800"
                           onClick={() => setLocation("/appointments")}
                         >
                           <div className="w-10 h-10 bg-burnt-yellow rounded-lg flex items-center justify-center mr-4">
                             <Plus className="text-white h-5 w-5" />
                           </div>
                           <div className="text-left">
-                            <h4 className="font-medium text-gray-900">Novo Agendamento</h4>
-                            <p className="text-sm text-gray-600">Criar um novo atendimento</p>
+                            <h4 className="font-medium text-gray-900 dark:text-zinc-100">Novo Agendamento</h4>
+                            <p className="text-sm text-gray-600 dark:text-zinc-400">Criar um novo atendimento</p>
                           </div>
                         </Button>
 
                         <Button
                           variant="outline"
-                          className="flex items-center justify-start p-4 h-auto border-gray-200 hover:bg-gray-50"
+                          className="flex items-center justify-start p-4 h-auto border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800"
                           onClick={() => setLocation("/appointments")}
                         >
                           <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center mr-4">
                             <Route className="text-white h-5 w-5" />
                           </div>
                           <div className="text-left">
-                            <h4 className="font-medium text-gray-900">Otimizar Rota</h4>
-                            <p className="text-sm text-gray-600">Gerar rota para hoje</p>
+                            <h4 className="font-medium text-gray-900 dark:text-zinc-100">Otimizar Rota</h4>
+                            <p className="text-sm text-gray-600 dark:text-zinc-400">Gerar rota para hoje</p>
                           </div>
                         </Button>
 
                         <Button
                           variant="outline"
-                          className="flex items-center justify-start p-4 h-auto border-gray-200 hover:bg-gray-50"
+                          className="flex items-center justify-start p-4 h-auto border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800"
                           onClick={() => setLocation("/clients")}
                         >
                           <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center mr-4">
                             <UserPlus className="text-white h-5 w-5" />
                           </div>
                           <div className="text-left">
-                            <h4 className="font-medium text-gray-900">Novo Cliente</h4>
-                            <p className="text-sm text-gray-600">Cadastrar cliente</p>
+                            <h4 className="font-medium text-gray-900 dark:text-zinc-100">Novo Cliente</h4>
+                            <p className="text-sm text-gray-600 dark:text-zinc-400">Cadastrar cliente</p>
                           </div>
                         </Button>
 
                         <Button
                           variant="outline"
-                          className="flex items-center justify-start p-4 h-auto border-gray-200 hover:bg-gray-50"
+                          className="flex items-center justify-start p-4 h-auto border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800"
                           onClick={() => setLocation("/business-rules")}
                         >
                           <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center mr-4">
                             <BarChart3 className="text-white h-5 w-5" />
                           </div>
                           <div className="text-left">
-                            <h4 className="font-medium text-gray-900">Configurações</h4>
-                            <p className="text-sm text-gray-600">Regras de negócio</p>
+                            <h4 className="font-medium text-gray-900 dark:text-zinc-100">Configurações</h4>
+                            <p className="text-sm text-gray-600 dark:text-zinc-400">Regras de negócio</p>
                           </div>
                         </Button>
                       </div>
@@ -548,8 +548,8 @@ export default function Dashboard() {
                     <CardContent className="p-6">
                       {appointments.length === 0 ? (
                         <div className="text-center py-8">
-                          <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                          <p className="text-gray-600">Nenhuma atividade administrativa</p>
+                          <Clock className="h-12 w-12 text-gray-400 dark:text-zinc-600 mx-auto mb-4" />
+                          <p className="text-gray-600 dark:text-zinc-400">Nenhuma atividade administrativa</p>
                         </div>
                       ) : (
                         <div className="space-y-4">
@@ -558,15 +558,15 @@ export default function Dashboard() {
 
                             return (
                               <div key={activity.id} className="flex items-start space-x-4">
-                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                                  <Calendar className="text-blue-600 h-4 w-4" />
+                                <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                                  <Calendar className="text-blue-600 dark:text-blue-400 h-4 w-4" />
                                 </div>
                                 <div className="flex-1">
-                                  <p className="text-sm text-gray-900">
+                                  <p className="text-sm text-gray-900 dark:text-zinc-100">
                                     Agendamento criado para{" "}
                                     <span className="font-medium">{client?.name || "Cliente"}</span>
                                   </p>
-                                  <p className="text-xs text-gray-500">
+                                  <p className="text-xs text-gray-500 dark:text-zinc-500">
                                     {new Date(activity.createdAt).toLocaleDateString('pt-BR')} às{" "}
                                     {new Date(activity.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                                   </p>
@@ -596,8 +596,8 @@ export default function Dashboard() {
                         if (providerActivities.length === 0) {
                           return (
                             <div className="text-center py-8">
-                              <CheckCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                              <p className="text-gray-600">Nenhuma atividade de prestadores</p>
+                              <CheckCircle className="h-12 w-12 text-gray-400 dark:text-zinc-600 mx-auto mb-4" />
+                              <p className="text-gray-600 dark:text-zinc-400">Nenhuma atividade de prestadores</p>
                             </div>
                           );
                         }
@@ -615,26 +615,26 @@ export default function Dashboard() {
 
                               return (
                                 <div key={activity.id} className="flex items-start space-x-4">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-green-100' : 'bg-orange-100'
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-green-100 dark:bg-green-900/30' : 'bg-orange-100 dark:bg-orange-900/30'
                                     }`}>
                                     {isCompleted ? (
-                                      <CheckCircle className="text-green-600 h-4 w-4" />
+                                      <CheckCircle className="text-green-600 dark:text-green-400 h-4 w-4" />
                                     ) : (
-                                      <Clock className="text-orange-600 h-4 w-4" />
+                                      <Clock className="text-orange-600 dark:text-orange-400 h-4 w-4" />
                                     )}
                                   </div>
                                   <div className="flex-1">
-                                    <p className="text-sm text-gray-900">
+                                    <p className="text-sm text-gray-900 dark:text-zinc-100">
                                       <span className="font-medium">{technician?.name || "Técnico"}</span>{" "}
                                       {isCompleted ? 'concluiu' : 'registrou'} atendimento em{" "}
                                       <span className="font-medium">{client?.name || "Cliente"}</span>
                                     </p>
                                     <div className="flex items-center gap-2 mt-1">
-                                      <Badge className={`text-xs ${isCompleted ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
+                                      <Badge className={`text-xs ${isCompleted ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' : 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300'
                                         }`}>
                                         {statusLabel}
                                       </Badge>
-                                      <span className="text-xs text-gray-500">
+                                      <span className="text-xs text-gray-500 dark:text-zinc-500">
                                         {(activity as any).updatedAt ? new Date((activity as any).updatedAt).toLocaleDateString('pt-BR') : (activity.createdAt ? new Date(activity.createdAt).toLocaleDateString('pt-BR') : '')}
                                       </span>
                                     </div>

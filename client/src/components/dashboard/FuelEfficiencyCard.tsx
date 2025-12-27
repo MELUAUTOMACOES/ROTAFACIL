@@ -41,7 +41,7 @@ export function FuelEfficiencyCard({ vehicleIds, fuelTypes }: FuelEfficiencyCard
                 <CardContent>
                     <div className="animate-pulse space-y-3">
                         {[1, 2, 3].map((i) => (
-                            <div key={i} className="h-12 bg-gray-200 rounded" />
+                            <div key={i} className="h-12 bg-gray-200 dark:bg-zinc-700 rounded" />
                         ))}
                     </div>
                 </CardContent>
@@ -75,7 +75,7 @@ export function FuelEfficiencyCard({ vehicleIds, fuelTypes }: FuelEfficiencyCard
             </CardHeader>
             <CardContent className="space-y-4">
                 {vehiclesWithEfficiency.length === 0 ? (
-                    <div className="text-center py-6 text-gray-500">
+                    <div className="text-center py-6 text-gray-500 dark:text-zinc-500">
                         <Car className="h-10 w-10 mx-auto mb-2 opacity-50" />
                         <p>Sem dados de eficiência</p>
                         <p className="text-xs">Requer odômetro em abastecimentos</p>
@@ -92,16 +92,16 @@ export function FuelEfficiencyCard({ vehicleIds, fuelTypes }: FuelEfficiencyCard
                                 {topVehicles.map((vehicle, index) => (
                                     <div
                                         key={vehicle.vehicleId}
-                                        className="flex items-center justify-between p-2 bg-green-50 rounded-lg"
+                                        className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/20 rounded-lg"
                                     >
                                         <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold text-green-700 w-5">{index + 1}º</span>
+                                            <span className="text-xs font-bold text-green-700 dark:text-green-400 w-5">{index + 1}º</span>
                                             <div>
                                                 <p className="text-sm font-medium">{vehicle.plate}</p>
-                                                <p className="text-xs text-gray-500">{vehicle.model}</p>
+                                                <p className="text-xs text-gray-500 dark:text-zinc-500">{vehicle.model}</p>
                                             </div>
                                         </div>
-                                        <Badge className="bg-green-100 text-green-800">{vehicle.kmPerLiter.toFixed(1)} km/L</Badge>
+                                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">{vehicle.kmPerLiter.toFixed(1)} km/L</Badge>
                                     </div>
                                 ))}
                             </div>
@@ -118,16 +118,16 @@ export function FuelEfficiencyCard({ vehicleIds, fuelTypes }: FuelEfficiencyCard
                                     {bottomVehicles.map((vehicle, index) => (
                                         <div
                                             key={vehicle.vehicleId}
-                                            className="flex items-center justify-between p-2 bg-red-50 rounded-lg"
+                                            className="flex items-center justify-between p-2 bg-red-50 dark:bg-red-900/20 rounded-lg"
                                         >
                                             <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-red-700 w-5">{vehiclesWithEfficiency.length - index}º</span>
+                                                <span className="text-xs font-bold text-red-700 dark:text-red-400 w-5">{vehiclesWithEfficiency.length - index}º</span>
                                                 <div>
                                                     <p className="text-sm font-medium">{vehicle.plate}</p>
-                                                    <p className="text-xs text-gray-500">{vehicle.model}</p>
+                                                    <p className="text-xs text-gray-500 dark:text-zinc-500">{vehicle.model}</p>
                                                 </div>
                                             </div>
-                                            <Badge className="bg-red-100 text-red-800">{vehicle.kmPerLiter.toFixed(1)} km/L</Badge>
+                                            <Badge className="bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300">{vehicle.kmPerLiter.toFixed(1)} km/L</Badge>
                                         </div>
                                     ))}
                                 </div>
@@ -137,11 +137,11 @@ export function FuelEfficiencyCard({ vehicleIds, fuelTypes }: FuelEfficiencyCard
                         {/* Alertas de consumo atípico */}
                         {atypicalVehicles.length > 0 && (
                             <div className="pt-2 border-t">
-                                <h4 className="text-sm font-medium text-orange-700 flex items-center gap-1 mb-2">
+                                <h4 className="text-sm font-medium text-orange-700 dark:text-orange-400 flex items-center gap-1 mb-2">
                                     <AlertTriangle className="h-4 w-4" />
                                     Consumo Atípico ({atypicalVehicles.length})
                                 </h4>
-                                <p className="text-xs text-gray-500">
+                                <p className="text-xs text-gray-500 dark:text-zinc-500">
                                     Veículos com eficiência ±20% da média ({avgEfficiency.toFixed(1)} km/L)
                                 </p>
                             </div>

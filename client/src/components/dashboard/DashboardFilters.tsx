@@ -156,8 +156,8 @@ export function DashboardFilters({
     };
 
     return (
-        <div className="flex flex-wrap items-center gap-3 p-3 bg-gray-50 rounded-lg border">
-            <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="flex flex-wrap items-center gap-3 p-3 bg-gray-50 dark:bg-zinc-900 rounded-lg border dark:border-zinc-800">
+            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-zinc-400">
                 <Filter className="w-4 h-4" />
                 <span className="font-medium">Filtros:</span>
             </div>

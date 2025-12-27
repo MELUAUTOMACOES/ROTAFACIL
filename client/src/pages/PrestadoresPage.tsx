@@ -478,7 +478,7 @@ export default function PrestadoresPage() {
 
     if (!routeData) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-gray-50">
+            <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-gray-50 dark:bg-zinc-950">
                 {user?.role === 'admin' && (
                     <div className="w-full max-w-md mb-8">
                         <Label className="mb-2 block text-left">Selecionar Prestador/Rota</Label>
@@ -512,8 +512,8 @@ export default function PrestadoresPage() {
                 <div className="bg-yellow-100 p-4 rounded-full mb-4">
                     <Calendar className="w-8 h-8 text-[#B8860B]" />
                 </div>
-                <h2 className="text-xl font-bold mb-2">Nenhuma rota ativa encontrada</h2>
-                <p className="text-gray-500 mb-6">
+                <h2 className="text-xl font-bold mb-2 dark:text-zinc-100">Nenhuma rota ativa encontrada</h2>
+                <p className="text-gray-500 dark:text-zinc-400 mb-6">
                     {user?.role === 'admin'
                         ? "Selecione um prestador acima ou verifique se há rotas criadas para hoje."
                         : "Você não possui romaneios confirmados para a data de hoje."}
@@ -531,9 +531,9 @@ export default function PrestadoresPage() {
     const canCloseRoute = pendingAppointments === 0 && !isRouteFinalized;
 
     return (
-        <div className="min-h-screen bg-gray-50 pb-20">
+        <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 pb-20">
             {/* Header */}
-            <header className="bg-white border-b sticky top-0 z-10 px-4 py-3 shadow-sm">
+            <header className="bg-white dark:bg-zinc-900 border-b dark:border-zinc-800 sticky top-0 z-10 px-4 py-3 shadow-sm">
                 <div className="flex flex-col gap-2 mb-2">
                     {user?.role === 'admin' && (
                         <div className="w-full">
@@ -565,8 +565,8 @@ export default function PrestadoresPage() {
                     )}
                     <div className="flex justify-between items-center">
                         <div>
-                            <h1 className="text-lg font-bold text-gray-900">{route.title}</h1>
-                            <p className="text-sm text-gray-500 capitalize">
+                            <h1 className="text-lg font-bold text-gray-900 dark:text-zinc-100">{route.title}</h1>
+                            <p className="text-sm text-gray-500 dark:text-zinc-400 capitalize">
                                 {format(new Date(route.date.toString().split('T')[0] + 'T12:00:00'), "EEEE, d 'de' MMMM", { locale: ptBR })}
                             </p>
                         </div>
@@ -577,7 +577,7 @@ export default function PrestadoresPage() {
                 </div>
 
                 {/* Summary Stats */}
-                <div className="flex gap-4 text-sm text-gray-600 bg-gray-50 p-2 rounded-lg">
+                <div className="flex gap-4 text-sm text-gray-600 dark:text-zinc-400 bg-gray-50 dark:bg-zinc-800 p-2 rounded-lg">
                     <div className="flex items-center gap-1">
                         <CheckCircle className="w-4 h-4 text-green-600" />
                         <span>{summary.completedStops}/{summary.totalStops}</span>
@@ -654,7 +654,7 @@ export default function PrestadoresPage() {
 
                                         <div className="flex-1 p-3">
                                             <div className="flex justify-between items-start mb-1">
-                                                <span className="font-semibold text-gray-900 line-clamp-1">
+                                                <span className="font-semibold text-gray-900 dark:text-zinc-100 line-clamp-1">
                                                     {stop.appointment?.clientName}
                                                 </span>
                                                 {/* Timer se em andamento, senão status */}
@@ -670,7 +670,7 @@ export default function PrestadoresPage() {
                                                 )}
                                             </div>
 
-                                            <p className="text-sm text-gray-600 mb-1 line-clamp-1">{stop.appointment?.serviceName}</p>
+                                            <p className="text-sm text-gray-600 dark:text-zinc-400 mb-1 line-clamp-1">{stop.appointment?.serviceName}</p>
 
                                             <div className="flex items-center justify-between mt-2">
                                                 <div className="flex items-start gap-1 text-xs text-gray-500 flex-1">
@@ -733,7 +733,7 @@ export default function PrestadoresPage() {
                     </div>
 
                     {/* Footer for Start/End Route */}
-                    <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg z-20">
+                    <div className="fixed bottom-0 left-0 right-0 p-4 bg-white dark:bg-zinc-900 border-t dark:border-zinc-800 shadow-lg z-20">
                         {(!route.routeStartedAt) ? (
                             // Rota não iniciada - mostrar botão Iniciar
                             <Button
