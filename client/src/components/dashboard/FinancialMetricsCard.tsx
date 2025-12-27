@@ -2,7 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { DollarSign, Loader2 } from "lucide-react";
+import { useRef } from "react";
+import { captureAndShare } from "@/lib/screenshot";
+import { Button } from "@/components/ui/button";
+import { DollarSign, Loader2, Share2 } from "lucide-react";
 
 interface StatusBreakdown {
     status: string;
@@ -140,25 +143,38 @@ export function FinancialMetricsCard({ technicianId, teamId, startDate, endDate 
         );
     };
 
+    const cardRef = useRef<HTMLDivElement>(null);
+
+    const handleShare = async () => {
+        if (cardRef.current) {
+            await captureAndShare(cardRef.current, `metricas-financeiras.png`);
+        }
+    };
+
     return (
         <TooltipProvider>
-            <Card>
+            <Card ref={cardRef}>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                        <DollarSign className="w-5 h-5 text-green-600" />
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span className="cursor-help border-b border-dashed border-gray-400">
-                                    Métricas Financeiras
-                                </span>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
-                                <p>
-                                    Receita total esperada e breakdown por status de agendamento no período selecionado.
-                                    Baseado nos preços dos serviços cadastrados.
-                                </p>
-                            </TooltipContent>
-                        </Tooltip>
+                    <CardTitle className="flex items-center justify-between text-lg">
+                        <div className="flex items-center gap-2">
+                            <DollarSign className="w-5 h-5 text-green-600" />
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span className="cursor-help border-b border-dashed border-gray-400">
+                                        Métricas Financeiras
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                    <p>
+                                        Receita total esperada e breakdown por status de agendamento no período selecionado.
+                                        Baseado nos preços dos serviços cadastrados.
+                                    </p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={handleShare} className="h-8 w-8">
+                            <Share2 className="w-4 h-4 text-gray-500" />
+                        </Button>
                     </CardTitle>
                 </CardHeader>
                 <CardContent>

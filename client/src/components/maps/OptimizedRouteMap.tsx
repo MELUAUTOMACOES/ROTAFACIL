@@ -64,6 +64,12 @@ function FitToData({
 
   // Garante que o Leaflet recalcule o tamanho quando o componente for mostrado
   useEffect(() => {
+    try {
+      const container = map.getContainer();
+      (container as any)._leaflet_map = map;
+    } catch {
+      // ignore
+    }
     const t = setTimeout(() => map.invalidateSize(), 0);
     return () => clearTimeout(t);
   }, [map]);

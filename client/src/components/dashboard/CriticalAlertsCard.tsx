@@ -3,8 +3,10 @@ import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle, AlertCircle, Clock, ChevronRight, User } from "lucide-react";
+import { AlertTriangle, AlertCircle, Clock, ChevronRight, User, Share2 } from "lucide-react";
 import { Link } from "wouter";
+import { useRef } from "react";
+import { captureAndShare } from "@/lib/screenshot";
 
 interface CriticalAlert {
     type: string;
@@ -53,34 +55,47 @@ export function CriticalAlertsCard() {
     const criticalCount = alerts.filter(a => a.severity === "critical").length;
     const warningCount = alerts.filter(a => a.severity === "warning").length;
 
+    const cardRef = useRef<HTMLDivElement>(null);
+
+    const handleShare = async () => {
+        if (cardRef.current) {
+            await captureAndShare(cardRef.current, `alertas-criticos.png`);
+        }
+    };
+
     return (
         <TooltipProvider>
-            <Card>
+            <Card ref={cardRef}>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                        <AlertTriangle className="w-5 h-5 text-orange-600" />
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span className="cursor-help border-b border-dashed border-gray-400">Alertas Críticos</span>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
-                                <p>Situações que requerem atenção imediata: agendamentos sem técnico, rotas não iniciadas no horário, e pendências não resolvidas.</p>
-                            </TooltipContent>
-                        </Tooltip>
-                        {alerts.length > 0 && (
-                            <div className="flex gap-1 ml-2">
-                                {criticalCount > 0 && (
-                                    <span className="px-2 py-0.5 bg-red-100 text-red-800 text-xs font-medium rounded-full">
-                                        {criticalCount}
-                                    </span>
-                                )}
-                                {warningCount > 0 && (
-                                    <span className="px-2 py-0.5 bg-orange-100 text-orange-800 text-xs font-medium rounded-full">
-                                        {warningCount}
-                                    </span>
-                                )}
-                            </div>
-                        )}
+                    <CardTitle className="flex items-center justify-between text-lg">
+                        <div className="flex items-center gap-2">
+                            <AlertTriangle className="w-5 h-5 text-orange-600" />
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span className="cursor-help border-b border-dashed border-gray-400">Alertas Críticos</span>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                    <p>Situações que requerem atenção imediata: agendamentos sem técnico, rotas não iniciadas no horário, e pendências não resolvidas.</p>
+                                </TooltipContent>
+                            </Tooltip>
+                            {alerts.length > 0 && (
+                                <div className="flex gap-1 ml-2">
+                                    {criticalCount > 0 && (
+                                        <span className="px-2 py-0.5 bg-red-100 text-red-800 text-xs font-medium rounded-full">
+                                            {criticalCount}
+                                        </span>
+                                    )}
+                                    {warningCount > 0 && (
+                                        <span className="px-2 py-0.5 bg-orange-100 text-orange-800 text-xs font-medium rounded-full">
+                                            {warningCount}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={handleShare} className="h-8 w-8">
+                            <Share2 className="w-4 h-4 text-gray-500" />
+                        </Button>
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -120,6 +135,6 @@ export function CriticalAlertsCard() {
                     )}
                 </CardContent>
             </Card>
-        </TooltipProvider>
+        </TooltipProvider >
     );
 }

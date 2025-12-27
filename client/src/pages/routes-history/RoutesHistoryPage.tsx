@@ -44,8 +44,8 @@ import {
   FileText
 } from 'lucide-react';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import QRCode from 'qrcode';
+import leafletImage from 'leaflet-image';
 // @ts-ignore - dom-to-image-more não tem tipos TypeScript
 import domtoimage from 'dom-to-image-more';
 
@@ -1227,53 +1227,128 @@ export default function RoutesHistoryPage() {
           console.warn('Não foi possível invalidar o tamanho do mapa:', e);
         }
 
-        try {
-          // dom-to-image-more lida melhor com CSS transforms do Leaflet
-          const dataUrl = await domtoimage.toPng(mapContainer, {
-            quality: 1.0,
-            width: mapContainer.offsetWidth,
-            height: mapContainer.offsetHeight,
-            style: {
-              transform: 'none',
-            },
-            filter: (node: HTMLElement) => {
-              // Filtrar controles do Leaflet
-              if (node.classList) {
-                return !node.classList.contains('leaflet-control-container') &&
-                  !node.classList.contains('leaflet-control-attribution') &&
-                  !node.classList.contains('leaflet-control-zoom');
-              }
-              return true;
-            },
-          });
-          mapImageDataUrl = dataUrl;
-
-          console.log('✅ Mapa capturado com sucesso usando dom-to-image-more');
-        } catch (error) {
-          console.error('Erro ao capturar mapa com dom-to-image-more, tentando html2canvas:', error);
-
-          // Fallback para html2canvas se dom-to-image falhar
+        // 4.1) Remove apenas markers numerados (DivIcon) antes da captura
+        const mapInstance = (mapContainer as any)._leaflet_map;
+        let removedMarkers: any[] = [];
+        if (mapInstance) {
           try {
-            const canvas = await html2canvas(mapContainer, {
-              useCORS: true,
-              allowTaint: false,
-              backgroundColor: '#ffffff',
-              scale: 2,
-              logging: false,
-              ignoreElements: (element) => {
-                return element.classList?.contains('leaflet-control-container') ||
-                  element.classList?.contains('leaflet-control-attribution');
+            const leafletMod: any = await import('leaflet');
+            const L = leafletMod?.default ?? leafletMod;
+            if (L?.DivIcon) {
+              mapInstance.eachLayer((layer: any) => {
+                try {
+                  // Remove apenas markers com DivIcon (números das paradas)
+                  // Mantém: StartIcon (pin de início) e GeoJSON/Polyline (linha da rota)
+                  if (layer instanceof L.Marker && layer.options?.icon instanceof L.DivIcon) {
+                    removedMarkers.push(layer);
+                    mapInstance.removeLayer(layer);
+                  }
+                } catch {
+                  // ignore
+                }
+              });
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        if (true) {
+          let captureStyleEl: HTMLStyleElement | null = null;
+          try {
+            // Mitiga "grades"/gaps de tiles do Leaflet: desativa transforms durante a captura.
+            captureStyleEl = document.createElement('style');
+            captureStyleEl.setAttribute('data-pdf-map-capture', '1');
+            captureStyleEl.textContent = `
+              .leaflet-container { background: #ffffff !important; }
+              .leaflet-pane, .leaflet-map-pane, .leaflet-tile-pane, .leaflet-overlay-pane,
+              .leaflet-marker-pane, .leaflet-shadow-pane { transform: none !important; }
+              .leaflet-tile-container { transform: none !important; }
+              .leaflet-tile { transform: none !important; }
+            `;
+            document.head.appendChild(captureStyleEl);
+
+            await new Promise(resolve => setTimeout(resolve, 250));
+
+            // dom-to-image-more: captura tiles + polyline + StartIcon (sem markers numerados que crasham)
+            const dataUrl = await domtoimage.toJpeg(mapContainer, {
+              quality: 0.98,
+              bgcolor: '#ffffff',
+              width: mapContainer.offsetWidth,
+              height: mapContainer.offsetHeight,
+              style: {
+                transform: 'none',
+                backgroundColor: '#ffffff',
+              },
+              filter: (node: HTMLElement) => {
+                // Filtrar controles do Leaflet
+                if (node.classList) {
+                  return !node.classList.contains('leaflet-control-container') &&
+                    !node.classList.contains('leaflet-control-attribution') &&
+                    !node.classList.contains('leaflet-control-zoom');
+                }
+                return true;
               },
             });
-            mapImageDataUrl = canvas.toDataURL('image/png', 1.0);
-            console.log('✅ Mapa capturado com html2canvas (fallback)');
-          } catch (fallbackError) {
-            console.error('Erro ao capturar mapa com html2canvas:', fallbackError);
+
+            // Reduz a imagem antes de inserir no PDF para evitar artefatos por fatiamento interno do jsPDF
+            try {
+              const img = new Image();
+              img.crossOrigin = 'anonymous';
+              await new Promise<void>((resolve, reject) => {
+                img.onload = () => resolve();
+                img.onerror = reject;
+                img.src = dataUrl;
+              });
+
+              const maxW = 900;
+              const maxH = 600;
+              const scale = Math.min(1, maxW / img.width, maxH / img.height);
+              const targetW = Math.max(1, Math.round(img.width * scale));
+              const targetH = Math.max(1, Math.round(img.height * scale));
+
+              const c = document.createElement('canvas');
+              c.width = targetW;
+              c.height = targetH;
+              const cctx = c.getContext('2d');
+              if (cctx) {
+                cctx.fillStyle = '#ffffff';
+                cctx.fillRect(0, 0, targetW, targetH);
+                cctx.imageSmoothingEnabled = true;
+                // @ts-ignore
+                cctx.imageSmoothingQuality = 'high';
+                cctx.drawImage(img, 0, 0, targetW, targetH);
+                mapImageDataUrl = c.toDataURL('image/jpeg', 0.92);
+              } else {
+                mapImageDataUrl = dataUrl;
+              }
+            } catch {
+              mapImageDataUrl = dataUrl;
+            }
+          } catch {
             toast({
               title: "Aviso",
               description: "Não foi possível capturar o mapa. O PDF será gerado sem a visualização do mapa.",
               variant: "default",
             });
+          } finally {
+            if (captureStyleEl) captureStyleEl.remove();
+            // Restaura markers numerados
+            if (mapInstance && removedMarkers.length > 0) {
+              try {
+                removedMarkers.forEach((layer) => {
+                  try {
+                    layer.addTo(mapInstance);
+                  } catch {
+                    // ignore
+                  }
+                });
+              } catch {
+                // ignore
+              }
+            }
           }
         }
       }
@@ -1456,7 +1531,8 @@ export default function RoutesHistoryPage() {
 
         const mapWidth = pageWidth - 2 * margin;
         const mapHeight = 120;
-        pdf.addImage(mapImageDataUrl, 'PNG', margin, yPosition, mapWidth, mapHeight);
+        // @ts-ignore
+        pdf.addImage(mapImageDataUrl, 'JPEG', margin, yPosition, mapWidth, mapHeight, undefined, 'NONE');
         yPosition += mapHeight + 10;
       }
 

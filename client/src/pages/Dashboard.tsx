@@ -41,6 +41,9 @@ import { FuelEfficiencyCard } from "@/components/dashboard/FuelEfficiencyCard";
 import { FuelCostEvolutionCard } from "@/components/dashboard/FuelCostEvolutionCard";
 import type { Vehicle } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
+import { Share2 } from "lucide-react";
+import { captureAndShare } from "@/lib/screenshot";
+import { useRef } from "react";
 
 
 interface DashboardStats {
@@ -230,9 +233,26 @@ export default function Dashboard() {
     });
   };
 
+  const dashboardRef = useRef<HTMLDivElement>(null);
+
+  const handleShare = async () => {
+    if (dashboardRef.current) {
+      await captureAndShare(dashboardRef.current, `dashboard-${new Date().toISOString().split('T')[0]}.png`);
+    }
+  };
+
   return (
     <TooltipProvider>
-      <div className="space-y-6">
+      <div id="dashboard-capture" className="space-y-6" ref={dashboardRef}>
+        {/* Header com Título e Compartilhar */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-zinc-100">Dashboard</h1>
+          <Button variant="outline" onClick={handleShare} className="gap-2">
+            <Share2 className="h-4 w-4" />
+            Compartilhar
+          </Button>
+        </div>
+
         {/* Filtros Globais */}
         <DashboardFilters filters={filters} onFiltersChange={setFilters} />
 

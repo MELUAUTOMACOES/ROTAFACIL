@@ -7,8 +7,12 @@ import {
     CalendarCheck,
     CalendarX,
     Calendar,
-    Loader2
+    Loader2,
+    Share2
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useRef } from "react";
+import { captureAndShare } from "@/lib/screenshot";
 
 interface OperationStatsCardProps {
     startDate?: string;
@@ -109,25 +113,38 @@ export function OperationStatsCard({ startDate, endDate, technicianId, teamId }:
         },
     ];
 
+    const cardRef = useRef<HTMLDivElement>(null);
+
+    const handleShare = async () => {
+        if (cardRef.current) {
+            await captureAndShare(cardRef.current, `estatisticas-operacao.png`);
+        }
+    };
+
     return (
         <TooltipProvider>
-            <Card>
+            <Card ref={cardRef}>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                        <CalendarDays className="w-5 h-5 text-blue-600" />
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span className="cursor-help border-b border-dashed border-gray-400">
-                                    Estatísticas de Agendamentos
-                                </span>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
-                                <p>
-                                    Resumo dos agendamentos no período selecionado.
-                                    Inclui totais de hoje, concluídos, cancelados e total geral.
-                                </p>
-                            </TooltipContent>
-                        </Tooltip>
+                    <CardTitle className="flex items-center justify-between text-lg">
+                        <div className="flex items-center gap-2">
+                            <CalendarDays className="w-5 h-5 text-blue-600" />
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span className="cursor-help border-b border-dashed border-gray-400">
+                                        Estatísticas de Agendamentos
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                    <p>
+                                        Resumo dos agendamentos no período selecionado.
+                                        Inclui totais de hoje, concluídos, cancelados e total geral.
+                                    </p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={handleShare} className="h-8 w-8">
+                            <Share2 className="w-4 h-4 text-gray-500" />
+                        </Button>
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
