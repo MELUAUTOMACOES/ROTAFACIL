@@ -35,6 +35,7 @@ import { registerCompanyRoutes } from "./routes/company.routes";
 import { registerVehicleExtensionRoutes } from "./routes/vehicle-extensions.routes";
 import { registerMetricsRoutes, trackFeatureUsage } from "./routes/metrics.routes";
 import { registerAuditRoutes } from "./routes/audit.routes";
+import { registerDashboardRoutes } from "./routes/dashboard.routes";
 import { trackCompanyAudit, getAuditDescription } from "./audit.helpers";
 import { isAccessAllowed, getAccessDeniedMessage } from "./access-schedule-validator";
 
@@ -760,6 +761,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(pendencias);
     } catch (error: any) {
       console.error("❌ [PENDING] Erro ao listar pendências:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== FUEL RECORDS (ABASTECIMENTO) ====================
+
+  // Listar registros de abastecimento (com filtros opcionais)
+  app.get("/api/fuel-records", authenticateToken, async (req: any, res) => {
+    try {
+      const { vehicleId, startDate, endDate } = req.query;
+
+      const filters: { vehicleId?: number; startDate?: Date; endDate?: Date } = {};
+
+      if (vehicleId) {
+        filters.vehicleId = parseInt(vehicleId as string);
+      }
+      if (startDate) {
+        filters.startDate = new Date(startDate as string);
+      }
+      if (endDate) {
+        filters.endDate = new Date(endDate as string);
+      }
+
+      const records = await storage.getFuelRecords(req.user.userId, filters);
+      res.json(records);
+    } catch (error: any) {
+      console.error("❌ [FUEL] Erro ao listar registros:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Criar registro de abastecimento
+  app.post("/api/fuel-records", authenticateToken, async (req: any, res) => {
+    try {
+      const { vehicleId, fuelType, liters, pricePerLiter, totalCost, odometerKm, notes, fuelDate, occurrenceId } = req.body;
+
+      if (!vehicleId || !fuelType || !liters || !pricePerLiter || !totalCost) {
+        return res.status(400).json({ message: "Campos obrigatórios: vehicleId, fuelType, liters, pricePerLiter, totalCost" });
+      }
+
+      const record = await storage.createFuelRecord({
+        vehicleId,
+        fuelType,
+        liters,
+        pricePerLiter,
+        totalCost,
+        odometerKm: odometerKm || null,
+        notes: notes || null,
+        fuelDate: fuelDate ? new Date(fuelDate) : new Date(),
+        occurrenceId: occurrenceId || null,
+      }, req.user.userId, req.user.companyId);
+
+      console.log(`⛽ [FUEL] Registro criado: veículo ${vehicleId}, ${liters}L de ${fuelType} por R$${totalCost}`);
+      res.json(record);
+    } catch (error: any) {
+      console.error("❌ [FUEL] Erro ao criar registro:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Estatísticas de consumo por veículo
+  app.get("/api/fuel-records/vehicle/:id/stats", authenticateToken, async (req: any, res) => {
+    try {
+      const vehicleId = parseInt(req.params.id);
+      const stats = await storage.getVehicleFuelStats(vehicleId, req.user.userId);
+      res.json(stats);
+    } catch (error: any) {
+      console.error("❌ [FUEL] Erro ao buscar estatísticas:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Dashboard: Fleet fuel statistics (with optional filters)
+  app.get("/api/dashboard/fuel-stats", authenticateToken, async (req: any, res) => {
+    try {
+      const { vehicleIds, fuelTypes } = req.query;
+
+      const filters: { vehicleIds?: number[]; fuelTypes?: string[] } = {};
+
+      if (vehicleIds) {
+        filters.vehicleIds = String(vehicleIds).split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      }
+      if (fuelTypes) {
+        filters.fuelTypes = String(fuelTypes).split(',').map(t => t.trim()).filter(t => t.length > 0);
+      }
+
+      const stats = await storage.getFleetFuelStats(req.user.userId, filters);
+      res.json(stats);
+    } catch (error: any) {
+      console.error("❌ [DASHBOARD] Erro ao buscar estatísticas de combustível:", error);
       res.status(500).json({ message: error.message });
     }
   });
@@ -1655,7 +1746,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/vehicles/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
+      console.log(`🔧 [UPDATE VEHICLE] ID: ${id}, Body:`, req.body);
       const vehicleData = insertVehicleSchema.parse(req.body);
+      console.log(`🔧 [UPDATE VEHICLE] Parsed Data:`, vehicleData);
       const vehicle = await storage.updateVehicle(id, vehicleData, req.user.userId);
       res.json(vehicle);
     } catch (error: any) {
@@ -2818,6 +2911,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (oldDate.toDateString() !== newDate.toDateString()) {
           changes.push(`data de ${oldDate.toLocaleDateString('pt-BR')} para ${newDate.toLocaleDateString('pt-BR')}`);
           changeType = 'rescheduled';
+          // Increment reschedule count
+          appointmentData.rescheduleCount = (originalAppointment.rescheduleCount || 0) + 1;
         }
       }
 
@@ -2981,10 +3076,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         appointmentData.executionFinishedAt = null;
         appointmentData.photos = null;
         appointmentData.signature = null;
-        // Também resetar status para scheduled se estava em algum status de execução
         if (originalAppointment.status !== 'scheduled') {
           appointmentData.status = 'scheduled';
         }
+
+        // Increment reschedule count
+        appointmentData.rescheduleCount = (originalAppointment.rescheduleCount || 0) + 1;
       }
 
       const appointment = await storage.updateAppointment(id, appointmentData, req.user.userId);
@@ -3225,6 +3322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             scheduledDate: newDateTime,
             status: 'rescheduled', // 🔧 CORREÇÃO: Usar 'rescheduled' para rastreabilidade
             executionStatus: null, // Limpa o status de execução anterior
+            rescheduleCount: (appointment.rescheduleCount || 0) + 1, // Incrementa contador de reagendamentos
             ...(newTechnicianId !== undefined && { technicianId: newTechnicianId || null }),
             ...(newTeamId !== undefined && { teamId: newTeamId || null }),
           })
@@ -4390,6 +4488,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Registrar rotas de auditoria (admin de empresa)
   registerAuditRoutes(app, authenticateToken);
+
+  // Registrar rotas do dashboard (métricas e KPIs)
+  registerDashboardRoutes(app, authenticateToken);
 
   const httpServer = createServer(app);
 

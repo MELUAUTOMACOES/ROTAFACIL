@@ -12,9 +12,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import VehicleForm from "@/components/forms/VehicleForm";
 import VehicleMaintenanceForm from "@/components/forms/VehicleMaintenanceForm";
-import { Plus, Car, Calendar, User, Users, Edit, Trash2, Wrench, FileText, ClipboardCheck, Search, Search as SelectIcon } from "lucide-react";
+import { Plus, Car, Calendar, User, Users, Edit, Trash2, Wrench, FileText, ClipboardCheck, Search, Search as SelectIcon, Fuel } from "lucide-react";
 import type { Vehicle, Technician, Team, VehicleMaintenance } from "@shared/schema";
 import VehicleChecklistAuditTab from "@/components/vehicles/VehicleChecklistAuditTab";
+import FuelConsumptionTab from "@/components/vehicles/FuelConsumptionTab";
 
 
 export default function Vehicles() {
@@ -24,6 +25,7 @@ export default function Vehicles() {
   const [isMaintenanceFormOpen, setIsMaintenanceFormOpen] = useState(false);
   const [selectedVehicleForMaintenance, setSelectedVehicleForMaintenance] = useState<Vehicle | null>(null);
   const [selectedMaintenance, setSelectedMaintenance] = useState<VehicleMaintenance | null>(null);
+  const [initialFormTab, setInitialFormTab] = useState("dados");
 
   // Estados de filtro
   const [vehicleSearch, setVehicleSearch] = useState("");
@@ -32,16 +34,7 @@ export default function Vehicles() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Ler hash da URL para abrir na tab correta
-  useEffect(() => {
-    const hash = window.location.hash.replace("#", "");
-    if (hash === "checklist") {
-      setActiveTab("checklist");
-    } else if (hash === "manutencao") {
-      setActiveTab("manutencao");
-    }
-  }, []);
-
+  // Ler hash e query params da URL
   const { data: vehicles = [], isLoading } = useQuery({
     queryKey: ["/api/vehicles"],
     queryFn: async () => {
@@ -52,7 +45,7 @@ export default function Vehicles() {
     },
   });
 
-  const { data: technicians = [] } = useQuery({
+  const { data: technicians = [], isLoading: isLoadingTechs } = useQuery({
     queryKey: ["/api/technicians"],
     queryFn: async () => {
       const response = await fetch("/api/technicians", {
@@ -62,7 +55,7 @@ export default function Vehicles() {
     },
   });
 
-  const { data: teams = [] } = useQuery({
+  const { data: teams = [], isLoading: isLoadingTeams } = useQuery({
     queryKey: ["/api/teams"],
     queryFn: async () => {
       const response = await fetch("/api/teams", {
@@ -71,6 +64,35 @@ export default function Vehicles() {
       return response.json();
     },
   });
+
+  // Ler hash e query params da URL
+  useEffect(() => {
+    const hash = window.location.hash.replace("#", "");
+    if (hash === "checklist") {
+      setActiveTab("checklist");
+    } else if (hash === "manutencao") {
+      setActiveTab("manutencao");
+    }
+
+    // Verificar query params para abrir modal específico
+    const params = new URLSearchParams(window.location.search);
+    const openId = params.get("openId");
+    const tabParam = params.get("tab");
+
+    if (openId && vehicles.length > 0) {
+      const vehicleToOpen = vehicles.find((v: Vehicle) => v.id.toString() === openId);
+      if (vehicleToOpen) {
+        setSelectedVehicle(vehicleToOpen);
+        if (tabParam) {
+          setInitialFormTab(tabParam);
+        }
+        setIsFormOpen(true);
+        // Limpar URL para não reabrir ao atualizar
+        const newUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, document.title, newUrl);
+      }
+    }
+  }, [vehicles]);
 
   const getTechnician = (technicianId: number | null) => {
     if (!technicianId) return null;
@@ -100,7 +122,7 @@ export default function Vehicles() {
       (vehicleResponsibility === "unassigned" && !hasAssignment);
 
     return matchesSearch && matchesResponsibility;
-  });
+  }).sort((a: Vehicle, b: Vehicle) => a.id - b.id);
 
   const deleteVehicleMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -124,6 +146,7 @@ export default function Vehicles() {
 
   const handleEdit = (vehicle: Vehicle) => {
     setSelectedVehicle(vehicle);
+    setInitialFormTab("dados");
     setIsFormOpen(true);
   };
 
@@ -136,9 +159,10 @@ export default function Vehicles() {
   const handleFormClose = () => {
     setIsFormOpen(false);
     setSelectedVehicle(null);
+    setInitialFormTab("dados"); // Resetar tab inicial
   };
 
-  if (isLoading) {
+  if (isLoading || isLoadingTechs || isLoadingTeams) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-burnt-yellow"></div>
@@ -161,6 +185,7 @@ export default function Vehicles() {
               className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
               onClick={() => {
                 setSelectedVehicle(null);
+                setInitialFormTab("dados");
                 setIsFormOpen(true);
               }}
             >
@@ -173,7 +198,7 @@ export default function Vehicles() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-2xl">
+        <TabsList className="grid w-full grid-cols-4 max-w-3xl">
           <TabsTrigger value="veiculos" className="flex items-center">
             <Car className="h-4 w-4 mr-2" />
             Veículos
@@ -185,6 +210,10 @@ export default function Vehicles() {
           <TabsTrigger value="checklist" className="flex items-center">
             <ClipboardCheck className="h-4 w-4 mr-2" />
             Checklist Auditoria
+          </TabsTrigger>
+          <TabsTrigger value="consumo" className="flex items-center">
+            <Fuel className="h-4 w-4 mr-2" />
+            Consumo
           </TabsTrigger>
         </TabsList>
 
@@ -235,6 +264,7 @@ export default function Vehicles() {
                     className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
                     onClick={() => {
                       setSelectedVehicle(null);
+                      setInitialFormTab("dados");
                       setIsFormOpen(true);
                     }}
                   >
@@ -353,8 +383,14 @@ export default function Vehicles() {
         </TabsContent>
 
         {/* Tab: Checklist Auditoria */}
+        {/* Tab: Checklist Auditoria */}
         <TabsContent value="checklist" className="mt-4">
           <VehicleChecklistAuditTab />
+        </TabsContent>
+
+        {/* Tab: Consumo */}
+        <TabsContent value="consumo" className="mt-4">
+          <FuelConsumptionTab vehicles={vehicles} />
         </TabsContent>
       </Tabs>
 
@@ -362,11 +398,13 @@ export default function Vehicles() {
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="max-w-2xl">
           <VehicleForm
+            key={selectedVehicle?.id || 'new'}
             vehicle={selectedVehicle}
             technicians={technicians}
             teams={teams}
             vehicles={vehicles}
             onClose={handleFormClose}
+            initialTab={initialFormTab}
           />
         </DialogContent>
       </Dialog>

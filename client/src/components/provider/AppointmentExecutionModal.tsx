@@ -125,6 +125,7 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
         { value: 'nao_realizado_problema_tecnico', label: 'Problema Técnico', icon: AlertTriangle, color: 'text-yellow-600 bg-yellow-50 border-yellow-200' },
         { value: 'nao_realizado_endereco_incorreto', label: 'Endereço Incorreto', icon: MapPin, color: 'text-purple-600 bg-purple-50 border-purple-200' },
         { value: 'nao_realizado_cliente_recusou', label: 'Cliente Recusou', icon: XCircle, color: 'text-red-600 bg-red-50 border-red-200' },
+        { value: 'nao_realizado_falta_material', label: 'Falta de Material', icon: AlertTriangle, color: 'text-amber-600 bg-amber-50 border-amber-200' },
         { value: 'nao_realizado_outro', label: 'Outro Motivo', icon: HelpCircle, color: 'text-gray-600 bg-gray-50 border-gray-200' },
     ];
 

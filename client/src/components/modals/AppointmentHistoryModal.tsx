@@ -53,6 +53,7 @@ const pendingReasonLabels: Record<string, string> = {
     problema_tecnico: "Problema técnico",
     endereco_incorreto: "Endereço incorreto",
     cliente_recusou: "Cliente recusou",
+    falta_material: "Falta de material",
     outro_motivo: "Outro motivo",
 };
 

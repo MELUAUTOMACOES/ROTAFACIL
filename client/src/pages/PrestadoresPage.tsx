@@ -45,7 +45,24 @@ export default function PrestadoresPage() {
     const [occurrenceTime, setOccurrenceTime] = useState(''); // Horário aproximado HH:mm
     const [occurrenceDuration, setOccurrenceDuration] = useState(''); // Duração em minutos
 
+    // Estados para abastecimento (quando tipo === 'abastecimento')
+    const [fuelVehicleId, setFuelVehicleId] = useState<number | null>(null);
+    const [fuelType, setFuelType] = useState<string>('gasolina');
+    const [fuelLiters, setFuelLiters] = useState('');
+    const [fuelPricePerLiter, setFuelPricePerLiter] = useState('');
+    const [fuelTotalCost, setFuelTotalCost] = useState('');
+    const [fuelOdometerKm, setFuelOdometerKm] = useState('');
+
     const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+
+    // Buscar veículos para select de abastecimento
+    const { data: vehiclesData } = useQuery({
+        queryKey: ['/api/vehicles'],
+        queryFn: async () => {
+            const res = await apiRequest("GET", "/api/vehicles");
+            return res.json();
+        }
+    });
 
     // Buscar lista de prestadores ativos (apenas admin)
     const { data: activeProviders } = useQuery({
@@ -168,28 +185,64 @@ export default function PrestadoresPage() {
     });
 
     const createOccurrenceMutation = useMutation({
-        mutationFn: async ({ routeId, type, notes, approximateTime, durationMinutes }: {
+        mutationFn: async ({ routeId, type, notes, approximateTime, durationMinutes, fuelData }: {
             routeId: string;
             type: string;
             notes: string;
             approximateTime?: string;
             durationMinutes?: number;
+            fuelData?: {
+                vehicleId: number;
+                fuelType: string;
+                liters: string;
+                pricePerLiter: string;
+                totalCost: string;
+                odometerKm?: string;
+            };
         }) => {
-            const res = await apiRequest("POST", `/api/provider/route/${routeId}/occurrence`, {
+            // Criar ocorrência
+            const occurrenceRes = await apiRequest("POST", `/api/provider/route/${routeId}/occurrence`, {
                 type,
                 notes,
                 approximateTime,
                 durationMinutes
             });
-            return res.json();
+            const occurrence = await occurrenceRes.json();
+
+            // Se for abastecimento com dados válidos, criar registro de abastecimento
+            if (type === 'abastecimento' && fuelData && fuelData.vehicleId && fuelData.liters && fuelData.pricePerLiter && fuelData.totalCost) {
+                await apiRequest("POST", "/api/fuel-records", {
+                    vehicleId: fuelData.vehicleId,
+                    fuelType: fuelData.fuelType,
+                    liters: fuelData.liters,
+                    pricePerLiter: fuelData.pricePerLiter,
+                    totalCost: fuelData.totalCost,
+                    odometerKm: fuelData.odometerKm ? parseInt(fuelData.odometerKm) : null,
+                    notes: notes || null,
+                    occurrenceId: occurrence.id
+                });
+            }
+
+            return occurrence;
         },
         onSuccess: () => {
             setShowOccurrenceModal(false);
             setOccurrenceType('');
             setOccurrenceNotes('');
+            setOccurrenceTime('');
+            setOccurrenceDuration('');
+            // Reset campos de abastecimento
+            setFuelVehicleId(null);
+            setFuelType('gasolina');
+            setFuelLiters('');
+            setFuelPricePerLiter('');
+            setFuelTotalCost('');
+            setFuelOdometerKm('');
             toast({
                 title: "Ocorrência registrada!",
-                description: "A pausa foi registrada com sucesso.",
+                description: occurrenceType === 'abastecimento'
+                    ? "Abastecimento registrado com sucesso."
+                    : "A pausa foi registrada com sucesso.",
             });
         },
         onError: (error: any) => {
@@ -281,6 +334,9 @@ export default function PrestadoresPage() {
             .replace(/{horario_estimado}/g, appointment?.scheduledTime || 'em breve')
             .replace(/{endereco}/g, appointment?.clientAddress || '');
 
+        // Adicionar assinatura fixa
+        message += "\n\nFeito por, RotaFácil Frotas.";
+
         return `https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`;
     };
 
@@ -330,7 +386,7 @@ export default function PrestadoresPage() {
         if (selectedAppointmentData) {
             // Se for conclusão ou falha, tenta pegar localização final
             let endLocation = undefined;
-            if (data.executionStatus && ['concluido', 'nao_realizado_cliente_ausente', 'nao_realizado_cliente_pediu_remarcacao', 'nao_realizado_problema_tecnico', 'nao_realizado_endereco_incorreto', 'nao_realizado_cliente_recusou', 'nao_realizado_outro'].includes(data.executionStatus)) {
+            if (data.executionStatus && ['concluido', 'nao_realizado_cliente_ausente', 'nao_realizado_cliente_pediu_remarcacao', 'nao_realizado_problema_tecnico', 'nao_realizado_endereco_incorreto', 'nao_realizado_cliente_recusou', 'nao_realizado_falta_material', 'nao_realizado_outro'].includes(data.executionStatus)) {
                 try {
                     endLocation = await tracker.getCurrentLocation();
                 } catch (e) {
@@ -394,6 +450,7 @@ export default function PrestadoresPage() {
             case 'nao_realizado_problema_tecnico': return 'Prob. Técnico';
             case 'nao_realizado_endereco_incorreto': return 'End. Incorreto';
             case 'nao_realizado_cliente_recusou': return 'Recusou';
+            case 'nao_realizado_falta_material': return 'Falta Material';
             case 'nao_realizado_outro': return 'Outro';
             default: return 'Pendente';
         }
@@ -908,6 +965,101 @@ export default function PrestadoresPage() {
                             </button>
                         </div>
 
+                        {occurrenceType === 'abastecimento' && (
+                            <div className="bg-orange-50 p-4 rounded-lg border border-orange-200 space-y-3 animate-in fade-in slide-in-from-top-2">
+                                <h4 className="font-semibold text-orange-800 text-sm flex items-center gap-2">
+                                    <Fuel className="w-4 h-4" /> Dados do Abastecimento
+                                </h4>
+
+                                <div className="space-y-2">
+                                    <Label>Veículo</Label>
+                                    <Select value={fuelVehicleId?.toString()} onValueChange={(val) => setFuelVehicleId(parseInt(val))}>
+                                        <SelectTrigger className="bg-white">
+                                            <SelectValue placeholder="Selecione o veículo" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {vehiclesData?.map((v: any) => (
+                                                <SelectItem key={v.id} value={v.id.toString()}>
+                                                    {v.plate} - {v.model} {v.brand}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-2">
+                                        <Label>Tipo</Label>
+                                        <Select value={fuelType} onValueChange={setFuelType}>
+                                            <SelectTrigger className="bg-white">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="gasolina">Gasolina</SelectItem>
+                                                <SelectItem value="etanol">Etanol</SelectItem>
+                                                <SelectItem value="diesel_s10">Diesel S10</SelectItem>
+                                                <SelectItem value="diesel_s500">Diesel S500</SelectItem>
+                                                <SelectItem value="gnv">GNV</SelectItem>
+                                                <SelectItem value="eletrico">Elétrico</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Odômetro (km)</Label>
+                                        <Input type="number" value={fuelOdometerKm} onChange={(e) => setFuelOdometerKm(e.target.value)} className="bg-white" placeholder="Ex: 15400" />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div className="space-y-2">
+                                        <Label>Litros</Label>
+                                        <Input
+                                            type="number"
+                                            value={fuelLiters}
+                                            onChange={(e) => {
+                                                const l = e.target.value;
+                                                setFuelLiters(l);
+                                                if (l && fuelPricePerLiter) {
+                                                    setFuelTotalCost((parseFloat(l) * parseFloat(fuelPricePerLiter)).toFixed(2));
+                                                }
+                                            }}
+                                            className="bg-white"
+                                            placeholder="0.00"
+                                            step="0.01"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Preço/L</Label>
+                                        <Input
+                                            type="number"
+                                            value={fuelPricePerLiter}
+                                            onChange={(e) => {
+                                                const p = e.target.value;
+                                                setFuelPricePerLiter(p);
+                                                if (fuelLiters && p) {
+                                                    setFuelTotalCost((parseFloat(fuelLiters) * parseFloat(p)).toFixed(2));
+                                                }
+                                            }}
+                                            className="bg-white"
+                                            placeholder="0.00"
+                                            step="0.001"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Total R$</Label>
+                                        <Input
+                                            type="number"
+                                            value={fuelTotalCost}
+                                            onChange={(e) => setFuelTotalCost(e.target.value)}
+                                            className="bg-white"
+                                            placeholder="0.00"
+                                            step="0.01"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-2">
                                 <Label>Horário Aproximado</Label>
@@ -947,14 +1099,22 @@ export default function PrestadoresPage() {
                             onClick={() => {
                                 const durationNum = occurrenceDuration ? parseInt(occurrenceDuration) : undefined;
                                 createOccurrenceMutation.mutate({
-                                    routeId: route.id,
+                                    routeId: routeData?.route?.id,
                                     type: occurrenceType,
                                     notes: occurrenceNotes,
                                     approximateTime: occurrenceTime || undefined,
-                                    durationMinutes: durationNum
+                                    durationMinutes: durationNum,
+                                    fuelData: occurrenceType === 'abastecimento' ? {
+                                        vehicleId: fuelVehicleId!,
+                                        fuelType,
+                                        liters: fuelLiters,
+                                        pricePerLiter: fuelPricePerLiter,
+                                        totalCost: fuelTotalCost,
+                                        odometerKm: fuelOdometerKm || undefined
+                                    } : undefined
                                 });
                             }}
-                            disabled={!occurrenceType || createOccurrenceMutation.isPending}
+                            disabled={!occurrenceType || createOccurrenceMutation.isPending || (occurrenceType === 'abastecimento' && (!fuelVehicleId || !fuelLiters || !fuelTotalCost))}
                             className="bg-orange-500 hover:bg-orange-600 text-white"
                         >
                             {createOccurrenceMutation.isPending ? 'Registrando...' : 'Registrar'}

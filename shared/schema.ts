@@ -209,6 +209,7 @@ export const appointments = pgTable("appointments", {
   executionFinishedAt: timestamp("execution_finished_at"), // Hora que o prestador finalizou o atendimento
   executionStartLocation: jsonb("execution_start_location"), // { lat, lng, address, timestamp }
   executionEndLocation: jsonb("execution_end_location"), // { lat, lng, address, timestamp }
+  rescheduleCount: integer("reschedule_count").default(0).notNull(), // Contador de vezes que foi reagendado
   cep: text("cep").notNull(),
   logradouro: text("logradouro").notNull(),
   numero: text("numero").notNull(),
@@ -413,6 +414,26 @@ export const routeOccurrences = pgTable("route_occurrences", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Fuel Records table - Registro de abastecimentos dos veículos
+export const fuelRecords = pgTable("fuel_records", {
+  id: serial("id").primaryKey(),
+  vehicleId: integer("vehicle_id").notNull().references(() => vehicles.id, { onDelete: 'cascade' }),
+  occurrenceId: integer("occurrence_id").references(() => routeOccurrences.id, { onDelete: 'set null' }),
+  userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
+
+  fuelDate: timestamp("fuel_date").notNull().defaultNow(),
+  fuelType: varchar("fuel_type", { length: 32 }).notNull(), // gasolina, etanol, diesel_s500, diesel_s10, eletrico
+  liters: decimal("liters", { precision: 10, scale: 3 }).notNull(),
+  pricePerLiter: decimal("price_per_liter", { precision: 8, scale: 4 }).notNull(),
+  totalCost: decimal("total_cost", { precision: 12, scale: 2 }).notNull(),
+
+  odometerKm: integer("odometer_km"),
+  notes: text("notes"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Daily availability table - Armazena disponibilidade calculada por dia/responsável
 export const dailyAvailability = pgTable("daily_availability", {
   id: serial("id").primaryKey(),
@@ -505,7 +526,13 @@ export const insertVehicleSchema = createInsertSchema(vehicles).omit({
   brand: z.string().min(1, "Marca é obrigatória"),
   model: z.string().min(1, "Modelo é obrigatório"),
   year: z.number().min(1900, "Ano deve ser válido").max(new Date().getFullYear() + 1, "Ano não pode ser no futuro"),
-  fuelType: fuelTypeEnum.default("gasolina"),
+  fuelType: z.preprocess(
+    (val) => {
+      if (!val || val === "" || typeof val !== "string") return "gasolina";
+      return val.trim().toLowerCase();
+    },
+    fuelTypeEnum
+  ).default("gasolina"),
   fuelConsumption: z.string().or(z.number()).optional().nullable(),
   tankCapacity: z.number().min(1).max(500).optional().nullable(),
 }).refine(
@@ -612,6 +639,24 @@ export const insertDateRestrictionSchema = createInsertSchema(dateRestrictions).
   userId: true,
   createdAt: true,
 });
+
+export const insertFuelRecordSchema = createInsertSchema(fuelRecords).omit({
+  id: true,
+  userId: true,
+  companyId: true,
+  createdAt: true,
+}).extend({
+  fuelDate: z.union([z.string(), z.date()]).transform((val) => {
+    if (typeof val === 'string') return new Date(val);
+    return val;
+  }),
+  fuelType: fuelTypeEnum,
+  liters: z.string().or(z.number()),
+  pricePerLiter: z.string().or(z.number()),
+  totalCost: z.string().or(z.number()),
+  odometerKm: z.number().min(0).optional().nullable(),
+});
+
 
 export const insertAccessScheduleSchema = createInsertSchema(accessSchedules).omit({
   id: true,
@@ -1176,3 +1221,5 @@ export type PendingResolution = typeof pendingResolutions.$inferSelect;
 export type InsertPendingResolution = z.infer<typeof insertPendingResolutionSchema>;
 export type AppointmentHistory = typeof appointmentHistory.$inferSelect;
 export type InsertAppointmentHistory = z.infer<typeof insertAppointmentHistorySchema>;
+export type FuelRecord = typeof fuelRecords.$inferSelect;
+export type InsertFuelRecord = z.infer<typeof insertFuelRecordSchema>;

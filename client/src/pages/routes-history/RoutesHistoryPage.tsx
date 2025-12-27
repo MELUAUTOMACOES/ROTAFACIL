@@ -349,6 +349,7 @@ export default function RoutesHistoryPage() {
       case 'nao_realizado_problema_tecnico': return 'Prob. Técnico';
       case 'nao_realizado_endereco_incorreto': return 'End. Incorreto';
       case 'nao_realizado_cliente_recusou': return 'Recusou';
+      case 'nao_realizado_falta_material': return 'Falta Material';
       case 'nao_realizado_outro': return 'Outro';
       default: return 'Pendente';
     }

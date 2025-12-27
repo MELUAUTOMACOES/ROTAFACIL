@@ -18,6 +18,7 @@ type PendingReasonType =
     | 'nao_realizado_problema_tecnico'
     | 'nao_realizado_endereco_incorreto'
     | 'nao_realizado_cliente_recusou'
+    | 'nao_realizado_falta_material'
     | 'nao_realizado_outro'
     | (string & {});
 type ResolutionActionType = 'rescheduled' | 'cancelled' | 'resolved_by_provider' | 'awaiting';
@@ -59,6 +60,7 @@ const pendingReasonLabels: Record<string, string> = {
     nao_realizado_problema_tecnico: "Problema técnico",
     nao_realizado_endereco_incorreto: "Endereço incorreto",
     nao_realizado_cliente_recusou: "Cliente recusou",
+    nao_realizado_falta_material: "Falta de material",
     nao_realizado_outro: "Outro motivo",
 };
 
@@ -129,6 +131,7 @@ export function ResolvePendingModal({
             case 'nao_realizado_endereco_incorreto':
                 return 'rescheduled';
             case 'nao_realizado_problema_tecnico':
+            case 'nao_realizado_falta_material':
                 return 'resolved_by_provider';
             case 'nao_realizado_cliente_recusou':
                 return 'cancelled';
@@ -149,6 +152,8 @@ export function ResolvePendingModal({
                 return 'bg-red-500';
             case 'nao_realizado_cliente_recusou':
                 return 'bg-gray-500';
+            case 'nao_realizado_falta_material':
+                return 'bg-amber-500';
             default:
                 return 'bg-burnt-yellow';
         }

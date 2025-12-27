@@ -34,29 +34,28 @@ interface VehicleFormProps {
   teams: Team[];
   vehicles: Vehicle[];
   onClose: () => void;
+  initialTab?: string;
 }
 
-export default function VehicleForm({
-  vehicle,
-  technicians,
-  teams,
-  vehicles,
-  onClose,
-}: VehicleFormProps) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("dados");
-  const [assignmentType, setAssignmentType] = useState<"technician" | "team">(
-    vehicle?.technicianId
-      ? "technician"
-      : vehicle?.teamId
-        ? "team"
-        : "technician",
-  );
+type FuelTypeKey = "gasolina" | "etanol" | "diesel_s500" | "diesel_s10" | "eletrico" | "hibrido";
 
-  const form = useForm<InsertVehicle>({
-    resolver: zodResolver(insertVehicleSchema),
-    defaultValues: {
+interface InitialFormValues {
+  plate: string;
+  model: string;
+  brand: string;
+  year: number;
+  fuelType: FuelTypeKey;
+  fuelConsumption: string | undefined;
+  tankCapacity: number | undefined;
+  technicianId: number | undefined;
+  teamId: number | undefined;
+  assignmentType: "technician" | "team";
+}
+
+// Helper para processar valores iniciais do veículo
+function getInitialValues(vehicle: Vehicle | null | undefined): InitialFormValues {
+  if (!vehicle) {
+    return {
       plate: "",
       model: "",
       brand: "",
@@ -66,46 +65,100 @@ export default function VehicleForm({
       tankCapacity: undefined,
       technicianId: undefined,
       teamId: undefined,
-    },
+      assignmentType: "technician",
+    };
+  }
+
+  // Normalizar fuelType para lowercase
+  let fuelTypeRaw: string = vehicle.fuelType || "gasolina";
+  fuelTypeRaw = fuelTypeRaw.trim().toLowerCase();
+  
+  const validFuelTypes: FuelTypeKey[] = ["gasolina", "etanol", "diesel_s500", "diesel_s10", "eletrico", "hibrido"];
+  const fuelType: FuelTypeKey = validFuelTypes.includes(fuelTypeRaw as FuelTypeKey) 
+    ? (fuelTypeRaw as FuelTypeKey) 
+    : "gasolina";
+
+  // Garantir IDs numéricos válidos
+  let technicianId: number | undefined = undefined;
+  if (vehicle.technicianId != null) {
+    const n = Number(vehicle.technicianId);
+    if (Number.isFinite(n) && n > 0) technicianId = n;
+  }
+
+  let teamId: number | undefined = undefined;
+  if (vehicle.teamId != null) {
+    const n = Number(vehicle.teamId);
+    if (Number.isFinite(n) && n > 0) teamId = n;
+  }
+
+  const assignmentType: "technician" | "team" = teamId ? "team" : "technician";
+
+  console.log("🚗 [VehicleForm] getInitialValues:", {
+    vehicleId: vehicle.id,
+    originalFuelType: vehicle.fuelType,
+    normalizedFuelType: fuelType,
+    technicianId,
+    teamId,
+    assignmentType,
   });
 
-  // Resetar form quando o veículo muda (correção de bug de cache)
-  useEffect(() => {
-    if (vehicle) {
-      form.reset({
-        plate: vehicle.plate,
-        model: vehicle.model,
-        brand: vehicle.brand,
-        year: vehicle.year,
-        fuelType: (vehicle as any).fuelType || "gasolina",
-        fuelConsumption: (vehicle as any).fuelConsumption || undefined,
-        tankCapacity: (vehicle as any).tankCapacity || undefined,
-        technicianId: vehicle.technicianId || undefined,
-        teamId: vehicle.teamId || undefined,
-      });
-      setAssignmentType(vehicle.technicianId ? "technician" : vehicle.teamId ? "team" : "technician");
-    } else {
-      form.reset({
-        plate: "",
-        model: "",
-        brand: "",
-        year: new Date().getFullYear(),
-        fuelType: "gasolina",
-        fuelConsumption: undefined,
-        tankCapacity: undefined,
-        technicianId: undefined,
-        teamId: undefined,
-      });
-      setAssignmentType("technician");
-    }
-  }, [vehicle, form]);
+  return {
+    plate: vehicle.plate,
+    model: vehicle.model,
+    brand: vehicle.brand,
+    year: vehicle.year,
+    fuelType,
+    fuelConsumption: vehicle.fuelConsumption != null ? String(vehicle.fuelConsumption) : undefined,
+    tankCapacity: vehicle.tankCapacity ?? undefined,
+    technicianId: assignmentType === "technician" ? technicianId : undefined,
+    teamId: assignmentType === "team" ? teamId : undefined,
+    assignmentType,
+  };
+}
+
+export default function VehicleForm({
+  vehicle,
+  technicians,
+  teams,
+  vehicles,
+  onClose,
+  initialTab = "dados",
+}: VehicleFormProps) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState(initialTab);
+  
+  // Calcular valores iniciais uma vez na montagem
+  const initialValues = getInitialValues(vehicle);
+  
+  const [assignmentType, setAssignmentType] = useState<"technician" | "team">(
+    initialValues.assignmentType
+  );
+
+  const form = useForm<InsertVehicle>({
+    resolver: zodResolver(insertVehicleSchema),
+    defaultValues: {
+      plate: initialValues.plate,
+      model: initialValues.model,
+      brand: initialValues.brand,
+      year: initialValues.year,
+      fuelType: initialValues.fuelType,
+      fuelConsumption: initialValues.fuelConsumption,
+      tankCapacity: initialValues.tankCapacity,
+      technicianId: initialValues.technicianId,
+      teamId: initialValues.teamId,
+    },
+  });
 
   const createVehicleMutation = useMutation({
     mutationFn: async (data: InsertVehicle) => {
       const response = await apiRequest("POST", "/api/vehicles", data);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (createdVehicle: Vehicle) => {
+      queryClient.setQueryData<Vehicle[]>(["/api/vehicles"], (old) =>
+        old ? [...old, createdVehicle] : [createdVehicle],
+      );
       queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
       toast({
         title: "Sucesso",
@@ -131,7 +184,12 @@ export default function VehicleForm({
       );
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (updatedVehicle: Vehicle) => {
+      queryClient.setQueryData<Vehicle[]>(["/api/vehicles"], (old) =>
+        old
+          ? old.map((v) => (v.id === updatedVehicle.id ? updatedVehicle : v))
+          : old,
+      );
       queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
       toast({
         title: "Sucesso",
@@ -149,6 +207,7 @@ export default function VehicleForm({
   });
 
   const onSubmit = (data: InsertVehicle) => {
+    console.log("🚗 [VehicleForm] Submitting data:", data);
     if (vehicle) {
       updateVehicleMutation.mutate(data);
     } else {
@@ -198,6 +257,9 @@ export default function VehicleForm({
   );
 
   function renderVehicleForm() {
+    // Capturar valores atuais para usar no filtro
+    const currentTechnicianId = form.watch("technicianId");
+
     return (
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div>
@@ -296,20 +358,25 @@ export default function VehicleForm({
             </div>
 
             <div>
-              <Label htmlFor="fuelConsumption" className="flex items-center">
-                <Gauge className="h-4 w-4 mr-1" />
+              <Label htmlFor="fuelConsumption" className="block mb-1">
                 Consumo ({form.watch("fuelType") === "eletrico" ? "km/kWh" : "km/L"})
               </Label>
-              <Input
-                type="number"
-                step="0.1"
-                min="1"
-                max="100"
-                placeholder="Ex: 12.5"
-                className="mt-1"
-                value={form.watch("fuelConsumption") || ""}
-                onChange={(e) => form.setValue("fuelConsumption", e.target.value || undefined, { shouldValidate: true })}
-              />
+              <div className="relative">
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  id="fuelConsumption"
+                  max="100"
+                  placeholder="Ex: 12.5"
+                  className="mt-1"
+                  value={form.watch("fuelConsumption")?.toString() || ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    form.setValue("fuelConsumption", val === "" ? undefined : val, { shouldValidate: true });
+                  }}
+                />
+              </div>
               {form.formState.errors.fuelConsumption && (
                 <p className="text-sm text-red-600 mt-1">
                   {form.formState.errors.fuelConsumption.message}
@@ -401,10 +468,13 @@ export default function VehicleForm({
                 <SelectContent>
                   {technicians
                     .filter((t) => {
+                      // SEMPRE mostrar o técnico atualmente selecionado no formulário
+                      if (currentTechnicianId && Number(currentTechnicianId) === t.id) return true;
+
                       // Filtrar técnicos ativos
                       if (!t.isActive) return false;
 
-                      // Se estiver editando, permitir o técnico atual
+                      // Se estiver editando, permitir o técnico original do veículo
                       if (vehicle?.technicianId === t.id) return true;
 
                       // Filtrar técnicos já vinculados a outros veículos
@@ -460,9 +530,9 @@ export default function VehicleForm({
                     ))}
                 </SelectContent>
               </Select>
-              {form.formState.errors.teamId && (
+              {(form.formState.errors.teamId || form.formState.errors.technicianId) && (
                 <p className="text-sm text-red-600 mt-1">
-                  {form.formState.errors.teamId.message}
+                  {(form.formState.errors.teamId || form.formState.errors.technicianId)?.message}
                 </p>
               )}
               {assignmentType === "team" && form.watch("teamId") && (
@@ -493,3 +563,5 @@ export default function VehicleForm({
     );
   }
 }
+
+

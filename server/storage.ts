@@ -21,6 +21,7 @@ import {
   type MaintenanceWarranty, type InsertMaintenanceWarranty,
   type FeatureUsage, type InsertFeatureUsage,
   type AppointmentHistory, type InsertAppointmentHistory,
+  type FuelRecord, type InsertFuelRecord,
   users, clients, services, technicians, vehicles, appointments, appointmentHistory, checklists, businessRules, teams, teamMembers, accessSchedules,
   companies, memberships, invitations,
   dateRestrictions,
@@ -29,7 +30,8 @@ import {
   auditLogs,
   vehicleDocuments, vehicleMaintenances, maintenanceWarranties,
   featureUsage,
-  trackingLocations
+  trackingLocations,
+  fuelRecords
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, ilike, sql, inArray, isNotNull, ne, isNull, gte, lte, desc } from "drizzle-orm";
@@ -204,6 +206,22 @@ export interface IStorage {
   createTrackingLocation(data: { userId: number; routeId?: string; latitude: number; longitude: number; accuracy?: number; batteryLevel?: number; speed?: number; heading?: number; providerId?: number }): Promise<any>;
   getRouteTrackingLocations(routeId: string): Promise<any[]>;
 
+  // Fuel Records
+  getFuelRecords(userId: number, filters?: { vehicleId?: number; startDate?: Date; endDate?: Date }): Promise<FuelRecord[]>;
+  createFuelRecord(record: InsertFuelRecord, userId: number, companyId?: number | null): Promise<FuelRecord>;
+  getVehicleFuelStats(vehicleId: number, userId: number): Promise<{ totalLiters: number; totalCost: number; avgPricePerLiter: number; recordCount: number }>;
+  getFleetFuelStats(userId: number, filters?: { vehicleIds?: number[]; fuelTypes?: string[] }): Promise<{
+    totalSpent: number;
+    totalLiters: number;
+    avgPricePerLiter: number;
+    costPerKm: number;
+    avgKmPerLiter: number;
+    totalRefuelings: number;
+    spentVariation: number;
+    litersVariation: number;
+    byVehicle: { vehicleId: number; plate: string; model: string; totalSpent: number; totalLiters: number; kmPerLiter: number }[];
+    monthlyEvolution: { month: string; totalSpent: number; totalLiters: number }[];
+  }>;
 
 }
 
@@ -1584,6 +1602,215 @@ export class DatabaseStorage implements IStorage {
       .from(trackingLocations)
       .where(eq(trackingLocations.routeId, routeId))
       .orderBy(trackingLocations.timestamp);
+  }
+
+  // Fuel Records Implementation
+  async getFuelRecords(userId: number, filters?: { vehicleId?: number; startDate?: Date; endDate?: Date }): Promise<FuelRecord[]> {
+    let conditions = [eq(fuelRecords.userId, userId)];
+
+    if (filters?.vehicleId) {
+      conditions.push(eq(fuelRecords.vehicleId, filters.vehicleId));
+    }
+    if (filters?.startDate) {
+      conditions.push(gte(fuelRecords.fuelDate, filters.startDate));
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(fuelRecords.fuelDate, filters.endDate));
+    }
+
+    return await db.select()
+      .from(fuelRecords)
+      .where(and(...conditions))
+      .orderBy(desc(fuelRecords.fuelDate));
+  }
+
+  async createFuelRecord(record: InsertFuelRecord, userId: number, companyId?: number | null): Promise<FuelRecord> {
+    const [fuelRecord] = await db.insert(fuelRecords).values({
+      ...record,
+      userId,
+      companyId: companyId ?? null,
+    } as any).returning();
+    return fuelRecord;
+  }
+
+  async getVehicleFuelStats(vehicleId: number, userId: number): Promise<{ totalLiters: number; totalCost: number; avgPricePerLiter: number; recordCount: number }> {
+    const records = await db.select()
+      .from(fuelRecords)
+      .where(and(
+        eq(fuelRecords.vehicleId, vehicleId),
+        eq(fuelRecords.userId, userId)
+      ));
+
+    if (records.length === 0) {
+      return { totalLiters: 0, totalCost: 0, avgPricePerLiter: 0, recordCount: 0 };
+    }
+
+    const totalLiters = records.reduce((sum, r) => sum + parseFloat(String(r.liters)), 0);
+    const totalCost = records.reduce((sum, r) => sum + parseFloat(String(r.totalCost)), 0);
+    const avgPricePerLiter = totalLiters > 0 ? totalCost / totalLiters : 0;
+
+    return {
+      totalLiters: Math.round(totalLiters * 100) / 100,
+      totalCost: Math.round(totalCost * 100) / 100,
+      avgPricePerLiter: Math.round(avgPricePerLiter * 100) / 100,
+      recordCount: records.length
+    };
+  }
+
+  async getFleetFuelStats(userId: number, filters?: { vehicleIds?: number[]; fuelTypes?: string[] }): Promise<{
+    totalSpent: number;
+    totalLiters: number;
+    avgPricePerLiter: number;
+    costPerKm: number;
+    avgKmPerLiter: number;
+    totalRefuelings: number;
+    spentVariation: number;
+    litersVariation: number;
+    byVehicle: { vehicleId: number; plate: string; model: string; totalSpent: number; totalLiters: number; kmPerLiter: number }[];
+    monthlyEvolution: { month: string; totalSpent: number; totalLiters: number }[];
+  }> {
+    // Get all fuel records for user
+    let allRecords = await db.select().from(fuelRecords).where(eq(fuelRecords.userId, userId));
+
+    // Apply filters
+    if (filters?.vehicleIds && filters.vehicleIds.length > 0) {
+      allRecords = allRecords.filter(r => filters.vehicleIds!.includes(r.vehicleId));
+    }
+    if (filters?.fuelTypes && filters.fuelTypes.length > 0) {
+      allRecords = allRecords.filter(r => filters.fuelTypes!.includes(r.fuelType));
+    }
+
+    // Get all vehicles for enriching data
+    const allVehicles = await db.select().from(vehicles).where(eq(vehicles.userId, userId));
+    const vehicleMap = new Map(allVehicles.map(v => [v.id, v]));
+
+    // Current month calculations
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+
+    const thisMonthRecords = allRecords.filter(r => new Date(r.fuelDate) >= startOfMonth);
+    const lastMonthRecords = allRecords.filter(r => {
+      const date = new Date(r.fuelDate);
+      return date >= startOfLastMonth && date <= endOfLastMonth;
+    });
+
+    // Calculate totals for this month
+    const totalSpent = thisMonthRecords.reduce((sum, r) => sum + parseFloat(String(r.totalCost)), 0);
+    const totalLiters = thisMonthRecords.reduce((sum, r) => sum + parseFloat(String(r.liters)), 0);
+    const avgPricePerLiter = totalLiters > 0 ? totalSpent / totalLiters : 0;
+
+    // Calculate last month totals for variation
+    const lastMonthSpent = lastMonthRecords.reduce((sum, r) => sum + parseFloat(String(r.totalCost)), 0);
+    const lastMonthLiters = lastMonthRecords.reduce((sum, r) => sum + parseFloat(String(r.liters)), 0);
+
+    const spentVariation = lastMonthSpent > 0 ? Math.round(((totalSpent - lastMonthSpent) / lastMonthSpent) * 100) : 0;
+    const litersVariation = lastMonthLiters > 0 ? Math.round(((totalLiters - lastMonthLiters) / lastMonthLiters) * 100) : 0;
+
+    // Calculate km/L and cost per km from odometer data
+    // Group records by vehicle and sort by date to calculate distances
+    type FuelRecordType = typeof allRecords[number];
+    const vehicleRecordsMap = new Map<number, FuelRecordType[]>();
+    for (const record of allRecords) {
+      if (!vehicleRecordsMap.has(record.vehicleId)) {
+        vehicleRecordsMap.set(record.vehicleId, []);
+      }
+      vehicleRecordsMap.get(record.vehicleId)!.push(record);
+    }
+
+    let totalKmDriven = 0;
+    let totalLitersWithOdometer = 0;
+    const byVehicle: { vehicleId: number; plate: string; model: string; totalSpent: number; totalLiters: number; kmPerLiter: number }[] = [];
+
+    const vehicleEntries = Array.from(vehicleRecordsMap.entries());
+    for (const [vehicleId, records] of vehicleEntries) {
+      const vehicle = vehicleMap.get(vehicleId);
+      if (!vehicle) continue;
+
+      // Sort by odometer to calculate distances
+      const sortedByOdometer = records
+        .filter((r: FuelRecordType) => r.odometerKm !== null)
+        .sort((a: FuelRecordType, b: FuelRecordType) => (a.odometerKm || 0) - (b.odometerKm || 0));
+
+      let vehicleKm = 0;
+      let vehicleLiters = 0;
+      let vehicleSpent = 0;
+
+      // Apply filters for vehicle totals
+      const filteredRecords = filters?.fuelTypes && filters.fuelTypes.length > 0
+        ? records.filter((r: FuelRecordType) => filters.fuelTypes!.includes(r.fuelType))
+        : records;
+
+      for (const r of filteredRecords) {
+        vehicleLiters += parseFloat(String(r.liters));
+        vehicleSpent += parseFloat(String(r.totalCost));
+      }
+
+      // Calculate km driven (difference between last and first odometer)
+      if (sortedByOdometer.length >= 2) {
+        const filteredByOdometer = filters?.fuelTypes && filters.fuelTypes.length > 0
+          ? sortedByOdometer.filter((r: FuelRecordType) => filters.fuelTypes!.includes(r.fuelType))
+          : sortedByOdometer;
+
+        if (filteredByOdometer.length >= 2) {
+          vehicleKm = (filteredByOdometer[filteredByOdometer.length - 1].odometerKm || 0) - (filteredByOdometer[0].odometerKm || 0);
+          totalKmDriven += vehicleKm;
+          totalLitersWithOdometer += vehicleLiters;
+        }
+      }
+
+      const kmPerLiter = vehicleLiters > 0 && vehicleKm > 0 ? vehicleKm / vehicleLiters : 0;
+
+      byVehicle.push({
+        vehicleId,
+        plate: vehicle.plate,
+        model: `${vehicle.brand} ${vehicle.model}`,
+        totalSpent: Math.round(vehicleSpent * 100) / 100,
+        totalLiters: Math.round(vehicleLiters * 100) / 100,
+        kmPerLiter: Math.round(kmPerLiter * 100) / 100
+      });
+    }
+
+    // Sort by efficiency (best first)
+    byVehicle.sort((a, b) => b.kmPerLiter - a.kmPerLiter);
+
+    const avgKmPerLiter = totalLitersWithOdometer > 0 && totalKmDriven > 0
+      ? totalKmDriven / totalLitersWithOdometer
+      : 0;
+    const costPerKm = totalKmDriven > 0 ? totalSpent / totalKmDriven : 0;
+
+    // Monthly evolution (last 6 months)
+    const monthlyEvolution: { month: string; totalSpent: number; totalLiters: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+      const monthKey = `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}`;
+
+      const monthRecords = allRecords.filter(r => {
+        const date = new Date(r.fuelDate);
+        return date >= monthStart && date <= monthEnd;
+      });
+
+      monthlyEvolution.push({
+        month: monthKey,
+        totalSpent: Math.round(monthRecords.reduce((sum, r) => sum + parseFloat(String(r.totalCost)), 0) * 100) / 100,
+        totalLiters: Math.round(monthRecords.reduce((sum, r) => sum + parseFloat(String(r.liters)), 0) * 100) / 100
+      });
+    }
+
+    return {
+      totalSpent: Math.round(totalSpent * 100) / 100,
+      totalLiters: Math.round(totalLiters * 100) / 100,
+      avgPricePerLiter: Math.round(avgPricePerLiter * 100) / 100,
+      costPerKm: Math.round(costPerKm * 100) / 100,
+      avgKmPerLiter: Math.round(avgKmPerLiter * 100) / 100,
+      totalRefuelings: thisMonthRecords.length,
+      spentVariation,
+      litersVariation,
+      byVehicle,
+      monthlyEvolution
+    };
   }
 }
 
