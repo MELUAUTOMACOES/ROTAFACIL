@@ -79,16 +79,9 @@ export default function Login() {
 
     try {
       if (isLogin) {
-        const result = await login(formData.username, formData.password);
-        if (!result.success) {
-          setError(result.message || "Falha no login");
-        } else {
-          if (result.userType === "provider") {
-            setLocation("/prestadores");
-          } else {
-            setLocation("/dashboard");
-          }
-        }
+        await login(formData.username, formData.password);
+        // Se chegou aqui, login foi bem sucedido
+        setLocation("/dashboard");
       } else {
         if (formData.password !== formData.confirmPassword) {
           setError("As senhas não coincidem");
@@ -96,22 +89,17 @@ export default function Login() {
           return;
         }
 
-        const result = await register({
+        await register({
           username: formData.username,
           password: formData.password,
           name: formData.name,
           email: formData.email,
-          company: formData.company,
         });
-
-        if (!result.success) {
-          setError(result.message || "Falha no registro");
-        } else {
-          setLocation("/dashboard");
-        }
+        // Se chegou aqui, registro foi bem sucedido
+        setLocation("/dashboard");
       }
-    } catch (err) {
-      setError("Erro ao processar sua solicitação");
+    } catch (err: any) {
+      setError(err.message || "Erro ao processar sua solicitação");
     } finally {
       setIsLoading(false);
     }
@@ -365,17 +353,17 @@ export default function Login() {
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="username" className="text-slate-200 text-sm">Usuário</Label>
+                  <Label htmlFor="username" className="text-slate-200 text-sm">Email</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
                     <Input
                       id="username"
                       name="username"
-                      type="text"
+                      type="email"
                       value={formData.username}
                       onChange={handleInputChange}
                       className="bg-zinc-800 border-zinc-700 text-white placeholder:text-slate-500 pl-10 focus:border-amber-500 focus:ring-amber-500"
-                      placeholder="Digite seu usuário"
+                      placeholder="seu@email.com"
                       required
                     />
                   </div>

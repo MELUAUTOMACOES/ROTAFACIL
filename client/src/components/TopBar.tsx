@@ -16,6 +16,10 @@ const pageNames: Record<string, string> = {
   "/technicians": "Técnicos",
   "/vehicles": "Veículos",
   "/services": "Serviços",
+  "/find-date": "Ache uma Data",
+  "/prestadores": "Prestadores",
+  "/business-rules": "Regras de Negócio",
+  "/users": "Gestão de Usuários",
 };
 
 export default function TopBar({ onMenuClick }: TopBarProps) {
@@ -33,7 +37,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
   const pageName = pageNames[location] || "Dashboard";
 
   return (
-    <header className="bg-white dark:bg-zinc-900 shadow-sm border-b border-gray-200 dark:border-zinc-700 px-6 py-4">
+    <header className="bg-white dark:bg-black shadow-sm border-b border-gray-200 dark:border-zinc-800 px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
           <Button
@@ -60,4 +64,3 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
     </header>
   );
 }
-
