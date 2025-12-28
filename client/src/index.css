@@ -1097,4 +1097,17 @@
 .dark .rbc-addons-dnd-over {
   background-color: rgba(59, 130, 246, 0.2) !important;
   border-color: #3b82f6 !important;
+}/* Flowing Road Animation */
+@keyframes road-flow {
+    0% {
+        stroke-dashoffset: 0;
+    }
+
+    100% {
+        stroke-dashoffset: 6;
+    }
+}
+
+.animate-road-flow {
+    animation: road-flow 20s linear infinite;
 }

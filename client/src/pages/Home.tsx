@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import logoImg from "@assets/SEM FUNDO_1750819798590.png";
+import FlowingRoad from "@/components/FlowingRoad";
 import {
   Clock,
   DollarSign,
@@ -23,8 +24,7 @@ import {
   Gauge,
   Eye,
   PieChart,
-  Activity,
-  Truck
+  Activity
 } from "lucide-react";
 
 export default function Home() {
@@ -81,6 +81,8 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-black text-slate-100">
+      {/* Estrada contínua de fundo */}
+      <FlowingRoad />
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-lg border-b border-slate-800/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -101,8 +103,8 @@ export default function Home() {
                   key={link.section}
                   href={link.href}
                   className={`text-sm font-medium transition-all duration-300 ${activeSection === link.section
-                      ? 'text-amber-500 border-b-2 border-amber-500 pb-1'
-                      : 'text-slate-400 hover:text-white'
+                    ? 'text-amber-500 border-b-2 border-amber-500 pb-1'
+                    : 'text-slate-400 hover:text-white'
                     }`}
                 >
                   {link.label}
@@ -155,41 +157,6 @@ export default function Home() {
 
       {/* Hero Section */}
       <section id="hero" ref={heroRef} className="relative pt-32 pb-32 min-h-screen flex items-center overflow-hidden bg-black">
-        {/* Professional Road Animation */}
-        <div className="absolute inset-0 overflow-hidden">
-          {/* Road SVG - professional style */}
-          <svg className="absolute bottom-0 left-0 w-full h-64 opacity-40" viewBox="0 0 1440 200" preserveAspectRatio="none">
-            {/* Road surface */}
-            <path
-              d="M-50,200 L-50,150 Q200,100 500,120 T1000,90 T1500,110 L1500,200 Z"
-              fill="#1a1a1a"
-            />
-            {/* Road edge lines */}
-            <path
-              d="M-50,150 Q200,100 500,120 T1000,90 T1500,110"
-              stroke="#333"
-              strokeWidth="2"
-              fill="none"
-            />
-            {/* Center dashed line */}
-            <path
-              d="M-50,160 Q200,110 500,130 T1000,100 T1500,120"
-              stroke="#f59e0b"
-              strokeWidth="2"
-              fill="none"
-              strokeDasharray="30,20"
-              className="animate-road-line"
-            />
-          </svg>
-
-          {/* Truck moving on road - professional */}
-          <div className="absolute bottom-20 animate-truck-pro">
-            <div className="flex items-center space-x-1">
-              <Truck className="h-8 w-8 text-amber-500/60" />
-              <div className="w-2 h-2 bg-amber-400/40 rounded-full blur-sm" />
-            </div>
-          </div>
-        </div>
 
         {/* Animated pins - more visible */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -895,13 +862,6 @@ export default function Home() {
 
       {/* Final CTA */}
       <section className="py-32 bg-zinc-950 relative overflow-hidden">
-        {/* Subtle road at bottom */}
-        <div className="absolute bottom-0 left-0 right-0 h-20 opacity-20">
-          <svg className="w-full h-full" viewBox="0 0 1440 80" preserveAspectRatio="none">
-            <path d="M0,80 L0,60 Q360,40 720,50 T1440,40 L1440,80 Z" fill="#1a1a1a" />
-            <path d="M0,65 Q360,45 720,55 T1440,45" stroke="#f59e0b" strokeWidth="1" fill="none" strokeDasharray="15,10" />
-          </svg>
-        </div>
 
         <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl md:text-5xl font-bold text-white mb-8">
@@ -962,15 +922,7 @@ export default function Home() {
           50% { transform: translateY(-15px); }
         }
         
-        @keyframes truck-pro {
-          0% { transform: translateX(-100px); }
-          100% { transform: translateX(calc(100vw + 100px)); }
-        }
-        
-        @keyframes road-line {
-          0% { stroke-dashoffset: 0; }
-          100% { stroke-dashoffset: -50; }
-        }
+
         
         @keyframes fade-in-up {
           0% {
@@ -992,13 +944,7 @@ export default function Home() {
           animation: pin-float 5s ease-in-out infinite;
         }
         
-        .animate-truck-pro {
-          animation: truck-pro 20s linear infinite;
-        }
-        
-        .animate-road-line {
-          animation: road-line 2s linear infinite;
-        }
+
         
         .animate-fade-in-up {
           animation: fade-in-up 0.8s ease-out forwards;

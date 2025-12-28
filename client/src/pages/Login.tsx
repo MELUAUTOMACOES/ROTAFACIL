@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import FlowingRoad from "@/components/FlowingRoad";
 import {
   User,
   Lock,
@@ -17,7 +18,6 @@ import {
   EyeOff,
   Menu,
   X,
-  Truck,
   AlertCircle
 } from "lucide-react";
 import logoImg from "@assets/SEM FUNDO_1750819798590.png";
@@ -115,6 +115,8 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-black flex flex-col">
+      {/* Estrada contínua de fundo */}
+      <FlowingRoad static={true} />
       {/* Navigation */}
       <nav className="bg-black/90 backdrop-blur-lg border-b border-zinc-800/50 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -179,17 +181,6 @@ export default function Login() {
       <div className="flex flex-1 min-h-[calc(100vh-64px)]">
         {/* Left Side - Branding & Animation */}
         <div className="hidden lg:flex lg:w-1/2 bg-black flex-col justify-center items-center p-12 relative overflow-hidden">
-          {/* Road animation at bottom */}
-          <div className="absolute bottom-0 left-0 right-0">
-            <svg className="w-full h-32 opacity-30" viewBox="0 0 800 100" preserveAspectRatio="none">
-              <path d="M0,100 L0,70 Q200,50 400,60 T800,50 L800,100 Z" fill="#1a1a1a" />
-              <path d="M0,75 Q200,55 400,65 T800,55" stroke="#f59e0b" strokeWidth="2" fill="none" strokeDasharray="20,15" className="animate-road-line" />
-            </svg>
-            {/* Truck */}
-            <div className="absolute bottom-8 animate-truck-login">
-              <Truck className="h-6 w-6 text-amber-500/50" />
-            </div>
-          </div>
 
           {/* Animated pins */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -484,26 +475,8 @@ export default function Login() {
           50% { transform: translateY(-12px); }
         }
         
-        @keyframes truck-login {
-          0% { transform: translateX(-50px); }
-          100% { transform: translateX(calc(100vw / 2 + 50px)); }
-        }
-        
-        @keyframes road-line {
-          0% { stroke-dashoffset: 0; }
-          100% { stroke-dashoffset: -35; }
-        }
-        
         .animate-pin-login {
           animation: pin-login 4s ease-in-out infinite;
-        }
-        
-        .animate-truck-login {
-          animation: truck-login 18s linear infinite;
-        }
-        
-        .animate-road-line {
-          animation: road-line 1.5s linear infinite;
         }
       `}</style>
     </div>

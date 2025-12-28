@@ -280,7 +280,7 @@ export default function Dashboard() {
                           </Tooltip>
                           <p className="text-3xl font-bold text-gray-900 dark:text-zinc-100">{stats.todayAppointments}</p>
                         </div>
-                        <div className="w-12 h-12 bg-burnt-yellow bg-opacity-10 dark:bg-yellow-900/20 rounded-lg flex items-center justify-center">
+                        <div className="w-12 h-12 bg-burnt-yellow/10 dark:bg-yellow-900/20 rounded-lg flex items-center justify-center">
                           <Calendar className="text-burnt-yellow dark:text-yellow-500 h-6 w-6" />
                         </div>
                       </div>
