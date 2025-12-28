@@ -16,8 +16,11 @@ export const pool = new Pool({
   // 🚀 Otimizações para Supabase remoto
   max: 10,                           // Máximo de conexões no pool
   idleTimeoutMillis: 30000,          // 30s antes de liberar conexão ociosa
-  connectionTimeoutMillis: 5000,     // 5s timeout para nova conexão
+  connectionTimeoutMillis: 10000,    // 10s timeout para nova conexão (aumentado de 5s)
   keepAlive: true,                   // Manter conexões ativas
   keepAliveInitialDelayMillis: 10000, // Delay antes do primeiro keepalive
+  // 🔄 Configurações de resiliência
+  statement_timeout: 30000,          // 30s timeout para statements
+  query_timeout: 30000,              // 30s timeout para queries
 });
 export const db = drizzle(pool, { schema });

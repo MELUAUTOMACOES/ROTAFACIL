@@ -1310,25 +1310,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         token
       });
     } catch (error: any) {
-      // Database connection errors
-      if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' ||
-        error.message?.includes('database') || error.message?.includes('connection')) {
-        console.error("❌ Erro de conexão com banco de dados:", error);
+      // 🔍 Log detalhado do erro para debugging
+      console.error("❌ [LOGIN] Erro capturado:", {
+        code: error.code,
+        message: error.message,
+        name: error.name,
+        stack: error.stack?.substring(0, 200)
+      });
+
+      // 🌐 Database connection/pooler errors (incluindo timeout do pooler)
+      if (error.code === 'ECONNREFUSED' ||
+        error.code === 'ETIMEDOUT' ||
+        error.code === 'ENOTFOUND' ||
+        error.message?.toLowerCase().includes('pool') ||
+        error.message?.toLowerCase().includes('pooler') ||
+        error.message?.toLowerCase().includes('timeout') ||
+        error.message?.toLowerCase().includes('database') ||
+        error.message?.toLowerCase().includes('connection')) {
+
+        console.error("❌ [LOGIN] Erro de conexão/pooler detectado:", {
+          errorCode: error.code,
+          errorMessage: error.message
+        });
+
         return res.status(503).json({
-          message: "Não foi possível conectar ao banco de dados. Verifique se o Supabase está ativo e se a DATABASE_URL está correta."
+          message: "Não foi possível conectar ao banco de dados no momento. Isso pode ocorrer em períodos de inatividade (cold start). Por favor, tente novamente.",
+          retryable: true
         });
       }
 
-      // Validation errors
+      // ⚠️ Validation errors
       if (error.name === 'ZodError') {
-        console.error("❌ Erro de validação no login:", error);
+        console.error("❌ [LOGIN] Erro de validação:", error);
         return res.status(400).json({
           message: "Dados inválidos. Verifique o email e a senha."
         });
       }
 
-      // Generic error
-      console.error("❌ Erro no login:", error);
+      // ❓ Generic error
+      console.error("❌ [LOGIN] Erro genérico:", error);
       res.status(500).json({
         message: error.message || "Erro interno no servidor. Tente novamente."
       });
