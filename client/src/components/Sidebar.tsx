@@ -118,6 +118,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
               {!isCollapsed && (
                 <h1 className="text-xl font-bold text-white whitespace-nowrap overflow-hidden">
                   Rota<span className="text-burnt-yellow">Fácil</span>
+                  <span className="text-gray-400 font-normal ml-1">Frotas</span>
                 </h1>
               )}
             </div>

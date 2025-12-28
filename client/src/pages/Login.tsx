@@ -1,191 +1,123 @@
-import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useState, useEffect, FormEvent, ChangeEvent } from "react";
 import { useAuth } from "@/lib/auth";
+import { useLocation, Link } from "wouter";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useToast } from "@/hooks/use-toast";
 import {
-  Route as RouteIcon,
+  User,
+  Lock,
+  MapPin,
   Calendar,
-  Users,
+  BarChart3,
+  Car,
   Eye,
   EyeOff,
   Menu,
   X,
-  Clock,
-  Shield,
-  Zap,
+  Truck,
   AlertCircle
 } from "lucide-react";
 import logoImg from "@assets/SEM FUNDO_1750819798590.png";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+interface LoginFormData {
+  username: string;
+  password: string;
+  confirmPassword: string;
+  name: string;
+  email: string;
+  company: string;
+  rememberMe: boolean;
+}
+
+interface PinData {
+  id: number;
+  x: number;
+  y: number;
+  delay: number;
+  size: number;
+}
 
 export default function Login() {
+  const { login, register } = useAuth();
+  const [, setLocation] = useLocation();
   const [isLogin, setIsLogin] = useState(true);
-  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string>("");
-  const [formData, setFormData] = useState({
-    name: "",
+  const [pins, setPins] = useState<PinData[]>([]);
+
+  const [formData, setFormData] = useState<LoginFormData>({
     username: "",
-    email: "",
     password: "",
     confirmPassword: "",
+    name: "",
+    email: "",
+    company: "",
     rememberMe: false,
   });
 
-  const { login, register } = useAuth();
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
+  useEffect(() => {
+    const newPins = Array.from({ length: 10 }, (_, i) => ({
+      id: i,
+      x: 5 + Math.random() * 90,
+      y: 10 + Math.random() * 80,
+      delay: Math.random() * 4,
+      size: 3 + Math.random() * 3
+    }));
+    setPins(newPins);
+  }, []);
 
-  const getErrorMessage = (error: any): { title: string; description: string } => {
-    // Parse error message from API
-    const errorMessage = error.message || "";
-
-    // Network errors
-    if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
-      return {
-        title: "Erro de Conexão",
-        description: "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.",
-      };
-    }
-
-    // 404 - Servidor não encontrado ou rota inexistente
-    if (errorMessage.includes("404")) {
-      return {
-        title: "Servidor Indisponível",
-        description: "O servidor não está respondendo. Certifique-se de que o backend está rodando (pnpm dev ou pnpm dev:api).",
-      };
-    }
-
-    // 401/403 - Credenciais inválidas
-    if (errorMessage.includes("401") || errorMessage.includes("403") ||
-      errorMessage.toLowerCase().includes("credenciais") ||
-      errorMessage.toLowerCase().includes("usuário") ||
-      errorMessage.toLowerCase().includes("senha")) {
-      return {
-        title: "Credenciais Inválidas",
-        description: "Email ou senha incorretos. Verifique seus dados e tente novamente.",
-      };
-    }
-
-    // Database errors
-    if (errorMessage.toLowerCase().includes("database") ||
-      errorMessage.toLowerCase().includes("connection") ||
-      errorMessage.toLowerCase().includes("banco")) {
-      return {
-        title: "Erro no Banco de Dados",
-        description: "Não foi possível conectar ao banco de dados. Verifique se o Supabase está ativo e se a DATABASE_URL está correta.",
-      };
-    }
-
-    // 500 - Server error
-    if (errorMessage.includes("500")) {
-      return {
-        title: "Erro no Servidor",
-        description: "Ocorreu um erro interno no servidor. Tente novamente em alguns instantes.",
-      };
-    }
-
-    // Password mismatch (for registration)
-    if (errorMessage.includes("senha") && errorMessage.includes("coincidem")) {
-      return {
-        title: "Senhas não coincidem",
-        description: "As senhas digitadas não são iguais. Por favor, verifique e tente novamente.",
-      };
-    }
-
-    // Generic error
-    return {
-      title: "Erro",
-      description: errorMessage || "Ocorreu um erro inesperado. Tente novamente.",
-    };
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setError(null);
     setIsLoading(true);
-    setErrorMessage(""); // Limpar mensagem de erro anterior
 
     try {
       if (isLogin) {
-        await login(formData.email, formData.password);
-        toast({
-          title: "Login realizado com sucesso!",
-          description: "Bem-vindo ao RotaFácil",
-        });
-        // Redirect to dashboard after successful login
-        setLocation("/dashboard");
-      } else {
-        if (formData.password !== formData.confirmPassword) {
-          throw new Error("As senhas não coincidem");
-        }
-
-        await register({
-          name: formData.name,
-          username: formData.username,
-          email: formData.email,
-          password: formData.password,
-        });
-
-        toast({
-          title: "Conta criada com sucesso!",
-          description: "Bem-vindo ao RotaFácil",
-        });
-        // Redirect to dashboard after successful registration
-        setLocation("/dashboard");
-      }
-    } catch (error: any) {
-      const { title, description } = getErrorMessage(error);
-
-      let backendMessage: string | undefined;
-
-      // 1) Tenta pegar diretamente de error.response.data.message (caso o wrapper exponha isso)
-      if (error?.response?.data?.message && typeof error.response.data.message === "string") {
-        backendMessage = error.response.data.message;
-      } else {
-        // 2) Se error.message vier como "403: {\"message\":...}", tentar extrair o JSON e pegar o campo message
-        const raw = (error?.message ?? "") as string;
-        const jsonStart = raw.indexOf("{");
-        if (jsonStart !== -1) {
-          const jsonPart = raw.slice(jsonStart);
-          try {
-            const parsed = JSON.parse(jsonPart);
-            if (parsed && typeof parsed.message === "string") {
-              backendMessage = parsed.message;
-            }
-          } catch {
-            // Se não conseguir fazer parse, ignora e cai no fallback abaixo
+        const result = await login(formData.username, formData.password);
+        if (!result.success) {
+          setError(result.message || "Falha no login");
+        } else {
+          if (result.userType === "provider") {
+            setLocation("/prestadores");
+          } else {
+            setLocation("/dashboard");
           }
         }
-      }
-
-      if (!backendMessage) {
-        backendMessage = description;
-      }
-
-      const normalized = backendMessage.toLowerCase();
-
-      // Se for erro de horário, mostrar mensagem inline com a mensagem "limpa" do backend
-      if (normalized.includes("horário") || normalized.includes("horario")) {
-        setErrorMessage(backendMessage);
       } else {
-        // Outros erros continuam como toast
-        toast({
-          title,
-          description,
-          variant: "destructive",
+        if (formData.password !== formData.confirmPassword) {
+          setError("As senhas não coincidem");
+          setIsLoading(false);
+          return;
+        }
+
+        const result = await register({
+          username: formData.username,
+          password: formData.password,
+          name: formData.name,
+          email: formData.email,
+          company: formData.company,
         });
+
+        if (!result.success) {
+          setError(result.message || "Falha no registro");
+        } else {
+          setLocation("/dashboard");
+        }
       }
+    } catch (err) {
+      setError("Erro ao processar sua solicitação");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -194,61 +126,59 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      {/* Barra superior de navegação - adicionada para permitir navegação entre páginas */}
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <div className="min-h-screen bg-black flex flex-col">
+      {/* Navigation */}
+      <nav className="bg-black/90 backdrop-blur-lg border-b border-zinc-800/50 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Logo */}
-            <div className="flex-shrink-0">
-              <Link href="/">
-                <div className="flex items-center space-x-2 cursor-pointer hover:opacity-80 transition-opacity">
-                  <img src={logoImg} alt="RotaFácil Logo" className="h-8 w-8" />
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    Rota<span className="text-yellow-500">Fácil</span>
-                  </h1>
-                </div>
-              </Link>
-            </div>
-
-            {/* Menu de navegação desktop */}
-            <div className="hidden md:block">
-              <div className="ml-10 flex items-baseline space-x-8">
-                <Link href="/" className="text-gray-700 hover:text-yellow-500 px-3 py-2 text-sm font-medium">
-                  Home
-                </Link>
-                <a href="/#funcionalidades" className="text-gray-700 hover:text-yellow-500 px-3 py-2 text-sm font-medium">
-                  Funcionalidades
-                </a>
-                <a href="/#precos" className="text-gray-700 hover:text-yellow-500 px-3 py-2 text-sm font-medium">
-                  Preços
-                </a>
+            <Link href="/">
+              <div className="flex items-center space-x-2 cursor-pointer hover:opacity-80 transition-opacity">
+                <img src={logoImg} alt="RotaFácil Frotas Logo" className="h-8 w-8" />
+                <h1 className="text-xl font-bold text-white">
+                  Rota<span className="text-amber-500">Fácil</span>
+                  <span className="text-slate-400 font-normal ml-1">Frotas</span>
+                </h1>
               </div>
+            </Link>
+
+            {/* Desktop Menu */}
+            <div className="hidden md:flex items-center space-x-8">
+              <Link href="/" className="text-slate-400 hover:text-white transition-colors text-sm">
+                Home
+              </Link>
+              <a href="/#funcionalidades" className="text-slate-400 hover:text-white transition-colors text-sm">
+                Funcionalidades
+              </a>
+              <a href="/#precos" className="text-slate-400 hover:text-white transition-colors text-sm">
+                Preços
+              </a>
             </div>
 
-            {/* Menu mobile */}
+            {/* Mobile menu button */}
             <div className="md:hidden">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className="text-slate-400"
               >
                 {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
               </Button>
             </div>
           </div>
 
-          {/* Menu mobile expandido */}
+          {/* Mobile Menu */}
           {isMenuOpen && (
-            <div className="md:hidden">
-              <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 border-t border-gray-200">
-                <Link href="/" className="text-gray-700 hover:text-yellow-500 block px-3 py-2 text-base font-medium">
+            <div className="md:hidden border-t border-zinc-800">
+              <div className="px-2 pt-2 pb-3 space-y-1">
+                <Link href="/" className="text-slate-400 hover:text-white block px-3 py-2 text-base">
                   Home
                 </Link>
-                <a href="/#funcionalidades" className="text-gray-700 hover:text-yellow-500 block px-3 py-2 text-base font-medium">
+                <a href="/#funcionalidades" className="text-slate-400 hover:text-white block px-3 py-2 text-base">
                   Funcionalidades
                 </a>
-                <a href="/#precos" className="text-gray-700 hover:text-yellow-500 block px-3 py-2 text-base font-medium">
+                <a href="/#precos" className="text-slate-400 hover:text-white block px-3 py-2 text-base">
                   Preços
                 </a>
               </div>
@@ -257,263 +187,337 @@ export default function Login() {
         </div>
       </nav>
 
-      <div className="flex flex-1">
-        {/* Left Side - Branding */}
-        <div className="hidden lg:flex lg:w-1/2 bg-black text-white flex-col justify-center items-center p-12">
-          <div className="max-w-md text-center">
-            <div className="flex items-center justify-center space-x-3 mb-6">
-              <img src={logoImg} alt="RotaFácil Logo" className="h-12 w-12" />
-              <h1 className="text-5xl font-bold">
-                Rota<span className="text-burnt-yellow">Fácil</span>
-              </h1>
+      {/* Main Content - Side by Side Layout */}
+      <div className="flex flex-1 min-h-[calc(100vh-64px)]">
+        {/* Left Side - Branding & Animation */}
+        <div className="hidden lg:flex lg:w-1/2 bg-black flex-col justify-center items-center p-12 relative overflow-hidden">
+          {/* Road animation at bottom */}
+          <div className="absolute bottom-0 left-0 right-0">
+            <svg className="w-full h-32 opacity-30" viewBox="0 0 800 100" preserveAspectRatio="none">
+              <path d="M0,100 L0,70 Q200,50 400,60 T800,50 L800,100 Z" fill="#1a1a1a" />
+              <path d="M0,75 Q200,55 400,65 T800,55" stroke="#f59e0b" strokeWidth="2" fill="none" strokeDasharray="20,15" className="animate-road-line" />
+            </svg>
+            {/* Truck */}
+            <div className="absolute bottom-8 animate-truck-login">
+              <Truck className="h-6 w-6 text-amber-500/50" />
             </div>
-            <p className="text-xl text-gray-300 mb-12 leading-relaxed">
-              A plataforma completa para gestão de equipes técnicas e otimização de rotas
+          </div>
+
+          {/* Animated pins */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            {pins.map(pin => (
+              <div
+                key={pin.id}
+                className="absolute animate-pin-login"
+                style={{
+                  left: `${pin.x}%`,
+                  top: `${pin.y}%`,
+                  animationDelay: `${pin.delay}s`,
+                }}
+              >
+                <MapPin
+                  className="text-amber-500 drop-shadow-[0_0_6px_rgba(245,158,11,0.4)]"
+                  style={{ width: `${pin.size * 5}px`, height: `${pin.size * 5}px`, opacity: 0.2 + (pin.size - 3) * 0.05 }}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* Glow effect */}
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[400px] h-[250px] bg-gradient-to-b from-amber-500/10 to-transparent blur-3xl" />
+
+          <div className="relative max-w-md text-center z-10">
+            <div className="flex items-center justify-center space-x-3 mb-8">
+              <img src={logoImg} alt="RotaFácil Frotas Logo" className="h-14 w-14" />
+              <div>
+                <h1 className="text-4xl font-bold text-white">
+                  Rota<span className="text-amber-500">Fácil</span>
+                </h1>
+                <p className="text-slate-400 text-lg">Frotas</p>
+              </div>
+            </div>
+
+            <p className="text-xl text-slate-300 mb-12 leading-relaxed">
+              Economize tempo, reduza custos e organize sua operação em um só lugar.
             </p>
-            <div className="space-y-6 text-left">
-              <div className="flex items-start space-x-4">
-                <div className="bg-burnt-yellow bg-opacity-20 p-3 rounded-lg">
-                  <RouteIcon className="text-white h-6 w-6" />
+
+            <div className="space-y-4 text-left">
+              <div className="flex items-start space-x-4 p-4 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:border-amber-500/30 transition-colors">
+                <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <MapPin className="text-amber-500 h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-lg mb-1">Roteirização Inteligente</h3>
-                  <p className="text-gray-400 text-sm">Otimize suas rotas automaticamente com algoritmos avançados</p>
+                  <h3 className="font-semibold text-white text-sm mb-1">Roteirização Inteligente</h3>
+                  <p className="text-slate-400 text-xs">Rotas otimizadas para economizar combustível.</p>
                 </div>
               </div>
-              <div className="flex items-start space-x-4">
-                <div className="bg-burnt-yellow bg-opacity-20 p-3 rounded-lg">
-                  <Calendar className="text-white h-6 w-6" />
+
+              <div className="flex items-start space-x-4 p-4 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:border-amber-500/30 transition-colors">
+                <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Calendar className="text-amber-500 h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-lg mb-1">Agendamentos Simplificados</h3>
-                  <p className="text-gray-400 text-sm">Gerencie todos os seus compromissos em um só lugar</p>
+                  <h3 className="font-semibold text-white text-sm mb-1">Agendamentos Centralizados</h3>
+                  <p className="text-slate-400 text-xs">Gerencie compromissos em um só lugar.</p>
                 </div>
               </div>
-              <div className="flex items-start space-x-4">
-                <div className="bg-burnt-yellow bg-opacity-20 p-3 rounded-lg">
-                  <Users className="text-white h-6 w-6" />
+
+              <div className="flex items-start space-x-4 p-4 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:border-amber-500/30 transition-colors">
+                <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <BarChart3 className="text-amber-500 h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-lg mb-1">Gestão de Equipes</h3>
-                  <p className="text-gray-400 text-sm">Controle total sobre técnicos, veículos e disponibilidade</p>
+                  <h3 className="font-semibold text-white text-sm mb-1">Dashboard Completo</h3>
+                  <p className="text-slate-400 text-xs">Métricas de operação, finanças e frota.</p>
                 </div>
               </div>
-              <div className="flex items-start space-x-4">
-                <div className="bg-burnt-yellow bg-opacity-20 p-3 rounded-lg">
-                  <Clock className="text-white h-6 w-6" />
+
+              <div className="flex items-start space-x-4 p-4 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:border-amber-500/30 transition-colors">
+                <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Car className="text-amber-500 h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-lg mb-1">Controle de Acesso</h3>
-                  <p className="text-gray-400 text-sm">Defina horários e permissões personalizadas</p>
+                  <h3 className="font-semibold text-white text-sm mb-1">Gestão de Frota</h3>
+                  <p className="text-slate-400 text-xs">Controle manutenção e consumo.</p>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right Side - Login/Register Form */}
-        <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-gradient-to-br from-gray-50 to-white">
-          <div className="max-w-md w-full space-y-8">
-            <div className="text-center lg:hidden mb-8">
-              <Link href="/">
-                <h1 className="text-3xl font-bold cursor-pointer hover:opacity-80 transition-opacity">
-                  Rota<span className="text-burnt-yellow">Fácil</span>
-                </h1>
-              </Link>
-            </div>
+        {/* Right Side - Login Form */}
+        <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-zinc-950">
+          <Card className="w-full max-w-md bg-zinc-900 border-zinc-800 shadow-2xl">
+            <CardContent className="p-8">
+              <div className="text-center mb-8">
+                {/* Mobile logo */}
+                <div className="lg:hidden flex items-center justify-center space-x-2 mb-6">
+                  <img src={logoImg} alt="RotaFácil Frotas Logo" className="h-10 w-10" />
+                  <h1 className="text-2xl font-bold text-white">
+                    Rota<span className="text-amber-500">Fácil</span>
+                    <span className="text-slate-400 font-normal ml-1">Frotas</span>
+                  </h1>
+                </div>
 
-            <Card className="shadow-xl border-0">
-              <CardHeader className="space-y-2 pb-6">
-                <CardTitle className="text-3xl font-bold text-gray-900">
-                  {isLogin ? "Bem-vindo de volta!" : "Criar nova conta"}
-                </CardTitle>
-                <CardDescription className="text-base">
+                <h2 className="text-2xl font-bold text-white mb-2">
+                  {isLogin ? "Entrar na conta" : "Criar conta"}
+                </h2>
+                <p className="text-slate-400 text-sm">
                   {isLogin
-                    ? "Entre com suas credenciais para acessar sua conta"
-                    : "Preencha os dados abaixo para criar sua conta"
+                    ? "Acesse sua conta para gerenciar sua operação"
+                    : "Preencha os dados para criar sua conta"
                   }
-                </CardDescription>
-              </CardHeader>
+                </p>
+              </div>
 
-              <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-5">
-                  {/* Mensagem de erro inline para restrição de horário */}
-                  {errorMessage && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start space-x-3">
-                      <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <h4 className="text-sm font-semibold text-red-900 mb-1">Acesso Restrito</h4>
-                        <p className="text-sm text-red-700">{errorMessage}</p>
-                      </div>
+              {error && (
+                <Alert variant="destructive" className="mb-6 bg-red-900/20 border-red-800 text-red-400">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {!isLogin && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="name" className="text-slate-200 text-sm">Nome completo</Label>
+                      <Input
+                        id="name"
+                        name="name"
+                        type="text"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        className="bg-zinc-800 border-zinc-700 text-white placeholder:text-slate-500 focus:border-amber-500 focus:ring-amber-500"
+                        placeholder="Seu nome"
+                        required={!isLogin}
+                      />
                     </div>
-                  )}
-                  {!isLogin && (
-                    <>
-                      <div>
-                        <Label htmlFor="name">Nome completo</Label>
-                        <Input
-                          id="name"
-                          name="name"
-                          type="text"
-                          required
-                          value={formData.name}
-                          onChange={handleInputChange}
-                          placeholder="Seu nome completo"
-                          className="mt-1"
-                        />
-                      </div>
 
-                      <div>
-                        <Label htmlFor="username">Nome de usuário</Label>
-                        <Input
-                          id="username"
-                          name="username"
-                          type="text"
-                          required
-                          value={formData.username}
-                          onChange={handleInputChange}
-                          placeholder="Seu nome de usuário"
-                          className="mt-1"
-                        />
-                      </div>
-                    </>
-                  )}
+                    <div className="space-y-2">
+                      <Label htmlFor="email" className="text-slate-200 text-sm">E-mail</Label>
+                      <Input
+                        id="email"
+                        name="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        className="bg-zinc-800 border-zinc-700 text-white placeholder:text-slate-500 focus:border-amber-500 focus:ring-amber-500"
+                        placeholder="seu@email.com"
+                        required={!isLogin}
+                      />
+                    </div>
 
-                  <div>
-                    <Label htmlFor="email">Email</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="company" className="text-slate-200 text-sm">Empresa</Label>
+                      <Input
+                        id="company"
+                        name="company"
+                        type="text"
+                        value={formData.company}
+                        onChange={handleInputChange}
+                        className="bg-zinc-800 border-zinc-700 text-white placeholder:text-slate-500 focus:border-amber-500 focus:ring-amber-500"
+                        placeholder="Nome da empresa"
+                        required={!isLogin}
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="username" className="text-slate-200 text-sm">Usuário</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
                     <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      required
-                      value={formData.email}
+                      id="username"
+                      name="username"
+                      type="text"
+                      value={formData.username}
                       onChange={handleInputChange}
-                      placeholder="seu@email.com"
-                      className="mt-1"
+                      className="bg-zinc-800 border-zinc-700 text-white placeholder:text-slate-500 pl-10 focus:border-amber-500 focus:ring-amber-500"
+                      placeholder="Digite seu usuário"
+                      required
                     />
                   </div>
+                </div>
 
-                  <div>
-                    <Label htmlFor="password">Senha</Label>
-                    <div className="relative mt-1">
-                      <Input
-                        id="password"
-                        name="password"
-                        type={showPassword ? "text" : "password"}
-                        required
-                        value={formData.password}
-                        onChange={handleInputChange}
-                        placeholder="Sua senha"
-                        className="pr-10"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4 text-gray-400" />
-                        ) : (
-                          <Eye className="h-4 w-4 text-gray-400" />
-                        )}
-                      </Button>
-                    </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-slate-200 text-sm">Senha</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
+                    <Input
+                      id="password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      value={formData.password}
+                      onChange={handleInputChange}
+                      className="bg-zinc-800 border-zinc-700 text-white placeholder:text-slate-500 pl-10 pr-10 focus:border-amber-500 focus:ring-amber-500"
+                      placeholder="Digite sua senha"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    >
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
                   </div>
+                </div>
 
-                  {!isLogin && (
-                    <div>
-                      <Label htmlFor="confirmPassword">Confirmar senha</Label>
+                {!isLogin && (
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPassword" className="text-slate-200 text-sm">Confirmar senha</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
                       <Input
                         id="confirmPassword"
                         name="confirmPassword"
-                        type="password"
-                        required
+                        type={showPassword ? "text" : "password"}
                         value={formData.confirmPassword}
                         onChange={handleInputChange}
+                        className="bg-zinc-800 border-zinc-700 text-white placeholder:text-slate-500 pl-10 focus:border-amber-500 focus:ring-amber-500"
                         placeholder="Confirme sua senha"
-                        className="mt-1"
+                        required={!isLogin}
                       />
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {isLogin && (
+                {isLogin && (
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id="rememberMe"
                         name="rememberMe"
                         checked={formData.rememberMe}
                         onCheckedChange={(checked) =>
-                          setFormData(prev => ({ ...prev, rememberMe: checked as boolean }))
+                          setFormData(prev => ({ ...prev, rememberMe: checked === true }))
                         }
+                        className="border-zinc-600 data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
                       />
-                      <Label htmlFor="rememberMe" className="text-sm text-gray-600">
+                      <Label htmlFor="rememberMe" className="text-sm text-slate-400 cursor-pointer">
                         Lembrar de mim
                       </Label>
                     </div>
-                  )}
-
-                  <Button
-                    type="submit"
-                    className="w-full bg-gradient-to-r from-gray-900 to-gray-800 hover:from-gray-800 hover:to-gray-700 text-white h-11 text-base font-semibold shadow-lg transition-all duration-200"
-                    disabled={isLoading}
-                  >
-                    {isLoading
-                      ? (
-                        <div className="flex items-center space-x-2">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          <span>Aguarde...</span>
-                        </div>
-                      )
-                      : isLogin
-                        ? "Entrar na conta"
-                        : "Criar minha conta"
-                    }
-                  </Button>
-                </form>
-
-                {isLogin && (
-                  <div className="text-center mt-4">
-                    <Link href="/forgot-password">
-                      <Button
-                        variant="link"
-                        className="text-sm text-gray-600 hover:text-burnt-yellow p-0"
-                      >
-                        Esqueceu sua senha?
-                      </Button>
-                    </Link>
                   </div>
                 )}
 
-                <div className="text-center mt-6">
-                  <p className="text-sm text-gray-600">
-                    {isLogin ? "Não tem uma conta?" : "Já tem uma conta?"}{" "}
-                    {isLogin ? (
-                      <Link href="/signup-company">
-                        <Button
-                          variant="link"
-                          className="font-medium text-burnt-yellow hover:text-burnt-yellow-dark p-0"
-                        >
-                          Cadastre-se grátis
-                        </Button>
-                      </Link>
-                    ) : (
+                <Button
+                  type="submit"
+                  className="w-full h-12 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold shadow-lg shadow-amber-500/20"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Processando...
+                    </div>
+                  ) : isLogin ? (
+                    "Entrar"
+                  ) : (
+                    "Criar conta"
+                  )}
+                </Button>
+              </form>
+
+              <div className="mt-6 text-center">
+                <p className="text-sm text-slate-400">
+                  {isLogin ? "Não tem uma conta? " : "Já tem uma conta? "}
+                  {isLogin ? (
+                    <Link href="/#precos">
                       <Button
                         variant="link"
-                        className="font-medium text-burnt-yellow hover:text-burnt-yellow-dark p-0"
-                        onClick={() => setIsLogin(true)}
+                        className="font-medium text-amber-500 hover:text-amber-400 p-0"
                       >
-                        Faça login
+                        Veja os planos
                       </Button>
-                    )}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                    </Link>
+                  ) : (
+                    <Button
+                      variant="link"
+                      className="font-medium text-amber-500 hover:text-amber-400 p-0"
+                      onClick={() => setIsLogin(true)}
+                    >
+                      Faça login
+                    </Button>
+                  )}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
+
+      {/* CSS for animations */}
+      <style>{`
+        @keyframes pin-login {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-12px); }
+        }
+        
+        @keyframes truck-login {
+          0% { transform: translateX(-50px); }
+          100% { transform: translateX(calc(100vw / 2 + 50px)); }
+        }
+        
+        @keyframes road-line {
+          0% { stroke-dashoffset: 0; }
+          100% { stroke-dashoffset: -35; }
+        }
+        
+        .animate-pin-login {
+          animation: pin-login 4s ease-in-out infinite;
+        }
+        
+        .animate-truck-login {
+          animation: truck-login 18s linear infinite;
+        }
+        
+        .animate-road-line {
+          animation: road-line 1.5s linear infinite;
+        }
+      `}</style>
     </div>
   );
 }
