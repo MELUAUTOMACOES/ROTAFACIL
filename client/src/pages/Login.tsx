@@ -7,11 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  Route as RouteIcon, 
-  Calendar, 
-  Users, 
-  Eye, 
+import {
+  Route as RouteIcon,
+  Calendar,
+  Users,
+  Eye,
   EyeOff,
   Menu,
   X,
@@ -44,7 +44,7 @@ export default function Login() {
   const getErrorMessage = (error: any): { title: string; description: string } => {
     // Parse error message from API
     const errorMessage = error.message || "";
-    
+
     // Network errors
     if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
       return {
@@ -52,7 +52,7 @@ export default function Login() {
         description: "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.",
       };
     }
-    
+
     // 404 - Servidor não encontrado ou rota inexistente
     if (errorMessage.includes("404")) {
       return {
@@ -60,28 +60,28 @@ export default function Login() {
         description: "O servidor não está respondendo. Certifique-se de que o backend está rodando (pnpm dev ou pnpm dev:api).",
       };
     }
-    
+
     // 401/403 - Credenciais inválidas
-    if (errorMessage.includes("401") || errorMessage.includes("403") || 
-        errorMessage.toLowerCase().includes("credenciais") ||
-        errorMessage.toLowerCase().includes("usuário") ||
-        errorMessage.toLowerCase().includes("senha")) {
+    if (errorMessage.includes("401") || errorMessage.includes("403") ||
+      errorMessage.toLowerCase().includes("credenciais") ||
+      errorMessage.toLowerCase().includes("usuário") ||
+      errorMessage.toLowerCase().includes("senha")) {
       return {
         title: "Credenciais Inválidas",
         description: "Email ou senha incorretos. Verifique seus dados e tente novamente.",
       };
     }
-    
+
     // Database errors
-    if (errorMessage.toLowerCase().includes("database") || 
-        errorMessage.toLowerCase().includes("connection") ||
-        errorMessage.toLowerCase().includes("banco")) {
+    if (errorMessage.toLowerCase().includes("database") ||
+      errorMessage.toLowerCase().includes("connection") ||
+      errorMessage.toLowerCase().includes("banco")) {
       return {
         title: "Erro no Banco de Dados",
         description: "Não foi possível conectar ao banco de dados. Verifique se o Supabase está ativo e se a DATABASE_URL está correta.",
       };
     }
-    
+
     // 500 - Server error
     if (errorMessage.includes("500")) {
       return {
@@ -89,7 +89,7 @@ export default function Login() {
         description: "Ocorreu um erro interno no servidor. Tente novamente em alguns instantes.",
       };
     }
-    
+
     // Password mismatch (for registration)
     if (errorMessage.includes("senha") && errorMessage.includes("coincidem")) {
       return {
@@ -97,7 +97,7 @@ export default function Login() {
         description: "As senhas digitadas não são iguais. Por favor, verifique e tente novamente.",
       };
     }
-    
+
     // Generic error
     return {
       title: "Erro",
@@ -123,14 +123,14 @@ export default function Login() {
         if (formData.password !== formData.confirmPassword) {
           throw new Error("As senhas não coincidem");
         }
-        
+
         await register({
           name: formData.name,
           username: formData.username,
           email: formData.email,
           password: formData.password,
         });
-        
+
         toast({
           title: "Conta criada com sucesso!",
           description: "Bem-vindo ao RotaFácil",
@@ -273,7 +273,7 @@ export default function Login() {
             <div className="space-y-6 text-left">
               <div className="flex items-start space-x-4">
                 <div className="bg-burnt-yellow bg-opacity-20 p-3 rounded-lg">
-                  <RouteIcon className="text-burnt-yellow h-6 w-6" />
+                  <RouteIcon className="text-white h-6 w-6" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-lg mb-1">Roteirização Inteligente</h3>
@@ -282,7 +282,7 @@ export default function Login() {
               </div>
               <div className="flex items-start space-x-4">
                 <div className="bg-burnt-yellow bg-opacity-20 p-3 rounded-lg">
-                  <Calendar className="text-burnt-yellow h-6 w-6" />
+                  <Calendar className="text-white h-6 w-6" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-lg mb-1">Agendamentos Simplificados</h3>
@@ -291,7 +291,7 @@ export default function Login() {
               </div>
               <div className="flex items-start space-x-4">
                 <div className="bg-burnt-yellow bg-opacity-20 p-3 rounded-lg">
-                  <Users className="text-burnt-yellow h-6 w-6" />
+                  <Users className="text-white h-6 w-6" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-lg mb-1">Gestão de Equipes</h3>
@@ -300,7 +300,7 @@ export default function Login() {
               </div>
               <div className="flex items-start space-x-4">
                 <div className="bg-burnt-yellow bg-opacity-20 p-3 rounded-lg">
-                  <Clock className="text-burnt-yellow h-6 w-6" />
+                  <Clock className="text-white h-6 w-6" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-lg mb-1">Controle de Acesso</h3>
@@ -321,20 +321,20 @@ export default function Login() {
                 </h1>
               </Link>
             </div>
-            
+
             <Card className="shadow-xl border-0">
               <CardHeader className="space-y-2 pb-6">
                 <CardTitle className="text-3xl font-bold text-gray-900">
                   {isLogin ? "Bem-vindo de volta!" : "Criar nova conta"}
                 </CardTitle>
                 <CardDescription className="text-base">
-                  {isLogin 
-                    ? "Entre com suas credenciais para acessar sua conta" 
+                  {isLogin
+                    ? "Entre com suas credenciais para acessar sua conta"
                     : "Preencha os dados abaixo para criar sua conta"
                   }
                 </CardDescription>
               </CardHeader>
-              
+
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-5">
                   {/* Mensagem de erro inline para restrição de horário */}
@@ -362,7 +362,7 @@ export default function Login() {
                           className="mt-1"
                         />
                       </div>
-                      
+
                       <div>
                         <Label htmlFor="username">Nome de usuário</Label>
                         <Input
@@ -378,7 +378,7 @@ export default function Login() {
                       </div>
                     </>
                   )}
-                  
+
                   <div>
                     <Label htmlFor="email">Email</Label>
                     <Input
@@ -392,7 +392,7 @@ export default function Login() {
                       className="mt-1"
                     />
                   </div>
-                  
+
                   <div>
                     <Label htmlFor="password">Senha</Label>
                     <div className="relative mt-1">
@@ -421,7 +421,7 @@ export default function Login() {
                       </Button>
                     </div>
                   </div>
-                  
+
                   {!isLogin && (
                     <div>
                       <Label htmlFor="confirmPassword">Confirmar senha</Label>
@@ -437,15 +437,15 @@ export default function Login() {
                       />
                     </div>
                   )}
-                  
+
                   {isLogin && (
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id="rememberMe"
                         name="rememberMe"
                         checked={formData.rememberMe}
-                        onCheckedChange={(checked) => 
-                          setFormData(prev => ({...prev, rememberMe: checked as boolean}))
+                        onCheckedChange={(checked) =>
+                          setFormData(prev => ({ ...prev, rememberMe: checked as boolean }))
                         }
                       />
                       <Label htmlFor="rememberMe" className="text-sm text-gray-600">
@@ -459,20 +459,20 @@ export default function Login() {
                     className="w-full bg-gradient-to-r from-gray-900 to-gray-800 hover:from-gray-800 hover:to-gray-700 text-white h-11 text-base font-semibold shadow-lg transition-all duration-200"
                     disabled={isLoading}
                   >
-                    {isLoading 
+                    {isLoading
                       ? (
                         <div className="flex items-center space-x-2">
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                           <span>Aguarde...</span>
                         </div>
                       )
-                      : isLogin 
-                        ? "Entrar na conta" 
+                      : isLogin
+                        ? "Entrar na conta"
                         : "Criar minha conta"
                     }
                   </Button>
                 </form>
-                
+
                 {isLogin && (
                   <div className="text-center mt-4">
                     <Link href="/forgot-password">
@@ -485,7 +485,7 @@ export default function Login() {
                     </Link>
                   </div>
                 )}
-                
+
                 <div className="text-center mt-6">
                   <p className="text-sm text-gray-600">
                     {isLogin ? "Não tem uma conta?" : "Já tem uma conta?"}{" "}

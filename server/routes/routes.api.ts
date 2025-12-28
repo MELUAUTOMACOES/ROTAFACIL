@@ -849,14 +849,15 @@ export function registerRoutesAPI(app: Express) {
         );
 
         // ✅ Garantir responsável único entre os agendamentos selecionados
+        // Prioridade: se tem teamId, usa equipe; senão, usa técnico
         const responsibles = selectedAppointments
           .map((a: any) => {
-            if (a.technicianId && !a.teamId)
-              return `technician:${a.technicianId}`;
-            if (a.teamId && !a.technicianId) return `team:${a.teamId}`;
+            if (a.teamId) return `team:${a.teamId}`;
+            if (a.technicianId) return `technician:${a.technicianId}`;
             return null;
           })
           .filter(Boolean);
+
 
         const uniqueResponsibles = Array.from(new Set(responsibles));
         if (uniqueResponsibles.length !== 1) {

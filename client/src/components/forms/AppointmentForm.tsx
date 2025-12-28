@@ -16,6 +16,33 @@ import NewClientDialog from "./NewClientDialog";
 import ClientForm from "./ClientForm";
 import { buscarEnderecoPorCep } from "@/lib/cep";
 
+// 💵 Utilitários para máscara de moeda (BRL)
+const formatCurrencyBRL = (value: string | number | null | undefined) => {
+  if (value === undefined || value === null || value === "") return "";
+
+  // Se for número, converter para representação de centavos
+  // Se for string, pegar apenas os dígitos
+  const numericValue = typeof value === "number"
+    ? (Math.round(value * 100)).toString()
+    : value.toString().replace(/\D/g, "");
+
+  if (!numericValue) return "";
+
+  const formatted = (Number(numericValue) / 100).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  return `R$ ${formatted}`;
+};
+
+const parseBRLToNumberString = (value: string) => {
+  if (!value) return null;
+  // "1.234,56" -> "1234.56"
+  const cleaned = value.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '');
+  return cleaned;
+};
+
 interface AppointmentFormProps {
   appointment?: Appointment | null;
   clients: Client[];
@@ -89,6 +116,8 @@ export default function AppointmentForm({
       complemento: appointment.complemento || "",
       bairro: appointment.bairro || "Não informado",
       cidade: appointment.cidade || "Não informado",
+      paymentType: (appointment.paymentType || "no_ato") as "no_ato" | "antecipado",
+      additionalValue: appointment.additionalValue || "",
     } : prefilledData ? {
       clientId: prefilledData.clientId ? parseInt(prefilledData.clientId) : 0,
       serviceId: prefilledData.serviceId ? parseInt(prefilledData.serviceId) : 0,
@@ -109,6 +138,8 @@ export default function AppointmentForm({
         (clients.find(c => c.id === parseInt(prefilledData.clientId!))?.bairro || "Não informado") : "Não informado",
       cidade: prefilledData.clientId ?
         (clients.find(c => c.id === parseInt(prefilledData.clientId!))?.cidade || "Não informado") : "Não informado",
+      paymentType: "no_ato",
+      additionalValue: "",
     } : {
       clientId: 0,
       serviceId: 0,
@@ -125,6 +156,8 @@ export default function AppointmentForm({
       complemento: "",
       bairro: "Não informado",
       cidade: "Não informado",
+      paymentType: "no_ato",
+      additionalValue: "",
     },
   });
 
@@ -301,7 +334,8 @@ export default function AppointmentForm({
 
     const formData = {
       ...data,
-      scheduledDate: processedDate
+      scheduledDate: processedDate,
+      additionalValue: data.additionalValue ? parseBRLToNumberString(formatCurrencyBRL(data.additionalValue)) : null
     };
 
     // Ensure proper handling of technician vs team assignment
@@ -928,6 +962,71 @@ export default function AppointmentForm({
                 </FormItem>
               )}
             />
+          </div>
+
+          {/* Seção de Pagamento */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-medium">💵 Pagamento</span>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <FormField
+                control={form.control}
+                name="paymentType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipo de Pagamento *</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || "no_ato"} disabled={isReadOnly}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="no_ato">🤝 No Ato (cobrar na hora)</SelectItem>
+                        <SelectItem value="antecipado">✅ Antecipado (já pago)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Valor do Serviço - somente leitura */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Valor do Serviço</label>
+                <div className="flex h-10 w-full rounded-md border border-input bg-gray-50 px-3 py-2 text-sm">
+                  {selectedService?.price ? `R$ ${Number(selectedService.price).toFixed(2)}` : "Selecione um serviço"}
+                </div>
+              </div>
+
+              <FormField
+                control={form.control}
+                name="additionalValue"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Valor Adicional</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="text"
+                        placeholder="0,00"
+                        {...field}
+                        value={formatCurrencyBRL(field.value)}
+                        className="bg-white"
+                        onChange={(e) => {
+                          // Pegar apenas os números
+                          const rawValue = e.target.value.replace(/\D/g, '');
+                          field.onChange(rawValue);
+                        }}
+                        disabled={isReadOnly}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-gray-500">Valor extra além do serviço</p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </div>
 
           <FormField

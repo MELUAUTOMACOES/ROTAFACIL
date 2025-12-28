@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
     MapPin, Calendar, Navigation, CheckCircle, Clock,
-    AlertTriangle, ChevronRight, QrCode, LogOut, Map as MapIcon, ClipboardCheck, PlayCircle, Home, UserCheck, Timer, Coffee, Wrench, Fuel, FileWarning
+    AlertTriangle, ChevronRight, QrCode, LogOut, Map as MapIcon, ClipboardCheck, PlayCircle, Home, UserCheck, Timer, Coffee, Wrench, Fuel, FileWarning, DollarSign, Loader2
 } from 'lucide-react';
 import QRCode from "react-qr-code";
 
@@ -672,6 +672,22 @@ export default function PrestadoresPage() {
 
                                             <p className="text-sm text-gray-600 dark:text-zinc-400 mb-1 line-clamp-1">{stop.appointment?.serviceName}</p>
 
+                                            {/* 💵 Aviso de pagamento "No Ato" */}
+                                            {stop.appointment?.paymentType === 'no_ato' && !stop.appointment?.paymentStatus && (
+                                                <div className="flex items-center gap-2 bg-amber-100 border border-amber-300 rounded px-2 py-1 mb-1">
+                                                    <DollarSign className="w-4 h-4 text-amber-700" />
+                                                    <span className="text-xs font-bold text-amber-800">
+                                                        COBRAR: R$ {(Number(stop.appointment?.servicePrice || 0) + Number(stop.appointment?.additionalValue || 0)).toFixed(2)}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {stop.appointment?.paymentType === 'antecipado' && (
+                                                <div className="flex items-center gap-1 text-xs text-green-600 mb-1">
+                                                    <CheckCircle className="w-3 h-3" />
+                                                    <span>Pago Antecipado</span>
+                                                </div>
+                                            )}
+
                                             <div className="flex items-center justify-between mt-2">
                                                 <div className="flex items-start gap-1 text-xs text-gray-500 flex-1">
                                                     <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />
@@ -741,7 +757,11 @@ export default function PrestadoresPage() {
                                 onClick={handleStartRoute}
                                 disabled={startRouteMutation.isPending}
                             >
-                                <PlayCircle className="w-5 h-5 mr-2" />
+                                {startRouteMutation.isPending ? (
+                                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                                ) : (
+                                    <PlayCircle className="w-5 h-5 mr-2" />
+                                )}
                                 {startRouteMutation.isPending ? 'Iniciando...' : 'Iniciar Rota'}
                             </Button>
                         ) : (
@@ -750,11 +770,15 @@ export default function PrestadoresPage() {
                                 <Button
                                     className={`w-full h-12 text-lg ${canCloseRoute ? 'bg-gray-900 hover:bg-gray-800' : 'bg-gray-400 cursor-not-allowed'} text-white`}
                                     onClick={handleOpenFinalizeModal}
-                                    disabled={!canCloseRoute}
+                                    disabled={!canCloseRoute || finalizeRouteMutation.isPending}
                                     type="button"
                                 >
-                                    <CheckCircle className="w-5 h-5 mr-2" />
-                                    Fechar Romaneio
+                                    {finalizeRouteMutation.isPending ? (
+                                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                                    ) : (
+                                        <CheckCircle className="w-5 h-5 mr-2" />
+                                    )}
+                                    {finalizeRouteMutation.isPending ? 'Finalizando...' : 'Fechar Romaneio'}
                                 </Button>
                                 {!canCloseRoute && (
                                     <p className="text-center text-sm text-orange-600">
@@ -775,29 +799,31 @@ export default function PrestadoresPage() {
             </Tabs>
 
             {/* Appointment Execution Modal */}
-            {selectedAppointmentData && (
-                <AppointmentExecutionModal
-                    isOpen={!!selectedAppointmentData}
-                    onClose={() => setSelectedAppointmentId(null)}
-                    appointment={selectedAppointmentData.appointment}
-                    onSave={handleSaveAppointment}
-                    onStartExecution={async (appointmentId: number) => {
-                        // Persistir executionStartedAt no banco + Location
-                        let startLocation = undefined;
-                        try {
-                            startLocation = await tracker.getCurrentLocation();
-                        } catch (e) { console.warn("Sem localização de inicio"); }
+            {
+                selectedAppointmentData && (
+                    <AppointmentExecutionModal
+                        isOpen={!!selectedAppointmentData}
+                        onClose={() => setSelectedAppointmentId(null)}
+                        appointment={selectedAppointmentData.appointment}
+                        onSave={handleSaveAppointment}
+                        onStartExecution={async (appointmentId: number) => {
+                            // Persistir executionStartedAt no banco + Location
+                            let startLocation = undefined;
+                            try {
+                                startLocation = await tracker.getCurrentLocation();
+                            } catch (e) { console.warn("Sem localização de inicio"); }
 
-                        await updateAppointmentMutation.mutateAsync({
-                            id: appointmentId,
-                            data: {
-                                executionStartedAt: new Date().toISOString(),
-                                executionStartLocation: startLocation
-                            }
-                        });
-                    }}
-                />
-            )}
+                            await updateAppointmentMutation.mutateAsync({
+                                id: appointmentId,
+                                data: {
+                                    executionStartedAt: new Date().toISOString(),
+                                    executionStartLocation: startLocation
+                                }
+                            });
+                        }}
+                    />
+                )
+            }
 
             {/* Finalize Route Modal */}
             <Dialog open={showFinalizeModal} onOpenChange={setShowFinalizeModal}>
@@ -868,9 +894,20 @@ export default function PrestadoresPage() {
                     </div>
 
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowFinalizeModal(false)}>Cancelar</Button>
-                        <Button onClick={handleFinalizeRoute} className="bg-[#DAA520] hover:bg-[#B8860B] text-white">
-                            Confirmar Fechamento
+                        <Button variant="outline" onClick={() => setShowFinalizeModal(false)} disabled={finalizeRouteMutation.isPending}>Cancelar</Button>
+                        <Button
+                            onClick={handleFinalizeRoute}
+                            className="bg-[#DAA520] hover:bg-[#B8860B] text-white"
+                            disabled={finalizeRouteMutation.isPending}
+                        >
+                            {finalizeRouteMutation.isPending ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Finalizando...
+                                </>
+                            ) : (
+                                'Confirmar Fechamento'
+                            )}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -1122,6 +1159,6 @@ export default function PrestadoresPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+        </div >
     );
 }

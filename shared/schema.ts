@@ -216,6 +216,12 @@ export const appointments = pgTable("appointments", {
   complemento: text("complemento"),
   bairro: text("bairro").notNull().default("Não informado"),
   cidade: text("cidade").notNull().default("Não informado"),
+  // Campos de pagamento
+  paymentType: text("payment_type").notNull().default("no_ato"), // 'antecipado' | 'no_ato'
+  paymentStatus: text("payment_status"), // 'pago' | 'nao_pago' | null (preenchido pelo prestador)
+  paymentNotes: text("payment_notes"), // Motivo se cliente não pagou
+  paymentConfirmedAt: timestamp("payment_confirmed_at"), // Quando foi confirmado o pagamento
+  additionalValue: decimal("additional_value", { precision: 10, scale: 2 }), // Valor adicional além do serviço
   userId: integer("user_id").notNull().references(() => users.id),
   companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -832,6 +838,11 @@ export const extendedInsertAppointmentSchema = insertAppointmentSchema.extend({
   feedback: z.string().optional().nullable(),
   executionStatus: z.string().optional().nullable(),
   executionNotes: z.string().optional().nullable(),
+  // Campos de pagamento
+  paymentType: z.enum(['antecipado', 'no_ato']).default('no_ato'),
+  paymentStatus: z.enum(['pago', 'nao_pago']).optional().nullable(),
+  paymentNotes: z.string().optional().nullable(),
+  additionalValue: z.string().or(z.number()).optional().nullable(),
 }).refine((data) => {
   // Pelo menos um responsável deve ser selecionado (técnico ou equipe)
   return data.technicianId || data.teamId;

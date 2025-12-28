@@ -363,6 +363,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             address: client ? `${client.logradouro}, ${client.numero}${client.complemento ? ` - ${client.complemento}` : ''}` : null,
             serviceName: service?.name || "Serviço não encontrado",
             serviceDuration: service?.duration || 0,
+            servicePrice: service?.price ? Number(service.price) : 0, // 💵 Preço do serviço
           }
         };
       }));
@@ -442,7 +443,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/provider/appointments/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { status, feedback, photos, signature, executionStatus, executionNotes, executionStartedAt, executionFinishedAt, executionStartLocation, executionEndLocation } = req.body;
+      const { status, feedback, photos, signature, executionStatus, executionNotes, executionStartedAt, executionFinishedAt, executionStartLocation, executionEndLocation, paymentStatus, paymentNotes, paymentConfirmedAt } = req.body;
 
       // 🔒 Validar se a rota pai já está finalizada (apenas finalizado/cancelado bloqueiam)
       const appointmentStops = await db.select().from(routeStops).where(eq(routeStops.appointmentNumericId, id));
@@ -474,7 +475,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         executionStartedAt, // 🆕 Adicionado para persistir o horário de início
         executionFinishedAt,
         executionStartLocation,
-        executionEndLocation
+        executionEndLocation,
+        paymentStatus,       // 💵 Status de pagamento
+        paymentNotes,        // 💵 Motivo se não pagou
+        paymentConfirmedAt   // 💵 Quando foi confirmado
       }, req.user.userId);
 
       res.json(updated);

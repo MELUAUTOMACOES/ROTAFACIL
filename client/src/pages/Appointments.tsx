@@ -755,7 +755,10 @@ export default function Appointments() {
 
       const res = await fetch("/api/routes/optimize", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({
           appointmentIds: selectedAppointmentIds,
           endAtStart,
@@ -913,7 +916,10 @@ export default function Appointments() {
 
         const res = await fetch("/api/routes/optimize", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            ...getAuthHeaders(),
+            "Content-Type": "application/json"
+          },
           body: JSON.stringify({
             appointmentIds: selectedAppointmentIds, // números
             endAtStart,
@@ -1093,7 +1099,10 @@ export default function Appointments() {
 
       const res = await fetch("/api/routes/optimize", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({
           appointmentIds: selectedAppointmentIds,
           endAtStart,

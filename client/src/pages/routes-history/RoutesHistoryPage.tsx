@@ -2057,9 +2057,27 @@ export default function RoutesHistoryPage() {
                       <TableCell>{apt.clientName}</TableCell>
                       <TableCell>{apt.responsibleName}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={getExecutionStatusColor(apt.executionStatus)}>
-                          {getExecutionStatusLabel(apt.executionStatus)}
-                        </Badge>
+                        {/* 💵 Se paymentStatus é 'nao_pago', mostrar 'Falta Pagamento' */}
+                        {apt.paymentStatus === 'nao_pago' ? (
+                          <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200">
+                            💵 Falta Pagamento
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className={
+                            apt.executionStatus === 'concluido'
+                              ? 'bg-green-100 text-green-800 border-green-200'
+                              : 'bg-red-100 text-red-800 border-red-200'
+                          }>
+                            {apt.executionStatus === 'concluido' ? 'Concluído' :
+                              apt.executionStatus === 'nao_realizado_cliente_ausente' ? 'Cliente Ausente' :
+                                apt.executionStatus === 'nao_realizado_cliente_pediu_remarcacao' ? 'Remarcar' :
+                                  apt.executionStatus === 'nao_realizado_problema_tecnico' ? 'Problema Técnico' :
+                                    apt.executionStatus === 'nao_realizado_endereco_incorreto' ? 'Endereço Incorreto' :
+                                      apt.executionStatus === 'nao_realizado_cliente_recusou' ? 'Cliente Recusou' :
+                                        apt.executionStatus === 'nao_realizado_falta_material' ? 'Falta Material' :
+                                          apt.executionStatus || 'Pendente'}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="max-w-[200px] truncate" title={apt.executionNotes}>{apt.executionNotes || '-'}</TableCell>
                       <TableCell>

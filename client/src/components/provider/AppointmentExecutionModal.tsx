@@ -3,10 +3,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SignaturePad } from './SignaturePad';
-import { Camera, PenTool, CheckCircle, XCircle, Clock, Save, MapPin, AlertTriangle, HelpCircle, PlayCircle, Timer } from "lucide-react";
+import { Camera, PenTool, CheckCircle, XCircle, Clock, Save, MapPin, AlertTriangle, HelpCircle, PlayCircle, Timer, DollarSign, AlertCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface AppointmentExecutionModalProps {
@@ -26,6 +27,16 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
     const [photos, setPhotos] = useState<string[]>(appointment?.photos || []);
     const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // 💵 Estados de pagamento
+    const [paymentStatus, setPaymentStatus] = useState<string>(appointment?.paymentStatus || '');
+    const [paymentNotes, setPaymentNotes] = useState<string>(appointment?.paymentNotes || '');
+
+    // Calcular valor total (serviço + adicional)
+    const servicePrice = Number(appointment?.servicePrice || 0);
+    const additionalValue = Number(appointment?.additionalValue || 0);
+    const totalValue = servicePrice + additionalValue;
+    const requiresPayment = appointment?.paymentType === 'no_ato' && !appointment?.paymentStatus;
 
     // ⏱️ Estado para controlar fluxo de 2 etapas
     const [isStarted, setIsStarted] = useState<boolean>(() => {
@@ -148,6 +159,18 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
                 return;
             }
 
+            // Se pagamento é "no_ato" e status é concluído/outro, deve preencher status de pagamento
+            if (appointment?.paymentType === 'no_ato' && !paymentStatus) {
+                toast({ title: "Pagamento obrigatório", description: "Informe se o cliente pagou ou não.", variant: "destructive" });
+                return;
+            }
+
+            // Se não pagou, motivo é obrigatório
+            if (paymentStatus === 'nao_pago' && (!paymentNotes || paymentNotes.trim().length < 3)) {
+                toast({ title: "Motivo obrigatório", description: "Descreva o motivo do não pagamento.", variant: "destructive" });
+                return;
+            }
+
             setIsSaving(true);
 
             // Mapeia status de execução para status administrativo (simplificado)
@@ -162,6 +185,10 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
                 executionNotes,
                 signature,
                 photos,
+                // Campos de pagamento
+                paymentStatus: paymentStatus || null,
+                paymentNotes: paymentNotes || null,
+                paymentConfirmedAt: paymentStatus ? new Date().toISOString() : null,
                 // Registrar tempos de execução para métricas do dashboard
                 executionStartedAt,
                 executionFinishedAt: new Date().toISOString(),
@@ -298,7 +325,11 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
                                 disabled={isStarting}
                                 className="flex-[2] h-12 text-lg bg-[#DAA520] hover:bg-[#B8860B] text-white"
                             >
-                                <PlayCircle className="w-5 h-5 mr-1" />
+                                {isStarting ? (
+                                    <Loader2 className="w-5 h-5 mr-1 animate-spin" />
+                                ) : (
+                                    <PlayCircle className="w-5 h-5 mr-1" />
+                                )}
                                 {isStarting ? 'Iniciando...' : 'Iniciar'}
                             </Button>
                         </div>
@@ -340,7 +371,84 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
                                 </div>
                             </div>
 
-                            {/* Execution Notes */}
+                            {/* 💵 Seção de Pagamento - só aparece se paymentType é 'no_ato' */}
+                            {appointment?.paymentType === 'no_ato' && (
+                                <div className="space-y-3">
+                                    {/* Banner de aviso de cobrança */}
+                                    <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-12 h-12 bg-amber-200 rounded-full flex items-center justify-center flex-shrink-0">
+                                                <DollarSign className="w-7 h-7 text-amber-700" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className="font-bold text-amber-900 text-lg">⚠️ COBRAR DO CLIENTE</p>
+                                                <p className="text-2xl font-bold text-amber-800">
+                                                    R$ {totalValue.toFixed(2)}
+                                                </p>
+                                                {additionalValue > 0 && (
+                                                    <p className="text-xs text-amber-600">
+                                                        (Serviço: R$ {servicePrice.toFixed(2)} + Adicional: R$ {additionalValue.toFixed(2)})
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Seleção de status de pagamento */}
+                                    <div className="space-y-2">
+                                        <Label className="flex justify-between">
+                                            <span>Cliente pagou?</span>
+                                            <span className="text-red-500 text-xs font-bold uppercase tracking-wide">Obrigatório</span>
+                                        </Label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                onClick={() => { setPaymentStatus('pago'); setPaymentNotes(''); }}
+                                                className={`flex items-center justify-center p-3 rounded-lg border-2 transition-all ${paymentStatus === 'pago'
+                                                    ? 'border-green-500 bg-green-50 text-green-700 ring-1 ring-green-500'
+                                                    : 'border-gray-200 hover:border-gray-300 text-gray-600 bg-white'
+                                                    }`}
+                                            >
+                                                <CheckCircle className="w-5 h-5 mr-2" />
+                                                <span className="font-medium">Sim, pagou</span>
+                                            </button>
+                                            <button
+                                                onClick={() => setPaymentStatus('nao_pago')}
+                                                className={`flex items-center justify-center p-3 rounded-lg border-2 transition-all ${paymentStatus === 'nao_pago'
+                                                    ? 'border-red-500 bg-red-50 text-red-700 ring-1 ring-red-500'
+                                                    : 'border-gray-200 hover:border-gray-300 text-gray-600 bg-white'
+                                                    }`}
+                                            >
+                                                <XCircle className="w-5 h-5 mr-2" />
+                                                <span className="font-medium">Não pagou</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Campo de motivo se não pagou */}
+                                    {paymentStatus === 'nao_pago' && (
+                                        <div className="space-y-2">
+                                            <Label className="flex justify-between">
+                                                <span>Motivo do não pagamento</span>
+                                                <span className="text-red-500 text-xs font-bold uppercase tracking-wide">Obrigatório</span>
+                                            </Label>
+                                            <Textarea
+                                                placeholder="Descreva o motivo pelo qual o cliente não pagou..."
+                                                value={paymentNotes}
+                                                onChange={(e) => setPaymentNotes(e.target.value)}
+                                                className="min-h-[80px] border-red-200 focus:border-red-400"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Badge se pagamento é antecipado */}
+                            {appointment?.paymentType === 'antecipado' && (
+                                <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+                                    <CheckCircle className="w-5 h-5 text-green-600" />
+                                    <span className="text-green-700 font-medium">✅ Pagamento Antecipado - Cliente já pagou</span>
+                                </div>
+                            )}
                             <div className="space-y-2">
                                 <Label className="flex justify-between">
                                     <span>Relato / Observações</span>
@@ -377,13 +485,17 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
                         </div>
 
                         <DialogFooter className="gap-2 sm:gap-0 sticky bottom-0 bg-white pt-2 border-t mt-4">
-                            <Button variant="outline" onClick={onClose}>Cancelar</Button>
+                            <Button variant="outline" onClick={onClose} disabled={isSaving}>Cancelar</Button>
                             <Button
                                 onClick={handleSave}
                                 disabled={isSaving}
                                 className="bg-[#DAA520] hover:bg-[#B8860B] text-white"
                             >
-                                <Save className="w-4 h-4 mr-2" />
+                                {isSaving ? (
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                    <Save className="w-4 h-4 mr-2" />
+                                )}
                                 {isSaving ? 'Salvando...' : 'Confirmar Registro'}
                             </Button>
                         </DialogFooter>

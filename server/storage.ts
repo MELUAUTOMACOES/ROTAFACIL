@@ -992,6 +992,9 @@ export class DatabaseStorage implements IStorage {
       executionFinishedAt?: string | null;
       executionStartLocation?: any;
       executionEndLocation?: any;
+      paymentStatus?: string | null;       // 💵 'pago' | 'nao_pago'
+      paymentNotes?: string | null;        // 💵 Motivo se não pagou
+      paymentConfirmedAt?: string | null;  // 💵 Quando foi confirmado
     },
     userId: number
   ): Promise<Appointment> {
@@ -1003,6 +1006,7 @@ export class DatabaseStorage implements IStorage {
 
     if (data.executionStartedAt) updateData.executionStartedAt = new Date(data.executionStartedAt);
     if (data.executionFinishedAt) updateData.executionFinishedAt = new Date(data.executionFinishedAt);
+    if (data.paymentConfirmedAt) updateData.paymentConfirmedAt = new Date(data.paymentConfirmedAt);
 
     // Salvar histórico antes de atualizar
     const [currentAppointment] = await db.select().from(appointments).where(eq(appointments.id, id));
@@ -1065,14 +1069,21 @@ export class DatabaseStorage implements IStorage {
       return [];
     }
 
-    // 3. Buscar agendamentos pendentes (não concluídos e não cancelados)
+    // 3. Buscar agendamentos pendentes (não concluídos, não cancelados, OU com pagamento não realizado)
     const pendingAppointments = await db
       .select()
       .from(appointments)
       .where(and(
         inArray(appointments.id, appointmentIds),
-        or(isNull(appointments.executionStatus), ne(appointments.executionStatus, 'concluido')),
-        ne(appointments.status, 'cancelled') // Exclui agendamentos cancelados
+        ne(appointments.status, 'cancelled'), // Exclui agendamentos cancelados
+        or(
+          // Não concluídos
+          and(
+            or(isNull(appointments.executionStatus), ne(appointments.executionStatus, 'concluido'))
+          ),
+          // OU com pagamento pendente (paymentStatus = 'nao_pago')
+          eq(appointments.paymentStatus, 'nao_pago')
+        )
       ));
 
     // 4. 🚀 OTIMIZADO: Buscar TODOS os dados relacionados de uma vez (batch)

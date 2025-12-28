@@ -424,8 +424,27 @@ export async function validateTechnicianTeamConflict(
     });
 
     if (technicianTeams.length > 0) {
+      // Obter o dia da semana da data solicitada
+      const dayOfWeek = date.getDay(); // 0 = domingo, 1 = segunda, etc.
+      const dayNames = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+      const currentDayName = dayNames[dayOfWeek];
+
       // Verificar se alguma dessas equipes tem agendamentos no dia
       for (const tm of technicianTeams) {
+        // Primeiro, verificar se a equipe trabalha neste dia da semana
+        const team = await db.query.teams.findFirst({
+          where: and(eq(teams.id, tm.teamId), eq(teams.userId, userId)),
+        });
+
+        if (!team) continue;
+
+        // Se a equipe não trabalha neste dia, não há conflito
+        const teamWorkDays = team.diasTrabalho || ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
+        if (!teamWorkDays.includes(currentDayName)) {
+          console.log(`📅 [VALIDATION] Equipe "${team.name}" não trabalha nas ${currentDayName}s - sem conflito`);
+          continue;
+        }
+
         const teamAppointments = await db.query.appointments.findMany({
           where: and(
             eq(appointments.userId, userId),
@@ -437,11 +456,6 @@ export async function validateTechnicianTeamConflict(
         });
 
         if (teamAppointments.length > 0) {
-          // Buscar nome da equipe
-          const team = await db.query.teams.findFirst({
-            where: eq(sql`id`, tm.teamId),
-          });
-
           return {
             valid: false,
             message: `O técnico faz parte da equipe "${team?.name || 'desconhecida'}" que já possui agendamentos neste dia. Apenas um pode ter agendamentos no mesmo dia.`

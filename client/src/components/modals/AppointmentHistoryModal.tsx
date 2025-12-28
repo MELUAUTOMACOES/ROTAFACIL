@@ -57,6 +57,18 @@ const pendingReasonLabels: Record<string, string> = {
     outro_motivo: "Outro motivo",
 };
 
+// Função auxiliar para formatar data de forma segura
+function safeFormatDate(dateValue: any, formatString: string): string | null {
+    if (!dateValue) return null;
+    try {
+        const date = new Date(dateValue);
+        if (isNaN(date.getTime())) return null;
+        return format(date, formatString, { locale: ptBR });
+    } catch {
+        return null;
+    }
+}
+
 export function AppointmentHistoryModal({
     isOpen,
     onClose,
@@ -81,9 +93,13 @@ export function AppointmentHistoryModal({
 
         // Data agendada
         if (prev.scheduledDate !== current.scheduledDate) {
-            const prevDate = new Date(prev.scheduledDate);
-            const newDate = new Date(current.scheduledDate);
-            changes.push(`Data: ${format(prevDate, 'dd/MM/yyyy HH:mm', { locale: ptBR })} → ${format(newDate, 'dd/MM/yyyy HH:mm', { locale: ptBR })}`);
+            const prevDateFormatted = safeFormatDate(prev.scheduledDate, 'dd/MM/yyyy HH:mm');
+            const newDateFormatted = safeFormatDate(current.scheduledDate, 'dd/MM/yyyy HH:mm');
+            if (prevDateFormatted && newDateFormatted) {
+                changes.push(`Data: ${prevDateFormatted} → ${newDateFormatted}`);
+            } else if (newDateFormatted) {
+                changes.push(`Data: ${newDateFormatted}`);
+            }
         }
 
         // Status
@@ -152,9 +168,9 @@ export function AppointmentHistoryModal({
                                                         </div>
                                                     </div>
                                                     <div className="text-xs text-muted-foreground text-right">
-                                                        {format(new Date(item.changedAt), "dd/MM/yyyy", { locale: ptBR })}
+                                                        {safeFormatDate(item.changedAt, "dd/MM/yyyy") || "Data inválida"}
                                                         <br />
-                                                        {format(new Date(item.changedAt), "HH:mm", { locale: ptBR })}
+                                                        {safeFormatDate(item.changedAt, "HH:mm") || "--:--"}
                                                     </div>
                                                 </div>
 
