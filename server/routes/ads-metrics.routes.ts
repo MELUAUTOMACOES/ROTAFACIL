@@ -9,11 +9,14 @@
  * - GET /api/metrics/ads/funnel - Funil de conversão
  * - GET /api/metrics/ads/campaigns - Tabela por campanha
  * - GET /api/metrics/ads/behavior - Comportamento (scroll, device)
+ * - GET /api/metrics/ads/whatsapp-settings - Configuração do WhatsApp
+ * - PUT /api/metrics/ads/whatsapp-settings - Atualizar configuração do WhatsApp
+ * - GET /api/metrics/ads/whatsapp - Relatório de clicks no WhatsApp
  */
 
 import type { Express, Request, Response } from "express";
 import { db } from "../db";
-import { analyticsEvents } from "@shared/schema";
+import { analyticsEvents, adsWhatsappSettings } from "@shared/schema";
 import { sql, eq, and, gte, lte, desc } from "drizzle-orm";
 
 /**
@@ -55,9 +58,9 @@ export function registerAdsMetricsRoutes(app: Express, authenticateToken: any) {
             const period = (req.query.period as string) || "30d";
             const { startDate, endDate } = getPeriodDates(period);
 
-            // Total de page_views
+            // Total de page_views (distinct sessions)
             const pageViewsResult = await db
-                .select({ count: sql<number>`count(*)` })
+                .select({ count: sql<number>`count(DISTINCT ${analyticsEvents.sessionId})` })
                 .from(analyticsEvents)
                 .where(and(
                     eq(analyticsEvents.eventName, "page_view"),
@@ -86,7 +89,7 @@ export function registerAdsMetricsRoutes(app: Express, authenticateToken: any) {
             const topSourceResult = await db
                 .select({
                     source: sql<string>`COALESCE(${analyticsEvents.utmSource}, 'orgânico')`,
-                    count: sql<number>`count(*)`
+                    count: sql<number>`count(DISTINCT ${analyticsEvents.sessionId})`
                 })
                 .from(analyticsEvents)
                 .where(and(
@@ -95,7 +98,7 @@ export function registerAdsMetricsRoutes(app: Express, authenticateToken: any) {
                     lte(analyticsEvents.createdAt, endDate)
                 ))
                 .groupBy(sql`COALESCE(${analyticsEvents.utmSource}, 'orgânico')`)
-                .orderBy(desc(sql`count(*)`))
+                .orderBy(desc(sql`count(DISTINCT ${analyticsEvents.sessionId})`))
                 .limit(1);
 
             const topSource = topSourceResult[0]
@@ -132,11 +135,11 @@ export function registerAdsMetricsRoutes(app: Express, authenticateToken: any) {
                 "signup_complete"
             ];
 
-            // Buscar contagem de cada evento
+            // Buscar contagem de cada evento (distinct sessions para page_view/scroll)
             const results = await db
                 .select({
                     eventName: analyticsEvents.eventName,
-                    count: sql<number>`count(*)`
+                    count: sql<number>`count(DISTINCT ${analyticsEvents.sessionId})`
                 })
                 .from(analyticsEvents)
                 .where(and(
@@ -184,12 +187,12 @@ export function registerAdsMetricsRoutes(app: Express, authenticateToken: any) {
             const period = (req.query.period as string) || "30d";
             const { startDate, endDate } = getPeriodDates(period);
 
-            // Visitantes por campanha (page_view)
+            // Visitantes por campanha (distinct sessions com page_view)
             const visitorsResult = await db
                 .select({
                     utmSource: sql<string>`COALESCE(${analyticsEvents.utmSource}, 'orgânico')`,
                     utmCampaign: sql<string>`COALESCE(${analyticsEvents.utmCampaign}, '-')`,
-                    visitors: sql<number>`count(*)`
+                    visitors: sql<number>`count(DISTINCT ${analyticsEvents.sessionId})`
                 })
                 .from(analyticsEvents)
                 .where(and(
@@ -277,32 +280,55 @@ export function registerAdsMetricsRoutes(app: Express, authenticateToken: any) {
     });
 
     // ==================== BEHAVIOR (Comportamento) ====================
+    // CORRIGIDO: Engajamento = sessions com scroll_50 / sessions com page_view
+    // CORRIGIDO: Dispositivos = distinct sessionId com page_view
     app.get("/api/metrics/ads/behavior", authenticateToken, async (req: Request, res: Response) => {
         try {
             const period = (req.query.period as string) || "30d";
             const { startDate, endDate } = getPeriodDates(period);
 
-            // Scroll metrics (50% vs 75%)
-            const scrollResult = await db
-                .select({
-                    eventName: analyticsEvents.eventName,
-                    count: sql<number>`count(*)`
-                })
+            // Total de sessions com page_view (base para engajamento)
+            const totalSessionsResult = await db
+                .select({ count: sql<number>`count(DISTINCT ${analyticsEvents.sessionId})` })
                 .from(analyticsEvents)
                 .where(and(
-                    sql`${analyticsEvents.eventName} IN ('scroll_50', 'scroll_75')`,
+                    eq(analyticsEvents.eventName, "page_view"),
                     gte(analyticsEvents.createdAt, startDate),
                     lte(analyticsEvents.createdAt, endDate)
-                ))
-                .groupBy(analyticsEvents.eventName);
+                ));
+            const totalSessions = Number(totalSessionsResult[0]?.count || 0);
 
-            const scroll50 = Number(scrollResult.find(r => r.eventName === "scroll_50")?.count || 0);
-            const scroll75 = Number(scrollResult.find(r => r.eventName === "scroll_75")?.count || 0);
+            // Sessions com scroll_50
+            const scroll50Result = await db
+                .select({ count: sql<number>`count(DISTINCT ${analyticsEvents.sessionId})` })
+                .from(analyticsEvents)
+                .where(and(
+                    eq(analyticsEvents.eventName, "scroll_50"),
+                    gte(analyticsEvents.createdAt, startDate),
+                    lte(analyticsEvents.createdAt, endDate)
+                ));
+            const scroll50Sessions = Number(scroll50Result[0]?.count || 0);
 
-            // Device breakdown (mobile vs desktop)
+            // Sessions com scroll_75
+            const scroll75Result = await db
+                .select({ count: sql<number>`count(DISTINCT ${analyticsEvents.sessionId})` })
+                .from(analyticsEvents)
+                .where(and(
+                    eq(analyticsEvents.eventName, "scroll_75"),
+                    gte(analyticsEvents.createdAt, startDate),
+                    lte(analyticsEvents.createdAt, endDate)
+                ));
+            const scroll75Sessions = Number(scroll75Result[0]?.count || 0);
+
+            // Taxa de engajamento = sessions com scroll_50 / sessions com page_view
+            const engagementRate = totalSessions > 0
+                ? Math.round((scroll50Sessions / totalSessions) * 100)
+                : 0;
+
+            // Device breakdown (distinct sessionId com page_view)
             const deviceResult = await db
                 .select({
-                    deviceType: analyticsEvents.deviceType,
+                    deviceType: sql<string>`COALESCE(${analyticsEvents.deviceType}, 'unknown')`,
                     count: sql<number>`count(DISTINCT ${analyticsEvents.sessionId})`
                 })
                 .from(analyticsEvents)
@@ -311,16 +337,17 @@ export function registerAdsMetricsRoutes(app: Express, authenticateToken: any) {
                     gte(analyticsEvents.createdAt, startDate),
                     lte(analyticsEvents.createdAt, endDate)
                 ))
-                .groupBy(analyticsEvents.deviceType);
+                .groupBy(sql`COALESCE(${analyticsEvents.deviceType}, 'unknown')`);
 
             const mobile = Number(deviceResult.find(r => r.deviceType === "mobile")?.count || 0);
             const desktop = Number(deviceResult.find(r => r.deviceType === "desktop")?.count || 0);
-            const totalDevices = mobile + desktop;
+            const unknown = Number(deviceResult.find(r => r.deviceType === "unknown")?.count || 0);
+            const totalDevices = mobile + desktop + unknown;
 
             // CTA clicks by position (from eventData)
             const ctaResult = await db
                 .select({
-                    position: sql<string>`${analyticsEvents.eventData}->>'position'`,
+                    position: sql<string>`COALESCE(${analyticsEvents.eventData}->>'position', 'unknown')`,
                     count: sql<number>`count(*)`
                 })
                 .from(analyticsEvents)
@@ -329,22 +356,23 @@ export function registerAdsMetricsRoutes(app: Express, authenticateToken: any) {
                     gte(analyticsEvents.createdAt, startDate),
                     lte(analyticsEvents.createdAt, endDate)
                 ))
-                .groupBy(sql`${analyticsEvents.eventData}->>'position'`);
+                .groupBy(sql`COALESCE(${analyticsEvents.eventData}->>'position', 'unknown')`);
 
             const ctaHero = Number(ctaResult.find(r => r.position === "hero")?.count || 0);
             const ctaFooter = Number(ctaResult.find(r => r.position === "footer")?.count || 0);
 
             res.json({
                 scroll: {
-                    scroll50,
-                    scroll75,
-                    engagementRate: scroll50 > 0
-                        ? Math.round((scroll75 / scroll50) * 100)
-                        : 0
+                    scroll50: scroll50Sessions,
+                    scroll75: scroll75Sessions,
+                    engagementRate, // % de sessions que rolaram 50%
+                    engagedUsers: scroll50Sessions // Usuários engajados = sessions com scroll_50
                 },
                 devices: {
                     mobile,
                     desktop,
+                    unknown,
+                    total: totalDevices,
                     mobilePercentage: totalDevices > 0
                         ? Math.round((mobile / totalDevices) * 100)
                         : 0
@@ -360,6 +388,172 @@ export function registerAdsMetricsRoutes(app: Express, authenticateToken: any) {
         } catch (error: any) {
             console.error("❌ [ADS] Erro ao buscar comportamento:", error.message);
             res.status(500).json({ message: "Erro ao buscar dados de comportamento" });
+        }
+    });
+
+    // ==================== WHATSAPP SETTINGS ====================
+
+    // GET PÚBLICO - Para a landing page (Home) buscar config sem auth
+    app.get("/api/public/whatsapp-settings", async (req: Request, res: Response) => {
+        try {
+            const result = await db
+                .select({
+                    whatsappNumber: adsWhatsappSettings.whatsappNumber,
+                    defaultMessage: adsWhatsappSettings.defaultMessage
+                })
+                .from(adsWhatsappSettings)
+                .orderBy(desc(adsWhatsappSettings.id))
+                .limit(1);
+
+            if (result.length === 0) {
+                return res.json({ whatsappNumber: "", defaultMessage: "" });
+            }
+
+            res.json(result[0]);
+        } catch (error: any) {
+            console.error("❌ [ADS] Erro ao buscar config WhatsApp pública:", error.message);
+            res.json({ whatsappNumber: "", defaultMessage: "" });
+        }
+    });
+
+    // GET - Buscar configuração atual (com auth para admin)
+    app.get("/api/metrics/ads/whatsapp-settings", authenticateToken, async (req: Request, res: Response) => {
+        try {
+            // Busca o registro mais recente (ou primeiro com id=1)
+            const result = await db
+                .select()
+                .from(adsWhatsappSettings)
+                .orderBy(desc(adsWhatsappSettings.id))
+                .limit(1);
+
+            if (result.length === 0) {
+                // Retorna configuração padrão se não existir
+                return res.json({
+                    id: null,
+                    whatsappNumber: "",
+                    defaultMessage: "Olá! Gostaria de saber mais sobre o RotaFácil.",
+                    exists: false
+                });
+            }
+
+            res.json({
+                ...result[0],
+                exists: true
+            });
+
+        } catch (error: any) {
+            console.error("❌ [ADS] Erro ao buscar configuração WhatsApp:", error.message);
+            res.status(500).json({ message: "Erro ao buscar configuração do WhatsApp" });
+        }
+    });
+
+    // PUT - Atualizar configuração
+    app.put("/api/metrics/ads/whatsapp-settings", authenticateToken, async (req: Request, res: Response) => {
+        try {
+            const { whatsappNumber, defaultMessage } = req.body;
+
+            // Validações
+            if (!whatsappNumber || typeof whatsappNumber !== "string") {
+                console.warn("⚠️ [ADS] Validação falhou: número WhatsApp inválido");
+                return res.status(400).json({ message: "Número do WhatsApp é obrigatório" });
+            }
+
+            // Validar formato do número (apenas dígitos, mínimo 10)
+            const cleanNumber = whatsappNumber.replace(/\D/g, "");
+            if (cleanNumber.length < 10) {
+                console.warn("⚠️ [ADS] Validação falhou: número muito curto:", cleanNumber);
+                return res.status(400).json({ message: "Número deve ter pelo menos 10 dígitos (com DDI)" });
+            }
+
+            if (!defaultMessage || typeof defaultMessage !== "string") {
+                console.warn("⚠️ [ADS] Validação falhou: mensagem inválida");
+                return res.status(400).json({ message: "Mensagem padrão é obrigatória" });
+            }
+
+            // Verificar se já existe registro
+            const existing = await db
+                .select()
+                .from(adsWhatsappSettings)
+                .limit(1);
+
+            let result;
+            if (existing.length > 0) {
+                // Atualizar existente
+                [result] = await db
+                    .update(adsWhatsappSettings)
+                    .set({
+                        whatsappNumber: cleanNumber,
+                        defaultMessage,
+                        updatedAt: new Date()
+                    })
+                    .where(eq(adsWhatsappSettings.id, existing[0].id))
+                    .returning();
+            } else {
+                // Criar novo
+                [result] = await db
+                    .insert(adsWhatsappSettings)
+                    .values({
+                        whatsappNumber: cleanNumber,
+                        defaultMessage
+                    })
+                    .returning();
+            }
+
+            console.log("✅ [ADS] Configuração WhatsApp salva:", result.id);
+            res.json(result);
+
+        } catch (error: any) {
+            console.error("❌ [ADS] Erro ao salvar configuração WhatsApp:", error.message);
+            res.status(500).json({ message: "Erro ao salvar configuração do WhatsApp" });
+        }
+    });
+
+    // ==================== WHATSAPP CLICKS REPORT ====================
+    app.get("/api/metrics/ads/whatsapp", authenticateToken, async (req: Request, res: Response) => {
+        try {
+            const period = (req.query.period as string) || "30d";
+            const { startDate, endDate } = getPeriodDates(period);
+
+            // Total de clicks no WhatsApp
+            const totalResult = await db
+                .select({ count: sql<number>`count(*)` })
+                .from(analyticsEvents)
+                .where(and(
+                    eq(analyticsEvents.eventName, "click_whatsapp"),
+                    gte(analyticsEvents.createdAt, startDate),
+                    lte(analyticsEvents.createdAt, endDate)
+                ));
+            const totalClicks = Number(totalResult[0]?.count || 0);
+
+            // Breakdown por source (metadata.source ou eventData.source)
+            const bySourceResult = await db
+                .select({
+                    source: sql<string>`COALESCE(${analyticsEvents.eventData}->>'source', 'unknown')`,
+                    clicks: sql<number>`count(*)`
+                })
+                .from(analyticsEvents)
+                .where(and(
+                    eq(analyticsEvents.eventName, "click_whatsapp"),
+                    gte(analyticsEvents.createdAt, startDate),
+                    lte(analyticsEvents.createdAt, endDate)
+                ))
+                .groupBy(sql`COALESCE(${analyticsEvents.eventData}->>'source', 'unknown')`)
+                .orderBy(desc(sql`count(*)`));
+
+            const clicksBySource = bySourceResult.map(r => ({
+                source: r.source,
+                clicks: Number(r.clicks)
+            }));
+
+            res.json({
+                totalClicks,
+                clicksBySource,
+                period
+            });
+
+        } catch (error: any) {
+            console.error("❌ [ADS] Erro ao buscar relatório WhatsApp:", error.message);
+            res.status(500).json({ message: "Erro ao buscar relatório do WhatsApp" });
         }
     });
 

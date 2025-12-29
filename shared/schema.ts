@@ -1179,6 +1179,21 @@ export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).om
   createdAt: true,
 });
 
+// ADS WhatsApp Settings - Configuração do botão de WhatsApp na tela ADS
+export const adsWhatsappSettings = pgTable("ads_whatsapp_settings", {
+  id: serial("id").primaryKey(),
+  whatsappNumber: text("whatsapp_number").notNull(), // Número com DDI (ex: 5541999999999)
+  defaultMessage: text("default_message").notNull(), // Mensagem padrão ao abrir chat
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertAdsWhatsappSettingsSchema = createInsertSchema(adsWhatsappSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type Company = typeof companies.$inferSelect;
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
@@ -1259,3 +1274,5 @@ export type FuelRecord = typeof fuelRecords.$inferSelect;
 export type InsertFuelRecord = z.infer<typeof insertFuelRecordSchema>;
 export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
 export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
+export type AdsWhatsappSettings = typeof adsWhatsappSettings.$inferSelect;
+export type InsertAdsWhatsappSettings = z.infer<typeof insertAdsWhatsappSettingsSchema>;

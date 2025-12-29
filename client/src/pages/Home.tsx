@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import logoImg from "@assets/SEM FUNDO_1750819798590.png";
 import FlowingRoad from "@/components/FlowingRoad";
+import { WhatsAppFloatingButton } from "@/components/WhatsAppFloatingButton";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import {
   Clock,
@@ -994,6 +995,9 @@ export default function Home() {
           animation: scroll-indicator 2s ease-in-out infinite;
         }
       `}</style>
+
+      {/* Botão flutuante de WhatsApp */}
+      <WhatsAppFloatingButton />
     </div>
   );
 }
