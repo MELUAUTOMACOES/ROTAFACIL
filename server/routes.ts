@@ -2406,7 +2406,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🔍 [ACHE UMA DATA] Endpoint para buscar datas disponíveis (streaming)
+  // 🔍 [ENCONTRE UMA DATA] Endpoint para buscar datas disponíveis (streaming)
   app.post("/api/scheduling/find-available-dates", authenticateToken, async (req: any, res) => {
     try {
       const { clientId, cep, numero, logradouro, bairro, cidade, estado, serviceId, technicianId, teamId, startDate } = req.body;
@@ -3428,6 +3428,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reason = `Aguardando retorno${followUpDate ? ` até ${new Date(followUpDate).toLocaleDateString('pt-BR')}` : ''}`;
 
         console.log(`✅ [RESOLVE-PENDING] Marcado como aguardando retorno`);
+
+      } else if (resolutionAction === 'payment_confirmed') {
+        // 💰 PAGAMENTO CONFIRMADO - marca pagamento como recebido
+        await db.update(appointments)
+          .set({
+            paymentStatus: 'pago',
+            paymentConfirmedAt: new Date(),
+            // Manter executionStatus como 'concluido' - não alterar
+          })
+          .where(eq(appointments.id, appointmentId));
+
+        newData = {
+          paymentStatus: 'pago',
+          paymentConfirmedAt: new Date(),
+        };
+        changeType = 'payment_confirmed';
+        reason = resolutionNotes || 'Pagamento confirmado pelo gestor';
+
+        console.log(`✅ [RESOLVE-PENDING] Pagamento confirmado`);
       }
 
       // Buscar nome do usuário para o histórico

@@ -105,6 +105,7 @@ export function PendingReasonsCard({ technicians = [], teams = [] }: PendingReas
             "nao_realizado_cliente_recusou": "bg-gray-500",
             "nao_realizado_falta_material": "bg-amber-500",
             "nao_realizado_outro": "bg-purple-500",
+            "payment_pending": "bg-red-600", // 💰 Pendência de pagamento
         };
         return colors[reason] || "bg-gray-400 dark:bg-gray-600";
     };

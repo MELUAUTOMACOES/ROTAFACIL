@@ -81,7 +81,7 @@ export default function AppointmentForm({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Verificar se o formulário foi aberto a partir do fluxo "Ache uma Data"
+  // Verificar se o formulário foi aberto a partir do fluxo "Encontre uma Data"
   const isFromFindDate = !!prefilledData && !appointment;
   console.log("📝 [DEBUG] AppointmentForm - isFromFindDate:", isFromFindDate);
 
@@ -504,7 +504,7 @@ export default function AppointmentForm({
                   />
                 </FormControl>
                 {isFromFindDate && (
-                  <p className="text-sm text-blue-600">Cliente selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
+                  <p className="text-sm text-blue-600">Cliente selecionado a partir da busca "Encontre uma data" - não pode ser alterado</p>
                 )}
                 <FormMessage />
               </FormItem>
@@ -542,7 +542,7 @@ export default function AppointmentForm({
                     </SelectContent>
                   </Select>
                   {isFromFindDate && (
-                    <p className="text-sm text-blue-600">Serviço selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
+                    <p className="text-sm text-blue-600">Serviço selecionado a partir da busca "Encontre uma data" - não pode ser alterado</p>
                   )}
                   {selectedService && (
                     <p className="text-base font-semibold text-gray-700 flex items-center gap-1 mt-1">
@@ -608,7 +608,7 @@ export default function AppointmentForm({
                     </SelectContent>
                   </Select>
                   {isFromFindDate && (
-                    <p className="text-sm text-blue-600">Técnico/Equipe selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
+                    <p className="text-sm text-blue-600">Técnico/Equipe selecionado a partir da busca "Encontre uma data" - não pode ser alterado</p>
                   )}
                   <FormMessage />
                 </FormItem>
@@ -648,7 +648,7 @@ export default function AppointmentForm({
                     />
                   </FormControl>
                   {prefilledData?.date && (
-                    <p className="text-sm text-blue-600">Data selecionada a partir da busca "Ache uma data" - não pode ser alterada</p>
+                    <p className="text-sm text-blue-600">Data selecionada a partir da busca "Encontre uma data" - não pode ser alterada</p>
                   )}
                   {workScheduleWarning && (
                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-md">
@@ -776,7 +776,7 @@ export default function AppointmentForm({
                       />
                     </FormControl>
                     {prefilledData?.cep && (
-                      <p className="text-sm text-blue-600">CEP selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
+                      <p className="text-sm text-blue-600">CEP selecionado a partir da busca "Encontre uma data" - não pode ser alterado</p>
                     )}
                     <FormMessage />
                   </FormItem>
@@ -806,7 +806,7 @@ export default function AppointmentForm({
                       />
                     </FormControl>
                     {prefilledData?.numero && (
-                      <p className="text-sm text-blue-600">Número selecionado a partir da busca "Ache uma data" - não pode ser alterado</p>
+                      <p className="text-sm text-blue-600">Número selecionado a partir da busca "Encontre uma data" - não pode ser alterado</p>
                     )}
                     <FormMessage />
                   </FormItem>

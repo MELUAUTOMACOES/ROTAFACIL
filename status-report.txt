@@ -1,9 +1,0 @@
-=== STATUS ÚNICOS ===
-agendado: 1 agendamentos
-completed: 2 agendamentos
-in_progress: 1 agendamentos
-cancelled: 2 agendamentos
-scheduled: 17 agendamentos
-
-=== STATUS NÃO PADRÃO ===
-ID 9: agendado

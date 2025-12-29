@@ -16,7 +16,7 @@ const pageNames: Record<string, string> = {
   "/technicians": "Técnicos",
   "/vehicles": "Veículos",
   "/services": "Serviços",
-  "/find-date": "Ache uma Data",
+  "/find-date": "Encontre uma Data",
   "/prestadores": "Prestadores",
   "/business-rules": "Regras de Negócio",
   "/users": "Gestão de Usuários",

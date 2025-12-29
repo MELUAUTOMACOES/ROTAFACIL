@@ -20,17 +20,20 @@ type PendingReasonType =
     | 'nao_realizado_cliente_recusou'
     | 'nao_realizado_falta_material'
     | 'nao_realizado_outro'
+    | 'payment_pending' // 💰 Novo: pendĂȘncia de pagamento
     | (string & {});
-type ResolutionActionType = 'rescheduled' | 'cancelled' | 'resolved_by_provider' | 'awaiting';
+type ResolutionActionType = 'rescheduled' | 'cancelled' | 'resolved_by_provider' | 'awaiting' | 'payment_confirmed'; // 💰 Novo: pagamento confirmado
 
 interface PendingAppointment {
     id: number;
     clientName?: string;
     clientPhone?: string;
     serviceName?: string;
+    servicePrice?: number | null; // 💰 Preço do serviço
     originalDate?: string | Date; // Can be string from API or Date object
     providerName?: string;
     executionNotes?: string;
+    paymentNotes?: string; // 💰 Notas de pagamento
     clientId?: number;
     clientAddress?: {
         cep: string;
@@ -44,6 +47,7 @@ interface PendingAppointment {
     technicianId?: number;
     teamId?: number;
     rescheduleCount?: number;
+    pendingType?: 'execution' | 'payment'; // 💰 Tipo de pendĂȘncia
 }
 
 interface ResolvePendingModalProps {
@@ -62,6 +66,7 @@ const pendingReasonLabels: Record<string, string> = {
     nao_realizado_cliente_recusou: "Cliente recusou",
     nao_realizado_falta_material: "Falta de material",
     nao_realizado_outro: "Outro motivo",
+    payment_pending: "Falta de pagamento", // 💰 Novo label
 };
 
 const actionLabels: Record<ResolutionActionType, string> = {
@@ -69,6 +74,7 @@ const actionLabels: Record<ResolutionActionType, string> = {
     cancelled: "Cancelar definitivamente",
     resolved_by_provider: "Resolvido pelo prestador",
     awaiting: "Aguardando retorno",
+    payment_confirmed: "Confirmar pagamento", // 💰 Novo label
 };
 
 export function ResolvePendingModal({
@@ -135,6 +141,8 @@ export function ResolvePendingModal({
                 return 'resolved_by_provider';
             case 'nao_realizado_cliente_recusou':
                 return 'cancelled';
+            case 'payment_pending': // 💰 Sugerir confirmar pagamento
+                return 'payment_confirmed';
             default:
                 return 'rescheduled';
         }
@@ -154,6 +162,8 @@ export function ResolvePendingModal({
                 return 'bg-gray-500';
             case 'nao_realizado_falta_material':
                 return 'bg-amber-500';
+            case 'payment_pending': // 💰 Cor para pendĂȘncia de pagamento
+                return 'bg-red-600';
             default:
                 return 'bg-burnt-yellow';
         }
@@ -194,6 +204,11 @@ export function ResolvePendingModal({
             // Para "resolvido pelo prestador": descrição é obrigatória
             if (!providerResolutionDetails || providerResolutionDetails.trim() === '') {
                 missingFields.push('Descrição da Resolução');
+            }
+        } else if (resolutionAction === 'payment_confirmed') {
+            // 💰 Para confirmar pagamento: notas de resolução são obrigatórias
+            if (!resolutionNotes || resolutionNotes.trim() === '') {
+                missingFields.push('Observações sobre o pagamento');
             }
         }
         // Para "awaiting" (aguardando retorno): nenhum campo obrigatório
@@ -328,6 +343,10 @@ export function ResolvePendingModal({
                                 <RadioGroupItem value="awaiting" id="awaiting" />
                                 <Label htmlFor="awaiting" className="cursor-pointer font-normal">⏸️ Aguardando retorno</Label>
                             </div>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="payment_confirmed" id="payment_confirmed" />
+                                <Label htmlFor="payment_confirmed" className="cursor-pointer font-normal">💰 Confirmar pagamento</Label>
+                            </div>
                         </RadioGroup>
                     </div>
 
@@ -435,6 +454,49 @@ export function ResolvePendingModal({
                                     placeholder="Descreva como o problema foi resolvido"
                                 />
                                 {!providerResolutionDetails && validationError && (
+                                    <p className="text-sm text-red-600 mt-1">Este campo é obrigatório</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 💰 Confirmação de Pagamento */}
+                    {resolutionAction === 'payment_confirmed' && (
+                        <div className="space-y-3 p-4 border rounded-lg bg-green-50 dark:bg-green-950">
+                            <h3 className="font-semibold">💰 Confirmação de Pagamento</h3>
+
+                            {/* Mostrar valor do serviço */}
+                            {appointment.servicePrice !== null && appointment.servicePrice !== undefined && (
+                                <div className="p-3 bg-white dark:bg-zinc-900 border rounded-lg">
+                                    <Label className="text-sm text-muted-foreground">Valor do Serviço</Label>
+                                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                                        R$ {Number(appointment.servicePrice).toFixed(2).replace('.', ',')}
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Notas sobre pagamento (preenchidas pelo prestador) */}
+                            {appointment.paymentNotes && (
+                                <div className="p-3 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 rounded">
+                                    <Label className="text-sm font-semibold">Motivo informado pelo prestador:</Label>
+                                    <p className="text-sm mt-1">{appointment.paymentNotes}</p>
+                                </div>
+                            )}
+
+                            {/* Campo de observações (obrigatório) */}
+                            <div>
+                                <Label htmlFor="paymentResolutionNotes" className="text-red-600">
+                                    Observações sobre o pagamento *
+                                </Label>
+                                <Textarea
+                                    id="paymentResolutionNotes"
+                                    value={resolutionNotes}
+                                    onChange={(e) => setResolutionNotes(e.target.value)}
+                                    rows={3}
+                                    className={!resolutionNotes && validationError ? 'border-red-500 ring-red-500' : ''}
+                                    placeholder="Ex: Pago via PIX em 28/12, Recebido em dinheiro, etc."
+                                />
+                                {!resolutionNotes && validationError && (
                                     <p className="text-sm text-red-600 mt-1">Este campo é obrigatório</p>
                                 )}
                             </div>

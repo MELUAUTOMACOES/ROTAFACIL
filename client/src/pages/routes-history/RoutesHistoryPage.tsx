@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient"; // você já usa no VehicleForm
 import { getAuthHeaders } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import { usePendingAppointments } from "@/hooks/usePendingAppointments";
 import { ToastAction } from "@/components/ui/toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -326,13 +327,7 @@ export default function RoutesHistoryPage() {
   console.log('🔍 [ROUTES HISTORY] Aplicando filtros:', filters);
 
   // Query para pendências (agendamentos não concluídos de rotas finalizadas)
-  const { data: pendingAppointments = [], isLoading: isLoadingPending } = useQuery({
-    queryKey: ['/api/pending-appointments'],
-    queryFn: async () => {
-      const res = await apiRequest("GET", "/api/pending-appointments");
-      return res.json();
-    }
-  });
+  const { pendingAppointments, isLoading: isLoadingPending } = usePendingAppointments();
 
   const getExecutionStatusColor = (status: string | null) => {
     if (!status) return 'bg-gray-100 text-gray-800 border-gray-200';
@@ -2688,7 +2683,12 @@ export default function RoutesHistoryPage() {
             setSelectedPendingAppt(null);
           }}
           appointment={selectedPendingAppt}
-          pendingReason={selectedPendingAppt.executionStatus || 'nao_realizado_outro'}
+          pendingReason={
+            // 💰 Se for pendência de pagamento, usar 'payment_pending'
+            selectedPendingAppt?.pendingType === 'payment'
+              ? 'payment_pending'
+              : (selectedPendingAppt?.executionStatus || 'nao_realizado_outro')
+          }
           onResolve={handleResolveSubmit}
         />
       )}

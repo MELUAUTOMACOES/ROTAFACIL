@@ -1,7 +1,9 @@
 import { Link, useLocation } from "wouter";
 import logoImg from "@assets/SEM FUNDO_1750819798590.png";
 import { useAuth } from "@/lib/auth";
+import { usePendingAppointments } from "@/hooks/usePendingAppointments";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Calendar,
   Car,
@@ -40,7 +42,7 @@ interface SidebarProps {
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Agendamentos", href: "/appointments", icon: Calendar },
-  { name: "Ache uma data", href: "/find-date", icon: Search },
+  { name: "Encontre uma data", href: "/find-date", icon: Search },
   { name: "Romaneios - Histórico de Rotas", href: "/routes-history", icon: History },
   { name: "Prestadores", href: "/prestadores", icon: Truck },
   { name: "Clientes", href: "/clients", icon: Users },
@@ -52,6 +54,7 @@ const navigation = [
 export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCollapse }: SidebarProps) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const { pendingCount } = usePendingAppointments();
 
   const isActive = (href: string) => {
     if (href === "/dashboard" && (location === "/" || location === "/dashboard")) {
@@ -139,6 +142,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
               const Icon = item.icon;
               const active = isActive(item.href);
 
+              // Check if this is the Routes History item
+              const isRoutesHistory = item.href === '/routes-history';
+              const hasPending = isRoutesHistory && pendingCount > 0;
+
               const LinkContent = (
                 <Link
                   href={item.href}
@@ -151,8 +158,24 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
                   `}
                   title={isCollapsed ? item.name : undefined}
                 >
-                  <Icon className={`h-5 w-5 ${isCollapsed ? '' : 'mr-3'} ${active ? "text-amber-600 dark:text-amber-500" : "text-gray-500 dark:text-zinc-400"}`} />
-                  {!isCollapsed && <span className="truncate">{item.name}</span>}
+                  <div className="relative">
+                    <Icon className={`h-5 w-5 ${isCollapsed ? '' : 'mr-3'} ${active ? "text-amber-600 dark:text-amber-500" : "text-gray-500 dark:text-zinc-400"}`} />
+                    {/* Badge indicator for collapsed state - red dot */}
+                    {hasPending && isCollapsed && (
+                      <span className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-red-500 rounded-full border border-white dark:border-black" />
+                    )}
+                  </div>
+                  {!isCollapsed && (
+                    <>
+                      <span className="truncate flex-1">{item.name}</span>
+                      {/* Badge for expanded state - red number */}
+                      {hasPending && (
+                        <Badge variant="destructive" className="ml-auto bg-red-500 hover:bg-red-600 text-white">
+                          {pendingCount}
+                        </Badge>
+                      )}
+                    </>
+                  )}
                 </Link>
               );
 

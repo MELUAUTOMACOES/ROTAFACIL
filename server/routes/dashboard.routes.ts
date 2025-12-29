@@ -7,10 +7,10 @@ import {
     services,
     technicians,
     teams,
-
     clients,
     vehicles,
-    vehicleDocuments
+    vehicleDocuments,
+    pendingResolutions // 📊 Adicionar para buscar histórico de pendências
 } from "@shared/schema";
 import { eq, and, sql, gte, lte, or, isNull, desc, ne } from "drizzle-orm";
 
@@ -692,12 +692,15 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
             const periodStart = startDate ? new Date(startDate as string) : startOfMonth;
             const periodEnd = endDate ? new Date(endDate as string) : endOfMonth;
 
-            // Base condition
+            // Base condition - pendências de execução OU pagamento
             let baseCondition = and(
                 eq(appointments.userId, req.user.userId),
                 gte(appointments.scheduledDate, periodStart),
                 lte(appointments.scheduledDate, periodEnd),
-                sql`${appointments.executionStatus} LIKE 'nao_realizado%'`
+                or(
+                    sql`${appointments.executionStatus} LIKE 'nao_realizado%'`, // Pendência de execução
+                    eq(appointments.paymentStatus, 'nao_pago') // 💰 Pendência de pagamento
+                )
             );
 
             // Adicionar filtros
@@ -708,25 +711,67 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 baseCondition = and(baseCondition, eq(appointments.teamId, parseInt(teamId as string)));
             }
 
-            // Buscar agendamentos não realizados
+            // Buscar agendamentos não realizados OU com pagamento pendente (ATIVOS)
             const notCompletedAppointments = await db
                 .select({
                     id: appointments.id,
                     executionStatus: appointments.executionStatus,
+                    paymentStatus: appointments.paymentStatus,
                     technicianId: appointments.technicianId,
                     teamId: appointments.teamId,
                 })
                 .from(appointments)
                 .where(baseCondition);
 
-            // Agrupar por motivo
+            // 💡 Também buscar pendências JÁ RESOLVIDAS do período (histórico)
+            let resolvedCondition = and(
+                eq(appointments.userId, req.user.userId),
+                gte(appointments.scheduledDate, periodStart),
+                lte(appointments.scheduledDate, periodEnd)
+            );
+
+            if (technicianId) {
+                resolvedCondition = and(resolvedCondition, eq(appointments.technicianId, parseInt(technicianId as string)));
+            }
+            if (teamId) {
+                resolvedCondition = and(resolvedCondition, eq(appointments.teamId, parseInt(teamId as string)));
+            }
+
+            const resolvedPendencies = await db
+                .select({
+                    appointmentId: pendingResolutions.appointmentId,
+                    originalPendingReason: pendingResolutions.originalPendingReason,
+                    resolutionAction: pendingResolutions.resolutionAction,
+                })
+                .from(pendingResolutions)
+                .innerJoin(appointments, eq(pendingResolutions.appointmentId, appointments.id))
+                .where(resolvedCondition);
+
+            // Agrupar por motivo (ATIVOS + RESOLVIDOS)
             const reasonsMap = new Map<string, number>();
+
+            // Contar pendências ativas
             for (const apt of notCompletedAppointments) {
-                const reason = apt.executionStatus || "nao_realizado_outro";
+                // 💰 Se for pendência de pagamento, usar 'payment_pending' como motivo
+                let reason = apt.executionStatus || "nao_realizado_outro";
+                if (apt.paymentStatus === 'nao_pago' && apt.executionStatus === 'concluido') {
+                    reason = 'payment_pending';
+                }
                 reasonsMap.set(reason, (reasonsMap.get(reason) || 0) + 1);
             }
 
-            const total = notCompletedAppointments.length;
+            // Contar pendências resolvidas (histórico)
+            for (const resolution of resolvedPendencies) {
+                const reason = resolution.originalPendingReason || "nao_realizado_outro";
+                // Evitar duplicar se o agendamento também está em notCompletedAppointments
+                const isDuplicate = notCompletedAppointments.some(apt => apt.id === resolution.appointmentId);
+                if (!isDuplicate) {
+                    reasonsMap.set(reason, (reasonsMap.get(reason) || 0) + 1);
+                }
+            }
+
+            // Total deve ser a soma de TODOS os motivos (ativos + resolvidos)
+            const total = Array.from(reasonsMap.values()).reduce((sum, count) => sum + count, 0);
             const reasons = Array.from(reasonsMap.entries())
                 .map(([reason, count]) => ({
                     reason,
@@ -793,25 +838,9 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 byResponsible.sort((a, b) => b.count - a.count);
             }
 
-            // Calcular taxa de resolução (simplificado - olha se status mudou para completed ou cancelled)
-            const resolvedCount = await db
-                .select({ count: sql<number>`count(*)::int` })
-                .from(appointments)
-                .where(
-                    and(
-                        eq(appointments.userId, req.user.userId),
-                        gte(appointments.scheduledDate, periodStart),
-                        lte(appointments.scheduledDate, periodEnd),
-                        sql`${appointments.executionStatus} LIKE 'nao_realizado%'`,
-                        or(
-                            eq(appointments.status, "completed"),
-                            eq(appointments.status, "cancelled"),
-                            eq(appointments.status, "rescheduled")
-                        )
-                    )
-                );
-
-            const resolved = resolvedCount[0]?.count || 0;
+            // Calcular taxa de resolução correta: 
+            // (pendências já resolvidas / total de pendências do período) * 100
+            const resolved = resolvedPendencies.length;
             const resolutionRate = total > 0 ? Math.round((resolved / total) * 100) : 0;
 
             console.log(`✅ [DASHBOARD] Pendências: ${total} total, ${reasons.length} motivos, ${resolutionRate}% resolvidos`);
@@ -842,6 +871,7 @@ function formatNotCompletedReason(reason: string): string {
         "nao_realizado_problema_tecnico": "Problema técnico",
         "nao_realizado_falta_material": "Falta de material",
         "nao_realizado_outro": "Outro motivo",
+        "payment_pending": "Falta de pagamento", // 💰 Pendência de pagamento
         "concluido": "Concluído",
     };
     return labels[reason] || reason.replace("nao_realizado_", "").replace(/_/g, " ");

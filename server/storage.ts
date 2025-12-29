@@ -1115,13 +1115,22 @@ export class DatabaseStorage implements IStorage {
       const technician = apt.technicianId ? techniciansMap.get(apt.technicianId) : null;
       const team = apt.teamId ? teamsMap.get(apt.teamId) : null;
 
+      // Determinar tipo de pendência
+      const isPendingExecution = !apt.executionStatus || apt.executionStatus !== 'concluido';
+      const isPendingPayment = apt.paymentStatus === 'nao_pago';
+
+      // Se tem ambas pendências, priorizar execução
+      const pendingType = isPendingExecution ? 'execution' : (isPendingPayment ? 'payment' : 'execution');
+
       return {
         ...apt,
         routeDate: route?.date,
         routeTitle: route?.title,
         clientName: client?.name,
         serviceName: service?.name,
-        responsibleName: technician?.name || team?.name || 'N/A'
+        servicePrice: service?.price ? Number(service.price) : null, // 💰 Adicionar preço do serviço
+        responsibleName: technician?.name || team?.name || 'N/A',
+        pendingType, // 🏷️ Tipo de pendência: 'execution' ou 'payment'
       };
     });
 

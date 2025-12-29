@@ -269,7 +269,7 @@ export default function Home() {
                 <div className="w-16 h-16 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform duration-500">
                   <LayoutDashboard className="h-8 w-8 text-amber-500" />
                 </div>
-                <h3 className="text-2xl font-semibold text-white mb-4">Tudo em um lugar</h3>
+                <h3 className="text-2xl font-semibold text-white mb-4">Centralize informações</h3>
                 <p className="text-slate-400 text-lg leading-relaxed">
                   Clientes, técnicos, veículos, agendamentos e relatórios centralizados. Sem alternar entre planilhas e aplicativos.
                 </p>
@@ -392,7 +392,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Feature Highlight - Ache uma Data */}
+      {/* Feature Highlight - Encontre uma Data */}
       <section className="py-32 bg-black min-h-screen flex items-center">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
@@ -405,7 +405,7 @@ export default function Home() {
                     <div className="w-12 h-12 bg-amber-500 rounded-xl flex items-center justify-center">
                       <Search className="h-6 w-6 text-white" />
                     </div>
-                    <h4 className="font-semibold text-white text-lg">Ache uma Data</h4>
+                    <h4 className="font-semibold text-white text-lg">Encontre uma Data</h4>
                   </div>
 
                   <div className="space-y-4">
@@ -446,11 +446,11 @@ export default function Home() {
               </div>
 
               <h2 className="text-3xl md:text-5xl font-bold text-white mb-8">
-                Ache a melhor data para cada cliente
+                Encontre a melhor data para cada cliente
               </h2>
 
               <p className="text-lg md:text-xl text-slate-400 mb-10 leading-relaxed">
-                Ao agendar um novo atendimento, o sistema busca automaticamente as datas com <strong className="text-white">menor distância</strong> em relação aos outros agendamentos já existentes.
+                Ao agendar um novo atendimento, o sistema busca automaticamente as datas com <strong className="text-white">menor distância</strong> em relação aos outros agendamentos já existentes, e otimiza as rotas para que você não perca tempo.
               </p>
 
               <div className="space-y-6">
@@ -573,7 +573,7 @@ export default function Home() {
                 <div className="w-14 h-14 bg-zinc-800 rounded-xl flex items-center justify-center mb-6">
                   <Search className="h-7 w-7 text-amber-500" />
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-3">Ache uma Data</h3>
+                <h3 className="text-xl font-semibold text-white mb-3">Encontre uma Data</h3>
                 <p className="text-slate-400">
                   Encontre a melhor data considerando proximidade. Agendamentos assertivos que geram economia.
                 </p>
@@ -591,15 +591,15 @@ export default function Home() {
               Simples de usar
             </h2>
             <p className="text-slate-400 text-lg md:text-xl">
-              Comece a usar em minutos, não em dias.
+              Comece a usar em minutos.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-12">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-12">
             <div className="text-center group">
               <div className="w-20 h-20 bg-zinc-900 border-2 border-zinc-800 group-hover:border-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-8 transition-all duration-300 relative">
                 <span className="text-3xl font-bold text-amber-500">1</span>
-                <div className="absolute -right-10 top-1/2 hidden md:block">
+                <div className="absolute -right-10 top-1/2 hidden lg:block">
                   <ChevronRight className="h-8 w-8 text-zinc-700" />
                 </div>
               </div>
@@ -612,23 +612,36 @@ export default function Home() {
             <div className="text-center group">
               <div className="w-20 h-20 bg-zinc-900 border-2 border-zinc-800 group-hover:border-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-8 transition-all duration-300 relative">
                 <span className="text-3xl font-bold text-amber-500">2</span>
-                <div className="absolute -right-10 top-1/2 hidden md:block">
+                <div className="absolute -right-10 top-1/2 hidden lg:block">
                   <ChevronRight className="h-8 w-8 text-zinc-700" />
                 </div>
               </div>
               <h3 className="text-xl font-semibold text-white mb-4">Agende</h3>
               <p className="text-slate-400 text-lg">
-                Crie atendimentos no calendário. Use "Ache uma Data" para escolher a melhor opção.
+                Crie atendimentos no calendário. Use "Encontre uma Data" para escolher a melhor opção.
+              </p>
+            </div>
+
+            <div className="text-center group">
+              <div className="w-20 h-20 bg-zinc-900 border-2 border-zinc-800 group-hover:border-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-8 transition-all duration-300 relative">
+                <span className="text-3xl font-bold text-amber-500">3</span>
+                <div className="absolute -right-10 top-1/2 hidden lg:block">
+                  <ChevronRight className="h-8 w-8 text-zinc-700" />
+                </div>
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-4">Acompanhe</h3>
+              <p className="text-slate-400 text-lg">
+                Roteirize, envie para o técnico e monitore a execução em tempo real.
               </p>
             </div>
 
             <div className="text-center group">
               <div className="w-20 h-20 bg-zinc-900 border-2 border-zinc-800 group-hover:border-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-8 transition-all duration-300">
-                <span className="text-3xl font-bold text-amber-500">3</span>
+                <span className="text-3xl font-bold text-amber-500">4</span>
               </div>
-              <h3 className="text-xl font-semibold text-white mb-4">Acompanhe</h3>
+              <h3 className="text-xl font-semibold text-white mb-4">Gerencie</h3>
               <p className="text-slate-400 text-lg">
-                Roteirize, envie para o técnico e monitore a execução em tempo real.
+                Analise métricas, controle custos e tome decisões baseadas em dados reais do dashboard.
               </p>
             </div>
           </div>
@@ -688,7 +701,7 @@ export default function Home() {
             </Card>
 
             {/* Professional - Highlighted */}
-            <Card className="bg-gradient-to-b from-amber-500/10 to-zinc-900 border-amber-500/50 relative hover:border-amber-500 transition-all duration-300">
+            <Card className="bg-gradient-to-b from-[#B8860B]/45 via-[#1a1a1a]/90 to-black border-[#DAA520]/40 relative hover:border-[#DAA520] transition-all duration-300">
               <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                 <span className="bg-gradient-to-r from-amber-500 to-orange-600 text-white text-sm font-semibold px-5 py-2 rounded-full shadow-lg">
                   Mais popular
@@ -696,10 +709,11 @@ export default function Home() {
               </div>
               <CardContent className="p-8 pt-10">
                 <h3 className="text-xl font-bold text-white mb-2">Profissional</h3>
-                <p className="text-slate-400 text-sm mb-6">Para empresas em crescimento</p>
+                <p className="text-black text-sm mb-6">
+                  Para empresas em crescimento</p>
                 <div className="mb-8">
                   <span className="text-4xl font-bold text-white">R$ 249</span>
-                  <span className="text-slate-400">/mês</span>
+                  <span className="text-[#E5E5E5]">/mês</span>
                 </div>
                 <ul className="space-y-4 mb-8">
                   <li className="flex items-center gap-3 text-sm text-slate-300">
@@ -850,7 +864,7 @@ export default function Home() {
 
             <Card className="bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 transition-colors">
               <CardContent className="p-6">
-                <h4 className="font-semibold text-white mb-3 text-lg">Como funciona o "Ache uma Data"?</h4>
+                <h4 className="font-semibold text-white mb-3 text-lg">Como funciona o "Encontre uma Data"?</h4>
                 <p className="text-slate-400">
                   Ao informar o endereço do cliente e o serviço desejado, o sistema busca as datas onde há técnicos disponíveis e ordena pela menor distância em relação aos outros atendimentos já agendados, garantindo rotas mais econômicas.
                 </p>

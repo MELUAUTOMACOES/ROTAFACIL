@@ -111,7 +111,7 @@ Regras de disponibilidade diária e validação de conflitos entre técnicos e e
 
 ---
 
-## 🔎 Funcionalidade "Ache uma Data" (Visão Resumida)
+## 🔎 Funcionalidade "Encontre uma Data" (Visão Resumida)
 
 Funcionalidade para sugerir melhores datas de agendamento considerando disponibilidade e distância.
 
