@@ -23,7 +23,8 @@ import {
   ChevronRight,
   Truck,
   BarChart3,
-  FileSearch
+  FileSearch,
+  TrendingUp
 } from "lucide-react";
 import {
   Tooltip,
@@ -81,7 +82,14 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
   if (isSuperAdmin) {
     navItems = [
       ...navItems,
-      { name: "Métricas", href: "/admin/metrics", icon: BarChart3 }
+      { name: "Métricas", href: "/admin/metrics", icon: BarChart3 },
+      { name: "ADS", href: "/ads", icon: TrendingUp }
+    ];
+  } else if (user?.role === 'admin') {
+    // Admin normal também pode ver ADS
+    navItems = [
+      ...navItems,
+      { name: "ADS", href: "/ads", icon: TrendingUp }
     ];
   }
 

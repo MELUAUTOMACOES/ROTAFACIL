@@ -29,6 +29,7 @@ import AcceptInvite from "./pages/AcceptInvite";
 import CompanyUsers from "./pages/CompanyUsers";
 import AdminMetrics from "./pages/AdminMetrics";
 import AdminAudit from "./pages/AdminAudit";
+import Ads from "./pages/Ads";
 import Layout from "./components/Layout";
 import NotFound from "@/pages/not-found";
 
@@ -94,6 +95,7 @@ function AppRoutes() {
             <Route path="/company/users" component={CompanyUsers} />
             <Route path="/convite/:token" component={AcceptInvite} />
             <Route path="/admin/audit" component={AdminAudit} />
+            <Route path="/ads" component={Ads} />
 
             <Route path="/change-password" component={() => <ChangePassword isRequired={false} />} />
             <Route component={NotFound} />

@@ -36,6 +36,7 @@ import { registerVehicleExtensionRoutes } from "./routes/vehicle-extensions.rout
 import { registerMetricsRoutes, trackFeatureUsage } from "./routes/metrics.routes";
 import { registerAuditRoutes } from "./routes/audit.routes";
 import { registerDashboardRoutes } from "./routes/dashboard.routes";
+import { registerAdsMetricsRoutes } from "./routes/ads-metrics.routes";
 import { trackCompanyAudit, getAuditDescription } from "./audit.helpers";
 import { isAccessAllowed, getAccessDeniedMessage } from "./access-schedule-validator";
 
@@ -258,6 +259,74 @@ function sleep(ms: number) {
 // ================================================================
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // ==================== PUBLIC ROUTES (NO AUTH) ====================
+
+  // 📊 Landing Page Analytics - Endpoint público para rastreamento de eventos
+  // Rate limit mais restritivo para evitar spam/abuse
+  const analyticsRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minuto
+    max: 30, // Máximo 30 eventos por minuto por IP
+    message: { message: "Too many analytics events" },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  app.post("/api/metrics/event", analyticsRateLimiter, async (req: any, res) => {
+    try {
+      const { eventName, page, deviceType, utmSource, utmMedium, utmCampaign, utmContent, utmTerm, eventData, sessionId } = req.body;
+
+      // Validação básica
+      if (!eventName || typeof eventName !== 'string') {
+        return res.status(400).json({ message: "eventName é obrigatório" });
+      }
+
+      if (!page || typeof page !== 'string') {
+        return res.status(400).json({ message: "page é obrigatório" });
+      }
+
+      if (!deviceType || !['mobile', 'desktop'].includes(deviceType)) {
+        return res.status(400).json({ message: "deviceType deve ser 'mobile' ou 'desktop'" });
+      }
+
+      // Lista de eventos permitidos (whitelist)
+      const allowedEvents = ['page_view', 'scroll_50', 'scroll_75', 'click_cta_principal', 'click_whatsapp', 'signup_start', 'signup_complete'];
+      if (!allowedEvents.includes(eventName)) {
+        return res.status(400).json({ message: "Evento não permitido" });
+      }
+
+      // Extrair informações do request
+      const userAgent = req.headers['user-agent'] || 'unknown';
+      const ipAddress = req.ip || req.connection?.remoteAddress || 'unknown';
+
+      // Salvar evento no banco
+      const event = await storage.createAnalyticsEvent({
+        eventName,
+        page,
+        deviceType,
+        utmSource: utmSource || null,
+        utmMedium: utmMedium || null,
+        utmCampaign: utmCampaign || null,
+        utmContent: utmContent || null,
+        utmTerm: utmTerm || null,
+        eventData: eventData || null,
+        sessionId: sessionId || null,
+        userAgent,
+        ipAddress,
+      });
+
+      // Log em desenvolvimento
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`📊 [ANALYTICS] Evento registrado: ${eventName} | Page: ${page} | Device: ${deviceType} | Session: ${sessionId || 'N/A'}`);
+      }
+
+      res.status(201).json({ success: true, eventId: event.id });
+    } catch (error: any) {
+      console.error("❌ [ANALYTICS] Erro ao registrar evento:", error);
+      // Não expor detalhes do erro para endpoint público
+      res.status(500).json({ message: "Erro ao registrar evento" });
+    }
+  });
+
   // ==================== PROVIDER ROUTES ====================
 
   // 1. Obter rota ativa do prestador (Hoje)
@@ -4591,6 +4660,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Erro interno ao buscar CEP" });
     }
   });
+
+  // 📊 Registrar rotas de métricas ADS
+  registerAdsMetricsRoutes(app, authenticateToken);
 
   return httpServer;
 }

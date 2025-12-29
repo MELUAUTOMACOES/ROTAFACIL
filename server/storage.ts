@@ -22,6 +22,7 @@ import {
   type FeatureUsage, type InsertFeatureUsage,
   type AppointmentHistory, type InsertAppointmentHistory,
   type FuelRecord, type InsertFuelRecord,
+  type AnalyticsEvent, type InsertAnalyticsEvent,
   users, clients, services, technicians, vehicles, appointments, appointmentHistory, checklists, businessRules, teams, teamMembers, accessSchedules,
   companies, memberships, invitations,
   dateRestrictions,
@@ -31,7 +32,8 @@ import {
   vehicleDocuments, vehicleMaintenances, maintenanceWarranties,
   featureUsage,
   trackingLocations,
-  fuelRecords
+  fuelRecords,
+  analyticsEvents
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, ilike, sql, inArray, isNotNull, ne, isNull, gte, lte, desc } from "drizzle-orm";
@@ -223,6 +225,8 @@ export interface IStorage {
     monthlyEvolution: { month: string; totalSpent: number; totalLiters: number }[];
   }>;
 
+  // Analytics Events (Traffic Metrics - Landing Page)
+  createAnalyticsEvent(data: InsertAnalyticsEvent): Promise<AnalyticsEvent>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1831,6 +1835,18 @@ export class DatabaseStorage implements IStorage {
       byVehicle,
       monthlyEvolution
     };
+  }
+  // ==================== ANALYTICS EVENTS ====================
+  /**
+   * Registra um evento de analytics (landing page tracking)
+   * @param data - Dados do evento (nome, UTMs, device, etc.)
+   */
+  async createAnalyticsEvent(data: InsertAnalyticsEvent): Promise<AnalyticsEvent> {
+    const [event] = await db
+      .insert(analyticsEvents)
+      .values(data)
+      .returning();
+    return event;
   }
 }
 

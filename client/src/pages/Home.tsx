@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import logoImg from "@assets/SEM FUNDO_1750819798590.png";
 import FlowingRoad from "@/components/FlowingRoad";
+import { useAnalytics } from "@/hooks/useAnalytics";
 import {
   Clock,
   DollarSign,
@@ -31,6 +32,9 @@ export default function Home() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("");
 
+  // 📊 Analytics tracking hook
+  const { trackPageView, trackCta, setupScrollTracking } = useAnalytics();
+
   // Refs para as seções
   const heroRef = useRef<HTMLElement>(null);
   const beneficiosRef = useRef<HTMLElement>(null);
@@ -39,6 +43,19 @@ export default function Home() {
 
   // Animação de pins 
   const [pins, setPins] = useState<Array<{ id: number, x: number, y: number, delay: number, size: number }>>([]);
+
+  // 📊 Page view e scroll tracking
+  useEffect(() => {
+    // Dispara evento de page_view
+    trackPageView();
+
+    // Configura scroll tracking (50% e 75%)
+    const cleanupScroll = setupScrollTracking();
+
+    return () => {
+      cleanupScroll();
+    };
+  }, [trackPageView, setupScrollTracking]);
 
   useEffect(() => {
     const newPins = Array.from({ length: 12 }, (_, i) => ({
@@ -203,7 +220,11 @@ export default function Home() {
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
             <Link href="/login">
-              <Button size="lg" className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold px-8 h-14 text-base shadow-lg shadow-amber-500/25 transition-all hover:shadow-amber-500/40 hover:scale-105">
+              <Button
+                size="lg"
+                className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold px-8 h-14 text-base shadow-lg shadow-amber-500/25 transition-all hover:shadow-amber-500/40 hover:scale-105"
+                onClick={() => trackCta('hero')}
+              >
                 Começar agora
                 <ChevronRight className="ml-2 h-5 w-5" />
               </Button>
@@ -885,7 +906,11 @@ export default function Home() {
             Comece hoje mesmo e veja a diferença na sua gestão de frotas.
           </p>
           <Link href="/login">
-            <Button size="lg" className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold px-12 h-16 text-lg shadow-lg shadow-amber-500/25 transition-all hover:shadow-amber-500/40 hover:scale-105">
+            <Button
+              size="lg"
+              className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold px-12 h-16 text-lg shadow-lg shadow-amber-500/25 transition-all hover:shadow-amber-500/40 hover:scale-105"
+              onClick={() => trackCta('footer')}
+            >
               Começar agora
               <ChevronRight className="ml-2 h-6 w-6" />
             </Button>

@@ -1156,6 +1156,29 @@ export const insertAppointmentHistorySchema = createInsertSchema(appointmentHist
   createdAt: true,
 });
 
+// Analytics Events - Rastreamento de métricas de tráfego pago (landing page)
+export const analyticsEvents = pgTable("analytics_events", {
+  id: serial("id").primaryKey(),
+  eventName: text("event_name").notNull(), // page_view, scroll_50, scroll_75, click_cta_principal, etc.
+  eventData: jsonb("event_data"), // Dados customizados do evento
+  utmSource: text("utm_source"),
+  utmMedium: text("utm_medium"),
+  utmCampaign: text("utm_campaign"),
+  utmContent: text("utm_content"),
+  utmTerm: text("utm_term"),
+  page: text("page").notNull(), // URL/path da página
+  deviceType: text("device_type").notNull(), // mobile | desktop
+  sessionId: text("session_id"), // Para agrupar eventos do mesmo visitante
+  userAgent: text("user_agent"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type Company = typeof companies.$inferSelect;
 export type InsertCompany = z.infer<typeof insertCompanySchema>;
@@ -1234,3 +1257,5 @@ export type AppointmentHistory = typeof appointmentHistory.$inferSelect;
 export type InsertAppointmentHistory = z.infer<typeof insertAppointmentHistorySchema>;
 export type FuelRecord = typeof fuelRecords.$inferSelect;
 export type InsertFuelRecord = z.infer<typeof insertFuelRecordSchema>;
+export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
