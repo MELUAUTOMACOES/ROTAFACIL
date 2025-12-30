@@ -12,7 +12,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { UserCog, Mail, Phone, Wrench, MapPin, FileText, Clock as ClockIcon } from "lucide-react";
+import { UserCog, Mail, Phone, Wrench, MapPin, FileText, Clock as ClockIcon, Camera, X } from "lucide-react";
+import { useState, useRef } from "react";
 
 // Função para buscar endereço por CEP - igual ao cadastro de cliente
 async function buscarEnderecoPorCep(cep: string) {
@@ -32,7 +33,9 @@ interface TechnicianFormProps {
 export default function TechnicianForm({ technician, services, onClose }: TechnicianFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(technician?.photoUrl || null);
+
   const form = useForm<InsertTechnician>({
     resolver: zodResolver(extendedInsertTechnicianSchema),
     defaultValues: technician ? {
@@ -64,6 +67,7 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
       horarioAlmocoMinutos: technician.horarioAlmocoMinutos || 60,
       diasTrabalho: technician.diasTrabalho || ['segunda', 'terca', 'quarta', 'quinta', 'sexta'],
       isActive: technician.isActive,
+      photoUrl: technician.photoUrl || "",
     } : {
       name: "",
       email: "",
@@ -93,6 +97,7 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
       horarioAlmocoMinutos: 60,
       diasTrabalho: ['segunda', 'terca', 'quarta', 'quinta', 'sexta'],
       isActive: true,
+      photoUrl: "",
     },
   });
 
@@ -106,17 +111,17 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
     },
     onSuccess: (result) => {
       console.log('✅ TechnicianForm - Técnico criado com sucesso:', result);
-      
+
       // Mostrar toast de sucesso imediatamente
       toast({
         title: "Sucesso",
         description: "Técnico criado com sucesso",
       });
-      
+
       // Fechar modal primeiro para evitar conflitos DOM
       console.log('🚪 TechnicianForm - Fechando modal antes de invalidar cache');
       onClose();
-      
+
       // Invalidar cache após o modal ser fechado
       requestAnimationFrame(() => {
         console.log('🔃 TechnicianForm - Invalidando cache após fechamento do modal');
@@ -144,17 +149,17 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
     },
     onSuccess: (result) => {
       console.log('✅ TechnicianForm - Técnico atualizado com sucesso:', result);
-      
+
       // Mostrar toast de sucesso imediatamente
       toast({
         title: "Sucesso",
         description: "Técnico atualizado com sucesso",
       });
-      
+
       // Fechar modal primeiro para evitar conflitos DOM
       console.log('🚪 TechnicianForm - Fechando modal antes de invalidar cache (atualização)');
       onClose();
-      
+
       // Invalidar cache após o modal ser fechado
       requestAnimationFrame(() => {
         console.log('🔃 TechnicianForm - Invalidando cache após fechamento do modal (atualização)');
@@ -193,6 +198,75 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          {/* Upload de Foto do Técnico */}
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              {photoPreview ? (
+                <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-burnt-yellow">
+                  <img src={photoPreview} alt="Foto do técnico" className="w-full h-full object-cover" />
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-gray-200 dark:bg-zinc-700 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-zinc-600">
+                  <Camera className="w-8 h-8 text-gray-400 dark:text-zinc-500" />
+                </div>
+              )}
+              {photoPreview && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhotoPreview(null);
+                    form.setValue("photoUrl", "");
+                  }}
+                  className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white hover:bg-red-600"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+            <div className="flex-1">
+              <Label className="text-sm font-medium">Foto do Técnico</Label>
+              <p className="text-xs text-gray-500 dark:text-zinc-400 mb-2">
+                Foto para identificação no mapa em tempo real (máx. 200KB)
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+
+                  if (file.size > 200 * 1024) {
+                    toast({
+                      title: "Arquivo muito grande",
+                      description: "A foto deve ter no máximo 200KB",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    const base64 = event.target?.result as string;
+                    setPhotoPreview(base64);
+                    form.setValue("photoUrl", base64);
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Camera className="w-4 h-4 mr-2" />
+                {photoPreview ? "Alterar foto" : "Adicionar foto"}
+              </Button>
+            </div>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
             <FormField
               control={form.control}
@@ -245,19 +319,19 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                     Email
                   </FormLabel>
                   <FormControl>
-                    <Input 
-                      type="email" 
-                      placeholder="email@exemplo.com" 
-                      {...field} 
-                      value={field.value || ""} 
+                    <Input
+                      type="email"
+                      placeholder="email@exemplo.com"
+                      {...field}
+                      value={field.value || ""}
                       onChange={(e) => {
                         // Validação de email: deve conter @ para ser válido
                         const value = e.target.value;
                         field.onChange(value);
                         if (value && !value.includes('@')) {
-                          form.setError('email', { 
-                            type: 'manual', 
-                            message: 'Email deve conter o caractere @' 
+                          form.setError('email', {
+                            type: 'manual',
+                            message: 'Email deve conter o caractere @'
                           });
                         } else {
                           form.clearErrors('email');
@@ -280,9 +354,9 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                     Telefone *
                   </FormLabel>
                   <FormControl>
-                    <Input 
-                      placeholder="(11) 99999-9999" 
-                      {...field} 
+                    <Input
+                      placeholder="(11) 99999-9999"
+                      {...field}
                       onChange={(e) => {
                         // Formatação automática do telefone: aceitar apenas números e formatar
                         let value = e.target.value.replace(/\D/g, '');
@@ -310,7 +384,7 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
               <MapPin className="h-5 w-5 text-gray-500" />
               <h3 className="text-lg font-medium">Endereço</h3>
             </div>
-            
+
             <div className="grid gap-4 md:grid-cols-2">
               <FormField
                 control={form.control}
@@ -463,7 +537,7 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
             <p className="text-sm text-gray-500">
               Se preenchido, será usado como ponto de partida na roteirização. Caso contrário, será usado o endereço padrão da empresa.
             </p>
-            
+
             <div className="grid gap-4 md:grid-cols-2">
               <FormField
                 control={form.control}
@@ -618,7 +692,7 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
             <p className="text-sm text-gray-500">
               Defina os horários e dias de trabalho do técnico. Estes horários serão usados para calcular a disponibilidade.
             </p>
-            
+
             <div className="grid gap-4 md:grid-cols-3">
               <FormField
                 control={form.control}
@@ -770,7 +844,7 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
               <Wrench className="h-5 w-5 text-gray-500" />
               <h3 className="text-lg font-medium">Tipos de Serviços</h3>
             </div>
-            
+
             <FormField
               control={form.control}
               name="serviceIds"
@@ -831,15 +905,15 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
           </div>
 
           <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
-            <Button 
-              type="button" 
+            <Button
+              type="button"
               variant="outline"
               onClick={onClose}
             >
               Cancelar
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               disabled={isLoading}
               className="bg-black text-white hover:bg-gray-800"
             >

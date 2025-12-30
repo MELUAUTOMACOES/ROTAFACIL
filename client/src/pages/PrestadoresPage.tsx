@@ -369,15 +369,22 @@ export default function PrestadoresPage() {
 
     const handleStartRoute = async () => {
         if (routeData?.route?.id) {
-            let location = null;
+            let locationData = null;
             try {
-                location = await tracker.getCurrentLocation();
+                const position = await tracker.getCurrentLocation();
+                // Extrair dados corretos do GeolocationPosition para o formato do backend
+                locationData = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                    timestamp: new Date(position.timestamp).toISOString(),
+                    accuracy: position.coords.accuracy,
+                };
             } catch (e) {
                 console.warn("Não foi possível obter localização ao iniciar rota", e);
             }
             await startRouteMutation.mutateAsync({
                 id: routeData.route.id,
-                startLocationData: location
+                startLocationData: locationData
             });
         }
     };
@@ -385,10 +392,17 @@ export default function PrestadoresPage() {
     const handleSaveAppointment = async (data: any) => {
         if (selectedAppointmentData) {
             // Se for conclusão ou falha, tenta pegar localização final
-            let endLocation = undefined;
+            let endLocationData = undefined;
             if (data.executionStatus && ['concluido', 'nao_realizado_cliente_ausente', 'nao_realizado_cliente_pediu_remarcacao', 'nao_realizado_problema_tecnico', 'nao_realizado_endereco_incorreto', 'nao_realizado_cliente_recusou', 'nao_realizado_falta_material', 'nao_realizado_outro'].includes(data.executionStatus)) {
                 try {
-                    endLocation = await tracker.getCurrentLocation();
+                    const position = await tracker.getCurrentLocation();
+                    // Extrair dados corretos do GeolocationPosition
+                    endLocationData = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude,
+                        timestamp: new Date(position.timestamp).toISOString(),
+                        accuracy: position.coords.accuracy,
+                    };
                 } catch (e) {
                     console.warn("Sem localização de fim de atendimento");
                 }
@@ -398,7 +412,7 @@ export default function PrestadoresPage() {
                 id: selectedAppointmentData.appointment.id,
                 data: {
                     ...data,
-                    executionEndLocation: endLocation
+                    executionEndLocation: endLocationData
                 }
             });
         }
@@ -416,9 +430,16 @@ export default function PrestadoresPage() {
                 finalMotivo = finalizeMotivo ? `[Finalizado com Pendências] ${finalizeMotivo}` : '[Finalizado com Pendências]';
             }
 
-            let routeEndLocationData = null;
+            let endLocationData = null;
             try {
-                routeEndLocationData = await tracker.getCurrentLocation();
+                const position = await tracker.getCurrentLocation();
+                // Extrair dados corretos do GeolocationPosition
+                endLocationData = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                    timestamp: new Date(position.timestamp).toISOString(),
+                    accuracy: position.coords.accuracy,
+                };
             } catch (e) {
                 console.warn("Não foi possível obter localização ao finalizar rota", e);
             }
@@ -429,7 +450,7 @@ export default function PrestadoresPage() {
                     status: finalStatus,
                     motivo: finalMotivo,
                     routeEndLocation: routeEndLocation, // Onde finalizou o dia (tipo)
-                    endLocationData: routeEndLocationData // Coordenadas GPS
+                    endLocationData: endLocationData // Coordenadas GPS no formato correto
                 }
             });
         }

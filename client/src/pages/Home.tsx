@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import logoImg from "@assets/SEM FUNDO_1750819798590.png";
 import FlowingRoad from "@/components/FlowingRoad";
 import { WhatsAppFloatingButton } from "@/components/WhatsAppFloatingButton";
+import CookieBanner from "@/components/CookieBanner";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import {
   Clock,
@@ -948,6 +949,15 @@ export default function Home() {
           </div>
 
           <div className="mt-12 pt-8 border-t border-zinc-800 text-center">
+            <div className="flex flex-wrap justify-center gap-4 mb-4">
+              <Link href="/privacy" className="text-slate-500 hover:text-slate-300 text-sm transition-colors">
+                Política de Privacidade
+              </Link>
+              <span className="text-slate-700">|</span>
+              <Link href="/cookies" className="text-slate-500 hover:text-slate-300 text-sm transition-colors">
+                Política de Cookies
+              </Link>
+            </div>
             <p className="text-slate-500">
               © 2025 RotaFácil Frotas. Todos os direitos reservados.
             </p>
@@ -998,6 +1008,9 @@ export default function Home() {
 
       {/* Botão flutuante de WhatsApp */}
       <WhatsAppFloatingButton />
+
+      {/* 🍪 Banner de consentimento de cookies */}
+      <CookieBanner />
     </div>
   );
 }

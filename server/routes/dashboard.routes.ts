@@ -10,6 +10,7 @@ import {
     clients,
     vehicles,
     vehicleDocuments,
+    trackingLocations,
     pendingResolutions // 📊 Adicionar para buscar histórico de pendências
 } from "@shared/schema";
 import { eq, and, sql, gte, lte, or, isNull, desc, ne } from "drizzle-orm";
@@ -854,6 +855,116 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
             });
         } catch (error: any) {
             console.error("❌ [DASHBOARD] Erro ao buscar motivos de pendências:", error);
+            res.status(500).json({ message: error.message });
+        }
+    });
+
+    // ==================== LOCALIZAÇÃO EM TEMPO REAL DOS PRESTADORES ====================
+
+    // GET /api/dashboard/provider-locations - Última localização de cada prestador com rota em andamento
+    app.get("/api/dashboard/provider-locations", authenticateToken, async (req: any, res) => {
+        try {
+            console.log("📍 [DASHBOARD] Buscando localização dos prestadores");
+
+            // Buscar rotas em andamento (confirmadas, iniciadas, não finalizadas)
+            const inProgressRoutes = await db
+                .select()
+                .from(routes)
+                .where(
+                    and(
+                        eq(routes.userId, req.user.userId),
+                        eq(routes.status, "confirmado"),
+                        sql`${routes.routeStartedAt} IS NOT NULL`,
+                        sql`${routes.routeFinishedAt} IS NULL`
+                    )
+                );
+
+            if (inProgressRoutes.length === 0) {
+                console.log("📍 [DASHBOARD] Nenhuma rota em andamento");
+                return res.json({ providers: [] });
+            }
+
+            // Buscar última localização de cada rota/prestador
+            const providers = await Promise.all(
+                inProgressRoutes.map(async (route) => {
+                    let name = "Desconhecido";
+                    let photoUrl: string | null = null;
+
+                    // Buscar dados do responsável
+                    if (route.responsibleType === "technician") {
+                        const [tech] = await db
+                            .select({ name: technicians.name, photoUrl: technicians.photoUrl })
+                            .from(technicians)
+                            .where(eq(technicians.id, parseInt(route.responsibleId)))
+                            .limit(1);
+                        name = tech?.name || "Técnico";
+                        photoUrl = tech?.photoUrl || null;
+                    } else if (route.responsibleType === "team") {
+                        const [team] = await db
+                            .select({ name: teams.name, photoUrl: teams.photoUrl })
+                            .from(teams)
+                            .where(eq(teams.id, parseInt(route.responsibleId)))
+                            .limit(1);
+                        name = team?.name || "Equipe";
+                        photoUrl = team?.photoUrl || null;
+                    }
+
+                    // Gerar iniciais do nome (2 primeiras letras dos 2 primeiros nomes)
+                    const nameParts = name.split(" ").filter(Boolean);
+                    const initials = nameParts.length >= 2
+                        ? (nameParts[0][0] + nameParts[1][0]).toUpperCase()
+                        : name.substring(0, 2).toUpperCase();
+
+                    // Buscar última localização desta rota
+                    const [lastLocation] = await db
+                        .select()
+                        .from(trackingLocations)
+                        .where(eq(trackingLocations.routeId, route.id))
+                        .orderBy(desc(trackingLocations.timestamp))
+                        .limit(1);
+
+                    // Se não tiver localização registrada, tentar usar startLocationData da rota
+                    let location = null;
+                    if (lastLocation) {
+                        location = {
+                            lat: lastLocation.latitude,
+                            lng: lastLocation.longitude,
+                            timestamp: lastLocation.timestamp,
+                            routeId: route.id,
+                        };
+                    } else if (route.startLocationData) {
+                        const startData = route.startLocationData as any;
+                        if (startData?.lat && startData?.lng) {
+                            location = {
+                                lat: Number(startData.lat),
+                                lng: Number(startData.lng),
+                                timestamp: route.routeStartedAt,
+                                routeId: route.id,
+                            };
+                        }
+                    }
+
+                    // Só retornar se tiver localização
+                    if (!location) return null;
+
+                    return {
+                        id: parseInt(route.responsibleId),
+                        name,
+                        type: route.responsibleType as "technician" | "team",
+                        photoUrl,
+                        initials,
+                        location,
+                    };
+                })
+            );
+
+            // Filtrar nulls (prestadores sem localização)
+            const validProviders = providers.filter(Boolean);
+
+            console.log(`✅ [DASHBOARD] ${validProviders.length} prestadores com localização`);
+            res.json({ providers: validProviders });
+        } catch (error: any) {
+            console.error("❌ [DASHBOARD] Erro ao buscar localização dos prestadores:", error);
             res.status(500).json({ message: error.message });
         }
     });

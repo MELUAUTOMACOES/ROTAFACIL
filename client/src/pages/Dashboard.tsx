@@ -27,6 +27,7 @@ import { VehicleDocumentsAlertsCard } from "@/components/dashboard/VehicleDocume
 import { UpcomingMaintenancesCard } from "@/components/dashboard/UpcomingMaintenancesCard";
 import { MaintenanceCostsCard } from "@/components/dashboard/MaintenanceCostsCard";
 import { RoutesInProgressCard } from "@/components/dashboard/RoutesInProgressCard";
+import { ProviderLocationsMap } from "@/components/dashboard/ProviderLocationsMap";
 import { CriticalAlertsCard } from "@/components/dashboard/CriticalAlertsCard";
 import { ProductivityCard } from "@/components/dashboard/ProductivityCard";
 import { QualityMetricsCard } from "@/components/dashboard/QualityMetricsCard";
@@ -682,8 +683,11 @@ export default function Dashboard() {
                   teamId={filters.responsibleType === 'team' ? filters.responsibleId : undefined}
                 />
 
-                {/* Rotas em Progresso */}
-                <RoutesInProgressCard />
+                {/* Rotas em Progresso + Mapa de Localização */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <RoutesInProgressCard />
+                  <ProviderLocationsMap />
+                </div>
 
                 {/* Alertas Críticos */}
                 <CriticalAlertsCard />

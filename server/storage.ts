@@ -227,6 +227,9 @@ export interface IStorage {
 
   // Analytics Events (Traffic Metrics - Landing Page)
   createAnalyticsEvent(data: InsertAnalyticsEvent): Promise<AnalyticsEvent>;
+
+  // 🔐 LGPD - Aceite de termos
+  acceptLgpd(userId: number, version: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1847,6 +1850,23 @@ export class DatabaseStorage implements IStorage {
       .values(data)
       .returning();
     return event;
+  }
+
+  // ==================== LGPD ====================
+  /**
+   * Registra o aceite dos termos LGPD pelo usuário
+   * @param userId - ID do usuário
+   * @param version - Versão do termo aceito (ex: "v1.0-2025-01")
+   */
+  async acceptLgpd(userId: number, version: string): Promise<void> {
+    await db.update(users)
+      .set({
+        lgpdAccepted: true,
+        lgpdAcceptedAt: new Date(),
+        lgpdVersion: version,
+      })
+      .where(eq(users.id, userId));
+    console.log(`✅ [LGPD] Aceite registrado: userId=${userId}, version=${version}`);
   }
 }
 

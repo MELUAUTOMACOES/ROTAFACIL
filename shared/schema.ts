@@ -80,6 +80,10 @@ export const users = pgTable("users", {
   accessScheduleId: integer("access_schedule_id"), // Tabela de horário de acesso (opcional) - referência adicionada depois
   createdAt: timestamp("created_at").defaultNow().notNull(),
   createdBy: integer("created_by"), // ID do admin que criou (rastreabilidade LGPD)
+  // 🔐 LGPD - Aceite de termos
+  lgpdAccepted: boolean("lgpd_accepted").notNull().default(false),
+  lgpdAcceptedAt: timestamp("lgpd_accepted_at"),
+  lgpdVersion: text("lgpd_version"),
 });
 
 // Access Schedules table - Tabelas de horário de acesso à plataforma
@@ -163,6 +167,8 @@ export const technicians = pgTable("technicians", {
   horarioAlmocoMinutos: integer("horario_almoco_minutos").default(60), // Tempo de almoço em minutos
   diasTrabalho: text("dias_trabalho").array().default(['segunda', 'terca', 'quarta', 'quinta', 'sexta']), // Dias da semana que trabalha
   isActive: boolean("is_active").default(true).notNull(),
+  // Foto do técnico para exibição no mapa e identificação visual
+  photoUrl: text("photo_url"), // URL ou Base64 da foto do técnico
   userId: integer("user_id").notNull().references(() => users.id),
   companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -342,6 +348,8 @@ export const teams = pgTable("teams", {
   horarioFimTrabalho: text("horario_fim_trabalho").default("18:00"),
   horarioAlmocoMinutos: integer("horario_almoco_minutos").default(60), // Tempo de almoço em minutos
   diasTrabalho: text("dias_trabalho").array().default(['segunda', 'terca', 'quarta', 'quinta', 'sexta']), // Dias da semana que trabalha
+  // Foto da equipe para exibição no mapa e identificação visual
+  photoUrl: text("photo_url"), // URL ou Base64 da foto da equipe
   userId: integer("user_id").notNull().references(() => users.id),
   companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),

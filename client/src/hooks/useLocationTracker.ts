@@ -45,8 +45,8 @@ export function useLocationTracker({ userId, routeId, enabled, providerId }: Loc
 
             navigator.geolocation.getCurrentPosition(resolve, reject, {
                 enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0
+                timeout: 30000, // Aumentado para 30s para dar tempo ao GPS
+                maximumAge: 0 // Sempre buscar posição nova
             });
         });
     }, []);
@@ -54,6 +54,14 @@ export function useLocationTracker({ userId, routeId, enabled, providerId }: Loc
     // Envia localização para o backend
     const sendLocation = useCallback(async (position: GeolocationPosition) => {
         try {
+            // Log de precisão para debug
+            const accuracyMeters = Math.round(position.coords.accuracy);
+            if (accuracyMeters > 100) {
+                console.warn(`⚠️ [TRACKER] Precisão baixa: ${accuracyMeters}m (esperado <100m). Pode ser localização por Wi-Fi/IP.`);
+            } else {
+                console.log(`✅ [TRACKER] Precisão boa: ${accuracyMeters}m`);
+            }
+
             // Tentar obter nível de bateria (Chrome/Android)
             let batteryLevel = null;
             if ('getBattery' in navigator) {
@@ -81,7 +89,7 @@ export function useLocationTracker({ userId, routeId, enabled, providerId }: Loc
                 },
                 body: JSON.stringify({ points: [point] })
             });
-            console.log('📍 [TRACKER] Localização enviada:', point);
+            console.log(`📍 [TRACKER] Localização enviada: ${point.latitude.toFixed(6)}, ${point.longitude.toFixed(6)} (±${accuracyMeters}m)`);
         } catch (error) {
             console.error('❌ [TRACKER] Erro ao enviar localização:', error);
         }

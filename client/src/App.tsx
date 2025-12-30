@@ -30,6 +30,9 @@ import CompanyUsers from "./pages/CompanyUsers";
 import AdminMetrics from "./pages/AdminMetrics";
 import AdminAudit from "./pages/AdminAudit";
 import Ads from "./pages/Ads";
+import LgpdAccept from "./pages/LgpdAccept";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import CookiePolicy from "./pages/CookiePolicy";
 import Layout from "./components/Layout";
 import NotFound from "@/pages/not-found";
 
@@ -55,6 +58,8 @@ function AppRoutes() {
         <Route path="/set-password" component={SetPassword} />
         <Route path="/forgot-password" component={ForgotPassword} />
         <Route path="/reset-password" component={ResetPassword} />
+        <Route path="/privacy" component={PrivacyPolicy} />
+        <Route path="/cookies" component={CookiePolicy} />
         <Route path="/" component={Home} />
         <Route component={Home} />
       </Switch>
@@ -64,6 +69,13 @@ function AppRoutes() {
   // 🔐 LGPD: Se usuário precisa trocar senha, mostrar apenas tela de troca de senha
   if (requirePasswordChange) {
     return <ChangePassword isRequired={true} />;
+  }
+
+  // 🔐 LGPD: Se usuário não aceitou os termos LGPD, mostrar apenas tela de aceite
+  // Usa !user.lgpdAccepted para capturar false, undefined e null
+  // @ts-ignore - lgpdAccepted será retornado pelo /api/auth/me
+  if (!user.lgpdAccepted) {
+    return <LgpdAccept />;
   }
 
   // Rotas autenticadas

@@ -39,6 +39,8 @@ import { registerDashboardRoutes } from "./routes/dashboard.routes";
 import { registerAdsMetricsRoutes } from "./routes/ads-metrics.routes";
 import { trackCompanyAudit, getAuditDescription } from "./audit.helpers";
 import { isAccessAllowed, getAccessDeniedMessage } from "./access-schedule-validator";
+import { requireLgpdAccepted } from "./middleware/lgpd.middleware";
+import { LGPD_VERSION } from "@shared/constants";
 
 // 🛡️ Rate Limiting para Login (previne brute force)
 const loginRateLimiter = rateLimit({
@@ -1374,7 +1376,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           company: company ? {
             id: company.id,
             name: company.name,
-          } : undefined
+          } : undefined,
+          // 🔐 LGPD - Campos de aceite de termos
+          lgpdAccepted: user.lgpdAccepted,
+          lgpdAcceptedAt: user.lgpdAcceptedAt,
+          lgpdVersion: user.lgpdVersion,
         },
         token
       });
@@ -1459,9 +1465,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
           companyId: m.companyId,
           role: m.role,
           isActive: m.isActive,
-        }))
+        })),
+        // 🔐 LGPD - Campos de aceite de termos
+        lgpdAccepted: user.lgpdAccepted,
+        lgpdAcceptedAt: user.lgpdAcceptedAt,
+        lgpdVersion: user.lgpdVersion,
       });
     } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // 🔐 LGPD - Endpoint para aceitar termos
+  app.post("/api/lgpd/accept", authenticateToken, async (req: any, res) => {
+    try {
+      const userId = req.user.userId;
+
+      // Verificar se usuário existe
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        console.log(`❌ [LGPD] Usuário não encontrado: ${userId}`);
+        return res.status(404).json({ message: "Usuário não encontrado" });
+      }
+
+      // Registrar aceite no banco
+      await storage.acceptLgpd(userId, LGPD_VERSION);
+
+      res.json({
+        success: true,
+        message: "Termos LGPD aceitos com sucesso",
+        version: LGPD_VERSION,
+        acceptedAt: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("❌ [LGPD] Erro ao registrar aceite:", error);
       res.status(500).json({ message: error.message });
     }
   });

@@ -7,6 +7,7 @@
 
 import { UtmParams, getStoredUtmParams } from './utm';
 import { DeviceType, getDeviceType } from './device';
+import { COOKIE_CONSENT_KEY } from '../../../../shared/constants';
 
 // Nomes de eventos suportados
 export type EventName =
@@ -159,6 +160,20 @@ export function sendToMeta(event: AnalyticsEvent): void {
 }
 
 /**
+ * Verifica se o usuário consentiu com analytics (cookies 'all')
+ */
+function hasAnalyticsConsent(): boolean {
+    try {
+        const consent = localStorage.getItem(COOKIE_CONSENT_KEY);
+        if (!consent) return false;
+        const parsed = JSON.parse(consent);
+        return parsed.type === 'all';
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Envia evento para todos os destinos configurados
  * @param eventName - Nome do evento
  * @param customData - Dados adicionais opcionais
@@ -171,11 +186,21 @@ export async function trackEvent(eventName: EventName, customData?: Record<strin
         console.log('[Analytics] Tracking:', eventName, event);
     }
 
-    // Envia para todos os destinos em paralelo
-    await Promise.all([
-        sendToBackend(event),
-        // GA4 e Meta são síncronos por enquanto (stubs)
-        Promise.resolve(sendToGA4(event)),
-        Promise.resolve(sendToMeta(event)),
-    ]);
+    // Verifica consentimento de cookies
+    const hasConsent = hasAnalyticsConsent();
+
+    // Backend sempre recebe eventos (métricas básicas essenciais)
+    // GA4 e Meta só recebem se usuário consentiu com 'all'
+    const promises: Promise<void>[] = [sendToBackend(event)];
+
+    if (hasConsent) {
+        promises.push(
+            Promise.resolve(sendToGA4(event)),
+            Promise.resolve(sendToMeta(event))
+        );
+    } else if (process.env.NODE_ENV === 'development') {
+        console.log('[Analytics] GA4/Meta bloqueados - sem consentimento de cookies');
+    }
+
+    await Promise.all(promises);
 }
