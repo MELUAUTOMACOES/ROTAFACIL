@@ -38,6 +38,22 @@ function getOsrmUrl() {
   }
 
   // 2. Fallback: Arquivo txt em vários locais possíveis
+
+  // ==================== EGRESS LOGGING UTILITY ====================
+  // 📊 Helper para medir tamanho das respostas JSON (instrumentação temporária)
+  function logEgressSize(req: any, res: any, body: any): void {
+    try {
+      const sizeBytes = JSON.stringify(body).length;
+      const sizeKB = (sizeBytes / 1024).toFixed(2);
+      const arrayLength = Array.isArray(body) ? ` (${body.length} items)` : '';
+      console.log(`📊 [EGRESS] ${req.method} ${req.path} → ${sizeKB} KB${arrayLength}`);
+    } catch (err) {
+      // Se falhar, não quebra a resposta
+      console.error('❌ [EGRESS] Erro ao calcular tamanho:', err);
+    }
+  }
+
+  // =================================================================
   const candidates = [
     path.join(__dirname, "../osrm_url.txt"), // Localização original relativa (src/routes/ -> src/)
     path.join(__dirname, "osrm_url.txt"),    // Mesmo diretório
@@ -1617,6 +1633,7 @@ export function registerRoutesAPI(app: Express) {
       console.log("✅ Rotas encontradas:", routeList.length);
       console.log("==== LOG FIM: /api/routes (SUCESSO) ====");
 
+      logEgressSize(req, res, routeList); // 📊 Instrumentação
       res.json(routeList);
     } catch (error: any) {
       console.log("❌ ERRO na listagem:");

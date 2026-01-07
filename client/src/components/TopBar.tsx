@@ -20,6 +20,9 @@ const pageNames: Record<string, string> = {
   "/prestadores": "Prestadores",
   "/business-rules": "Regras de Negócio",
   "/users": "Gestão de Usuários",
+  "/admin/audit": "Auditoria",
+  "/admin/metrics": "Métricas do Sistema",
+  "/ads": "ADS - Marketing Dashboard",
 };
 
 export default function TopBar({ onMenuClick }: TopBarProps) {

@@ -31,10 +31,13 @@ export default function BusinessRulesPage() {
     defaultValues: {
       maximoParadasPorRota: 10,
       tempoDeslocamentoBuffer: 15,
-      minutosEntreParadas: 30,
-      distanciaMaximaEntrePontos: "50.00",
+      minutosEntreParadas: 30, // ⚠️ DEPRECATED - mantido para compatibilidade DB
+      distanciaMaximaEntrePontos: "50.00", // ⚠️ DEPRECATED
       distanciaMaximaAtendida: "100.00",
       distanciaMaximaEntrePontosDinamico: "50.00",
+      // 🆕 Novos campos de distância OSRM/Haversine
+      distanciaMaximaEntrePontosOsrm: "50.00",
+      distanciaMaximaEntrePontosHaversine: "40.00",
       enderecoEmpresaCep: "",
       enderecoEmpresaLogradouro: "",
       enderecoEmpresaNumero: "",
@@ -63,10 +66,13 @@ export default function BusinessRulesPage() {
       form.reset({
         maximoParadasPorRota: businessRules.maximoParadasPorRota,
         tempoDeslocamentoBuffer: businessRules.tempoDeslocamentoBuffer,
-        minutosEntreParadas: businessRules.minutosEntreParadas,
-        distanciaMaximaEntrePontos: businessRules.distanciaMaximaEntrePontos,
+        minutosEntreParadas: businessRules.minutosEntreParadas, // ⚠️ DEPRECATED
+        distanciaMaximaEntrePontos: businessRules.distanciaMaximaEntrePontos, // ⚠️ DEPRECATED
         distanciaMaximaAtendida: businessRules.distanciaMaximaAtendida,
         distanciaMaximaEntrePontosDinamico: businessRules.distanciaMaximaEntrePontosDinamico,
+        // 🆕 Novos campos OSRM/Haversine
+        distanciaMaximaEntrePontosOsrm: (businessRules as any).distanciaMaximaEntrePontosOsrm || businessRules.distanciaMaximaEntrePontos || "50.00",
+        distanciaMaximaEntrePontosHaversine: (businessRules as any).distanciaMaximaEntrePontosHaversine || String(parseFloat(businessRules.distanciaMaximaEntrePontos || "50") * 0.8),
         enderecoEmpresaCep: businessRules.enderecoEmpresaCep,
         enderecoEmpresaLogradouro: businessRules.enderecoEmpresaLogradouro,
         enderecoEmpresaNumero: businessRules.enderecoEmpresaNumero,
@@ -213,45 +219,71 @@ export default function BusinessRulesPage() {
                       )}
                     />
 
-                    <FormField
-                      control={form.control}
-                      name="minutosEntreParadas"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Minutos entre paradas</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min="5"
-                              max="120"
-                              {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value))}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    {/* 🆕 Seção de Distância com explicação clara */}
+                    <div className="col-span-2 space-y-4">
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 dark:bg-amber-900/20 dark:border-amber-800">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 dark:text-amber-400" />
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                              📏 Distância entre pontos: duas estratégias
+                            </p>
+                            <p className="text-xs text-amber-700 dark:text-amber-400">
+                              • <strong>ROTA REAL (OSRM)</strong>: Distância dirigível considerando malha viária<br />
+                              • <strong>ROTA APROXIMADA (Haversine)</strong>: Linha reta, usada como pré-filtro rápido e fallback
+                            </p>
+                          </div>
+                        </div>
+                      </div>
 
-                    <FormField
-                      control={form.control}
-                      name="distanciaMaximaEntrePontos"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Distância máxima entre pontos (km)</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="1"
-                              max="200"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <FormField
+                          control={form.control}
+                          name="distanciaMaximaEntrePontosOsrm"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Distância máxima entre pontos — ROTA REAL (km)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  min="1"
+                                  max="200"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                Limite final usando roteamento OSRM (distância dirigível real).
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="distanciaMaximaEntrePontosHaversine"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Distância máxima entre pontos — ROTA APROXIMADA (km)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  min="1"
+                                  max="200"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                Pré-filtro em linha reta. Recomendação: ~20% menor que a rota real.
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
 
                     <FormField
                       control={form.control}
@@ -268,6 +300,9 @@ export default function BusinessRulesPage() {
                               {...field}
                             />
                           </FormControl>
+                          <FormDescription>
+                            Usada apenas em dias sem agendamentos (distância base → primeiro atendimento).
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -278,7 +313,7 @@ export default function BusinessRulesPage() {
                       name="distanciaMaximaEntrePontosDinamico"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Distância máxima entre pontos dinâmico (km)</FormLabel>
+                          <FormLabel>Distância dinâmica (km) — Futuro</FormLabel>
                           <FormControl>
                             <Input
                               type="number"
@@ -286,8 +321,12 @@ export default function BusinessRulesPage() {
                               min="1"
                               max="200"
                               {...field}
+                              disabled
                             />
                           </FormControl>
+                          <FormDescription>
+                            Reservado para cálculo de frete (em desenvolvimento).
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}

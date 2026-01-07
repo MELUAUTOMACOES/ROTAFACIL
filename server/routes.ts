@@ -41,6 +41,14 @@ import { trackCompanyAudit, getAuditDescription } from "./audit.helpers";
 import { isAccessAllowed, getAccessDeniedMessage } from "./access-schedule-validator";
 import { requireLgpdAccepted } from "./middleware/lgpd.middleware";
 import { LGPD_VERSION } from "@shared/constants";
+import {
+  haversineDistance as osrmHaversineDistance,
+  calculateOSRMDistance,
+  calculateInsertionDelta,
+  haversinePreFilter,
+  osrmStats,
+  type Coords
+} from "./osrm-distance-helper";
 
 // 🛡️ Rate Limiting para Login (previne brute force)
 const loginRateLimiter = rateLimit({
@@ -258,7 +266,21 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// ================================================================
+// ==================== EGRESS LOGGING UTILITY ====================
+// 📊 Helper para medir tamanho das respostas JSON (instrumentação temporária)
+function logEgressSize(req: any, res: any, body: any): void {
+  try {
+    const sizeBytes = JSON.stringify(body).length;
+    const sizeKB = (sizeBytes / 1024).toFixed(2);
+    const arrayLength = Array.isArray(body) ? ` (${body.length} items)` : '';
+    console.log(`📊 [EGRESS] ${req.method} ${req.path} → ${sizeKB} KB${arrayLength}`);
+  } catch (err) {
+    // Se falhar, não quebra a resposta
+    console.error('❌ [EGRESS] Erro ao calcular tamanho:', err);
+  }
+}
+
+// =================================================================
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== PUBLIC ROUTES (NO AUTH) ====================
@@ -833,6 +855,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/pending-appointments", authenticateToken, async (req: any, res) => {
     try {
       const pendencias = await storage.getPendingAppointments(req.user.userId);
+      logEgressSize(req, res, pendencias); // 📊 Instrumentação
       res.json(pendencias);
     } catch (error: any) {
       console.error("❌ [PENDING] Erro ao listar pendências:", error);
@@ -860,6 +883,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const records = await storage.getFuelRecords(req.user.userId, filters);
+      logEgressSize(req, res, records); // 📊 Instrumentação
       res.json(records);
     } catch (error: any) {
       console.error("❌ [FUEL] Erro ao listar registros:", error);
@@ -1509,12 +1533,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Se não houver parâmetros de paginação, retorna todos os clientes (compatibilidade)
       if (!req.query.page && !req.query.limit) {
         const result = await storage.getAllClients(req.user.userId);
+        logEgressSize(req, res, result); // 📊 Instrumentação
         return res.json(result);
       }
 
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
       const result = await storage.getClients(req.user.userId, page, limit);
+      logEgressSize(req, res, result); // 📊 Instrumentação
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2155,37 +2181,198 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const startTime = Date.now();
 
-      // 🚀 OTIMIZAÇÃO: Limitar a agendamentos dos últimos 6 meses por padrão
-      // Pode ser sobrescrito com ?from=YYYY-MM-DD na query string
-      const fromParam = req.query.from;
-      let dateFilter: Date;
+      // =================================================================================
+      // PARÂMETROS DE QUERY
+      // =================================================================================
+      const isLegacy = req.headers['x-legacy-list'] === '1';
 
+      // Datas: from/to (YYYY-MM-DD)
+      let fromParam = req.query.from as string | undefined;
+      let toParam = req.query.to as string | undefined;
+
+      // Status (string, sem enum fixo - aceita qualquer valor do schema)
+      const statusParam = req.query.status as string | undefined;
+
+      // Filtro por responsável (técnico ou equipe)
+      const assignedType = req.query.assignedType as string | undefined;
+      const assignedId = req.query.assignedId ? parseInt(req.query.assignedId as string, 10) : undefined;
+
+      // Paginação
+      let page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+      let pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string, 10) || 25));
+
+      // =================================================================================
+      // MODO LEGACY: Limitar egress forçadamente
+      // =================================================================================
+      if (isLegacy) {
+        console.warn(`⚠️ [APPOINTMENTS] Modo LEGACY ativo (header x-legacy-list). Endpoint será descontinuado.`);
+
+        // Forçar limite de 30 dias se não vier from/to
+        if (!fromParam && !toParam) {
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          fromParam = thirtyDaysAgo.toISOString().split('T')[0];
+          console.log(`⚠️ [APPOINTMENTS/LEGACY] Sem from/to, forçando from=${fromParam}`);
+        }
+      }
+
+      // =================================================================================
+      // CONSTRUIR FILTROS
+      // =================================================================================
+      const conditions: any[] = [eq(appointments.userId, req.user.userId)];
+
+      // Filtro de data: from
       if (fromParam) {
-        dateFilter = new Date(fromParam);
+        const fromDate = new Date(fromParam);
+        if (!isNaN(fromDate.getTime())) {
+          fromDate.setHours(0, 0, 0, 0);
+          conditions.push(gte(appointments.scheduledDate, fromDate));
+        }
       } else {
-        // Padrão: últimos 6 meses
-        dateFilter = new Date();
-        dateFilter.setMonth(dateFilter.getMonth() - 6);
+        // Padrão: últimos 6 meses (se não for legacy)
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        conditions.push(gte(appointments.scheduledDate, sixMonthsAgo));
       }
 
-      // 🚀 ETAPA 1: Buscar agendamentos (query SIMPLES, sem joins pesados)
-      const appointmentsList = await db
-        .select()
+      // Filtro de data: to
+      if (toParam) {
+        const toDate = new Date(toParam);
+        if (!isNaN(toDate.getTime())) {
+          toDate.setHours(23, 59, 59, 999);
+          conditions.push(lte(appointments.scheduledDate, toDate));
+        }
+      }
+
+      // Filtro de status (string, não enum)
+      if (statusParam && statusParam.trim()) {
+        conditions.push(eq(appointments.status, statusParam.trim()));
+      }
+
+      // Filtro de responsável (técnico ou equipe)
+      if (assignedType && assignedId && Number.isFinite(assignedId)) {
+        if (assignedType === 'technician') {
+          conditions.push(eq(appointments.technicianId, assignedId));
+        } else if (assignedType === 'team') {
+          conditions.push(eq(appointments.teamId, assignedId));
+        }
+        // Se assignedType inválido, ignora silenciosamente
+      }
+
+      // =================================================================================
+      // MODO LEGACY: Retornar array direto (com limite)
+      // =================================================================================
+      if (isLegacy) {
+        const LEGACY_LIMIT = 300;
+
+        const appointmentsList = await db
+          .select()
+          .from(appointments)
+          .where(and(...conditions))
+          .orderBy(desc(appointments.scheduledDate))
+          .limit(LEGACY_LIMIT);
+
+        if (appointmentsList.length === 0) {
+          logEgressSize(req, res, []);
+          return res.json([]);
+        }
+
+        // Buscar routeInfo em batch
+        const appointmentIds = appointmentsList.map(a => a.id);
+        const routeInfos = await db
+          .select({
+            appointmentId: routeStops.appointmentNumericId,
+            routeId: routes.id,
+            routeStatus: routes.status,
+            routeDisplayNumber: routes.displayNumber,
+          })
+          .from(routeStops)
+          .innerJoin(routes, eq(routeStops.routeId, routes.id))
+          .where(and(
+            inArray(routeStops.appointmentNumericId, appointmentIds),
+            or(eq(routes.status, 'confirmado'), eq(routes.status, 'finalizado'))
+          ));
+
+        const routeInfoMap = new Map<number, { routeId: string; status: string | null; displayNumber: number | null }>();
+        for (const ri of routeInfos) {
+          if (ri.appointmentId && !routeInfoMap.has(ri.appointmentId)) {
+            routeInfoMap.set(ri.appointmentId, {
+              routeId: ri.routeId,
+              status: ri.routeStatus,
+              displayNumber: ri.routeDisplayNumber,
+            });
+          }
+        }
+
+        const result = appointmentsList.map(apt => ({
+          ...apt,
+          routeInfo: routeInfoMap.get(apt.id) || null,
+        }));
+
+        const totalTime = Date.now() - startTime;
+        console.log(`⚠️ [APPOINTMENTS/LEGACY] Retornando ${result.length} agendamentos em ${totalTime}ms (LIMITE: ${LEGACY_LIMIT})`);
+
+        logEgressSize(req, res, result);
+        return res.json(result);
+      }
+
+      // =================================================================================
+      // MODO PAGINADO: Resposta estruturada { items, pagination }
+      // =================================================================================
+
+      // Primeiro: contar total para paginação
+      const [countResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
         .from(appointments)
-        .where(and(
-          eq(appointments.userId, req.user.userId),
-          gte(appointments.scheduledDate, dateFilter)
-        ));
+        .where(and(...conditions));
 
-      // Early return se não houver agendamentos
-      if (appointmentsList.length === 0) {
-        console.log(`✅ [APPOINTMENTS] Nenhum agendamento encontrado em ${Date.now() - startTime}ms`);
-        return res.json([]);
+      const total = countResult?.count ?? 0;
+      const totalPages = Math.ceil(total / pageSize) || 1;
+
+      // Ajustar página se estiver além do limite
+      if (page > totalPages) {
+        page = totalPages;
       }
 
-      // 🚀 ETAPA 2: Buscar info de rotas em BATCH (uma única query)
-      const appointmentIds = appointmentsList.map(a => a.id);
+      const offset = (page - 1) * pageSize;
 
+      // Buscar página atual (campos otimizados para lista)
+      const appointmentsList = await db
+        .select({
+          id: appointments.id,
+          scheduledDate: appointments.scheduledDate,
+          status: appointments.status,
+          clientId: appointments.clientId,
+          serviceId: appointments.serviceId,
+          technicianId: appointments.technicianId,
+          teamId: appointments.teamId,
+          logradouro: appointments.logradouro,
+          numero: appointments.numero,
+          bairro: appointments.bairro,
+          cidade: appointments.cidade,
+          cep: appointments.cep,
+          notes: appointments.notes,
+          paymentStatus: appointments.paymentStatus,
+          executionStatus: appointments.executionStatus,
+        })
+        .from(appointments)
+        .where(and(...conditions))
+        .orderBy(desc(appointments.scheduledDate))
+        .limit(pageSize)
+        .offset(offset);
+
+      // Early return se não houver resultados
+      if (appointmentsList.length === 0) {
+        const response = {
+          items: [],
+          pagination: { page, pageSize, total, totalPages },
+        };
+        logEgressSize(req, res, response);
+        return res.json(response);
+      }
+
+      // Buscar routeInfo em batch
+      const appointmentIds = appointmentsList.map(a => a.id);
       const routeInfos = await db
         .select({
           appointmentId: routeStops.appointmentNumericId,
@@ -2200,10 +2387,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           or(eq(routes.status, 'confirmado'), eq(routes.status, 'finalizado'))
         ));
 
-      // 🚀 ETAPA 3: Criar map para lookup O(1)
       const routeInfoMap = new Map<number, { routeId: string; status: string | null; displayNumber: number | null }>();
       for (const ri of routeInfos) {
-        // Só adiciona se ainda não existe (pega o primeiro, que é o mais relevante)
         if (ri.appointmentId && !routeInfoMap.has(ri.appointmentId)) {
           routeInfoMap.set(ri.appointmentId, {
             routeId: ri.routeId,
@@ -2213,21 +2398,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // 🚀 ETAPA 4: Montar resultado final
-      const result = appointmentsList.map(apt => ({
+      const items = appointmentsList.map(apt => ({
         ...apt,
         routeInfo: routeInfoMap.get(apt.id) || null,
       }));
 
+      const response = {
+        items,
+        pagination: { page, pageSize, total, totalPages },
+      };
+
       const totalTime = Date.now() - startTime;
-      // Log apenas se demorar mais de 1 segundo (para monitorar performance)
       if (totalTime > 1000) {
-        console.log(`⚠️ [APPOINTMENTS] Consulta lenta: ${result.length} agendamentos em ${totalTime}ms`);
+        console.log(`⚠️ [APPOINTMENTS] Consulta lenta: página ${page}/${totalPages} (${items.length} de ${total}) em ${totalTime}ms`);
       } else {
-        console.log(`✅ [APPOINTMENTS] Retornando ${result.length} agendamentos em ${totalTime}ms`);
+        console.log(`✅ [APPOINTMENTS] Página ${page}/${totalPages}: ${items.length} itens (total: ${total}) em ${totalTime}ms`);
       }
 
-      res.json(result);
+      logEgressSize(req, res, response);
+      res.json(response);
     } catch (error: any) {
       console.error(`❌ [APPOINTMENTS] Erro ao buscar agendamentos:`, error);
       res.status(500).json({ message: error.message });
@@ -2541,10 +2730,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Regras de negócio não configuradas" });
       }
 
-      const maxDistanceBetweenPoints = parseFloat(businessRules.distanciaMaximaEntrePontos || "50");
+      // 🆕 Distâncias separadas: OSRM (real) vs Haversine (pré-filtro)
+      const maxDistanceOsrm = parseFloat((businessRules as any).distanciaMaximaEntrePontosOsrm || businessRules.distanciaMaximaEntrePontos || "50");
+      const maxDistanceHaversine = parseFloat((businessRules as any).distanciaMaximaEntrePontosHaversine || String(maxDistanceOsrm * 0.8));
       const maxDistanceServed = parseFloat(businessRules.distanciaMaximaAtendida || "100");
+      // Reset OSRM stats for this request
+      osrmStats.reset();
 
-      // Geocodificar endereço de destino
       let targetLat: number, targetLng: number;
 
       if (clientId) {
@@ -2585,20 +2777,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log("✅ [FIND-DATE] Coordenadas do destino:", { targetLat, targetLng });
 
-      // Função Haversine para calcular distância
-      const toRad = (deg: number) => (deg * Math.PI) / 180;
-      const haversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-        if (![lat1, lon1, lat2, lon2].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
-        const R = 6371; // Raio da Terra em km
-        const dLat = toRad(lat2 - lat1);
-        const dLon = toRad(lon2 - lon1);
-        const a =
-          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-          Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c;
-      };
+      // 🆕 Nota: Funções de distância importadas de osrm-distance-helper.ts
+      // (osrmHaversineDistance, calculateOSRMDistance, haversinePreFilter)
 
       // Buscar técnicos/equipes compatíveis com o serviço
       let responsibles: Array<{ type: 'technician' | 'team', id: number, name: string }> = [];
@@ -2653,7 +2833,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         checkedDays: 0,
         skippedNotWorkDay: 0,
         skippedNoTime: 0,
-        skippedTooFar: 0,
+        skippedHaversinePreFilter: 0, // 🆕 Rejeitados pelo pré-filtro Haversine
+        skippedOsrmTooFar: 0,          // 🆕 Rejeitados pela distância OSRM real
         skippedGeocodeError: 0,
         foundCandidates: 0
       };
@@ -2788,6 +2969,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         stats.checkedDays++;
 
+        // 📋 LOG: Início da verificação do dia
+        console.log(`\n📅 [VERIFICANDO DIA] ${dateKey} (${currentDayName})`);
+
         // Coletar TODOS os candidatos válidos para este dia
         const dayCandidates: Array<{
           responsible: typeof preparedResponsibles[0]['info'];
@@ -2802,11 +2986,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const data of preparedResponsibles) {
           const { info: responsible, baseAddress, diasTrabalho } = data;
 
+          console.log(`  👤 [RESPONSÁVEL] ${responsible.name} (${responsible.type})`);
+
           // Verificar dia de trabalho
           if (!diasTrabalho.includes(currentDayName)) {
+            console.log(`    ❌ [REJEITADO] Não trabalha em ${currentDayName}. Dias de trabalho: ${diasTrabalho.join(', ')}`);
             stats.skippedNotWorkDay++;
             continue;
           }
+
+          console.log(`    ✓ Trabalha em ${currentDayName}`);
 
           // 🚀 JUST-IN-TIME AVAILABILITY UPDATE
           await updateDailyAvailability(userId, candidateDate, responsible.type, responsible.id);
@@ -2821,9 +3010,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           if (!availability || availability.availableMinutes < service.duration) {
+            const availMin = availability?.availableMinutes || 0;
+            console.log(`    ❌ [REJEITADO] Sem tempo suficiente. Disponível: ${availMin}min / Necessário: ${service.duration}min`);
             stats.skippedNoTime++;
             continue;
           }
+
+          console.log(`    ✓ Tempo disponível: ${availability.availableMinutes}min (necessário: ${service.duration}min)`);
 
           // --- LÓGICA DE DISTÂNCIA ---
           const startOfDay = new Date(candidateDate);
@@ -2868,35 +3061,168 @@ export async function registerRoutes(app: Express): Promise<Server> {
           let minDistance = Number.POSITIVE_INFINITY;
           let distanceType: 'between_points' | 'from_base' = 'from_base';
 
+          // ========================================
+          // 🆕 LÓGICA DE DISTÂNCIA COM OSRM
+          // ========================================
+          const targetCoords: Coords = { lat: targetLat, lng: targetLng };
+
           if (dayAppointments.length > 0) {
+            // ========================================
+            // CASO B: Dia COM paradas existentes
+            // ========================================
+            // 1. Construir array de coordenadas da rota atual (SEM base ainda)
+            const routeCoords: Coords[] = [];
+            const routeAddresses: string[] = [];
+
             for (const apt of dayAppointments) {
               if (!apt.clientId) continue;
               const aptClient = await db.query.clients.findFirst({ where: eq(clients.id, apt.clientId) });
               if (aptClient?.lat && aptClient?.lng) {
-                const dist = haversineDistance(aptClient.lat, aptClient.lng, targetLat, targetLng);
-                if (dist < minDistance) {
-                  minDistance = dist;
-                  distanceType = 'between_points';
-                }
+                routeCoords.push({ lat: aptClient.lat, lng: aptClient.lng });
+                routeAddresses.push(`${aptClient.logradouro}, ${aptClient.numero} - ${aptClient.bairro || aptClient.cidade}`);
               }
             }
 
-            if (minDistance > maxDistanceBetweenPoints) {
-              stats.skippedTooFar++;
+            if (routeCoords.length === 0) {
+              console.log(`    ⚠️ [DISTANCE] Dia com agendamentos mas sem coordenadas válidas`);
+
+              stats.skippedGeocodeError++;
               continue;
             }
+
+            // 2. Obter coordenadas da BASE
+            const baseFullAddress = `${baseAddress.logradouro}, ${baseAddress.numero}, ${baseAddress.cidade}, ${baseAddress.cep}, Brasil`;
+            let baseCoords: Coords;
+
+            try {
+              const geocoded = await geocodeWithNominatim(baseFullAddress);
+              baseCoords = { lat: geocoded.lat, lng: geocoded.lng };
+            } catch (error: any) {
+              console.log(`    ⚠️ [GEOCODE] Erro ao geocodificar base: ${error.message}`);
+              stats.skippedGeocodeError++;
+              continue;
+            }
+
+            // 3. OTIMIZAR a ordem da rota (nearest neighbor a partir da base)
+            console.log(`    🔄 [OTIMIZANDO] Ordenando rota por proximidade da base...`);
+            const optimizedCoords: Coords[] = [];
+            const optimizedAddresses: string[] = [];
+            const remaining = [...routeCoords.map((coord, i) => ({ coord, addr: routeAddresses[i] }))];
+
+            let currentPos = baseCoords;
+            while (remaining.length > 0) {
+              // Encontrar o ponto mais próximo do atual
+              let nearestIdx = 0;
+              let nearestDist = osrmHaversineDistance(currentPos.lat, currentPos.lng, remaining[0].coord.lat, remaining[0].coord.lng);
+
+              for (let i = 1; i < remaining.length; i++) {
+                const dist = osrmHaversineDistance(currentPos.lat, currentPos.lng, remaining[i].coord.lat, remaining[i].coord.lng);
+                if (dist < nearestDist) {
+                  nearestDist = dist;
+                  nearestIdx = i;
+                }
+              }
+
+              const nearest = remaining.splice(nearestIdx, 1)[0];
+              optimizedCoords.push(nearest.coord);
+              optimizedAddresses.push(nearest.addr);
+              currentPos = nearest.coord;
+            }
+
+            // 4. Adicionar BASE no início da rota otimizada
+            const fullRouteCoords = [baseCoords, ...optimizedCoords];
+            const fullRouteAddresses = [
+              `BASE: ${baseAddress.logradouro}, ${baseAddress.numero} - ${baseAddress.bairro || baseAddress.cidade}`,
+              ...optimizedAddresses
+            ];
+
+            // 📍 LOG: Mostrar rota otimizada com base
+            console.log(`    📍 [ROTA OTIMIZADA] ${fullRouteAddresses.length} pontos (incluindo base):`);
+            fullRouteAddresses.forEach((addr, i) => console.log(`       ${i}. ${addr}`));
+            console.log(`    📍 [NOVO PONTO] ${logradouro}, ${numero} - ${cidade}`);
+
+            // 5. PRÉ-FILTRO HAVERSINE: Calcular distância Haversine até cada ponto da rota
+            console.log(`    📏 [PRÉ-FILTRO] Calculando Haversine até cada ponto da rota...`);
+            let minHaversineDist = Number.POSITIVE_INFINITY;
+
+            for (let i = 0; i < fullRouteCoords.length; i++) {
+              const dist = osrmHaversineDistance(
+                fullRouteCoords[i].lat,
+                fullRouteCoords[i].lng,
+                targetLat,
+                targetLng
+              );
+              console.log(`       📐 Haversine até ponto ${i}: ${dist.toFixed(1)}km`);
+              if (dist < minHaversineDist) {
+                minHaversineDist = dist;
+              }
+            }
+
+            console.log(`    📏 [PRÉ-FILTRO] Menor Haversine: ${minHaversineDist.toFixed(1)}km (limite: ${maxDistanceHaversine}km)`);
+
+            if (minHaversineDist > maxDistanceHaversine) {
+              console.log(`    ❌ [REJEITADO] Pré-filtro Haversine: ${minHaversineDist.toFixed(1)}km > ${maxDistanceHaversine}km`);
+              stats.skippedHaversinePreFilter++;
+              continue;
+            }
+
+            console.log(`    ✅ [PRÉ-FILTRO] Passou! Continuando para cálculo OSRM...`);
+
+            // 6. Calcular delta de inserção com OSRM usando rota completa (com base)
+            console.log(`    📏 [OSRM] Calculando delta de inserção na rota otimizada...`);
+            const { deltaDistance } = await calculateInsertionDelta(fullRouteCoords, targetCoords);
+            console.log(`    📏 [OSRM] Delta de inserção: ${deltaDistance.toFixed(1)}km (limite: ${maxDistanceOsrm}km)`);
+
+            if (deltaDistance > maxDistanceOsrm) {
+              console.log(`    ❌ [REJEITADO] Delta OSRM: ${deltaDistance.toFixed(1)}km > ${maxDistanceOsrm}km`);
+              stats.skippedOsrmTooFar++;
+              continue;
+            }
+
+            minDistance = deltaDistance;
+            distanceType = 'between_points';
+            console.log(`    ✅ [APROVADO] Delta OSRM: ${deltaDistance.toFixed(2)}km`);
+
           } else {
+            // ========================================
+            // CASO A: Dia VAZIO (sem paradas)
+            // ========================================
+            // Usar distanciaMaximaAtendida (distância base → primeiro atendimento)
+
             const baseFullAddress = `${baseAddress.logradouro}, ${baseAddress.numero}, ${baseAddress.cidade}, ${baseAddress.cep}, Brasil`;
             try {
               const baseCoords = await geocodeWithNominatim(baseFullAddress);
-              minDistance = haversineDistance(baseCoords.lat, baseCoords.lng, targetLat, targetLng);
-              distanceType = 'from_base';
+              const baseCoordsTyped: Coords = { lat: baseCoords.lat, lng: baseCoords.lng };
 
-              if (minDistance > maxDistanceServed) {
-                stats.skippedTooFar++;
+              // 1. Pré-filtro Haversine (usando 75% de maxDistanceServed como threshold)
+              const haversineThreshold = maxDistanceServed * 0.75;
+              const haversineDist = osrmHaversineDistance(baseCoords.lat, baseCoords.lng, targetLat, targetLng);
+
+              console.log(`    📏 [DIA VAZIO] Haversine da base: ${haversineDist.toFixed(1)}km (limite pré-filtro: ${haversineThreshold.toFixed(1)}km)`);
+
+              if (haversineDist > haversineThreshold) {
+                console.log(`    ❌ [REJEITADO] Pré-filtro base: ${haversineDist.toFixed(1)}km > ${haversineThreshold.toFixed(1)}km`);
+                stats.skippedHaversinePreFilter++;
                 continue;
               }
+
+              // 2. Validação com OSRM
+              const osrmDist = await calculateOSRMDistance(baseCoordsTyped, targetCoords);
+
+              console.log(`    📏 [DIA VAZIO] OSRM da base: ${osrmDist.toFixed(1)}km (limite: ${maxDistanceServed}km)`);
+
+              if (osrmDist > maxDistanceServed) {
+                console.log(`    ❌ [REJEITADO] Distância base OSRM: ${osrmDist.toFixed(1)}km > ${maxDistanceServed}km`);
+                stats.skippedOsrmTooFar++;
+                continue;
+              }
+
+              minDistance = osrmDist;
+              distanceType = 'from_base';
+              console.log(`    ✅ [APROVADO] Distância da base: ${osrmDist.toFixed(2)}km`);
+
             } catch (error: any) {
+              console.log(`    ⚠️ [GEOCODE] Erro ao geocodificar base: ${error.message}`);
               stats.skippedGeocodeError++;
               continue;
             }
@@ -2935,6 +3261,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           candidates.push(candidate);
           addedDays.add(dateKey);
           res.write(`data: ${JSON.stringify(candidate)}\n\n`);
+        } else {
+          console.log(`  ❌ [DIA DESCARTADO] ${dateKey} - Nenhum responsável atende aos critérios`);
         }
       }
 
@@ -2946,11 +3274,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`  - Dias verificados: ${stats.checkedDays}`);
       console.log(`  - Rejeitados (não é dia de trabalho): ${stats.skippedNotWorkDay}`);
       console.log(`  - Rejeitados (sem tempo livre): ${stats.skippedNoTime}`);
-      console.log(`  - Rejeitados (distância): ${stats.skippedTooFar}`);
+      console.log(`  - Rejeitados (pré-filtro Haversine): ${stats.skippedHaversinePreFilter}`);
+      console.log(`  - Rejeitados (OSRM distância real): ${stats.skippedOsrmTooFar}`);
       console.log(`  - Erros geocodificação: ${stats.skippedGeocodeError}`);
       console.log(`  - ✅ Candidatos encontrados: ${candidates.length}`);
-
-      console.log(`✅ [FIND-DATE] Total de ${candidates.length} candidatos encontrados`);
+      console.log(`\n🌐 [OSRM] Estatísticas de chamadas:`);
+      console.log(`  - Chamadas bem-sucedidas: ${osrmStats.callsSuccess}`);
+      console.log(`  - Hits de cache: ${osrmStats.callsCached}`);
+      console.log(`  - Fallbacks (erro): ${osrmStats.callsFailed}`);
 
       console.log(`\n🎯 [FIND-DATE] Busca concluída! ${candidates.length} opções encontradas`);
 

@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useAuth } from "@/lib/auth";
 import { getAuthHeaders } from "@/lib/auth";
 import { ArrowLeft, Users, Building2, Activity, TrendingUp, BarChart3, Calendar } from "lucide-react";
+import Layout from "@/components/Layout";
 
 type PeriodType = "7d" | "30d" | "90d" | "365d";
 
@@ -126,178 +127,118 @@ export default function AdminMetrics() {
     ];
 
     return (
-        <div className="min-h-screen bg-background p-6">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
-                        <ArrowLeft className="h-5 w-5" />
-                    </Button>
+        <Layout>
+            <div className="space-y-6">
+                {/* Header */}
+                <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">📊 Métricas do Sistema</h1>
                         <p className="text-muted-foreground">
                             Acompanhe o uso das funcionalidades pelos usuários
                         </p>
                     </div>
+
+                    {/* Filtro de período */}
+                    <Select value={period} onValueChange={(v) => setPeriod(v as PeriodType)}>
+                        <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Período" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {periodOptions.map(opt => (
+                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
 
-                {/* Filtro de período */}
-                <Select value={period} onValueChange={(v) => setPeriod(v as PeriodType)}>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Período" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {periodOptions.map(opt => (
-                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
-
-            {/* Cards de Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total de Usuários</CardTitle>
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {loadingOverview ? "..." : overview?.totalUsers || 0}
-                        </div>
-                        <p className="text-xs text-muted-foreground">Usuários cadastrados</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total de Empresas</CardTitle>
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {loadingOverview ? "..." : overview?.totalCompanies || 0}
-                        </div>
-                        <p className="text-xs text-muted-foreground">Empresas ativas</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Ações Hoje</CardTitle>
-                        <Activity className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {loadingOverview ? "..." : overview?.totalActionsToday || 0}
-                        </div>
-                        <p className="text-xs text-muted-foreground">Ações realizadas hoje</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Ações na Semana</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {loadingOverview ? "..." : overview?.totalActionsWeek || 0}
-                        </div>
-                        <p className="text-xs text-muted-foreground">Últimos 7 dias</p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Gráficos */}
-            <Tabs defaultValue="activity" className="space-y-4">
-                <TabsList>
-                    <TabsTrigger value="activity" className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" /> Atividade por Dia
-                    </TabsTrigger>
-                    <TabsTrigger value="features" className="flex items-center gap-2">
-                        <BarChart3 className="h-4 w-4" /> Top Funcionalidades
-                    </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="activity">
+                {/* Cards de Overview */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Atividade de Usuários</CardTitle>
-                            <CardDescription>
-                                Número de usuários ativos e ações por dia no período selecionado
-                            </CardDescription>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Total de Usuários</CardTitle>
+                            <Users className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
-                        <CardContent className="pt-4">
-                            {loadingActivity ? (
-                                <div className="h-[400px] flex items-center justify-center">Carregando...</div>
-                            ) : formattedActivity.length === 0 ? (
-                                <div className="h-[400px] flex items-center justify-center text-muted-foreground">
-                                    Nenhum dado disponível para o período selecionado
-                                </div>
-                            ) : (
-                                <ResponsiveContainer width="100%" height={400}>
-                                    <LineChart data={formattedActivity}>
-                                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                                        <XAxis dataKey="dateFormatted" className="text-xs" />
-                                        <YAxis yAxisId="left" className="text-xs" />
-                                        <YAxis yAxisId="right" orientation="right" className="text-xs" />
-                                        <Tooltip
-                                            contentStyle={{
-                                                backgroundColor: "hsl(var(--background))",
-                                                border: "1px solid hsl(var(--border))",
-                                                borderRadius: "8px"
-                                            }}
-                                        />
-                                        <Legend />
-                                        <Line
-                                            yAxisId="left"
-                                            type="monotone"
-                                            dataKey="activeUsers"
-                                            name="Usuários Ativos"
-                                            stroke="hsl(var(--primary))"
-                                            strokeWidth={2}
-                                            dot={{ fill: "hsl(var(--primary))" }}
-                                        />
-                                        <Line
-                                            yAxisId="right"
-                                            type="monotone"
-                                            dataKey="totalActions"
-                                            name="Total de Ações"
-                                            stroke="hsl(142 76% 36%)"
-                                            strokeWidth={2}
-                                            dot={{ fill: "hsl(142 76% 36%)" }}
-                                        />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            )}
+                        <CardContent>
+                            <div className="text-2xl font-bold">
+                                {loadingOverview ? "..." : overview?.totalUsers || 0}
+                            </div>
+                            <p className="text-xs text-muted-foreground">Usuários cadastrados</p>
                         </CardContent>
                     </Card>
-                </TabsContent>
 
-                <TabsContent value="features">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {/* Gráfico de barras */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Total de Empresas</CardTitle>
+                            <Building2 className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">
+                                {loadingOverview ? "..." : overview?.totalCompanies || 0}
+                            </div>
+                            <p className="text-xs text-muted-foreground">Empresas ativas</p>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Ações Hoje</CardTitle>
+                            <Activity className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">
+                                {loadingOverview ? "..." : overview?.totalActionsToday || 0}
+                            </div>
+                            <p className="text-xs text-muted-foreground">Ações realizadas hoje</p>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Ações na Semana</CardTitle>
+                            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">
+                                {loadingOverview ? "..." : overview?.totalActionsWeek || 0}
+                            </div>
+                            <p className="text-xs text-muted-foreground">Últimos 7 dias</p>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Gráficos */}
+                <Tabs defaultValue="activity" className="space-y-4">
+                    <TabsList>
+                        <TabsTrigger value="activity" className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4" /> Atividade por Dia
+                        </TabsTrigger>
+                        <TabsTrigger value="features" className="flex items-center gap-2">
+                            <BarChart3 className="h-4 w-4" /> Top Funcionalidades
+                        </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="activity">
                         <Card>
                             <CardHeader>
-                                <CardTitle>Top Funcionalidades</CardTitle>
+                                <CardTitle>Atividade de Usuários</CardTitle>
                                 <CardDescription>
-                                    As funcionalidades mais utilizadas no período
+                                    Número de usuários ativos e ações por dia no período selecionado
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="pt-4">
-                                {loadingTopFeatures ? (
+                                {loadingActivity ? (
                                     <div className="h-[400px] flex items-center justify-center">Carregando...</div>
-                                ) : formattedTopFeatures.length === 0 ? (
+                                ) : formattedActivity.length === 0 ? (
                                     <div className="h-[400px] flex items-center justify-center text-muted-foreground">
                                         Nenhum dado disponível para o período selecionado
                                     </div>
                                 ) : (
                                     <ResponsiveContainer width="100%" height={400}>
-                                        <BarChart data={formattedTopFeatures.slice(0, 10)} layout="vertical">
+                                        <LineChart data={formattedActivity}>
                                             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                                            <XAxis type="number" className="text-xs" />
-                                            <YAxis dataKey="label" type="category" width={150} className="text-xs" />
+                                            <XAxis dataKey="dateFormatted" className="text-xs" />
+                                            <YAxis yAxisId="left" className="text-xs" />
+                                            <YAxis yAxisId="right" orientation="right" className="text-xs" />
                                             <Tooltip
                                                 contentStyle={{
                                                     backgroundColor: "hsl(var(--background))",
@@ -305,63 +246,120 @@ export default function AdminMetrics() {
                                                     borderRadius: "8px"
                                                 }}
                                             />
-                                            <Bar dataKey="count" name="Quantidade" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-                                        </BarChart>
+                                            <Legend />
+                                            <Line
+                                                yAxisId="left"
+                                                type="monotone"
+                                                dataKey="activeUsers"
+                                                name="Usuários Ativos"
+                                                stroke="hsl(var(--primary))"
+                                                strokeWidth={2}
+                                                dot={{ fill: "hsl(var(--primary))" }}
+                                            />
+                                            <Line
+                                                yAxisId="right"
+                                                type="monotone"
+                                                dataKey="totalActions"
+                                                name="Total de Ações"
+                                                stroke="hsl(142 76% 36%)"
+                                                strokeWidth={2}
+                                                dot={{ fill: "hsl(142 76% 36%)" }}
+                                            />
+                                        </LineChart>
                                     </ResponsiveContainer>
                                 )}
                             </CardContent>
                         </Card>
+                    </TabsContent>
 
-                        {/* Tabela detalhada */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Detalhamento por Feature</CardTitle>
-                                <CardDescription>
-                                    Todas as funcionalidades e ações registradas
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="max-h-[400px] overflow-y-auto">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Funcionalidade</TableHead>
-                                                <TableHead>Ação</TableHead>
-                                                <TableHead className="text-right">Quantidade</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {loadingTopFeatures ? (
+                    <TabsContent value="features">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {/* Gráfico de barras */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Top Funcionalidades</CardTitle>
+                                    <CardDescription>
+                                        As funcionalidades mais utilizadas no período
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="pt-4">
+                                    {loadingTopFeatures ? (
+                                        <div className="h-[400px] flex items-center justify-center">Carregando...</div>
+                                    ) : formattedTopFeatures.length === 0 ? (
+                                        <div className="h-[400px] flex items-center justify-center text-muted-foreground">
+                                            Nenhum dado disponível para o período selecionado
+                                        </div>
+                                    ) : (
+                                        <ResponsiveContainer width="100%" height={400}>
+                                            <BarChart data={formattedTopFeatures.slice(0, 10)} layout="vertical">
+                                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                                <XAxis type="number" className="text-xs" />
+                                                <YAxis dataKey="label" type="category" width={150} className="text-xs" />
+                                                <Tooltip
+                                                    contentStyle={{
+                                                        backgroundColor: "hsl(var(--background))",
+                                                        border: "1px solid hsl(var(--border))",
+                                                        borderRadius: "8px"
+                                                    }}
+                                                />
+                                                <Bar dataKey="count" name="Quantidade" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            {/* Tabela detalhada */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Detalhamento por Feature</CardTitle>
+                                    <CardDescription>
+                                        Todas as funcionalidades e ações registradas
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="max-h-[400px] overflow-y-auto">
+                                        <Table>
+                                            <TableHeader>
                                                 <TableRow>
-                                                    <TableCell colSpan={3} className="text-center">Carregando...</TableCell>
+                                                    <TableHead>Funcionalidade</TableHead>
+                                                    <TableHead>Ação</TableHead>
+                                                    <TableHead className="text-right">Quantidade</TableHead>
                                                 </TableRow>
-                                            ) : formattedTopFeatures.length === 0 ? (
-                                                <TableRow>
-                                                    <TableCell colSpan={3} className="text-center text-muted-foreground">
-                                                        Nenhum dado disponível
-                                                    </TableCell>
-                                                </TableRow>
-                                            ) : (
-                                                formattedTopFeatures.map((item, i) => (
-                                                    <TableRow key={i}>
-                                                        <TableCell>{item.featureLabel}</TableCell>
-                                                        <TableCell>
-                                                            <span className="px-2 py-1 rounded-full text-xs bg-muted">
-                                                                {item.actionLabel}
-                                                            </span>
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-medium">{item.count}</TableCell>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {loadingTopFeatures ? (
+                                                    <TableRow>
+                                                        <TableCell colSpan={3} className="text-center">Carregando...</TableCell>
                                                     </TableRow>
-                                                ))
-                                            )}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </TabsContent>
-            </Tabs>
-        </div>
+                                                ) : formattedTopFeatures.length === 0 ? (
+                                                    <TableRow>
+                                                        <TableCell colSpan={3} className="text-center text-muted-foreground">
+                                                            Nenhum dado disponível
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ) : (
+                                                    formattedTopFeatures.map((item, i) => (
+                                                        <TableRow key={i}>
+                                                            <TableCell>{item.featureLabel}</TableCell>
+                                                            <TableCell>
+                                                                <span className="px-2 py-1 rounded-full text-xs bg-muted">
+                                                                    {item.actionLabel}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-medium">{item.count}</TableCell>
+                                                        </TableRow>
+                                                    ))
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </TabsContent>
+                </Tabs>
+            </div>
+        </Layout>
     );
 }

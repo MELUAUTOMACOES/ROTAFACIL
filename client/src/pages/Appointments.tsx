@@ -113,9 +113,17 @@ export default function Appointments() {
   const [selectedRestrictionResponsibles, setSelectedRestrictionResponsibles] = useState<string[]>([]);
   const [restrictionError, setRestrictionError] = useState<string | null>(null);
 
-  // Estado para paginação
+  // Estado para paginação CLIENT-SIDE (filtros locais na página atual)
   const [currentPage, setCurrentPage] = useState<number>(1);
   const itemsPerPage = 20;
+
+  // Estado para paginação SERVER-SIDE (reduz egress)
+  const [serverPage, setServerPage] = useState(1);
+  const serverPageSize = 50; // Buscar mais por página para permitir filtros locais
+
+  // Filtros server-side para responsável (técnico/equipe)
+  const [serverAssignedType, setServerAssignedType] = useState<string>('');
+  const [serverAssignedId, setServerAssignedId] = useState<string>('');
 
   // Estado para modal de confirmação de exclusão
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -324,17 +332,40 @@ export default function Appointments() {
     }
   }, []);
 
-  const { data: appointments = [], isLoading } = useQuery({
-    queryKey: ["/api/appointments"],
+  // Interface para resposta paginada
+  interface PaginatedResponse {
+    items: Appointment[];
+    pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  }
+
+  const { data: appointmentsData, isLoading } = useQuery<PaginatedResponse>({
+    queryKey: [
+      '/api/appointments',
+      serverPage,
+      serverPageSize,
+      serverAssignedType,
+      serverAssignedId,
+    ],
     queryFn: async () => {
-      const response = await fetch("/api/appointments", {
+      const params = new URLSearchParams();
+      params.append('page', String(serverPage));
+      params.append('pageSize', String(serverPageSize));
+
+      // Filtros server-side
+      if (serverAssignedType && serverAssignedId) {
+        params.append('assignedType', serverAssignedType);
+        params.append('assignedId', serverAssignedId);
+      }
+
+      const response = await fetch(`/api/appointments?${params.toString()}`, {
         headers: getAuthHeaders(),
       });
-      if (!response.ok) throw new Error("Failed to fetch appointments");
+      if (!response.ok) throw new Error('Failed to fetch appointments');
       const data = await response.json();
 
       // Log para debug de romaneios
-      const withRouteInfo = data.filter((apt: any) => apt.routeInfo);
+      const items = data.items || [];
+      const withRouteInfo = items.filter((apt: any) => apt.routeInfo);
       if (withRouteInfo.length > 0) {
         console.log(`🚚 [APPOINTMENTS] ${withRouteInfo.length} agendamentos com romaneio:`,
           withRouteInfo.map((apt: any) => `#${apt.id} -> Romaneio ${apt.routeInfo.status} #${apt.routeInfo.displayNumber}`)
@@ -344,6 +375,16 @@ export default function Appointments() {
       return data;
     },
   });
+
+  // Extrair items e pagination da resposta
+  const appointments = appointmentsData?.items ?? [];
+  const serverPagination = appointmentsData?.pagination ?? { page: 1, pageSize: serverPageSize, total: 0, totalPages: 1 };
+
+  // Reset página server-side quando filtro de responsável mudar
+  useEffect(() => {
+    setServerPage(1);
+    setCurrentPage(1);
+  }, [serverAssignedType, serverAssignedId]);
 
   const { data: clients = [] } = useQuery({
     queryKey: ["/api/clients"],
@@ -2790,7 +2831,7 @@ export default function Appointments() {
               ))}
             </div>
 
-            {/* Paginação */}
+            {/* Paginação CLIENT-SIDE (página atual de resultados) */}
             {totalPages > 1 && (
               <div className="flex items-center justify-center gap-4 mt-8 pb-4">
                 <Button
@@ -2802,7 +2843,7 @@ export default function Appointments() {
                   ← Anterior
                 </Button>
 
-                <span className="text-sm font-medium text-gray-700">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   Página {currentPage} de {totalPages} ({filteredAppointments.length} agendamentos)
                 </span>
 
@@ -2813,6 +2854,33 @@ export default function Appointments() {
                   disabled={currentPage === totalPages}
                 >
                   Próxima →
+                </Button>
+              </div>
+            )}
+
+            {/* Paginação SERVER-SIDE (carregar mais do banco) */}
+            {serverPagination.totalPages > 1 && (
+              <div className="flex items-center justify-center gap-4 py-4 border-t border-gray-200 dark:border-gray-700">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setServerPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={serverPage <= 1 || isLoading}
+                >
+                  ⏪ Página anterior (servidor)
+                </Button>
+
+                <span className="text-xs text-muted-foreground">
+                  Bloco {serverPage}/{serverPagination.totalPages} • {serverPagination.total} total no banco
+                </span>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setServerPage((prev) => Math.min(prev + 1, serverPagination.totalPages))}
+                  disabled={serverPage >= serverPagination.totalPages || isLoading}
+                >
+                  Próxima página (servidor) ⏩
                 </Button>
               </div>
             )}

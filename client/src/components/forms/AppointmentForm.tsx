@@ -262,10 +262,21 @@ export default function AppointmentForm({
 
     if (!scheduledDate) return null;
 
-    const date = new Date(scheduledDate);
+    // 🐛 FIX: Validar se scheduledDate é uma Date válida
+    const date = scheduledDate instanceof Date ? scheduledDate : new Date(scheduledDate);
+
+    // Se a data for inválida, retornar null ao invés de quebrar
+    if (isNaN(date.getTime())) {
+      return null;
+    }
+
     const dayOfWeek = date.getDay(); // 0 = domingo, 1 = segunda, ..., 6 = sábado
     const dayNames = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
     const dayName = dayNames[dayOfWeek];
+
+    // 🐛 FIX: Validar se dayName existe antes de chamar charAt
+    if (!dayName) return null;
+
     const dayNameDisplay = dayName.charAt(0).toUpperCase() + dayName.slice(1);
 
     // Verificar técnico
@@ -628,13 +639,29 @@ export default function AppointmentForm({
                     <Input
                       type={isAllDay ? "date" : "datetime-local"}
                       {...field}
-                      value={field.value ?
-                        (isAllDay ?
-                          // Para "dia todo", usar a data local sem ajuste de timezone
-                          `${field.value.getFullYear()}-${String(field.value.getMonth() + 1).padStart(2, '0')}-${String(field.value.getDate()).padStart(2, '0')}` :
-                          // Para horário específico, aplicar ajuste de timezone
-                          new Date(field.value.getTime() - field.value.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-                        ) : ""}
+                      value={(() => {
+                        // 🐛 FIX: Validar se field.value é uma Date válida antes de formatar
+                        if (!field.value) return "";
+
+                        const date = field.value instanceof Date ? field.value : new Date(field.value);
+
+                        // Se a data for inválida, retornar string vazia para não quebrar o input
+                        if (isNaN(date.getTime())) return "";
+
+                        try {
+                          if (isAllDay) {
+                            // Para "dia todo", usar a data local sem ajuste de timezone
+                            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                          } else {
+                            // Para horário específico, aplicar ajuste de timezone
+                            const adjusted = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+                            return adjusted.toISOString().slice(0, 16);
+                          }
+                        } catch (e) {
+                          // Em caso de qualquer erro, retornar string vazia
+                          return "";
+                        }
+                      })()}
                       onChange={(e) => {
                         if (isAllDay) {
                           // Para "dia todo", criar data às 12:00 do dia local para evitar problemas de timezone

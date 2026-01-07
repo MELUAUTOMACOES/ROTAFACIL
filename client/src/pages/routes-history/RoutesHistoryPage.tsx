@@ -392,7 +392,10 @@ export default function RoutesHistoryPage() {
     queryKey: ['/api/appointments'],
     queryFn: async () => {
       const response = await fetch('/api/appointments', {
-        headers: getAuthHeaders(),
+        headers: {
+          ...getAuthHeaders(),
+          'x-legacy-list': '1', // Formato array para compatibilidade (temporário)
+        },
       });
       if (!response.ok) throw new Error('Erro ao buscar agendamentos');
       return response.json();

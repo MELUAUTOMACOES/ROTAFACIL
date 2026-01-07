@@ -299,11 +299,14 @@ export const businessRules = pgTable("business_rules", {
   maximoParadasPorRota: integer("maximo_paradas_por_rota").notNull().default(10),
   horarioInicioTrabalho: text("horario_inicio_trabalho").notNull().default("08:00"),
   horarioFimTrabalho: text("horario_fim_trabalho").notNull().default("18:00"),
-  tempoDeslocamentoBuffer: integer("tempo_deslocamento_buffer").notNull().default(15), // in minutes
-  minutosEntreParadas: integer("minutos_entre_paradas").notNull().default(30),
-  distanciaMaximaEntrePontos: decimal("distancia_maxima_entre_pontos", { precision: 8, scale: 2 }).notNull().default("50.00"), // in km
-  distanciaMaximaAtendida: decimal("distancia_maxima_atendida", { precision: 8, scale: 2 }).notNull().default("100.00"), // in km
-  distanciaMaximaEntrePontosDinamico: decimal("distancia_maxima_entre_pontos_dinamico", { precision: 8, scale: 2 }).notNull().default("50.00"), // in km
+  tempoDeslocamentoBuffer: integer("tempo_deslocamento_buffer").notNull().default(15), // Buffer em minutos para cobrir trânsito/estacionamento
+  minutosEntreParadas: integer("minutos_entre_paradas").notNull().default(30), // ⚠️ DEPRECATED - não utilizado em cálculos
+  distanciaMaximaEntrePontos: decimal("distancia_maxima_entre_pontos", { precision: 8, scale: 2 }).notNull().default("50.00"), // ⚠️ DEPRECATED - usar campos OSRM/Haversine
+  distanciaMaximaAtendida: decimal("distancia_maxima_atendida", { precision: 8, scale: 2 }).notNull().default("100.00"), // Distância máxima da base ao primeiro atendimento (dia vazio)
+  distanciaMaximaEntrePontosDinamico: decimal("distancia_maxima_entre_pontos_dinamico", { precision: 8, scale: 2 }).notNull().default("50.00"), // Reservado para cálculo de frete futuro
+  // 🆕 Campos de distância separados (OSRM real vs Haversine aproximado)
+  distanciaMaximaEntrePontosOsrm: decimal("distancia_maxima_entre_pontos_osrm", { precision: 8, scale: 2 }).notNull().default("50.00"), // Distância real (rota OSRM)
+  distanciaMaximaEntrePontosHaversine: decimal("distancia_maxima_entre_pontos_haversine", { precision: 8, scale: 2 }).notNull().default("40.00"), // Distância aproximada (pré-filtro)
   // Endereço da Empresa
   enderecoEmpresaCep: text("endereco_empresa_cep").notNull(),
   enderecoEmpresaLogradouro: text("endereco_empresa_logradouro").notNull(),

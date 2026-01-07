@@ -29,6 +29,7 @@ import {
     Save,
     HelpCircle,
 } from "lucide-react";
+import Layout from "@/components/Layout";
 
 // ===================== TYPES =====================
 
@@ -555,134 +556,136 @@ export default function Ads() {
     }
 
     return (
-        <div className="p-6 space-y-8 max-w-7xl mx-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                        ADS - Marketing Dashboard
-                    </h1>
-                    <p className="text-gray-500 dark:text-zinc-400 mt-1">
-                        Métricas de tráfego pago da landing page (últimos 30 dias)
-                    </p>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-zinc-400">
-                    <TrendingUp className="h-4 w-4" />
-                    <span>Atualizado agora</span>
-                </div>
-            </div>
-
-            {/* KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {loadingOverview ? (
-                    [1, 2, 3, 4].map((i) => (
-                        <Card key={i} className="animate-pulse">
-                            <CardContent className="p-6 h-24 bg-gray-100 dark:bg-zinc-800" />
-                        </Card>
-                    ))
-                ) : (
-                    <>
-                        <KpiCard
-                            title="Visitantes"
-                            value={overview?.totalPageViews.toLocaleString() || "0"}
-                            icon={Users}
-                        />
-                        <KpiCard
-                            title="Conversões"
-                            value={overview?.totalSignups.toLocaleString() || "0"}
-                            icon={Target}
-                        />
-                        <KpiCard
-                            title="Taxa de Conversão"
-                            value={`${overview?.conversionRate || 0}%`}
-                            icon={TrendingUp}
-                        />
-                        <KpiCard
-                            title="Origem Principal"
-                            value={overview?.topSource.name || "-"}
-                            subtitle={`${overview?.topSource.count || 0} visitantes`}
-                            icon={Globe}
-                        />
-                    </>
-                )}
-            </div>
-
-            {/* Funnel & Campaigns */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800">
-                    <CardHeader>
-                        <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                            <ArrowRight className="h-5 w-5 text-amber-500" />
-                            Funil de Conversão
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loadingFunnel ? (
-                            <div className="space-y-4">
-                                {[1, 2, 3, 4, 5, 6].map((i) => (
-                                    <div key={i} className="animate-pulse h-3 bg-gray-100 dark:bg-zinc-800 rounded" />
-                                ))}
-                            </div>
-                        ) : (
-                            <FunnelChart data={funnelData?.funnel || []} />
-                        )}
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800">
-                    <CardHeader>
-                        <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                            <Globe className="h-5 w-5 text-amber-500" />
-                            Campanhas
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loadingCampaigns ? (
-                            <div className="animate-pulse space-y-3">
-                                {[1, 2, 3, 4].map((i) => (
-                                    <div key={i} className="h-10 bg-gray-100 dark:bg-zinc-800 rounded" />
-                                ))}
-                            </div>
-                        ) : (
-                            <CampaignsTable campaigns={campaignsData?.campaigns || []} />
-                        )}
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Behavior */}
-            <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Comportamento</h2>
-                {loadingBehavior ? (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {[1, 2, 3].map((i) => (
-                            <Card key={i} className="animate-pulse">
-                                <CardContent className="p-6 h-40 bg-gray-100 dark:bg-zinc-800" />
-                            </Card>
-                        ))}
+        <Layout>
+            <div className="space-y-8">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                            ADS - Marketing Dashboard
+                        </h1>
+                        <p className="text-gray-500 dark:text-zinc-400 mt-1">
+                            Métricas de tráfego pago da landing page (últimos 30 dias)
+                        </p>
                     </div>
-                ) : behaviorData ? (
-                    <BehaviorMetrics data={behaviorData} />
-                ) : null}
-            </div>
+                    <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-zinc-400">
+                        <TrendingUp className="h-4 w-4" />
+                        <span>Atualizado agora</span>
+                    </div>
+                </div>
 
-            {/* WhatsApp Section */}
-            <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">WhatsApp</h2>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <WhatsAppConfigCard
-                        settings={whatsappSettings}
-                        onSave={(data) => saveSettingsMutation.mutateAsync(data)}
-                    />
-                    {loadingWhatsappClicks ? (
-                        <Card className="animate-pulse">
-                            <CardContent className="p-6 h-40 bg-gray-100 dark:bg-zinc-800" />
-                        </Card>
+                {/* KPIs */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {loadingOverview ? (
+                        [1, 2, 3, 4].map((i) => (
+                            <Card key={i} className="animate-pulse">
+                                <CardContent className="p-6 h-24 bg-gray-100 dark:bg-zinc-800" />
+                            </Card>
+                        ))
                     ) : (
-                        <WhatsAppClicksCard data={whatsappClicks} />
+                        <>
+                            <KpiCard
+                                title="Visitantes"
+                                value={overview?.totalPageViews.toLocaleString() || "0"}
+                                icon={Users}
+                            />
+                            <KpiCard
+                                title="Conversões"
+                                value={overview?.totalSignups.toLocaleString() || "0"}
+                                icon={Target}
+                            />
+                            <KpiCard
+                                title="Taxa de Conversão"
+                                value={`${overview?.conversionRate || 0}%`}
+                                icon={TrendingUp}
+                            />
+                            <KpiCard
+                                title="Origem Principal"
+                                value={overview?.topSource.name || "-"}
+                                subtitle={`${overview?.topSource.count || 0} visitantes`}
+                                icon={Globe}
+                            />
+                        </>
                     )}
                 </div>
+
+                {/* Funnel & Campaigns */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <Card className="bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800">
+                        <CardHeader>
+                            <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                                <ArrowRight className="h-5 w-5 text-amber-500" />
+                                Funil de Conversão
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {loadingFunnel ? (
+                                <div className="space-y-4">
+                                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                                        <div key={i} className="animate-pulse h-3 bg-gray-100 dark:bg-zinc-800 rounded" />
+                                    ))}
+                                </div>
+                            ) : (
+                                <FunnelChart data={funnelData?.funnel || []} />
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card className="bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800">
+                        <CardHeader>
+                            <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                                <Globe className="h-5 w-5 text-amber-500" />
+                                Campanhas
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {loadingCampaigns ? (
+                                <div className="animate-pulse space-y-3">
+                                    {[1, 2, 3, 4].map((i) => (
+                                        <div key={i} className="h-10 bg-gray-100 dark:bg-zinc-800 rounded" />
+                                    ))}
+                                </div>
+                            ) : (
+                                <CampaignsTable campaigns={campaignsData?.campaigns || []} />
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Behavior */}
+                <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Comportamento</h2>
+                    {loadingBehavior ? (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {[1, 2, 3].map((i) => (
+                                <Card key={i} className="animate-pulse">
+                                    <CardContent className="p-6 h-40 bg-gray-100 dark:bg-zinc-800" />
+                                </Card>
+                            ))}
+                        </div>
+                    ) : behaviorData ? (
+                        <BehaviorMetrics data={behaviorData} />
+                    ) : null}
+                </div>
+
+                {/* WhatsApp Section */}
+                <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">WhatsApp</h2>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <WhatsAppConfigCard
+                            settings={whatsappSettings}
+                            onSave={(data) => saveSettingsMutation.mutateAsync(data)}
+                        />
+                        {loadingWhatsappClicks ? (
+                            <Card className="animate-pulse">
+                                <CardContent className="p-6 h-40 bg-gray-100 dark:bg-zinc-800" />
+                            </Card>
+                        ) : (
+                            <WhatsAppClicksCard data={whatsappClicks} />
+                        )}
+                    </div>
+                </div>
             </div>
-        </div>
+        </Layout>
     );
 }

@@ -93,6 +93,16 @@ export default function Dashboard() {
 
   const { data: appointments = [] } = useQuery<Appointment[]>({
     queryKey: ["/api/appointments"],
+    queryFn: async () => {
+      const res = await fetch("/api/appointments", {
+        headers: {
+          ...getAuthHeaders(),
+          'x-legacy-list': '1', // Formato array para compatibilidade (temporário)
+        },
+      });
+      if (!res.ok) throw new Error("Failed to fetch appointments");
+      return res.json();
+    },
   });
 
   const { data: clients = [] } = useQuery<Client[]>({
