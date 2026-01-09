@@ -350,6 +350,23 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
             else if (variationPercent <= 25) efficiencyStatus = "warning";
             else efficiencyStatus = "critical";
 
+            // Determinar nome do mês ou período
+            let monthName = "";
+            const isFullMonth = periodStart.getDate() === 1 &&
+                periodEnd.getDate() === new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0).getDate();
+
+            if (isFullMonth) {
+                // Se for um mês completo, exibe o nome do mês
+                monthName = periodStart.toLocaleDateString("pt-BR", { month: "long" });
+                // Adiciona o ano se não for o ano atual
+                if (periodStart.getFullYear() !== now.getFullYear()) {
+                    monthName += ` ${periodStart.getFullYear()}`;
+                }
+            } else {
+                // Período personalizado
+                monthName = `${periodStart.toLocaleDateString("pt-BR")} a ${periodEnd.toLocaleDateString("pt-BR")}`;
+            }
+
             console.log(`✅ [DASHBOARD] Produtividade: ${avgRealMinutes}min real vs ${avgPlannedMinutes}min planejado (${variationPercent}%)`);
             res.json({
                 avgPlannedMinutes,
@@ -357,7 +374,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 variationPercent,
                 efficiencyStatus,
                 sampleSize: validCount,
-                monthName: now.toLocaleDateString("pt-BR", { month: "long" }),
+                monthName: monthName,
             });
         } catch (error: any) {
             console.error("❌ [DASHBOARD] Erro ao buscar métricas de produtividade:", error);
@@ -460,6 +477,20 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 ? Math.round((rescheduled / totalPeriod) * 100)
                 : 0;
 
+            // Determinar nome do mês ou período
+            let monthName = "";
+            const isFullMonth = periodStart.getDate() === 1 &&
+                periodEnd.getDate() === new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0).getDate();
+
+            if (isFullMonth) {
+                monthName = periodStart.toLocaleDateString("pt-BR", { month: "long" });
+                if (periodStart.getFullYear() !== now.getFullYear()) {
+                    monthName += ` ${periodStart.getFullYear()}`;
+                }
+            } else {
+                monthName = `${periodStart.toLocaleDateString("pt-BR")} a ${periodEnd.toLocaleDateString("pt-BR")}`;
+            }
+
             console.log(`✅ [DASHBOARD] Qualidade: ${notCompletedRate}% não realizados, ${rescheduledRate}% reagendados`);
             res.json({
                 totalFinalized,
@@ -469,7 +500,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 reasonsBreakdown,
                 rescheduledCount: rescheduled,
                 rescheduledRate,
-                monthName: now.toLocaleDateString("pt-BR", { month: "long" }),
+                monthName: monthName,
             });
         } catch (error: any) {
             console.error("❌ [DASHBOARD] Erro ao buscar métricas de qualidade:", error);
@@ -566,6 +597,20 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 ? Math.round((realRevenue / totalPotential) * 100)
                 : 0;
 
+            // Determinar nome do período
+            let monthName = "";
+            const isFullMonth = periodStart.getDate() === 1 &&
+                periodEnd.getDate() === new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0).getDate();
+
+            if (isFullMonth) {
+                monthName = periodStart.toLocaleDateString("pt-BR", { month: "long" });
+                if (periodStart.getFullYear() !== now.getFullYear()) {
+                    monthName += ` ${periodStart.getFullYear()}`;
+                }
+            } else {
+                monthName = `${periodStart.toLocaleDateString("pt-BR")} a ${periodEnd.toLocaleDateString("pt-BR")}`;
+            }
+
             console.log(`✅ [DASHBOARD] Financeiro: R$${realRevenue.toFixed(2)} real, R$${expectedRevenue.toFixed(2)} esperado (${realizationRate}%)`);
             res.json({
                 realRevenue,
@@ -574,8 +619,8 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 realizationRate,
                 completedCount: completedAppointments.length,
                 pendingCount: pendingAppointments.length,
-                monthName: now.toLocaleDateString("pt-BR", { month: "long" }),
-                year: now.getFullYear(),
+                monthName: monthName,
+                year: periodStart.getFullYear(),
             });
         } catch (error: any) {
             console.error("❌ [DASHBOARD] Erro ao buscar métricas financeiras:", error);

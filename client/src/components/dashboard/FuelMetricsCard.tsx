@@ -61,15 +61,33 @@ export function FuelMetricsCard({ vehicleIds, fuelTypes, startDate, endDate }: F
         );
     }
 
+    const getPeriodLabel = () => {
+        if (startDate && endDate) {
+            const start = new Date(startDate + "T00:00:00");
+            const end = new Date(endDate + "T00:00:00");
+            if (startDate === endDate) return "Hoje";
+            if (start.getDate() === 1 && end.getDate() === new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate()) {
+                // Mês completo
+                const monthName = start.toLocaleDateString("pt-BR", { month: "long" });
+                return monthName.charAt(0).toUpperCase() + monthName.slice(1); // Capitalize
+            }
+            return "Período";
+        }
+        return "Mês Atual";
+    };
+
+    const periodLabel = getPeriodLabel();
+    const periodTooltip = startDate ? "No período selecionado" : "No mês atual";
+
     const metrics = [
         {
-            title: "Gasto do Mês",
+            title: `Gasto (${periodLabel})`,
             value: stats ? `R$ ${stats.totalSpent.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "--",
             variation: stats?.spentVariation ?? 0,
             icon: DollarSign,
             iconColor: "text-green-600 dark:text-green-400",
             iconBg: "bg-green-50 dark:bg-green-900/20",
-            tooltip: "Total gasto em combustível no mês atual",
+            tooltip: `Total gasto em combustível ${periodTooltip}`,
         },
         {
             title: "Litros Consumidos",
@@ -78,7 +96,7 @@ export function FuelMetricsCard({ vehicleIds, fuelTypes, startDate, endDate }: F
             icon: Droplets,
             iconColor: "text-blue-600 dark:text-blue-400",
             iconBg: "bg-blue-50 dark:bg-blue-900/20",
-            tooltip: "Total de litros abastecidos no mês atual",
+            tooltip: `Total de litros abastecidos ${periodTooltip}`,
         },
         {
             title: "Eficiência Média",
@@ -135,7 +153,7 @@ export function FuelMetricsCard({ vehicleIds, fuelTypes, startDate, endDate }: F
                                     {metric.variation >= 0 ? "+" : ""}
                                     {metric.variation}%
                                 </span>
-                                <span className="text-gray-600 dark:text-zinc-400 text-sm ml-2">vs. mês passado</span>
+                                <span className="text-gray-600 dark:text-zinc-400 text-sm ml-2">vs. período anterior</span>
                             </div>
                         )}
                     </CardContent>

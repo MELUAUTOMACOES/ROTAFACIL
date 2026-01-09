@@ -390,12 +390,26 @@ export function registerVehicleExtensionRoutes(app: Express, authenticateToken: 
                 .from(vehicles)
                 .where(eq(vehicles.userId, req.user.userId));
 
+            // Determinar nome do período
+            let monthName = "";
+            const isFullMonth = periodStart.getDate() === 1 &&
+                periodEnd.getDate() === new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0).getDate();
+
+            if (isFullMonth) {
+                monthName = periodStart.toLocaleDateString("pt-BR", { month: "long" });
+                if (periodStart.getFullYear() !== now.getFullYear()) {
+                    monthName += ` ${periodStart.getFullYear()}`;
+                }
+            } else {
+                monthName = `${periodStart.toLocaleDateString("pt-BR")} a ${periodEnd.toLocaleDateString("pt-BR")}`;
+            }
+
             console.log(`✅ [DASHBOARD] Custos calculados - Mês: R$ ${monthTotal.toFixed(2)}, Ano: R$ ${yearTotal.toFixed(2)}`);
             res.json({
                 monthTotal,
                 yearTotal,
-                monthName: now.toLocaleDateString("pt-BR", { month: "long" }),
-                year: now.getFullYear(),
+                monthName: monthName,
+                year: periodStart.getFullYear(),
                 vehicles: userVehicles,
                 selectedVehicleId: vehicleId ? parseInt(vehicleId) : null,
             });
