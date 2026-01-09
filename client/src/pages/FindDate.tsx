@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Search, Calendar } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { getAuthHeaders } from "@/lib/auth";
+import { normalizeItems } from "@/lib/normalize";
 import { Service, Technician, BusinessRules, Client, Team } from "@shared/schema";
 import { useLocation } from "wouter";
 import { ClientSearch } from "@/components/ui/client-search";
@@ -54,19 +56,34 @@ export default function FindDate() {
   const [isFetchingCep, setIsFetchingCep] = useState(false);
 
   // Buscar serviços
-  const { data: services = [], isLoading: isLoadingServices, error: errorServices } = useQuery<Service[]>({
+  const { data: servicesData, isLoading: isLoadingServices, error: errorServices } = useQuery({
     queryKey: ["/api/services"],
+    queryFn: async () => {
+      const response = await fetch("/api/services?page=1&pageSize=50", { headers: getAuthHeaders() });
+      return response.json();
+    },
   });
+  const services = normalizeItems<Service>(servicesData);
 
   // Buscar técnicos
-  const { data: technicians = [], isLoading: isLoadingTechnicians, error: errorTechnicians } = useQuery<Technician[]>({
+  const { data: techniciansData, isLoading: isLoadingTechnicians, error: errorTechnicians } = useQuery({
     queryKey: ["/api/technicians"],
+    queryFn: async () => {
+      const response = await fetch("/api/technicians?page=1&pageSize=50", { headers: getAuthHeaders() });
+      return response.json();
+    },
   });
+  const technicians = normalizeItems<Technician>(techniciansData);
 
   // Buscar equipes
-  const { data: teams = [], isLoading: isLoadingTeams, error: errorTeams } = useQuery<Team[]>({
+  const { data: teamsData, isLoading: isLoadingTeams, error: errorTeams } = useQuery({
     queryKey: ["/api/teams"],
+    queryFn: async () => {
+      const response = await fetch("/api/teams?page=1&pageSize=50", { headers: getAuthHeaders() });
+      return response.json();
+    },
   });
+  const teams = normalizeItems<Team>(teamsData);
 
   // Buscar regras de negócio
   const { data: businessRules } = useQuery<BusinessRules>({

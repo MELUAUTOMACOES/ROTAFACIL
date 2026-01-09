@@ -6,6 +6,8 @@ import { BarChart3, TrendingUp, TrendingDown } from "lucide-react";
 interface FuelCostEvolutionCardProps {
     vehicleIds?: number[];
     fuelTypes?: string[];
+    startDate?: string;
+    endDate?: string;
 }
 
 interface FuelStats {
@@ -27,7 +29,7 @@ const MONTH_NAMES: Record<string, string> = {
     "12": "Dez",
 };
 
-export function FuelCostEvolutionCard({ vehicleIds, fuelTypes }: FuelCostEvolutionCardProps) {
+export function FuelCostEvolutionCard({ vehicleIds, fuelTypes, startDate, endDate }: FuelCostEvolutionCardProps) {
     const queryParams = new URLSearchParams();
     if (vehicleIds && vehicleIds.length > 0) {
         queryParams.set("vehicleIds", vehicleIds.join(","));
@@ -35,9 +37,11 @@ export function FuelCostEvolutionCard({ vehicleIds, fuelTypes }: FuelCostEvoluti
     if (fuelTypes && fuelTypes.length > 0) {
         queryParams.set("fuelTypes", fuelTypes.join(","));
     }
+    if (startDate) queryParams.set("startDate", startDate);
+    if (endDate) queryParams.set("endDate", endDate);
 
     const { data: stats, isLoading } = useQuery<FuelStats>({
-        queryKey: ["/api/dashboard/fuel-stats", vehicleIds, fuelTypes],
+        queryKey: ["/api/dashboard/fuel-stats", vehicleIds, fuelTypes, startDate, endDate],
         queryFn: async () => {
             const url = `/api/dashboard/fuel-stats${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
             const res = await apiRequest("GET", url);

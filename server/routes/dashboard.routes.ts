@@ -275,10 +275,18 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
             console.log("📊 [DASHBOARD] Buscando métricas de produtividade");
 
             const now = new Date();
-            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const defaultStartOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const defaultEndOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-            // Buscar agendamentos do mês com dados de execução
-            const monthAppointments = await db
+            // Query params para filtros opcionais
+            const { startDate, endDate } = req.query;
+
+            // Definir período (usar filtros ou default mês atual)
+            const periodStart = startDate ? new Date(startDate as string) : defaultStartOfMonth;
+            const periodEnd = endDate ? new Date(endDate as string + "T23:59:59") : defaultEndOfMonth;
+
+            // Buscar agendamentos do período com dados de execução
+            const periodAppointments = await db
                 .select({
                     id: appointments.id,
                     serviceId: appointments.serviceId,
@@ -290,7 +298,8 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .where(
                     and(
                         eq(appointments.userId, req.user.userId),
-                        gte(appointments.scheduledDate, startOfMonth),
+                        gte(appointments.scheduledDate, periodStart),
+                        lte(appointments.scheduledDate, periodEnd),
                         eq(appointments.executionStatus, "concluido"),
                         sql`${appointments.executionStartedAt} IS NOT NULL`,
                         sql`${appointments.executionFinishedAt} IS NOT NULL`
@@ -310,7 +319,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
             let totalRealMinutes = 0;
             let validCount = 0;
 
-            for (const apt of monthAppointments) {
+            for (const apt of periodAppointments) {
                 const service = servicesMap.get(apt.serviceId);
                 if (!service) continue;
 
@@ -364,10 +373,18 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
             console.log("📊 [DASHBOARD] Buscando métricas de qualidade");
 
             const now = new Date();
-            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const defaultStartOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const defaultEndOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-            // Buscar todos os agendamentos do mês que foram finalizados
-            const monthAppointments = await db
+            // Query params para filtros opcionais
+            const { startDate, endDate } = req.query;
+
+            // Definir período (usar filtros ou default mês atual)
+            const periodStart = startDate ? new Date(startDate as string) : defaultStartOfMonth;
+            const periodEnd = endDate ? new Date(endDate as string + "T23:59:59") : defaultEndOfMonth;
+
+            // Buscar todos os agendamentos do período que foram finalizados
+            const periodAppointments = await db
                 .select({
                     id: appointments.id,
                     status: appointments.status,
@@ -377,14 +394,15 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .where(
                     and(
                         eq(appointments.userId, req.user.userId),
-                        gte(appointments.scheduledDate, startOfMonth),
+                        gte(appointments.scheduledDate, periodStart),
+                        lte(appointments.scheduledDate, periodEnd),
                         sql`${appointments.executionStatus} IS NOT NULL`
                     )
                 );
 
-            const totalFinalized = monthAppointments.length;
-            const completed = monthAppointments.filter(a => a.executionStatus === "concluido").length;
-            const notCompleted = monthAppointments.filter(a =>
+            const totalFinalized = periodAppointments.length;
+            const completed = periodAppointments.filter(a => a.executionStatus === "concluido").length;
+            const notCompleted = periodAppointments.filter(a =>
                 a.executionStatus?.startsWith("nao_realizado")
             );
 
@@ -417,27 +435,29 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .where(
                     and(
                         eq(appointments.userId, req.user.userId),
-                        gte(appointments.scheduledDate, startOfMonth)
+                        gte(appointments.scheduledDate, periodStart),
+                        lte(appointments.scheduledDate, periodEnd)
                     )
                 );
 
             const rescheduled = rescheduledData[0]?.total || 0;
 
-            // Total de agendamentos do mês (para taxa de reagendamento)
-            const totalMonthAppointments = await db
+            // Total de agendamentos do período (para taxa de reagendamento)
+            const totalPeriodAppointments = await db
                 .select({ count: sql<number>`count(*)::int` })
                 .from(appointments)
                 .where(
                     and(
                         eq(appointments.userId, req.user.userId),
-                        gte(appointments.scheduledDate, startOfMonth)
+                        gte(appointments.scheduledDate, periodStart),
+                        lte(appointments.scheduledDate, periodEnd)
                     )
                 );
 
 
-            const totalMonth = totalMonthAppointments[0]?.count || 0;
-            const rescheduledRate = totalMonth > 0
-                ? Math.round((rescheduled / totalMonth) * 100)
+            const totalPeriod = totalPeriodAppointments[0]?.count || 0;
+            const rescheduledRate = totalPeriod > 0
+                ? Math.round((rescheduled / totalPeriod) * 100)
                 : 0;
 
             console.log(`✅ [DASHBOARD] Qualidade: ${notCompletedRate}% não realizados, ${rescheduledRate}% reagendados`);
@@ -965,6 +985,216 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
             res.json({ providers: validProviders });
         } catch (error: any) {
             console.error("❌ [DASHBOARD] Erro ao buscar localização dos prestadores:", error);
+            res.status(500).json({ message: error.message });
+        }
+    });
+
+    // ==================== AGENDAMENTOS DE HOJE (LISTA LEVE) ====================
+
+    // GET /api/dashboard/today-appointments - Lista leve de agendamentos de hoje
+    // Para exibir "Agenda de Hoje" e "Atividades" no Dashboard
+    app.get("/api/dashboard/today-appointments", authenticateToken, async (req: any, res) => {
+        try {
+            console.log("📊 [DASHBOARD] Buscando agendamentos de hoje");
+            const startTime = Date.now();
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+            const userId = req.user.userId;
+
+            // Buscar agendamentos de hoje (campos leves)
+            const todayList = await db
+                .select({
+                    id: appointments.id,
+                    scheduledDate: appointments.scheduledDate,
+                    status: appointments.status,
+                    clientId: appointments.clientId,
+                    serviceId: appointments.serviceId,
+                    technicianId: appointments.technicianId,
+                    teamId: appointments.teamId,
+                    logradouro: appointments.logradouro,
+                    numero: appointments.numero,
+                    bairro: appointments.bairro,
+                    cidade: appointments.cidade,
+                    notes: appointments.notes,
+                    executionStatus: appointments.executionStatus,
+                    createdAt: appointments.createdAt,
+                    // Incluir nome do cliente via join
+                    clientName: clients.name,
+                })
+                .from(appointments)
+                .leftJoin(clients, eq(appointments.clientId, clients.id))
+                .where(and(
+                    eq(appointments.userId, userId),
+                    gte(appointments.scheduledDate, today),
+                    lte(appointments.scheduledDate, tomorrow)
+                ))
+                .orderBy(appointments.scheduledDate)
+                .limit(limit);
+
+            const totalTime = Date.now() - startTime;
+            console.log(`✅ [DASHBOARD] ${todayList.length} agendamentos de hoje em ${totalTime}ms`);
+            res.json(todayList);
+        } catch (error: any) {
+            console.error("❌ [DASHBOARD] Erro ao buscar agendamentos de hoje:", error);
+            res.status(500).json({ message: error.message });
+        }
+    });
+
+    // ==================== MÉTRICAS DE AGENDAMENTOS PARA O DASHBOARD ====================
+
+    // GET /api/dashboard/appointments-stats - Estatísticas de agendamentos pré-calculadas
+    // Substitui o uso de /api/appointments pelo Dashboard, evitando egress pesado
+    app.get("/api/dashboard/appointments-stats", authenticateToken, async (req: any, res) => {
+        try {
+            console.log("📊 [DASHBOARD] Buscando estatísticas de agendamentos");
+            const startTime = Date.now();
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+
+            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59);
+
+            const userId = req.user.userId;
+
+            // 1. Contagem de hoje
+            const [todayCount] = await db
+                .select({ count: sql<number>`count(*)::int` })
+                .from(appointments)
+                .where(and(
+                    eq(appointments.userId, userId),
+                    gte(appointments.scheduledDate, today),
+                    lte(appointments.scheduledDate, tomorrow)
+                ));
+
+            // 2. Contagem de ontem (para variação)
+            const [yesterdayCount] = await db
+                .select({ count: sql<number>`count(*)::int` })
+                .from(appointments)
+                .where(and(
+                    eq(appointments.userId, userId),
+                    gte(appointments.scheduledDate, yesterday),
+                    lte(appointments.scheduledDate, today)
+                ));
+
+            // 3. Este mês: total e concluídos
+            const [thisMonthStats] = await db
+                .select({
+                    total: sql<number>`count(*)::int`,
+                    completed: sql<number>`count(*) FILTER (WHERE ${appointments.status} = 'completed' OR ${appointments.executionStatus} = 'concluido')::int`
+                })
+                .from(appointments)
+                .where(and(
+                    eq(appointments.userId, userId),
+                    gte(appointments.scheduledDate, startOfMonth),
+                    lte(appointments.scheduledDate, today)
+                ));
+
+            // 4. Mês passado: total e concluídos (para comparação)
+            const [lastMonthStats] = await db
+                .select({
+                    total: sql<number>`count(*)::int`,
+                    completed: sql<number>`count(*) FILTER (WHERE ${appointments.status} = 'completed' OR ${appointments.executionStatus} = 'concluido')::int`
+                })
+                .from(appointments)
+                .where(and(
+                    eq(appointments.userId, userId),
+                    gte(appointments.scheduledDate, startOfLastMonth),
+                    lte(appointments.scheduledDate, endOfLastMonth)
+                ));
+
+            // Calcular taxas de conclusão
+            const thisMonthRate = thisMonthStats.total > 0
+                ? Math.round((thisMonthStats.completed / thisMonthStats.total) * 100)
+                : 0;
+            const lastMonthRate = lastMonthStats.total > 0
+                ? Math.round((lastMonthStats.completed / lastMonthStats.total) * 100)
+                : 0;
+
+            // 5. Receita do mês (agendamentos concluídos * preço do serviço)
+            const monthRevenue = await db
+                .select({
+                    total: sql<number>`COALESCE(SUM(CAST(${services.price} AS DECIMAL)), 0)::float`
+                })
+                .from(appointments)
+                .innerJoin(services, eq(appointments.serviceId, services.id))
+                .where(and(
+                    eq(appointments.userId, userId),
+                    gte(appointments.scheduledDate, startOfMonth),
+                    lte(appointments.scheduledDate, today),
+                    or(
+                        eq(appointments.status, 'completed'),
+                        eq(appointments.executionStatus, 'concluido')
+                    )
+                ));
+
+            // 6. Receita do mês passado (para comparação)
+            const lastMonthRevenue = await db
+                .select({
+                    total: sql<number>`COALESCE(SUM(CAST(${services.price} AS DECIMAL)), 0)::float`
+                })
+                .from(appointments)
+                .innerJoin(services, eq(appointments.serviceId, services.id))
+                .where(and(
+                    eq(appointments.userId, userId),
+                    gte(appointments.scheduledDate, startOfLastMonth),
+                    lte(appointments.scheduledDate, endOfLastMonth),
+                    or(
+                        eq(appointments.status, 'completed'),
+                        eq(appointments.executionStatus, 'concluido')
+                    )
+                ));
+
+            // 7. Tempo médio de execução (este mês)
+            const avgExecTime = await db
+                .select({
+                    avg: sql<number>`COALESCE(AVG(EXTRACT(EPOCH FROM (${appointments.executionFinishedAt} - ${appointments.executionStartedAt})) / 60), 0)::float`
+                })
+                .from(appointments)
+                .where(and(
+                    eq(appointments.userId, userId),
+                    gte(appointments.scheduledDate, startOfMonth),
+                    eq(appointments.executionStatus, 'concluido'),
+                    sql`${appointments.executionStartedAt} IS NOT NULL`,
+                    sql`${appointments.executionFinishedAt} IS NOT NULL`
+                ));
+
+            // Calcular variações
+            const todayVariation = yesterdayCount.count > 0
+                ? Math.round(((todayCount.count - yesterdayCount.count) / yesterdayCount.count) * 100)
+                : 0;
+            const completionVariation = lastMonthRate > 0 ? thisMonthRate - lastMonthRate : 0;
+            const thisMonthRev = monthRevenue[0]?.total || 0;
+            const lastMonthRev = lastMonthRevenue[0]?.total || 0;
+            const revenueVariation = lastMonthRev > 0
+                ? Math.round(((thisMonthRev - lastMonthRev) / lastMonthRev) * 100)
+                : 0;
+
+            const result = {
+                todayAppointments: todayCount.count,
+                todayVariation,
+                completionRate: thisMonthRate,
+                completionVariation,
+                monthRevenue: thisMonthRev,
+                revenueVariation,
+                avgExecutionTime: Math.round(avgExecTime[0]?.avg || 0),
+            };
+
+            const totalTime = Date.now() - startTime;
+            console.log(`✅ [DASHBOARD] Estatísticas de agendamentos em ${totalTime}ms`);
+            res.json(result);
+        } catch (error: any) {
+            console.error("❌ [DASHBOARD] Erro ao buscar estatísticas de agendamentos:", error);
             res.status(500).json({ message: error.message });
         }
     });

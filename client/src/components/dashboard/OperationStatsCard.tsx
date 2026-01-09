@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { getAuthHeaders } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -21,67 +21,82 @@ interface OperationStatsCardProps {
     teamId?: number;
 }
 
-interface Appointment {
-    id: number;
-    status: string;
-    executionStatus: string | null;
-    scheduledDate: string;
+// Resposta do endpoint agregado /api/dashboard/financial-metrics-v2
+interface FinancialMetricsV2Response {
+    totalRevenue: number;
+    totalCount: number;
+    breakdown: Array<{
+        status: string;
+        label: string;
+        count: number;
+        revenue: number;
+        percent: number;
+        color: string;
+    }>;
+}
+
+// Resposta do endpoint /api/dashboard/appointments-stats
+interface AppointmentsStatsResponse {
+    todayAppointments: number;
+    todayVariation: number;
+    completionRate: number;
+    completionVariation: number;
+    monthRevenue: number;
+    revenueVariation: number;
+    avgExecutionTime: number;
 }
 
 export function OperationStatsCard({ startDate, endDate, technicianId, teamId }: OperationStatsCardProps) {
-    // Fetch all appointments
-    const { data: appointments = [], isLoading } = useQuery<Appointment[]>({
-        queryKey: ["/api/appointments", startDate, endDate],
+    // ✅ OTIMIZADO: Usar endpoint agregado em vez de buscar todos os appointments
+    // Payload: ~500 bytes vs ~10KB+ (fetch-all)
+    const { data: metricsData, isLoading: isLoadingMetrics } = useQuery<FinancialMetricsV2Response>({
+        queryKey: ["/api/dashboard/financial-metrics-v2", startDate, endDate, technicianId, teamId],
         queryFn: async () => {
-            const res = await apiRequest("GET", "/api/appointments");
+            const params = new URLSearchParams();
+            if (startDate) params.set("startDate", startDate);
+            if (endDate) params.set("endDate", endDate);
+            if (technicianId) params.set("technicianId", technicianId.toString());
+            if (teamId) params.set("teamId", teamId.toString());
+
+            const res = await fetch(`/api/dashboard/financial-metrics-v2?${params.toString()}`, {
+                headers: getAuthHeaders(),
+            });
+            if (!res.ok) throw new Error("Failed to fetch metrics");
             return res.json();
         },
+        staleTime: 30_000, // 30 segundos
+        refetchOnWindowFocus: false,
     });
 
-    // Filter by period
-    const periodAppointments = appointments.filter((apt) => {
-        if (!startDate || !endDate) return true;
-        const aptDate = new Date(apt.scheduledDate).toISOString().split("T")[0];
-        return aptDate >= startDate && aptDate <= endDate;
+    // Buscar contagem de hoje separadamente (endpoint leve)
+    const { data: todayStats, isLoading: isLoadingToday } = useQuery<AppointmentsStatsResponse>({
+        queryKey: ["/api/dashboard/appointments-stats"],
+        queryFn: async () => {
+            const res = await fetch("/api/dashboard/appointments-stats", {
+                headers: getAuthHeaders(),
+            });
+            if (!res.ok) throw new Error("Failed to fetch today stats");
+            return res.json();
+        },
+        staleTime: 30_000,
+        refetchOnWindowFocus: false,
     });
 
-    // Filter by technician/team if provided
-    const filteredAppointments = periodAppointments.filter((apt: any) => {
-        if (technicianId && apt.technicianId !== technicianId) return false;
-        if (teamId && apt.teamId !== teamId) return false;
-        return true;
-    });
+    const isLoading = isLoadingMetrics || isLoadingToday;
 
-    // Calculate today's date (Brazil timezone)
-    const now = new Date();
-    const brazilOffset = -3 * 60;
-    const localOffset = now.getTimezoneOffset();
-    const brazilTime = new Date(now.getTime() + (localOffset - brazilOffset) * 60 * 1000);
-    const todayStr = brazilTime.toISOString().split("T")[0];
+    // Extrair contagens do breakdown
+    const getCountByStatus = (status: string): number => {
+        return metricsData?.breakdown?.find(b => b.status === status)?.count || 0;
+    };
 
-    // Today's appointments
-    const todayAppointments = filteredAppointments.filter((apt) => {
-        const aptDate = new Date(apt.scheduledDate).toISOString().split("T")[0];
-        return aptDate === todayStr;
-    });
-
-    // Completed in period (executionStatus = concluido)
-    const completedCount = filteredAppointments.filter(
-        (apt) => apt.executionStatus === "concluido"
-    ).length;
-
-    // Cancelled in period (status = cancelled)
-    const cancelledCount = filteredAppointments.filter(
-        (apt) => apt.status === "cancelled"
-    ).length;
-
-    // Total in period
-    const totalCount = filteredAppointments.length;
+    const completedCount = getCountByStatus("concluido");
+    const cancelledCount = getCountByStatus("cancelado");
+    const totalCount = metricsData?.totalCount || 0;
 
     const stats = [
         {
             label: "Agendamentos Hoje",
-            value: todayAppointments.length,
+            value: todayStats?.todayAppointments || 0,
             icon: CalendarDays,
             color: "text-blue-600 dark:text-blue-400",
             bgColor: "bg-blue-50 dark:bg-blue-900/20",

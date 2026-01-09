@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
+import { normalizeItems } from "@/lib/normalize";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,19 +47,21 @@ export default function Technicians() {
   });
 
   // Queries para técnicos
-  const { data: technicians = [], isLoading: techniciansLoading } = useQuery({
+  const { data: techniciansData, isLoading: techniciansLoading } = useQuery({
     queryKey: ["/api/technicians"],
     queryFn: async () => {
-      const response = await fetch("/api/technicians", {
+      const response = await fetch("/api/technicians?page=1&pageSize=50", {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
         throw new Error('Erro ao carregar técnicos');
       }
-      const data = await response.json();
-      return Array.isArray(data) ? data : [];
+      return response.json();
     },
+    staleTime: 2 * 60_000, // 2 minutos
+    refetchOnWindowFocus: false,
   });
+  const technicians = normalizeItems<Technician>(techniciansData);
 
   // Filtragem de técnicos
   const filteredTechnicians = technicians.filter((tech: Technician) => {
@@ -80,19 +83,21 @@ export default function Technicians() {
   });
 
   // Queries para equipes
-  const { data: teams = [], isLoading: teamsLoading } = useQuery({
+  const { data: teamsData, isLoading: teamsLoading } = useQuery({
     queryKey: ["/api/teams"],
     queryFn: async () => {
-      const response = await fetch("/api/teams", {
+      const response = await fetch("/api/teams?page=1&pageSize=50", {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
         throw new Error('Erro ao carregar equipes');
       }
-      const data = await response.json();
-      return Array.isArray(data) ? data : [];
+      return response.json();
     },
+    staleTime: 2 * 60_000, // 2 minutos
+    refetchOnWindowFocus: false,
   });
+  const teams = normalizeItems<Team>(teamsData);
 
   // Filtragem de equipes
   const filteredTeams = teams.filter((team: Team) => {
@@ -101,19 +106,21 @@ export default function Technicians() {
   });
 
   // Query para serviços (necessário para formulários)
-  const { data: services = [], isLoading: servicesLoading } = useQuery({
+  const { data: servicesData, isLoading: servicesLoading } = useQuery({
     queryKey: ["/api/services"],
     queryFn: async () => {
-      const response = await fetch("/api/services", {
+      const response = await fetch("/api/services?page=1&pageSize=50", {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
         throw new Error('Erro ao carregar serviços');
       }
-      const data = await response.json();
-      return Array.isArray(data) ? data : [];
+      return response.json();
     },
+    staleTime: 5 * 60_000, // 5 minutos - serviços raramente mudam
+    refetchOnWindowFocus: false,
   });
+  const services = normalizeItems<Service>(servicesData);
 
   // Query para buscar membros de todas as equipes
   const { data: allTeamMembers = [] } = useQuery({

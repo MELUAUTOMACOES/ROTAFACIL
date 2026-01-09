@@ -21,6 +21,7 @@ import {
 } from "@shared/schema";
 import { eq, and, gte, lte, like, or, desc, inArray, sql, asc, ne } from "drizzle-orm";
 import { trackFeatureUsage } from "./metrics.routes";
+import { logEgressSize } from "../utils/egressLogger";
 
 // Extend Request type for authenticated user
 interface AuthenticatedRequest extends Request {
@@ -38,22 +39,6 @@ function getOsrmUrl() {
   }
 
   // 2. Fallback: Arquivo txt em vários locais possíveis
-
-  // ==================== EGRESS LOGGING UTILITY ====================
-  // 📊 Helper para medir tamanho das respostas JSON (instrumentação temporária)
-  function logEgressSize(req: any, res: any, body: any): void {
-    try {
-      const sizeBytes = JSON.stringify(body).length;
-      const sizeKB = (sizeBytes / 1024).toFixed(2);
-      const arrayLength = Array.isArray(body) ? ` (${body.length} items)` : '';
-      console.log(`📊 [EGRESS] ${req.method} ${req.path} → ${sizeKB} KB${arrayLength}`);
-    } catch (err) {
-      // Se falhar, não quebra a resposta
-      console.error('❌ [EGRESS] Erro ao calcular tamanho:', err);
-    }
-  }
-
-  // =================================================================
   const candidates = [
     path.join(__dirname, "../osrm_url.txt"), // Localização original relativa (src/routes/ -> src/)
     path.join(__dirname, "osrm_url.txt"),    // Mesmo diretório
@@ -75,6 +60,7 @@ function getOsrmUrl() {
   console.error("Nenhuma configuração de OSRM encontrada (ENV ou arquivo).");
   return null;
 }
+
 
 // Helper para converter ID numérico para UUID válido
 function numberToUUID(num: number): string {
@@ -1552,7 +1538,7 @@ export function registerRoutesAPI(app: Express) {
         });
       }
     });
-  // GET /api/routes - Listar rotas com filtros
+  // GET /api/routes - Listar rotas com filtros PAGINADOS
   app.get("/api/routes", authenticateToken, async (req: any, res: Response) => {
     console.log("==== LOG INÍCIO: /api/routes ====");
     console.log("Query params:", JSON.stringify(req.query, null, 2));
@@ -1567,6 +1553,11 @@ export function registerRoutesAPI(app: Express) {
         vehicleId,
         search,
       } = req.query;
+
+      // ✅ Paginação: defaults page=1, pageSize=20, max=50
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string) || 20));
+      const offset = (page - 1) * pageSize;
 
       const conditions = [];
 
@@ -1605,7 +1596,17 @@ export function registerRoutesAPI(app: Express) {
         conditions.push(like(routesTbl.title, `%${search}%`));
       }
 
-      const baseQuery = db
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+      // 1) Contar total para paginação
+      const countResult = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(routesTbl)
+        .where(whereClause);
+      const total = countResult[0]?.count || 0;
+
+      // 2) Buscar rotas paginadas com joins para responsibleName
+      const routeList = await db
         .select({
           id: routesTbl.id,
           title: routesTbl.title,
@@ -1620,21 +1621,47 @@ export function registerRoutesAPI(app: Express) {
           status: routesTbl.status,
           displayNumber: routesTbl.displayNumber,
           createdAt: routesTbl.createdAt,
+          // Join para nome do responsável
+          technicianName: technicians.name,
+          teamName: teams.name,
         })
-        .from(routesTbl);
+        .from(routesTbl)
+        .leftJoin(technicians, and(
+          eq(routesTbl.responsibleType, 'technician'),
+          eq(routesTbl.responsibleId, sql`${technicians.id}::text`)
+        ))
+        .leftJoin(teams, and(
+          eq(routesTbl.responsibleType, 'team'),
+          eq(routesTbl.responsibleId, sql`${teams.id}::text`)
+        ))
+        .where(whereClause)
+        .orderBy(desc(routesTbl.createdAt))
+        .limit(pageSize)
+        .offset(offset);
 
-      const routeList =
-        conditions.length > 0
-          ? await baseQuery
-            .where(and(...conditions))
-            .orderBy(desc(routesTbl.createdAt))
-          : await baseQuery.orderBy(desc(routesTbl.createdAt));
+      // 3) Mapear resultado com responsibleName
+      const items = routeList.map((r) => ({
+        ...r,
+        responsibleName: r.technicianName || r.teamName || null,
+        technicianName: undefined,
+        teamName: undefined,
+      }));
 
-      console.log("✅ Rotas encontradas:", routeList.length);
+      const result = {
+        items,
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        }
+      };
+
+      console.log(`✅ Rotas encontradas: ${items.length} de ${total} (página ${page})`);
       console.log("==== LOG FIM: /api/routes (SUCESSO) ====");
 
-      logEgressSize(req, res, routeList); // 📊 Instrumentação
-      res.json(routeList);
+      logEgressSize(req, result);
+      res.json(result);
     } catch (error: any) {
       console.log("❌ ERRO na listagem:");
       console.log("Mensagem:", error.message);

@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, Users, User, Filter } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 interface Technician {
     id: number;
@@ -34,6 +36,10 @@ export function DashboardFilters({
     showResponsibleFilter = true,
 }: DashboardFiltersProps) {
     const [selectedResponsible, setSelectedResponsible] = useState<string>("all");
+
+    // Estado local para filtros temporários (usado apenas no modo "custom")
+    const [tempStartDate, setTempStartDate] = useState<string>("");
+    const [tempEndDate, setTempEndDate] = useState<string>("");
 
     // Fetch technicians
     const { data: technicians = [] } = useQuery<Technician[]>({
@@ -98,6 +104,9 @@ export function DashboardFilters({
                 startDate = new Date(year, 0, 1);
                 endDate = new Date(year, 11, 31);
                 break;
+            case "custom":
+                // Para custom, não retornar datas automáticas
+                return null;
             default:
                 startDate = new Date(year, month - 1, 1);
                 endDate = new Date(year, month, 0);
@@ -111,12 +120,41 @@ export function DashboardFilters({
 
     // Handle period change
     const handlePeriodChange = (period: DashboardFiltersState["period"]) => {
-        const dateRange = getDateRange(period);
-        onFiltersChange({
-            ...filters,
-            period,
-            ...dateRange,
-        });
+        if (period === "custom") {
+            // Quando muda para custom, inicializar com as datas atuais ou vazias
+            const currentStart = filters.startDate || "";
+            const currentEnd = filters.endDate || "";
+            setTempStartDate(currentStart);
+            setTempEndDate(currentEnd);
+
+            // Atualizar apenas o período, sem disparar query
+            onFiltersChange({
+                ...filters,
+                period,
+            });
+        } else {
+            // Para períodos pré-definidos, aplicar imediatamente
+            const dateRange = getDateRange(period);
+            if (dateRange) {
+                onFiltersChange({
+                    ...filters,
+                    period,
+                    ...dateRange,
+                });
+            }
+        }
+    };
+
+    // Aplicar filtros customizados (chamado pelo botão "Filtrar")
+    const handleApplyCustomFilters = () => {
+        if (tempStartDate && tempEndDate) {
+            onFiltersChange({
+                ...filters,
+                period: "custom",
+                startDate: tempStartDate,
+                endDate: tempEndDate,
+            });
+        }
     };
 
     // Handle responsible change
@@ -175,9 +213,42 @@ export function DashboardFilters({
                         <SelectItem value="month">Este Mês</SelectItem>
                         <SelectItem value="quarter">Este Trimestre</SelectItem>
                         <SelectItem value="year">Este Ano</SelectItem>
+                        <SelectItem value="custom">Personalizado</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
+
+            {/* Custom Date Range - Only show when "custom" is selected */}
+            {filters.period === "custom" && (
+                <>
+                    <div className="flex items-center gap-2">
+                        <Input
+                            type="date"
+                            value={tempStartDate}
+                            onChange={(e) => setTempStartDate(e.target.value)}
+                            className="h-8 w-[140px] text-sm"
+                            placeholder="Data Início"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Input
+                            type="date"
+                            value={tempEndDate}
+                            onChange={(e) => setTempEndDate(e.target.value)}
+                            className="h-8 w-[140px] text-sm"
+                            placeholder="Data Fim"
+                        />
+                    </div>
+                    <Button
+                        onClick={handleApplyCustomFilters}
+                        size="sm"
+                        className="h-8 bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                        disabled={!tempStartDate || !tempEndDate}
+                    >
+                        Filtrar
+                    </Button>
+                </>
+            )}
 
             {/* Responsible Filter */}
             {showResponsibleFilter && (
@@ -220,11 +291,24 @@ export function DashboardFilters({
                 </div>
             )}
 
-            {/* Period indicator */}
-            {filters.startDate && filters.endDate && (
+            {/* Period indicator - Only show when not in custom mode OR when custom dates are applied */}
+            {filters.startDate && filters.endDate && filters.period !== "custom" && (
                 <div className="ml-auto text-xs text-gray-400">
                     {/* Parse as local date to avoid UTC offset issues */}
                     {(() => {
+                        const [sy, sm, sd] = filters.startDate.split('-').map(Number);
+                        const [ey, em, ed] = filters.endDate.split('-').map(Number);
+                        const startLocal = new Date(sy, sm - 1, sd);
+                        const endLocal = new Date(ey, em - 1, ed);
+                        return `${startLocal.toLocaleDateString("pt-BR")} - ${endLocal.toLocaleDateString("pt-BR")}`;
+                    })()}
+                </div>
+            )}
+
+            {/* Show custom dates indicator when custom period and dates are applied */}
+            {filters.period === "custom" && filters.startDate && filters.endDate && (
+                <div className="ml-auto text-xs text-gray-400">
+                    Filtrado: {(() => {
                         const [sy, sm, sd] = filters.startDate.split('-').map(Number);
                         const [ey, em, ed] = filters.endDate.split('-').map(Number);
                         const startLocal = new Date(sy, sm - 1, sd);

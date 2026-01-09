@@ -22,11 +22,23 @@ interface QualityMetrics {
     monthName: string;
 }
 
-export function QualityMetricsCard() {
+interface QualityMetricsCardProps {
+    startDate?: string;
+    endDate?: string;
+}
+
+export function QualityMetricsCard({ startDate, endDate }: QualityMetricsCardProps) {
+    // Construir query params
+    const queryParams = new URLSearchParams();
+    if (startDate) queryParams.set("startDate", startDate);
+    if (endDate) queryParams.set("endDate", endDate);
+    const queryString = queryParams.toString();
+
     const { data, isLoading } = useQuery<QualityMetrics>({
-        queryKey: ["/api/dashboard/quality-metrics"],
+        queryKey: ["/api/dashboard/quality-metrics", startDate, endDate],
         queryFn: async () => {
-            const res = await apiRequest("GET", "/api/dashboard/quality-metrics");
+            const url = `/api/dashboard/quality-metrics${queryString ? `?${queryString}` : ""}`;
+            const res = await apiRequest("GET", url);
             return res.json();
         },
     });

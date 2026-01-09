@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { normalizeItems } from "@/lib/normalize";
 import type { Vehicle } from "@shared/schema";
 import { Filter, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,13 +27,16 @@ export function FuelFilters({
     selectedFuelTypes,
     setSelectedFuelTypes,
 }: FuelFiltersProps) {
-    const { data: vehicles = [] } = useQuery<Vehicle[]>({
+    const { data: vehiclesData } = useQuery({
         queryKey: ["/api/vehicles"],
         queryFn: async () => {
             const res = await apiRequest("GET", "/api/vehicles");
             return res.json();
         },
+        staleTime: 2 * 60_000,
+        refetchOnWindowFocus: false,
     });
+    const vehicles = normalizeItems<Vehicle>(vehiclesData);
 
     const toggleVehicle = (id: number) => {
         setSelectedVehicles(

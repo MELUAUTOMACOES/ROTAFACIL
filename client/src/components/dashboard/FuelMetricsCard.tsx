@@ -7,6 +7,8 @@ import { Fuel, TrendingUp, TrendingDown, DollarSign, Gauge, Droplets } from "luc
 interface FuelMetricsCardProps {
     vehicleIds?: number[];
     fuelTypes?: string[];
+    startDate?: string;
+    endDate?: string;
 }
 
 interface FuelStats {
@@ -22,7 +24,7 @@ interface FuelStats {
     monthlyEvolution: { month: string; totalSpent: number; totalLiters: number }[];
 }
 
-export function FuelMetricsCard({ vehicleIds, fuelTypes }: FuelMetricsCardProps) {
+export function FuelMetricsCard({ vehicleIds, fuelTypes, startDate, endDate }: FuelMetricsCardProps) {
     const queryParams = new URLSearchParams();
     if (vehicleIds && vehicleIds.length > 0) {
         queryParams.set("vehicleIds", vehicleIds.join(","));
@@ -30,9 +32,11 @@ export function FuelMetricsCard({ vehicleIds, fuelTypes }: FuelMetricsCardProps)
     if (fuelTypes && fuelTypes.length > 0) {
         queryParams.set("fuelTypes", fuelTypes.join(","));
     }
+    if (startDate) queryParams.set("startDate", startDate);
+    if (endDate) queryParams.set("endDate", endDate);
 
     const { data: stats, isLoading } = useQuery<FuelStats>({
-        queryKey: ["/api/dashboard/fuel-stats", vehicleIds, fuelTypes],
+        queryKey: ["/api/dashboard/fuel-stats", vehicleIds, fuelTypes, startDate, endDate],
         queryFn: async () => {
             const url = `/api/dashboard/fuel-stats${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
             const res = await apiRequest("GET", url);

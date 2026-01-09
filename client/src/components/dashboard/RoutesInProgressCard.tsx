@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { normalizeItems } from "@/lib/normalize";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -77,8 +78,8 @@ export function RoutesInProgressCard() {
         enabled: !!selectedRouteId,
     });
 
-    // Query para buscar agendamentos (para pegar status de execução)
-    const { data: appointments = [] } = useQuery<any[]>({
+    // Query para buscar agendamentos (para pegar status de execução) - normalizado
+    const { data: appointmentsData } = useQuery({
         queryKey: ["/api/appointments"],
         queryFn: async () => {
             const res = await fetch("/api/appointments", {
@@ -88,7 +89,10 @@ export function RoutesInProgressCard() {
             return res.json();
         },
         enabled: !!selectedRouteId,
+        staleTime: 30_000, // 30 segundos
+        refetchOnWindowFocus: false,
     });
+    const appointments = normalizeItems<any>(appointmentsData);
 
     const formatElapsedTime = (minutes: number) => {
         if (minutes < 60) return `${minutes}min`;

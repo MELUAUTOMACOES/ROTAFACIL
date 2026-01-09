@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { normalizeItems } from '@/lib/normalize';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { format } from 'date-fns';
@@ -63,6 +64,7 @@ export default function PrestadoresPage() {
             return res.json();
         }
     });
+    const vehicles = normalizeItems(vehiclesData);
 
     // Buscar lista de prestadores ativos (apenas admin)
     const { data: activeProviders } = useQuery({
@@ -1036,7 +1038,7 @@ export default function PrestadoresPage() {
                                             <SelectValue placeholder="Selecione o veículo" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {vehiclesData?.map((v: any) => (
+                                            {vehicles?.map((v: any) => (
                                                 <SelectItem key={v.id} value={v.id.toString()}>
                                                     {v.plate} - {v.model} {v.brand}
                                                 </SelectItem>

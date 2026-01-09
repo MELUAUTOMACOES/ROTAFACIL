@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
+import { normalizeItems } from "@/lib/normalize";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,15 +32,19 @@ export default function Services() {
     ]
   });
 
-  const { data: services = [], isLoading } = useQuery({
+  const { data: servicesData, isLoading } = useQuery({
     queryKey: ["/api/services"],
     queryFn: async () => {
-      const response = await fetch("/api/services", {
+      const response = await fetch("/api/services?page=1&pageSize=50", {
         headers: getAuthHeaders(),
       });
+      if (!response.ok) throw new Error("Erro ao carregar serviços");
       return response.json();
     },
+    staleTime: 5 * 60_000, // 5 minutos - serviços raramente mudam
+    refetchOnWindowFocus: false,
   });
+  const services = normalizeItems<Service>(servicesData);
 
   // Filtragem de serviços
   const filteredServices = services.filter((service: Service) => {

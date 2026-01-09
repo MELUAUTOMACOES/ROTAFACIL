@@ -268,15 +268,40 @@ function sleep(ms: number) {
 
 // ==================== EGRESS LOGGING UTILITY ====================
 // 📊 Helper para medir tamanho das respostas JSON (instrumentação temporária)
-function logEgressSize(req: any, res: any, body: any): void {
+function logEgressSize(req: any, body: any): void {
   try {
-    const sizeBytes = JSON.stringify(body).length;
+    // Se body é undefined/null, não faz sentido medir
+    if (body === undefined || body === null) {
+      console.log(`📊 [EGRESS] ${req?.method || 'GET'} ${req?.path || '?'} → (empty)`);
+      return;
+    }
+
+    // Tenta serializar, silenciando erros de circular structure
+    let jsonStr: string;
+    try {
+      jsonStr = JSON.stringify(body);
+    } catch {
+      // Estrutura circular ou não serializável
+      console.log(`📊 [EGRESS] ${req?.method || 'GET'} ${req?.path || '?'} → (não serializável)`);
+      return;
+    }
+
+    const sizeBytes = jsonStr ? jsonStr.length : 0;
     const sizeKB = (sizeBytes / 1024).toFixed(2);
-    const arrayLength = Array.isArray(body) ? ` (${body.length} items)` : '';
-    console.log(`📊 [EGRESS] ${req.method} ${req.path} → ${sizeKB} KB${arrayLength}`);
-  } catch (err) {
-    // Se falhar, não quebra a resposta
-    console.error('❌ [EGRESS] Erro ao calcular tamanho:', err);
+
+    // Detectar item count: array direto, {items: []}, ou {data: []}
+    let itemInfo = '';
+    if (Array.isArray(body)) {
+      itemInfo = ` (${body.length} items)`;
+    } else if (body && Array.isArray(body.items)) {
+      itemInfo = ` (${body.items.length} items)`;
+    } else if (body && Array.isArray(body.data)) {
+      itemInfo = ` (${body.data.length} items)`;
+    }
+
+    console.log(`📊 [EGRESS] ${req?.method || 'GET'} ${req?.path || '?'} → ${sizeKB} KB${itemInfo}`);
+  } catch {
+    // Se tudo falhar, silencia - não queremos quebrar a response
   }
 }
 
@@ -855,7 +880,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/pending-appointments", authenticateToken, async (req: any, res) => {
     try {
       const pendencias = await storage.getPendingAppointments(req.user.userId);
-      logEgressSize(req, res, pendencias); // 📊 Instrumentação
+      logEgressSize(req, pendencias); // 📊 Instrumentação
       res.json(pendencias);
     } catch (error: any) {
       console.error("❌ [PENDING] Erro ao listar pendências:", error);
@@ -883,7 +908,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const records = await storage.getFuelRecords(req.user.userId, filters);
-      logEgressSize(req, res, records); // 📊 Instrumentação
+      logEgressSize(req, records); // 📊 Instrumentação
       res.json(records);
     } catch (error: any) {
       console.error("❌ [FUEL] Erro ao listar registros:", error);
@@ -935,15 +960,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard: Fleet fuel statistics (with optional filters)
   app.get("/api/dashboard/fuel-stats", authenticateToken, async (req: any, res) => {
     try {
-      const { vehicleIds, fuelTypes } = req.query;
+      const { vehicleIds, fuelTypes, startDate, endDate } = req.query;
 
-      const filters: { vehicleIds?: number[]; fuelTypes?: string[] } = {};
+      const filters: { vehicleIds?: number[]; fuelTypes?: string[]; startDate?: Date; endDate?: Date } = {};
 
       if (vehicleIds) {
         filters.vehicleIds = String(vehicleIds).split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
       }
       if (fuelTypes) {
         filters.fuelTypes = String(fuelTypes).split(',').map(t => t.trim()).filter(t => t.length > 0);
+      }
+      if (startDate) {
+        filters.startDate = new Date(startDate as string);
+      }
+      if (endDate) {
+        filters.endDate = new Date(endDate as string + "T23:59:59");
       }
 
       const stats = await storage.getFleetFuelStats(req.user.userId, filters);
@@ -1533,14 +1564,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Se não houver parâmetros de paginação, retorna todos os clientes (compatibilidade)
       if (!req.query.page && !req.query.limit) {
         const result = await storage.getAllClients(req.user.userId);
-        logEgressSize(req, res, result); // 📊 Instrumentação
+        logEgressSize(req, result); // 📊 Instrumentação
         return res.json(result);
       }
 
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
       const result = await storage.getClients(req.user.userId, page, limit);
-      logEgressSize(req, res, result); // 📊 Instrumentação
+      logEgressSize(req, result); // 📊 Instrumentação
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1730,9 +1761,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Services routes
   app.get("/api/services", authenticateToken, async (req: any, res) => {
     try {
-      const services = await storage.getServices(req.user.userId);
-      res.json(services);
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string) || 25));
+      const search = req.query.search as string;
+      const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
+
+      const result = await storage.getServicesPaged(req.user.userId, page, pageSize, search, isActive);
+      logEgressSize(req, result);
+      res.json(result);
     } catch (error: any) {
+      console.error("❌ [SERVICES] Erro ao listar:", error);
       res.status(500).json({ message: error.message });
     }
   });
@@ -1791,9 +1829,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Technicians routes
   app.get("/api/technicians", authenticateToken, async (req: any, res) => {
     try {
-      const technicians = await storage.getTechnicians(req.user.userId);
-      res.json(technicians);
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string) || 25));
+      const search = req.query.search as string;
+      const teamId = req.query.teamId ? parseInt(req.query.teamId as string) : undefined;
+      const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
+
+      const result = await storage.getTechniciansPaged(req.user.userId, page, pageSize, search, teamId, isActive);
+      logEgressSize(req, result);
+      res.json(result);
     } catch (error: any) {
+      console.error("❌ [TECHNICIANS] Erro ao listar:", error);
       res.status(500).json({ message: error.message });
     }
   });
@@ -1873,9 +1919,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Vehicles routes
   app.get("/api/vehicles", authenticateToken, async (req: any, res) => {
     try {
-      const vehicles = await storage.getVehicles(req.user.userId);
-      res.json(vehicles);
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string) || 25));
+      const search = req.query.search as string;
+      const responsibleType = req.query.responsibleType as string;
+      const responsibleId = req.query.responsibleId ? parseInt(req.query.responsibleId as string) : undefined;
+
+      const result = await storage.getVehiclesPaged(req.user.userId, page, pageSize, search, responsibleType, responsibleId);
+      logEgressSize(req, result);
+      res.json(result);
     } catch (error: any) {
+      console.error("❌ [VEHICLES] Erro ao listar:", error);
       res.status(500).json({ message: error.message });
     }
   });
@@ -2273,7 +2327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .limit(LEGACY_LIMIT);
 
         if (appointmentsList.length === 0) {
-          logEgressSize(req, res, []);
+          logEgressSize(req, []);
           return res.json([]);
         }
 
@@ -2312,7 +2366,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const totalTime = Date.now() - startTime;
         console.log(`⚠️ [APPOINTMENTS/LEGACY] Retornando ${result.length} agendamentos em ${totalTime}ms (LIMITE: ${LEGACY_LIMIT})`);
 
-        logEgressSize(req, res, result);
+        logEgressSize(req, result);
         return res.json(result);
       }
 
@@ -2367,7 +2421,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           items: [],
           pagination: { page, pageSize, total, totalPages },
         };
-        logEgressSize(req, res, response);
+        logEgressSize(req, response);
         return res.json(response);
       }
 
@@ -2415,7 +2469,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`✅ [APPOINTMENTS] Página ${page}/${totalPages}: ${items.length} itens (total: ${total}) em ${totalTime}ms`);
       }
 
-      logEgressSize(req, res, response);
+      logEgressSize(req, response);
       res.json(response);
     } catch (error: any) {
       console.error(`❌ [APPOINTMENTS] Erro ao buscar agendamentos:`, error);
@@ -4236,9 +4290,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Teams routes - Nova funcionalidade conforme solicitado
   app.get("/api/teams", authenticateToken, async (req: any, res) => {
     try {
-      const teams = await storage.getTeams(req.user.userId);
-      res.json(teams);
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string) || 25));
+      const search = req.query.search as string;
+
+      const result = await storage.getTeamsPaged(req.user.userId, page, pageSize, search);
+      logEgressSize(req, result);
+      res.json(result);
     } catch (error: any) {
+      console.error("❌ [TEAMS] Erro ao listar:", error);
       res.status(500).json({ message: error.message });
     }
   });

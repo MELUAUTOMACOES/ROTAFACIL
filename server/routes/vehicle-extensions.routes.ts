@@ -332,11 +332,16 @@ export function registerVehicleExtensionRoutes(app: Express, authenticateToken: 
         try {
             console.log("📊 [DASHBOARD] Buscando custos de manutenção");
 
-            const { vehicleId } = req.query;
+            const { vehicleId, startDate, endDate } = req.query;
 
             const now = new Date();
-            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const defaultStartOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const defaultEndOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
             const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+            // Definir período (usar filtros ou default mês atual)
+            const periodStart = startDate ? new Date(startDate as string) : defaultStartOfMonth;
+            const periodEnd = endDate ? new Date(endDate as string + "T23:59:59") : defaultEndOfMonth;
 
             // Base conditions
             const baseConditions = [
@@ -348,18 +353,19 @@ export function registerVehicleExtensionRoutes(app: Express, authenticateToken: 
                 baseConditions.push(eq(vehicleMaintenances.vehicleId, parseInt(vehicleId)));
             }
 
-            // Total do mês atual
-            const monthMaintenances = await db
+            // Total do período selecionado
+            const periodMaintenances = await db
                 .select({ totalCost: vehicleMaintenances.totalCost })
                 .from(vehicleMaintenances)
                 .where(
                     and(
                         ...baseConditions,
-                        gte(vehicleMaintenances.entryDate, startOfMonth)
+                        gte(vehicleMaintenances.entryDate, periodStart),
+                        lte(vehicleMaintenances.entryDate, periodEnd)
                     )
                 );
 
-            const monthTotal = monthMaintenances.reduce((acc, m) => {
+            const monthTotal = periodMaintenances.reduce((acc, m) => {
                 return acc + parseFloat(m.totalCost?.toString() || "0");
             }, 0);
 

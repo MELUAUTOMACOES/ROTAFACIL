@@ -4,6 +4,7 @@ import { useLocation, useRoute } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient"; // você já usa no VehicleForm
 import { getAuthHeaders } from "@/lib/auth";
+import { normalizeItems } from "@/lib/normalize";
 import { useToast } from "@/hooks/use-toast";
 import { usePendingAppointments } from "@/hooks/usePendingAppointments";
 import { ToastAction } from "@/components/ui/toast";
@@ -83,6 +84,7 @@ interface Route {
   vehicleId?: number | null;  // ⬅ agora é integer (FK)
   responsibleType: 'technician' | 'team';
   responsibleId: string;
+  responsibleName?: string | null;  // ✅ Novo: vem do join no backend
   distanceTotal: number;
   durationTotal: number;
   stopsCount: number;
@@ -90,6 +92,17 @@ interface Route {
   displayNumber: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// Interface para resposta paginada
+interface RoutesResponse {
+  items: Route[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 interface RouteDetail {
@@ -179,13 +192,13 @@ const displayStopName = (stop: any, appointments: any[], clients: any[]) => {
       }
 
       // Retorna nome + ID do agendamento
-      if (clientName) return `${clientName} #${apptIdNum}`;
+      if (clientName) return `${clientName} #${apptIdNum} `;
     }
   }
 
   // fallback final (mas com label mais curta/legível)
   const raw = String(stop?.appointmentId ?? "");
-  return `Agendamento #${raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw}`;
+  return `Agendamento #${raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw} `;
 };
 
 
@@ -247,12 +260,21 @@ export default function RoutesHistoryPage() {
     };
 
     const encoded = encodeURIComponent(btoa(JSON.stringify(prefill)));
-    setLocation(`/appointments?prefill=${encoded}`);
+    setLocation(`/ appointments ? prefill = ${encoded} `);
   };
 
-  // Query para listar rotas com filtros
-  const { data: routesData = [], isLoading: isLoadingRoutes } = useQuery<Route[]>({
-    queryKey: ['/api/routes', filters],
+  // ✅ Estado de paginação para rotas
+  const [routesPage, setRoutesPage] = useState(1);
+  const routesPageSize = 20;
+
+  // Reset page ao mudar filtros
+  useEffect(() => {
+    setRoutesPage(1);
+  }, [filters]);
+
+  // Query para listar rotas com filtros E paginação
+  const { data: routesResponse, isLoading: isLoadingRoutes } = useQuery<RoutesResponse>({
+    queryKey: ['/api/routes', filters, routesPage],
     queryFn: async () => {
       const params = new URLSearchParams();
 
@@ -267,6 +289,10 @@ export default function RoutesHistoryPage() {
       if (filters.selectedVehicle !== 'all') params.append('vehicleId', filters.selectedVehicle);
       if (filters.searchTerm.trim()) params.append('search', filters.searchTerm.trim());
 
+      // Paginação
+      params.append('page', String(routesPage));
+      params.append('pageSize', String(routesPageSize));
+
       const response = await fetch(`/api/routes?${params.toString()}`, {
         headers: getAuthHeaders(),
       });
@@ -274,6 +300,10 @@ export default function RoutesHistoryPage() {
       return response.json();
     }
   });
+
+  // Extrair items e pagination da resposta
+  const routesData = routesResponse?.items || [];
+  const routesPagination = routesResponse?.pagination || { page: 1, pageSize: 20, total: 0, totalPages: 1 };
 
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
   const [auditRouteId, setAuditRouteId] = useState<string | null>(null);
@@ -383,34 +413,34 @@ export default function RoutesHistoryPage() {
         headers: getAuthHeaders(),
       });
       if (!res.ok) return []; // deixa o fallback funcionar se o endpoint não existir
-      return res.json();
+      const data = await res.json();
+      return normalizeItems(data);
     },
   });
 
   // Fallback: lista geral de agendamentos (você já tem esse endpoint)
-  const { data: appointments = [] } = useQuery({
+  const { data: appointmentsData } = useQuery({
     queryKey: ['/api/appointments'],
     queryFn: async () => {
       const response = await fetch('/api/appointments', {
-        headers: {
-          ...getAuthHeaders(),
-          'x-legacy-list': '1', // Formato array para compatibilidade (temporário)
-        },
+        headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error('Erro ao buscar agendamentos');
       return response.json();
     }
   });
+  const appointments = normalizeItems(appointmentsData);
 
   // (opcional) cache de clientes para exibir nome
   const { data: clients = [] } = useQuery({
     queryKey: ['/api/clients'],
     queryFn: async () => {
-      const response = await fetch('/api/clients', {
+      const response = await fetch('/api/clients?limit=50', {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error('Erro ao buscar clientes');
-      return response.json();
+      const data = await response.json();
+      return normalizeItems(data);
     }
   });
 
@@ -465,16 +495,17 @@ export default function RoutesHistoryPage() {
   // ================== FIM DO BLOCO ÚNICO DO MODAL ==================
 
   // Queries para options dos filtros
-  const { data: technicians = [] } = useQuery({
+  const { data: techniciansData } = useQuery({
     queryKey: ['/api/technicians'],
     queryFn: async () => {
-      const response = await fetch('/api/technicians', {
+      const response = await fetch('/api/technicians?page=1&pageSize=50', {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error('Erro ao buscar técnicos');
       return response.json();
     }
   });
+  const technicians = normalizeItems<any>(techniciansData);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -921,28 +952,30 @@ export default function RoutesHistoryPage() {
   };
 
 
-  const { data: teams = [] } = useQuery({
+  const { data: teamsData } = useQuery({
     queryKey: ['/api/teams'],
     queryFn: async () => {
-      const response = await fetch('/api/teams', {
+      const response = await fetch('/api/teams?page=1&pageSize=50', {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error('Erro ao buscar equipes');
       return response.json();
     }
   });
+  const teams = normalizeItems<any>(teamsData);
 
   // carrega veículos
-  const { data: vehicles = [] } = useQuery({
+  const { data: vehiclesData } = useQuery({
     queryKey: ["/api/vehicles"],
     queryFn: async () => {
-      const response = await fetch("/api/vehicles", {
+      const response = await fetch("/api/vehicles?page=1&pageSize=50", {
         headers: getAuthHeaders(),
       }); // "fetch" = solicitar dados ao backend
       if (!response.ok) throw new Error("Erro ao buscar veículos");
       return response.json();
     },
   });
+  const vehicles = normalizeItems<any>(vehiclesData);
 
   // helpers
   const getVehicleById = (id?: number | null) =>
@@ -2022,6 +2055,38 @@ export default function RoutesHistoryPage() {
                     </TableBody>
 
                   </Table>
+                </div>
+              )}
+
+              {/* Barra de paginação */}
+              {routesPagination.total > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 p-4 bg-gray-50 dark:bg-zinc-800 rounded-lg">
+                  <div className="text-sm text-gray-600 dark:text-zinc-400">
+                    Mostrando {routesData.length} de {routesPagination.total} rotas
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRoutesPage(p => Math.max(1, p - 1))}
+                      disabled={routesPage <= 1}
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-1" />
+                      Anterior
+                    </Button>
+                    <span className="text-sm font-medium">
+                      Página {routesPagination.page} de {routesPagination.totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRoutesPage(p => Math.min(routesPagination.totalPages, p + 1))}
+                      disabled={routesPage >= routesPagination.totalPages}
+                    >
+                      Próxima
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>

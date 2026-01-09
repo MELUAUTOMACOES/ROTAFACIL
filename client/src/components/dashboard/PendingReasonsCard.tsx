@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { normalizeItems } from "@/lib/normalize";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -43,9 +44,11 @@ interface Team {
 interface PendingReasonsCardProps {
     technicians?: Technician[];
     teams?: Team[];
+    startDate?: string;
+    endDate?: string;
 }
 
-export function PendingReasonsCard({ technicians = [], teams = [] }: PendingReasonsCardProps) {
+export function PendingReasonsCard({ technicians = [], teams = [], startDate, endDate }: PendingReasonsCardProps) {
     const [selectedFilter, setSelectedFilter] = useState<string>("all");
 
     // Parse filter value
@@ -61,10 +64,12 @@ export function PendingReasonsCard({ technicians = [], teams = [] }: PendingReas
     const queryParams = new URLSearchParams();
     if (filterParams.technicianId) queryParams.append("technicianId", filterParams.technicianId);
     if (filterParams.teamId) queryParams.append("teamId", filterParams.teamId);
+    if (startDate) queryParams.append("startDate", startDate);
+    if (endDate) queryParams.append("endDate", endDate);
     const queryString = queryParams.toString();
 
     const { data, isLoading } = useQuery<PendingReasonsData>({
-        queryKey: ["/api/dashboard/pending-reasons", selectedFilter],
+        queryKey: ["/api/dashboard/pending-reasons", selectedFilter, startDate, endDate],
         queryFn: async () => {
             const url = queryString
                 ? `/api/dashboard/pending-reasons?${queryString}`
@@ -75,26 +80,30 @@ export function PendingReasonsCard({ technicians = [], teams = [] }: PendingReas
     });
 
     // Fetch technicians and teams if not provided
-    const { data: techData } = useQuery<Technician[]>({
+    const { data: techData } = useQuery({
         queryKey: ["/api/technicians"],
         queryFn: async () => {
             const res = await apiRequest("GET", "/api/technicians");
             return res.json();
         },
         enabled: technicians.length === 0,
+        staleTime: 2 * 60_000,
+        refetchOnWindowFocus: false,
     });
 
-    const { data: teamData } = useQuery<Team[]>({
+    const { data: teamData } = useQuery({
         queryKey: ["/api/teams"],
         queryFn: async () => {
             const res = await apiRequest("GET", "/api/teams");
             return res.json();
         },
         enabled: teams.length === 0,
+        staleTime: 2 * 60_000,
+        refetchOnWindowFocus: false,
     });
 
-    const allTechnicians = technicians.length > 0 ? technicians : techData || [];
-    const allTeams = teams.length > 0 ? teams : teamData || [];
+    const allTechnicians = technicians.length > 0 ? technicians : normalizeItems<Technician>(techData);
+    const allTeams = teams.length > 0 ? teams : normalizeItems<Team>(teamData);
 
     const getReasonColor = (reason: string): string => {
         const colors: Record<string, string> = {

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { normalizeItems } from "@/lib/normalize";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -65,13 +66,16 @@ export default function VehicleChecklistAuditTab() {
     const queryClient = useQueryClient();
 
     // Buscar veículos para filtro
-    const { data: vehicles = [] } = useQuery({
+    const { data: vehiclesData } = useQuery({
         queryKey: ["/api/vehicles"],
         queryFn: async () => {
             const res = await apiRequest("GET", "/api/vehicles");
             return res.json();
         },
+        staleTime: 2 * 60_000,
+        refetchOnWindowFocus: false,
     });
+    const vehicles = normalizeItems<any>(vehiclesData);
 
     // Buscar checklists
     const { data: checklists = [], isLoading } = useQuery({

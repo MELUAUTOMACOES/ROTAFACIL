@@ -7,6 +7,8 @@ import { TrendingUp, TrendingDown, AlertTriangle, Car } from "lucide-react";
 interface FuelEfficiencyCardProps {
     vehicleIds?: number[];
     fuelTypes?: string[];
+    startDate?: string;
+    endDate?: string;
 }
 
 interface FuelStats {
@@ -14,7 +16,7 @@ interface FuelStats {
     avgKmPerLiter: number;
 }
 
-export function FuelEfficiencyCard({ vehicleIds, fuelTypes }: FuelEfficiencyCardProps) {
+export function FuelEfficiencyCard({ vehicleIds, fuelTypes, startDate, endDate }: FuelEfficiencyCardProps) {
     const queryParams = new URLSearchParams();
     if (vehicleIds && vehicleIds.length > 0) {
         queryParams.set("vehicleIds", vehicleIds.join(","));
@@ -22,9 +24,11 @@ export function FuelEfficiencyCard({ vehicleIds, fuelTypes }: FuelEfficiencyCard
     if (fuelTypes && fuelTypes.length > 0) {
         queryParams.set("fuelTypes", fuelTypes.join(","));
     }
+    if (startDate) queryParams.set("startDate", startDate);
+    if (endDate) queryParams.set("endDate", endDate);
 
     const { data: stats, isLoading } = useQuery<FuelStats>({
-        queryKey: ["/api/dashboard/fuel-stats", vehicleIds, fuelTypes],
+        queryKey: ["/api/dashboard/fuel-stats", vehicleIds, fuelTypes, startDate, endDate],
         queryFn: async () => {
             const url = `/api/dashboard/fuel-stats${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
             const res = await apiRequest("GET", url);

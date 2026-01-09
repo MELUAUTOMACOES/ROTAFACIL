@@ -71,6 +71,7 @@ export interface IStorage {
 
   // Services
   getServices(userId: number): Promise<Service[]>;
+  getServicesPaged(userId: number, page: number, pageSize: number, search?: string, isActive?: boolean): Promise<{ items: Service[], pagination: { page: number, pageSize: number, total: number, totalPages: number } }>;
   getService(id: number, userId: number): Promise<Service | undefined>;
   createService(service: InsertService, userId: number): Promise<Service>;
   updateService(id: number, service: Partial<InsertService>, userId: number): Promise<Service>;
@@ -78,6 +79,7 @@ export interface IStorage {
 
   // Technicians
   getTechnicians(userId: number): Promise<Technician[]>;
+  getTechniciansPaged(userId: number, page: number, pageSize: number, search?: string, teamId?: number, isActive?: boolean): Promise<{ items: Technician[], pagination: { page: number, pageSize: number, total: number, totalPages: number } }>;
   getTechnician(id: number, userId: number): Promise<Technician | undefined>;
   createTechnician(technician: InsertTechnician, userId: number): Promise<Technician>;
   updateTechnician(id: number, technician: Partial<InsertTechnician>, userId: number): Promise<Technician>;
@@ -85,6 +87,7 @@ export interface IStorage {
 
   // Vehicles
   getVehicles(userId: number): Promise<Vehicle[]>;
+  getVehiclesPaged(userId: number, page: number, pageSize: number, search?: string, responsibleType?: string, responsibleId?: number): Promise<{ items: Vehicle[], pagination: { page: number, pageSize: number, total: number, totalPages: number } }>;
   getVehicle(id: number, userId: number): Promise<Vehicle | undefined>;
   createVehicle(vehicle: InsertVehicle, userId: number): Promise<Vehicle>;
   updateVehicle(id: number, vehicle: Partial<InsertVehicle>, userId: number): Promise<Vehicle>;
@@ -212,7 +215,7 @@ export interface IStorage {
   getFuelRecords(userId: number, filters?: { vehicleId?: number; startDate?: Date; endDate?: Date }): Promise<FuelRecord[]>;
   createFuelRecord(record: InsertFuelRecord, userId: number, companyId?: number | null): Promise<FuelRecord>;
   getVehicleFuelStats(vehicleId: number, userId: number): Promise<{ totalLiters: number; totalCost: number; avgPricePerLiter: number; recordCount: number }>;
-  getFleetFuelStats(userId: number, filters?: { vehicleIds?: number[]; fuelTypes?: string[] }): Promise<{
+  getFleetFuelStats(userId: number, filters?: { vehicleIds?: number[]; fuelTypes?: string[]; startDate?: Date; endDate?: Date }): Promise<{
     totalSpent: number;
     totalLiters: number;
     avgPricePerLiter: number;
@@ -568,6 +571,48 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(services).where(eq(services.userId, userId));
   }
 
+  async getServicesPaged(userId: number, page: number, pageSize: number, search?: string, isActive?: boolean) {
+    const conditions = [eq(services.userId, userId)];
+
+    if (search) {
+      conditions.push(
+        or(
+          ilike(services.name, `%${search}%`),
+          ilike(services.description, `%${search}%`)
+        )!
+      );
+    }
+    if (isActive !== undefined) {
+      conditions.push(eq(services.isActive, isActive));
+    }
+
+    const whereClause = and(...conditions);
+
+    // Count total
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(services)
+      .where(whereClause);
+
+    // Fetch paginated items
+    const items = await db
+      .select()
+      .from(services)
+      .where(whereClause)
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+
+    return {
+      items,
+      pagination: {
+        page,
+        pageSize,
+        total: count,
+        totalPages: Math.ceil(count / pageSize),
+      },
+    };
+  }
+
   async getService(id: number, userId: number): Promise<Service | undefined> {
     const [service] = await db.select().from(services).where(and(eq(services.id, id), eq(services.userId, userId)));
     return service || undefined;
@@ -602,6 +647,49 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(technicians).where(eq(technicians.userId, userId));
   }
 
+  async getTechniciansPaged(userId: number, page: number, pageSize: number, search?: string, teamId?: number, isActive?: boolean) {
+    const conditions = [eq(technicians.userId, userId)];
+
+    if (search) {
+      conditions.push(
+        or(
+          ilike(technicians.name, `%${search}%`),
+          ilike(technicians.email, `%${search}%`)
+        )!
+      );
+    }
+    if (teamId !== undefined) {
+      conditions.push(eq(technicians.teamId, teamId));
+    }
+    if (isActive !== undefined) {
+      conditions.push(eq(technicians.isActive, isActive));
+    }
+
+    const whereClause = and(...conditions);
+
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(technicians)
+      .where(whereClause);
+
+    const items = await db
+      .select()
+      .from(technicians)
+      .where(whereClause)
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+
+    return {
+      items,
+      pagination: {
+        page,
+        pageSize,
+        total: count,
+        totalPages: Math.ceil(count / pageSize),
+      },
+    };
+  }
+
   async getTechnician(id: number, userId: number): Promise<Technician | undefined> {
     const [technician] = await db.select().from(technicians).where(and(eq(technicians.id, id), eq(technicians.userId, userId)));
     return technician || undefined;
@@ -634,6 +722,50 @@ export class DatabaseStorage implements IStorage {
   // Vehicles
   async getVehicles(userId: number): Promise<Vehicle[]> {
     return await db.select().from(vehicles).where(eq(vehicles.userId, userId));
+  }
+
+  async getVehiclesPaged(userId: number, page: number, pageSize: number, search?: string, responsibleType?: string, responsibleId?: number) {
+    const conditions = [eq(vehicles.userId, userId)];
+
+    if (search) {
+      conditions.push(
+        or(
+          ilike(vehicles.plate, `%${search}%`),
+          ilike(vehicles.brand, `%${search}%`),
+          ilike(vehicles.model, `%${search}%`)
+        )!
+      );
+    }
+    if (responsibleType === 'technician' && responsibleId !== undefined) {
+      conditions.push(eq(vehicles.technicianId, responsibleId));
+    }
+    if (responsibleType === 'team' && responsibleId !== undefined) {
+      conditions.push(eq(vehicles.teamId, responsibleId));
+    }
+
+    const whereClause = and(...conditions);
+
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(vehicles)
+      .where(whereClause);
+
+    const items = await db
+      .select()
+      .from(vehicles)
+      .where(whereClause)
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+
+    return {
+      items,
+      pagination: {
+        page,
+        pageSize,
+        total: count,
+        totalPages: Math.ceil(count / pageSize),
+      },
+    };
   }
 
   async getVehicle(id: number, userId: number): Promise<Vehicle | undefined> {
@@ -879,6 +1011,38 @@ export class DatabaseStorage implements IStorage {
   // Teams - Implementação das operações de equipes conforme solicitado
   async getTeams(userId: number): Promise<Team[]> {
     return await db.select().from(teams).where(eq(teams.userId, userId));
+  }
+
+  async getTeamsPaged(userId: number, page: number, pageSize: number, search?: string) {
+    const conditions = [eq(teams.userId, userId)];
+
+    if (search) {
+      conditions.push(ilike(teams.name, `%${search}%`));
+    }
+
+    const whereClause = and(...conditions);
+
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(teams)
+      .where(whereClause);
+
+    const items = await db
+      .select()
+      .from(teams)
+      .where(whereClause)
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+
+    return {
+      items,
+      pagination: {
+        page,
+        pageSize,
+        total: count,
+        totalPages: Math.ceil(count / pageSize),
+      },
+    };
   }
 
   async getTeam(id: number, userId: number): Promise<Team | undefined> {
@@ -1684,7 +1848,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getFleetFuelStats(userId: number, filters?: { vehicleIds?: number[]; fuelTypes?: string[] }): Promise<{
+  async getFleetFuelStats(userId: number, filters?: { vehicleIds?: number[]; fuelTypes?: string[]; startDate?: Date; endDate?: Date }): Promise<{
     totalSpent: number;
     totalLiters: number;
     avgPricePerLiter: number;
@@ -1711,29 +1875,36 @@ export class DatabaseStorage implements IStorage {
     const allVehicles = await db.select().from(vehicles).where(eq(vehicles.userId, userId));
     const vehicleMap = new Map(allVehicles.map(v => [v.id, v]));
 
-    // Current month calculations
+    // Calculate period based on filters or use current month
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    const startOfMonth = filters?.startDate || new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = filters?.endDate || new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-    const thisMonthRecords = allRecords.filter(r => new Date(r.fuelDate) >= startOfMonth);
-    const lastMonthRecords = allRecords.filter(r => {
+    // Calculate previous period for variation (same duration before the selected period)
+    const periodDuration = endOfMonth.getTime() - startOfMonth.getTime();
+    const previousPeriodStart = new Date(startOfMonth.getTime() - periodDuration);
+    const previousPeriodEnd = new Date(startOfMonth.getTime() - 1);
+
+    const periodRecords = allRecords.filter(r => {
       const date = new Date(r.fuelDate);
-      return date >= startOfLastMonth && date <= endOfLastMonth;
+      return date >= startOfMonth && date <= endOfMonth;
+    });
+    const previousPeriodRecords = allRecords.filter(r => {
+      const date = new Date(r.fuelDate);
+      return date >= previousPeriodStart && date <= previousPeriodEnd;
     });
 
-    // Calculate totals for this month
-    const totalSpent = thisMonthRecords.reduce((sum, r) => sum + parseFloat(String(r.totalCost)), 0);
-    const totalLiters = thisMonthRecords.reduce((sum, r) => sum + parseFloat(String(r.liters)), 0);
+    // Calculate totals for selected period
+    const totalSpent = periodRecords.reduce((sum, r) => sum + parseFloat(String(r.totalCost)), 0);
+    const totalLiters = periodRecords.reduce((sum, r) => sum + parseFloat(String(r.liters)), 0);
     const avgPricePerLiter = totalLiters > 0 ? totalSpent / totalLiters : 0;
 
-    // Calculate last month totals for variation
-    const lastMonthSpent = lastMonthRecords.reduce((sum, r) => sum + parseFloat(String(r.totalCost)), 0);
-    const lastMonthLiters = lastMonthRecords.reduce((sum, r) => sum + parseFloat(String(r.liters)), 0);
+    // Calculate previous period totals for variation
+    const previousPeriodSpent = previousPeriodRecords.reduce((sum, r) => sum + parseFloat(String(r.totalCost)), 0);
+    const previousPeriodLiters = previousPeriodRecords.reduce((sum, r) => sum + parseFloat(String(r.liters)), 0);
 
-    const spentVariation = lastMonthSpent > 0 ? Math.round(((totalSpent - lastMonthSpent) / lastMonthSpent) * 100) : 0;
-    const litersVariation = lastMonthLiters > 0 ? Math.round(((totalLiters - lastMonthLiters) / lastMonthLiters) * 100) : 0;
+    const spentVariation = previousPeriodSpent > 0 ? Math.round(((totalSpent - previousPeriodSpent) / previousPeriodSpent) * 100) : 0;
+    const litersVariation = previousPeriodLiters > 0 ? Math.round(((totalLiters - previousPeriodLiters) / previousPeriodLiters) * 100) : 0;
 
     // Calculate km/L and cost per km from odometer data
     // Group records by vehicle and sort by date to calculate distances
@@ -1832,7 +2003,7 @@ export class DatabaseStorage implements IStorage {
       avgPricePerLiter: Math.round(avgPricePerLiter * 100) / 100,
       costPerKm: Math.round(costPerKm * 100) / 100,
       avgKmPerLiter: Math.round(avgKmPerLiter * 100) / 100,
-      totalRefuelings: thisMonthRecords.length,
+      totalRefuelings: periodRecords.length,
       spentVariation,
       litersVariation,
       byVehicle,

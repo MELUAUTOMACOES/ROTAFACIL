@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
+import { normalizeItems } from "@/lib/normalize";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,35 +36,47 @@ export default function Vehicles() {
   const queryClient = useQueryClient();
 
   // Ler hash e query params da URL
-  const { data: vehicles = [], isLoading } = useQuery({
+  const { data: vehiclesData, isLoading } = useQuery({
     queryKey: ["/api/vehicles"],
     queryFn: async () => {
-      const response = await fetch("/api/vehicles", {
+      const response = await fetch("/api/vehicles?page=1&pageSize=50", {
         headers: getAuthHeaders(),
       });
+      if (!response.ok) throw new Error("Erro ao carregar veículos");
       return response.json();
     },
+    staleTime: 2 * 60_000, // 2 minutos
+    refetchOnWindowFocus: false,
   });
+  const vehicles = normalizeItems<Vehicle>(vehiclesData);
 
-  const { data: technicians = [], isLoading: isLoadingTechs } = useQuery({
+  const { data: techniciansData, isLoading: isLoadingTechs } = useQuery({
     queryKey: ["/api/technicians"],
     queryFn: async () => {
-      const response = await fetch("/api/technicians", {
+      const response = await fetch("/api/technicians?page=1&pageSize=50", {
         headers: getAuthHeaders(),
       });
+      if (!response.ok) throw new Error("Erro ao carregar técnicos");
       return response.json();
     },
+    staleTime: 2 * 60_000, // 2 minutos
+    refetchOnWindowFocus: false,
   });
+  const technicians = normalizeItems<Technician>(techniciansData);
 
-  const { data: teams = [], isLoading: isLoadingTeams } = useQuery({
+  const { data: teamsData, isLoading: isLoadingTeams } = useQuery({
     queryKey: ["/api/teams"],
     queryFn: async () => {
-      const response = await fetch("/api/teams", {
+      const response = await fetch("/api/teams?page=1&pageSize=50", {
         headers: getAuthHeaders(),
       });
+      if (!response.ok) throw new Error("Erro ao carregar equipes");
       return response.json();
     },
+    staleTime: 2 * 60_000, // 2 minutos
+    refetchOnWindowFocus: false,
   });
+  const teams = normalizeItems<Team>(teamsData);
 
   // Ler hash e query params da URL
   useEffect(() => {

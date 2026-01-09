@@ -7,15 +7,28 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import ClientForm from "@/components/forms/ClientForm";
-import { Plus, Users, Mail, Phone, MapPin, Edit, Trash2, Upload, Download, Search as SelectIcon } from "lucide-react";
+import { Plus, Users, Mail, Phone, MapPin, Edit, Trash2, Upload, Download, Search as SelectIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { downloadCSV, downloadReport, downloadWithConfirmation } from "@/lib/download";
 import { useSafeNavigation } from "@/hooks/useSafeNavigation";
 import type { Client, InsertClient } from "@shared/schema";
+
+// Interface para resposta paginada
+interface ClientsResponse {
+  items: Client[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+}
 
 export default function Clients() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -31,17 +44,22 @@ export default function Clients() {
     ]
   });
 
-  const { data: clients = [], isLoading } = useQuery({
-    queryKey: ["/api/clients"],
+  // ✅ Paginação server-side
+  const { data: clientsResponse, isLoading } = useQuery<ClientsResponse>({
+    queryKey: ["/api/clients", page, pageSize],
     queryFn: async () => {
-      const response = await fetch("/api/clients", {
+      const response = await fetch(`/api/clients?page=${page}&limit=${pageSize}`, {
         headers: getAuthHeaders(),
       });
+      if (!response.ok) throw new Error("Erro ao carregar clientes");
       return response.json();
     },
   });
 
-  // Filtragem de clientes
+  const clients = clientsResponse?.items || clientsResponse?.data || [];
+  const pagination = clientsResponse?.pagination || { page: 1, pageSize: 25, total: clientsResponse?.total || 0, totalPages: Math.ceil((clientsResponse?.total || 0) / pageSize) };
+
+  // Filtragem client-side (para busca rápida na página atual)
   const filteredClients = clients.filter((client: Client) => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
@@ -557,6 +575,40 @@ export default function Clients() {
             </Card>
           ))}
         </div>
+      )}
+
+      {/* Barra de paginação */}
+      {pagination.total > 0 && (
+        <Card className="p-4 bg-white dark:bg-zinc-900">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-sm text-gray-600 dark:text-zinc-400">
+              Mostrando {clients.length} de {pagination.total} clientes
+            </div>
+            <div className="flex items-center gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Anterior
+              </Button>
+              <span className="text-sm font-medium">
+                Página {pagination.page} de {pagination.totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
+                disabled={page >= pagination.totalPages}
+              >
+                Próxima
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </Card>
       )}
 
       {/* Centralized Dialog for All Client Forms */}

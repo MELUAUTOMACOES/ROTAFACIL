@@ -47,9 +47,19 @@ export function ClientSearch({ value, onValueChange, onSelect, placeholder = "Pe
     staleTime: 30000,
   });
 
-  // Buscar cliente selecionado para mostrar o nome inicial
+  // Buscar cliente selecionado para mostrar o nome inicial (usando API paginada)
   const { data: allClients = [] } = useQuery<Client[]>({
     queryKey: ['/api/clients'],
+    queryFn: async () => {
+      const response = await fetch('/api/clients?limit=50', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      if (!response.ok) return [];
+      const data = await response.json();
+      return data.items || data; // Suporta formato paginado { items } ou array legado
+    },
   });
 
   useEffect(() => {

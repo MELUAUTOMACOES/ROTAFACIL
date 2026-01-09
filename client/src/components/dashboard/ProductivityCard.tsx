@@ -57,11 +57,23 @@ const getStatusConfig = (status: string) => {
     }
 };
 
-export function ProductivityCard() {
+interface ProductivityCardProps {
+    startDate?: string;
+    endDate?: string;
+}
+
+export function ProductivityCard({ startDate, endDate }: ProductivityCardProps) {
+    // Construir query params
+    const queryParams = new URLSearchParams();
+    if (startDate) queryParams.set("startDate", startDate);
+    if (endDate) queryParams.set("endDate", endDate);
+    const queryString = queryParams.toString();
+
     const { data, isLoading } = useQuery<ProductivityMetrics>({
-        queryKey: ["/api/dashboard/productivity-metrics"],
+        queryKey: ["/api/dashboard/productivity-metrics", startDate, endDate],
         queryFn: async () => {
-            const res = await apiRequest("GET", "/api/dashboard/productivity-metrics");
+            const url = `/api/dashboard/productivity-metrics${queryString ? `?${queryString}` : ""}`;
+            const res = await apiRequest("GET", url);
             return res.json();
         },
     });

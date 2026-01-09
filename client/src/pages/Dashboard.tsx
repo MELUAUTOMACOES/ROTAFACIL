@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { getAuthHeaders } from "@/lib/auth";
+import { normalizeItems } from "@/lib/normalize";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -91,121 +92,91 @@ export default function Dashboard() {
     setSelectedVehicles(vehiclesData.map(v => v.id));
   }
 
-  const { data: appointments = [] } = useQuery<Appointment[]>({
-    queryKey: ["/api/appointments"],
+  // ✅ NOVO: Usar endpoint otimizado em vez de /api/appointments
+  interface AppointmentsStats {
+    todayAppointments: number;
+    todayVariation: number;
+    completionRate: number;
+    completionVariation: number;
+    monthRevenue: number;
+    revenueVariation: number;
+    avgExecutionTime: number;
+  }
+
+  const { data: appointmentsStats } = useQuery<AppointmentsStats>({
+    queryKey: ["/api/dashboard/appointments-stats"],
     queryFn: async () => {
-      const res = await fetch("/api/appointments", {
-        headers: {
-          ...getAuthHeaders(),
-          'x-legacy-list': '1', // Formato array para compatibilidade (temporário)
-        },
+      const res = await fetch("/api/dashboard/appointments-stats", {
+        headers: getAuthHeaders(),
       });
-      if (!res.ok) throw new Error("Failed to fetch appointments");
+      if (!res.ok) throw new Error("Failed to fetch appointments stats");
       return res.json();
     },
   });
 
-  const { data: clients = [] } = useQuery<Client[]>({
-    queryKey: ["/api/clients"],
+  // ✅ Lista leve de agendamentos de hoje (para Agenda e Atividades)
+  interface TodayAppointment {
+    id: number;
+    scheduledDate: string;
+    status: string;
+    clientId: number;
+    serviceId: number;
+    technicianId: number | null;
+    teamId: number | null;
+    logradouro: string | null;
+    numero: string | null;
+    bairro: string | null;
+    cidade: string | null;
+    notes: string | null;
+    executionStatus: string | null;
+    createdAt: string;
+    clientName: string | null;
+  }
+
+  const { data: todayAppointments = [] } = useQuery<TodayAppointment[]>({
+    queryKey: ["/api/dashboard/today-appointments"],
+    queryFn: async () => {
+      const res = await fetch("/api/dashboard/today-appointments?limit=10", {
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error("Failed to fetch today appointments");
+      return res.json();
+    },
   });
 
-  const { data: technicians = [] } = useQuery<Technician[]>({
+  // ❌ Removido: clients não é mais usado no Dashboard (métricas pré-calculadas)
+
+  const { data: techniciansData } = useQuery({
     queryKey: ["/api/technicians"],
+    queryFn: async () => {
+      const response = await fetch("/api/technicians?page=1&pageSize=50", { headers: getAuthHeaders() });
+      return response.json();
+    },
   });
+  const technicians = normalizeItems<Technician>(techniciansData);
 
-  const { data: services = [] } = useQuery<Service[]>({
+  const { data: servicesData } = useQuery({
     queryKey: ["/api/services"],
+    queryFn: async () => {
+      const response = await fetch("/api/services?page=1&pageSize=50", { headers: getAuthHeaders() });
+      return response.json();
+    },
   });
-
-  // Helpers de data
-  const today = new Date();
-  const todayStr = today.toDateString();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toDateString();
-
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
-
-  // Filtrar agendamentos por período
-  const todayAppointments = appointments.filter((apt: Appointment) =>
-    new Date(apt.scheduledDate).toDateString() === todayStr
-  );
-  const yesterdayAppointments = appointments.filter((apt: Appointment) =>
-    new Date(apt.scheduledDate).toDateString() === yesterdayStr
-  );
-  const thisMonthAppointments = appointments.filter((apt: Appointment) => {
-    const date = new Date(apt.scheduledDate);
-    return date >= startOfMonth && date <= today;
-  });
-  const lastMonthAppointments = appointments.filter((apt: Appointment) => {
-    const date = new Date(apt.scheduledDate);
-    return date >= startOfLastMonth && date <= endOfLastMonth;
-  });
+  const services = normalizeItems<Service>(servicesData);
 
   // Técnicos ativos
   const activeTechnicians = technicians.filter((tech: Technician) => tech.isActive);
 
-  // Taxa de conclusão (este mês vs mês passado)
-  const thisMonthCompleted = thisMonthAppointments.filter((apt: Appointment) => apt.status === "completed" || apt.executionStatus === "concluido");
-  const lastMonthCompleted = lastMonthAppointments.filter((apt: Appointment) => apt.status === "completed" || apt.executionStatus === "concluido");
-
-  const thisMonthRate = thisMonthAppointments.length > 0
-    ? Math.round((thisMonthCompleted.length / thisMonthAppointments.length) * 100)
-    : 0;
-  const lastMonthRate = lastMonthAppointments.length > 0
-    ? Math.round((lastMonthCompleted.length / lastMonthAppointments.length) * 100)
-    : 0;
-
-  // Receita do mês (baseada em serviços dos agendamentos concluídos)
-  const calculateRevenue = (appts: Appointment[]) => {
-    return appts
-      .filter((apt: Appointment) => apt.status === "completed" || apt.executionStatus === "concluido")
-      .reduce((total: number, apt: Appointment) => {
-        const service = services.find((s: Service) => s.id === apt.serviceId);
-        return total + (service?.price ? parseFloat(String(service.price)) : 0);
-      }, 0);
-  };
-
-  const thisMonthRevenue = calculateRevenue(thisMonthAppointments);
-  const lastMonthRevenue = calculateRevenue(lastMonthAppointments);
-
-  // Tempo médio de execução (baseado em executionStartedAt e executionFinishedAt)
-  const calculateAvgExecutionTime = (appts: Appointment[]) => {
-    const aptsWithTime = appts.filter((apt: any) => apt.executionStartedAt && apt.executionFinishedAt);
-    if (aptsWithTime.length === 0) return 0;
-
-    const totalMinutes = aptsWithTime.reduce((sum: number, apt: any) => {
-      const start = new Date(apt.executionStartedAt);
-      const end = new Date(apt.executionFinishedAt);
-      const diffMs = end.getTime() - start.getTime();
-      return sum + (diffMs / 1000 / 60); // converter para minutos
-    }, 0);
-
-    return Math.round(totalMinutes / aptsWithTime.length);
-  };
-
-  const avgExecutionTime = calculateAvgExecutionTime(thisMonthCompleted);
-
-  // Calcular variações
-  const todayVariation = yesterdayAppointments.length > 0
-    ? Math.round(((todayAppointments.length - yesterdayAppointments.length) / yesterdayAppointments.length) * 100)
-    : 0;
-  const completionVariation = lastMonthRate > 0 ? thisMonthRate - lastMonthRate : 0;
-  const revenueVariation = lastMonthRevenue > 0
-    ? Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
-    : 0;
-
+  // ✅ Usar métricas do novo endpoint
   const stats: DashboardStats = {
-    todayAppointments: todayAppointments.length,
+    todayAppointments: appointmentsStats?.todayAppointments ?? 0,
     activeTechnicians: activeTechnicians.length,
-    completionRate: thisMonthRate,
-    monthRevenue: thisMonthRevenue,
-    avgExecutionTime,
-    todayVariation,
-    completionVariation,
-    revenueVariation,
+    completionRate: appointmentsStats?.completionRate ?? 0,
+    monthRevenue: appointmentsStats?.monthRevenue ?? 0,
+    avgExecutionTime: appointmentsStats?.avgExecutionTime ?? 0,
+    todayVariation: appointmentsStats?.todayVariation ?? 0,
+    completionVariation: appointmentsStats?.completionVariation ?? 0,
+    revenueVariation: appointmentsStats?.revenueVariation ?? 0,
   };
 
   const getStatusColor = (status: string) => {
@@ -330,7 +301,7 @@ export default function Dashboard() {
                       <div className="mt-4 flex items-center">
                         <span className="text-gray-600 dark:text-zinc-400 text-sm">
                           {activeTechnicians.filter((t: Technician) =>
-                            todayAppointments.some((a: Appointment) => a.technicianId === t.id)
+                            todayAppointments.some((a: TodayAppointment) => a.technicianId === t.id)
                           ).length} em campo agora
                         </span>
                       </div>
@@ -455,15 +426,13 @@ export default function Dashboard() {
                         </div>
                       ) : (
                         <div className="space-y-4">
-                          {todayAppointments.slice(0, 3).map((appointment: Appointment) => {
-                            const client = clients.find((c: Client) => c.id === appointment.clientId);
+                          {todayAppointments.slice(0, 3).map((appointment: TodayAppointment) => {
                             const technician = technicians.find((t: Technician) => t.id === appointment.technicianId);
                             const addressText = [
                               appointment.logradouro,
                               appointment.numero,
                               appointment.bairro,
                               appointment.cidade,
-                              appointment.cep,
                             ].filter(Boolean).join(', ');
 
                             return (
@@ -474,7 +443,7 @@ export default function Dashboard() {
                                   </span>
                                 </div>
                                 <div className="flex-1">
-                                  <h4 className="font-medium text-gray-900 dark:text-zinc-100">{client?.name || "Cliente"}</h4>
+                                  <h4 className="font-medium text-gray-900 dark:text-zinc-100">{appointment.clientName || "Cliente"}</h4>
                                   <p className="text-sm text-gray-600 dark:text-zinc-400">{appointment.notes || "Serviço"}</p>
                                   <p className="text-xs text-gray-500 dark:text-zinc-500">{addressText}</p>
                                 </div>
@@ -561,8 +530,8 @@ export default function Dashboard() {
 
                 {/* Productivity & Quality Metrics */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <ProductivityCard />
-                  <QualityMetricsCard />
+                  <ProductivityCard startDate={filters.startDate} endDate={filters.endDate} />
+                  <QualityMetricsCard startDate={filters.startDate} endDate={filters.endDate} />
                 </div>
 
                 {/* Recent Activity - Two Columns */}
@@ -577,15 +546,14 @@ export default function Dashboard() {
                       <CardDescription>Cadastros e agendamentos</CardDescription>
                     </CardHeader>
                     <CardContent className="p-6">
-                      {appointments.length === 0 ? (
+                      {todayAppointments.length === 0 ? (
                         <div className="text-center py-8">
                           <Clock className="h-12 w-12 text-gray-400 dark:text-zinc-600 mx-auto mb-4" />
                           <p className="text-gray-600 dark:text-zinc-400">Nenhuma atividade administrativa</p>
                         </div>
                       ) : (
                         <div className="space-y-4">
-                          {appointments.slice(0, 4).map((activity: Appointment) => {
-                            const client = clients.find((c: Client) => c.id === activity.clientId);
+                          {todayAppointments.slice(0, 4).map((activity: TodayAppointment) => {
 
                             return (
                               <div key={activity.id} className="flex items-start space-x-4">
@@ -595,7 +563,7 @@ export default function Dashboard() {
                                 <div className="flex-1">
                                   <p className="text-sm text-gray-900 dark:text-zinc-100">
                                     Agendamento criado para{" "}
-                                    <span className="font-medium">{client?.name || "Cliente"}</span>
+                                    <span className="font-medium">{activity.clientName || "Cliente"}</span>
                                   </p>
                                   <p className="text-xs text-gray-500 dark:text-zinc-500">
                                     {new Date(activity.createdAt).toLocaleDateString('pt-BR')} às{" "}
@@ -622,7 +590,7 @@ export default function Dashboard() {
                     <CardContent className="p-6">
                       {(() => {
                         // Filtrar apenas agendamentos com executionStatus (finalizados por prestadores)
-                        const providerActivities = appointments.filter((a: Appointment) => a.executionStatus);
+                        const providerActivities = todayAppointments.filter((a: TodayAppointment) => a.executionStatus);
 
                         if (providerActivities.length === 0) {
                           return (
@@ -635,8 +603,7 @@ export default function Dashboard() {
 
                         return (
                           <div className="space-y-4">
-                            {providerActivities.slice(0, 4).map((activity: Appointment) => {
-                              const client = clients.find((c: Client) => c.id === activity.clientId);
+                            {providerActivities.slice(0, 4).map((activity: TodayAppointment) => {
                               const technician = technicians.find((t: Technician) => t.id === activity.technicianId);
 
                               const isCompleted = activity.executionStatus === 'concluido';
@@ -658,7 +625,7 @@ export default function Dashboard() {
                                     <p className="text-sm text-gray-900 dark:text-zinc-100">
                                       <span className="font-medium">{technician?.name || "Técnico"}</span>{" "}
                                       {isCompleted ? 'concluiu' : 'registrou'} atendimento em{" "}
-                                      <span className="font-medium">{client?.name || "Cliente"}</span>
+                                      <span className="font-medium">{activity.clientName || "Cliente"}</span>
                                     </p>
                                     <div className="flex items-center gap-2 mt-1">
                                       <Badge className={`text-xs ${isCompleted ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' : 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300'
@@ -703,7 +670,7 @@ export default function Dashboard() {
                 <CriticalAlertsCard />
 
                 {/* Métricas de Produtividade */}
-                <ProductivityCard />
+                <ProductivityCard startDate={filters.startDate} endDate={filters.endDate} />
               </div>
             ),
 
@@ -725,10 +692,10 @@ export default function Dashboard() {
               <div className="space-y-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Métricas de Qualidade */}
-                  <QualityMetricsCard />
+                  <QualityMetricsCard startDate={filters.startDate} endDate={filters.endDate} />
 
                   {/* Motivos de Pendências com filtro */}
-                  <PendingReasonsCard />
+                  <PendingReasonsCard startDate={filters.startDate} endDate={filters.endDate} />
                 </div>
               </div>
             ),
@@ -745,12 +712,12 @@ export default function Dashboard() {
                 />
 
                 {/* Fuel Metrics Cards */}
-                <FuelMetricsCard vehicleIds={selectedVehicles} fuelTypes={selectedFuelTypes} />
+                <FuelMetricsCard vehicleIds={selectedVehicles} fuelTypes={selectedFuelTypes} startDate={filters.startDate} endDate={filters.endDate} />
 
                 {/* Fuel Efficiency + Cost Evolution */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <FuelEfficiencyCard vehicleIds={selectedVehicles} fuelTypes={selectedFuelTypes} />
-                  <FuelCostEvolutionCard vehicleIds={selectedVehicles} fuelTypes={selectedFuelTypes} />
+                  <FuelEfficiencyCard vehicleIds={selectedVehicles} fuelTypes={selectedFuelTypes} startDate={filters.startDate} endDate={filters.endDate} />
+                  <FuelCostEvolutionCard vehicleIds={selectedVehicles} fuelTypes={selectedFuelTypes} startDate={filters.startDate} endDate={filters.endDate} />
                 </div>
 
                 {/* Vehicle Alerts & Maintenance - Two Columns */}
@@ -762,7 +729,7 @@ export default function Dashboard() {
 
                 {/* Maintenance Costs - Full Width */}
                 <div className="grid grid-cols-1 gap-6">
-                  <MaintenanceCostsCard />
+                  <MaintenanceCostsCard startDate={filters.startDate} endDate={filters.endDate} />
                 </div>
               </div>
             ),

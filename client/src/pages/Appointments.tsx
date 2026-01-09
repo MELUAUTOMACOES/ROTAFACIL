@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders, useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
+import { normalizeItems } from "@/lib/normalize";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -386,15 +387,18 @@ export default function Appointments() {
     setCurrentPage(1);
   }, [serverAssignedType, serverAssignedId]);
 
-  const { data: clients = [] } = useQuery({
+  const { data: clientsData } = useQuery({
     queryKey: ["/api/clients"],
     queryFn: async () => {
-      const response = await fetch("/api/clients", {
+      const response = await fetch("/api/clients?limit=50", {
         headers: getAuthHeaders(),
       });
       return response.json();
     },
+    staleTime: 60_000, // 1 minuto
+    refetchOnWindowFocus: false,
   });
+  const clients = normalizeItems<Client>(clientsData);
 
   // Restrições de data para o mês atual na aba de disponibilidade
   const monthStart = useMemo(() => {
@@ -431,35 +435,44 @@ export default function Appointments() {
     enabled: viewMode === "calendar",
   });
 
-  const { data: services = [] } = useQuery({
+  const { data: servicesData } = useQuery({
     queryKey: ["/api/services"],
     queryFn: async () => {
-      const response = await fetch("/api/services", {
+      const response = await fetch("/api/services?page=1&pageSize=50", {
         headers: getAuthHeaders(),
       });
       return response.json();
     },
+    staleTime: 5 * 60_000, // 5 minutos - serviços raramente mudam
+    refetchOnWindowFocus: false,
   });
+  const services = normalizeItems<Service>(servicesData);
 
-  const { data: technicians = [] } = useQuery({
+  const { data: techniciansData } = useQuery({
     queryKey: ["/api/technicians"],
     queryFn: async () => {
-      const response = await fetch("/api/technicians", {
+      const response = await fetch("/api/technicians?page=1&pageSize=50", {
         headers: getAuthHeaders(),
       });
       return response.json();
     },
+    staleTime: 2 * 60_000, // 2 minutos
+    refetchOnWindowFocus: false,
   });
+  const technicians = normalizeItems<Technician>(techniciansData);
 
-  const { data: teams = [] } = useQuery({
+  const { data: teamsData } = useQuery({
     queryKey: ["/api/teams"],
     queryFn: async () => {
-      const response = await fetch("/api/teams", {
+      const response = await fetch("/api/teams?page=1&pageSize=50", {
         headers: getAuthHeaders(),
       });
       return response.json();
     },
+    staleTime: 2 * 60_000, // 2 minutos
+    refetchOnWindowFocus: false,
   });
+  const teams = normalizeItems<Team>(teamsData);
 
   const { data: businessRules } = useQuery({
     queryKey: ["/api/business-rules"],
@@ -470,6 +483,8 @@ export default function Appointments() {
       if (!response.ok) return null;
       return response.json();
     },
+    staleTime: 5 * 60_000, // 5 minutos - regras raramente mudam
+    refetchOnWindowFocus: false,
   });
 
   const { data: teamMembers = [] } = useQuery({
@@ -1508,8 +1523,8 @@ export default function Appointments() {
       searchTerm !== "" ||
       inRouteFilter !== "no";
 
-    let filteredTechs = technicians;
-    let filteredTeams = teams;
+    let filteredTechs = Array.isArray(technicians) ? technicians : [];
+    let filteredTeams = Array.isArray(teams) ? teams : [];
 
     // 1. Primeiro, aplica o filtro explícito de técnicos/equipes se houver
     if (selectedTechnicians.length > 0) {

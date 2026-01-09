@@ -23,14 +23,24 @@ interface MaintenanceCostsData {
     selectedVehicleId: number | null;
 }
 
-export function MaintenanceCostsCard() {
+interface MaintenanceCostsCardProps {
+    startDate?: string;
+    endDate?: string;
+}
+
+export function MaintenanceCostsCard({ startDate, endDate }: MaintenanceCostsCardProps) {
     const [selectedVehicleId, setSelectedVehicleId] = useState<string>("all");
 
     const { data, isLoading } = useQuery<MaintenanceCostsData>({
-        queryKey: ["/api/dashboard/maintenance-costs", selectedVehicleId],
+        queryKey: ["/api/dashboard/maintenance-costs", selectedVehicleId, startDate, endDate],
         queryFn: async () => {
-            const url = selectedVehicleId !== "all"
-                ? `/api/dashboard/maintenance-costs?vehicleId=${selectedVehicleId}`
+            const params = new URLSearchParams();
+            if (selectedVehicleId !== "all") params.set("vehicleId", selectedVehicleId);
+            if (startDate) params.set("startDate", startDate);
+            if (endDate) params.set("endDate", endDate);
+            const queryString = params.toString();
+            const url = queryString
+                ? `/api/dashboard/maintenance-costs?${queryString}`
                 : "/api/dashboard/maintenance-costs";
             const res = await apiRequest("GET", url);
             return res.json();
