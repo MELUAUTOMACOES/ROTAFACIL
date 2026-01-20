@@ -681,6 +681,9 @@ export default function Home() {
             <p className="text-slate-400 text-lg md:text-xl">
               Escolha o plano ideal para o tamanho da sua empresa.
             </p>
+            <p className="text-slate-500 text-sm mt-4 max-w-2xl mx-auto">
+              <strong className="text-slate-400">Agendamentos/mês:</strong> Cada otimização de rota e procura de datas consome 1 agendamento.
+            </p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
@@ -690,13 +693,17 @@ export default function Home() {
                 <h3 className="text-xl font-bold text-white mb-2">Básico</h3>
                 <p className="text-slate-400 text-sm mb-6">Para operações pequenas</p>
                 <div className="mb-8">
-                  <span className="text-4xl font-bold text-white">R$ 99</span>
+                  <span className="text-4xl font-bold text-white">R$ 179,90</span>
                   <span className="text-slate-400">/mês</span>
                 </div>
                 <ul className="space-y-4 mb-8">
                   <li className="flex items-center gap-3 text-sm text-slate-300">
                     <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                    50 requisições/mês
+                    50 agendamentos/mês
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-slate-300">
+                    <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
+                    Ache uma Data: até 30 buscas/mês
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-300">
                     <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
@@ -716,8 +723,8 @@ export default function Home() {
                   </li>
                 </ul>
                 <Link href="/login">
-                  <Button variant="outline" className="w-full border-zinc-700 text-slate-300 hover:bg-zinc-800 hover:text-white h-12">
-                    Testar grátis
+                  <Button variant="outline" className="w-full border-zinc-700 text-zinc-900 bg-white hover:bg-zinc-100 hover:text-zinc-900 h-12">
+                    Escolher plano
                   </Button>
                 </Link>
               </CardContent>
@@ -735,13 +742,17 @@ export default function Home() {
                 <p className="text-black text-sm mb-6">
                   Para empresas em crescimento</p>
                 <div className="mb-8">
-                  <span className="text-4xl font-bold text-white">R$ 249</span>
+                  <span className="text-4xl font-bold text-white">R$ 299,90</span>
                   <span className="text-[#E5E5E5]">/mês</span>
                 </div>
                 <ul className="space-y-4 mb-8">
                   <li className="flex items-center gap-3 text-sm text-slate-300">
                     <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                    200 requisições/mês
+                    200 agendamentos/mês
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-slate-300">
+                    <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
+                    Ache uma Data: até 120 buscas/mês
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-300">
                     <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
@@ -761,7 +772,7 @@ export default function Home() {
                   </li>
                 </ul>
                 <Link href="/login">
-                  <Button className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white h-12 shadow-lg shadow-amber-500/25">
+                  <Button className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-zinc-900 font-semibold h-12 shadow-lg shadow-amber-500/25">
                     Escolher plano
                   </Button>
                 </Link>
@@ -774,13 +785,17 @@ export default function Home() {
                 <h3 className="text-xl font-bold text-white mb-2">Empresarial</h3>
                 <p className="text-slate-400 text-sm mb-6">Para operações maiores</p>
                 <div className="mb-8">
-                  <span className="text-4xl font-bold text-white">R$ 649</span>
+                  <span className="text-4xl font-bold text-white">R$ 729,90</span>
                   <span className="text-slate-400">/mês</span>
                 </div>
                 <ul className="space-y-4 mb-8">
                   <li className="flex items-center gap-3 text-sm text-slate-300">
                     <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                    500 requisições/mês
+                    500 agendamentos/mês
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-slate-300">
+                    <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
+                    Ache uma Data: até 400 buscas/mês
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-300">
                     <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
@@ -800,8 +815,8 @@ export default function Home() {
                   </li>
                 </ul>
                 <Link href="/login">
-                  <Button variant="outline" className="w-full border-zinc-700 text-slate-300 hover:bg-zinc-800 hover:text-white h-12">
-                    Falar com vendas
+                  <Button variant="outline" className="w-full border-zinc-700 text-zinc-900 bg-white hover:bg-zinc-100 hover:text-zinc-900 h-12">
+                    Escolher plano
                   </Button>
                 </Link>
               </CardContent>
@@ -818,28 +833,32 @@ export default function Home() {
                 <ul className="space-y-4 mb-8">
                   <li className="flex items-center gap-3 text-sm text-slate-300">
                     <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                    Requisições ilimitadas
+                    Agendamentos personalizado
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-300">
                     <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                    Endereços ilimitados
+                    Ache uma Data: Personalizado
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-300">
                     <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                    Veículos ilimitados
+                    Endereços personalizado
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-300">
                     <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                    Técnicos ilimitados
+                    Veículos personalizado
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-300">
                     <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                    Histórico ilimitado
+                    Técnicos personalizado
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-slate-300">
+                    <Check className="h-5 w-5 text-amber-500 flex-shrink-0" />
+                    Histórico personalizado
                   </li>
                 </ul>
                 <Link href="/login">
-                  <Button variant="outline" className="w-full border-zinc-700 text-slate-300 hover:bg-zinc-800 hover:text-white h-12">
-                    Contatar
+                  <Button variant="outline" className="w-full border-zinc-700 text-zinc-900 bg-white hover:bg-zinc-100 hover:text-zinc-900 h-12">
+                    Falar com especialista
                   </Button>
                 </Link>
               </CardContent>

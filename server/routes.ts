@@ -49,6 +49,8 @@ import {
   osrmStats,
   type Coords
 } from "./osrm-distance-helper";
+import { getPlanLimits } from "@shared/plan-limits";
+import { companies } from "@shared/schema";
 
 // 🛡️ Rate Limiting para Login (previne brute force)
 const loginRateLimiter = rateLimit({
@@ -2791,6 +2793,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Reset OSRM stats for this request
       osrmStats.reset();
 
+      // 🔒 [PLAN-LIMITS] Buscar plano do usuário para aplicar limites
+      let userPlan = 'basic'; // default
+      if (companyId) {
+        const company = await db.query.companies.findFirst({
+          where: eq(companies.id, companyId)
+        });
+        if (company) userPlan = company.plan || 'basic';
+      } else {
+        const userRecord = await storage.getUserById(userId);
+        if (userRecord) userPlan = userRecord.plan || 'basic';
+      }
+      const planLimits = getPlanLimits(userPlan);
+      console.log(`🔒 [FIND-DATE] Plano: ${userPlan} | Limites: ${planLimits.maxFindDateOsrmDays} dias OSRM, ${planLimits.maxFindDateResponsiblesPerDay} responsáveis/dia`);
+
+      // Flag para indicar se técnico/equipe específico foi selecionado (desabilita limite por dia)
+      const specificResponsibleSelected = !!(technicianId || teamId);
+
       let targetLat: number, targetLng: number;
 
       if (clientId) {
@@ -3036,8 +3055,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           usedMinutes: number;
         }> = [];
 
+        // 🔒 [PLAN-LIMITS] Limitar responsáveis por dia (apenas se não escolheu específico)
+        let responsiblesForDay = preparedResponsibles;
+        if (!specificResponsibleSelected && preparedResponsibles.length > planLimits.maxFindDateResponsiblesPerDay) {
+          // Ordenar por disponibilidade (quem tem mais tempo livre primeiro) - critério simples
+          // Nota: Poderia ordenar por proximidade da base, mas requer geocodificação extra
+          responsiblesForDay = preparedResponsibles.slice(0, planLimits.maxFindDateResponsiblesPerDay);
+          console.log(`  🔒 [LIMITE] Avaliando apenas ${responsiblesForDay.length}/${preparedResponsibles.length} responsáveis (limite do plano ${userPlan})`);
+        }
+
+        // 🔒 [PLAN-LIMITS] Verificar se ainda está dentro do limite de dias com OSRM
+        const useOsrmForDistance = daysAhead < planLimits.maxFindDateOsrmDays;
+        if (!useOsrmForDistance && daysAhead === planLimits.maxFindDateOsrmDays) {
+          console.log(`\n⚠️ [PLAN-LIMITS] Limite de ${planLimits.maxFindDateOsrmDays} dias com OSRM atingido. Usando apenas Haversine a partir de agora.`);
+        }
+
         // Iterar pelos responsáveis para este dia
-        for (const data of preparedResponsibles) {
+        for (const data of responsiblesForDay) {
           const { info: responsible, baseAddress, diasTrabalho } = data;
 
           console.log(`  👤 [RESPONSÁVEL] ${responsible.name} (${responsible.type})`);
@@ -3223,19 +3257,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`    ✅ [PRÉ-FILTRO] Passou! Continuando para cálculo OSRM...`);
 
             // 6. Calcular delta de inserção com OSRM usando rota completa (com base)
-            console.log(`    📏 [OSRM] Calculando delta de inserção na rota otimizada...`);
-            const { deltaDistance } = await calculateInsertionDelta(fullRouteCoords, targetCoords);
-            console.log(`    📏 [OSRM] Delta de inserção: ${deltaDistance.toFixed(1)}km (limite: ${maxDistanceOsrm}km)`);
+            // 🔒 [PLAN-LIMITS] Só usar OSRM se dentro do limite de dias
+            if (useOsrmForDistance) {
+              console.log(`    📎 [OSRM] Calculando delta de inserção na rota otimizada...`);
+              const { deltaDistance } = await calculateInsertionDelta(fullRouteCoords, targetCoords);
+              console.log(`    📎 [OSRM] Delta de inserção: ${deltaDistance.toFixed(1)}km (limite: ${maxDistanceOsrm}km)`);
 
-            if (deltaDistance > maxDistanceOsrm) {
-              console.log(`    ❌ [REJEITADO] Delta OSRM: ${deltaDistance.toFixed(1)}km > ${maxDistanceOsrm}km`);
-              stats.skippedOsrmTooFar++;
-              continue;
+              if (deltaDistance > maxDistanceOsrm) {
+                console.log(`    ❌ [REJEITADO] Delta OSRM: ${deltaDistance.toFixed(1)}km > ${maxDistanceOsrm}km`);
+                stats.skippedOsrmTooFar++;
+                continue;
+              }
+
+              minDistance = deltaDistance;
+              distanceType = 'between_points';
+              console.log(`    ✅ [APROVADO] Delta OSRM: ${deltaDistance.toFixed(2)}km`);
+            } else {
+              // 🔒 [PLAN-LIMITS] Haversine-only mode (após limite de dias OSRM)
+              console.log(`    📞 [HAVERSINE-ONLY] Usando Haversine como distância (limite OSRM atingido)`);
+
+              // Usar a menor distância Haversine já calculada
+              if (minHaversineDist > maxDistanceHaversine * 1.25) {
+                // Rejeitar se muito distante (margem de 25% sobre o pré-filtro)
+                console.log(`    ❌ [REJEITADO] Haversine: ${minHaversineDist.toFixed(1)}km > ${(maxDistanceHaversine * 1.25).toFixed(1)}km`);
+                stats.skippedHaversinePreFilter++;
+                continue;
+              }
+
+              minDistance = minHaversineDist;
+              distanceType = 'between_points';
+              console.log(`    ✅ [APROVADO] Haversine: ${minHaversineDist.toFixed(2)}km`);
             }
-
-            minDistance = deltaDistance;
-            distanceType = 'between_points';
-            console.log(`    ✅ [APROVADO] Delta OSRM: ${deltaDistance.toFixed(2)}km`);
 
           } else {
             // ========================================
@@ -3261,19 +3313,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
 
               // 2. Validação com OSRM
-              const osrmDist = await calculateOSRMDistance(baseCoordsTyped, targetCoords);
+              // 🔒 [PLAN-LIMITS] Só usar OSRM se dentro do limite de dias
+              if (useOsrmForDistance) {
+                const osrmDist = await calculateOSRMDistance(baseCoordsTyped, targetCoords);
 
-              console.log(`    📏 [DIA VAZIO] OSRM da base: ${osrmDist.toFixed(1)}km (limite: ${maxDistanceServed}km)`);
+                console.log(`    📎 [DIA VAZIO] OSRM da base: ${osrmDist.toFixed(1)}km (limite: ${maxDistanceServed}km)`);
 
-              if (osrmDist > maxDistanceServed) {
-                console.log(`    ❌ [REJEITADO] Distância base OSRM: ${osrmDist.toFixed(1)}km > ${maxDistanceServed}km`);
-                stats.skippedOsrmTooFar++;
-                continue;
+                if (osrmDist > maxDistanceServed) {
+                  console.log(`    ❌ [REJEITADO] Distância base OSRM: ${osrmDist.toFixed(1)}km > ${maxDistanceServed}km`);
+                  stats.skippedOsrmTooFar++;
+                  continue;
+                }
+
+                minDistance = osrmDist;
+                distanceType = 'from_base';
+                console.log(`    ✅ [APROVADO] Distância da base: ${osrmDist.toFixed(2)}km`);
+              } else {
+                // 🔒 [PLAN-LIMITS] Haversine-only mode (após limite de dias OSRM)
+                console.log(`    📞 [HAVERSINE-ONLY] Usando Haversine como distância (limite OSRM atingido)`);
+
+                if (haversineDist > maxDistanceServed) {
+                  console.log(`    ❌ [REJEITADO] Haversine base: ${haversineDist.toFixed(1)}km > ${maxDistanceServed}km`);
+                  stats.skippedHaversinePreFilter++;
+                  continue;
+                }
+
+                minDistance = haversineDist;
+                distanceType = 'from_base';
+                console.log(`    ✅ [APROVADO] Haversine da base: ${haversineDist.toFixed(2)}km`);
               }
-
-              minDistance = osrmDist;
-              distanceType = 'from_base';
-              console.log(`    ✅ [APROVADO] Distância da base: ${osrmDist.toFixed(2)}km`);
 
             } catch (error: any) {
               console.log(`    ⚠️ [GEOCODE] Erro ao geocodificar base: ${error.message}`);

@@ -4,6 +4,9 @@ export interface PlanLimits {
   maxVehicles: number;
   maxTechnicians: number;
   maxMonthlyRequests: number;
+  // 🆕 Limites para Find-Date (Encontre uma Data)
+  maxFindDateOsrmDays: number;           // Máx dias analisados com OSRM (depois usa Haversine)
+  maxFindDateResponsiblesPerDay: number; // Máx responsáveis avaliados por dia (quando não escolhe específico)
 }
 
 export const PLAN_LIMITS: Record<string, PlanLimits> = {
@@ -12,24 +15,32 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
     maxVehicles: 3,
     maxTechnicians: 5,
     maxMonthlyRequests: 1000,
+    maxFindDateOsrmDays: 15,
+    maxFindDateResponsiblesPerDay: 3,
   },
   professional: {
     maxRouteAddresses: 50,
     maxVehicles: 10,
     maxTechnicians: 20,
     maxMonthlyRequests: 5000,
+    maxFindDateOsrmDays: 30,
+    maxFindDateResponsiblesPerDay: 5,
   },
   enterprise: {
     maxRouteAddresses: 150,
     maxVehicles: 50,
     maxTechnicians: 100,
     maxMonthlyRequests: 20000,
+    maxFindDateOsrmDays: 60,
+    maxFindDateResponsiblesPerDay: 8,
   },
   custom: {
     maxRouteAddresses: 500,
     maxVehicles: 200,
     maxTechnicians: 500,
     maxMonthlyRequests: 100000,
+    maxFindDateOsrmDays: 100,
+    maxFindDateResponsiblesPerDay: 999,
   },
 };
 
