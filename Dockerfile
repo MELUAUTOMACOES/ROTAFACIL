@@ -19,6 +19,9 @@ COPY . .
 # Build do backend
 RUN pnpm build:api
 
+# copia o arquivo do OSRM para dentro do dist (ajuste o caminho de origem se necessário)
+COPY osrm_url.txt ./dist/osrm_url.txt
+
 # Porta do app
 ENV PORT=5000
 EXPOSE 5000
