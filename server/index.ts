@@ -2,19 +2,21 @@ import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import cors from "cors";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+// 🔧 Vite só é importado em desenvolvimento
+import { log } from "./vite";
 
 const app = express();
+const isProduction = process.env.NODE_ENV === "production";
 
 // 🛡️ Security Headers (Helmet)
 app.use(helmet({
-  contentSecurityPolicy: false, // Desativado para permitir inline scripts do Vite em dev
+  contentSecurityPolicy: isProduction, // Ativo em produção, desativado em dev
   crossOriginEmbedderPolicy: false, // Permite carregar recursos externos (ex: mapas)
 }));
 
 // 🌐 CORS Configuration
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production'
+  origin: isProduction
     ? process.env.APP_URL || true // Em produção, usa APP_URL ou permite qualquer origem
     : true, // Em desenvolvimento, permite qualquer origem
   credentials: true,
@@ -82,20 +84,19 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
+  // 🔧 Vite middleware APENAS em desenvolvimento
+  // Em produção, o frontend é servido por Nginx/Caddy via EasyPanel
+  if (!isProduction) {
+    const { setupVite } = await import("./vite");
     await setupVite(app, server);
+    console.log('🔧 Modo desenvolvimento: Vite middleware ativo');
   } else {
-    serveStatic(app);
+    console.log('🚀 Modo produção: Backend API-only (frontend via proxy externo)');
   }
 
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = 5000;
+  // 📌 Porta configurável via env (padrão 5000)
+  const port = parseInt(process.env.PORT || "5000", 10);
   server.listen(port, "0.0.0.0", () => {
-    log(`serving on port ${port}`);
+    log(`🚀 API rodando na porta ${port}`);
   });
 })();

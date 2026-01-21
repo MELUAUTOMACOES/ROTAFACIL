@@ -1,4 +1,13 @@
-import express, { type Express } from "express";
+/**
+ * ⚠️ ARQUIVO APENAS PARA DESENVOLVIMENTO ⚠️
+ * 
+ * Este arquivo configura o Vite middleware para HMR durante desenvolvimento.
+ * Em PRODUÇÃO, o backend é API-only e o frontend é servido por Nginx/Caddy.
+ * 
+ * NÃO importar em produção - usar import dinâmico condicional em server/index.ts
+ */
+
+import { type Express } from "express";
 import fs from "fs";
 import path from "path";
 import { createServer as createViteServer, createLogger } from "vite";
@@ -8,6 +17,9 @@ import { nanoid } from "nanoid";
 
 const viteLogger = createLogger();
 
+/**
+ * Função de log simples - pode ser usada em dev e prod
+ */
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -19,13 +31,16 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+/**
+ * ⚠️ APENAS DESENVOLVIMENTO ⚠️
+ * Configura Vite middleware para HMR e serve o frontend em dev
+ */
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
-  middlewareMode: true,
-  hmr: { server },
-  allowedHosts: ["localhost", "127.0.0.1","f130346c-8d15-41c5-b416-c62a70be1792-00-ptd0q90wpvxz.janeway.replit.dev","a1f68040-6fba-489a-8723-a59b76ff0688-00-df4404fd3zdr.spock.replit.dev"],
+    middlewareMode: true,
+    hmr: { server },
+    allowedHosts: ["localhost", "127.0.0.1"],
   };
-
 
   const vite = await createViteServer({
     ...viteConfig,
@@ -68,19 +83,5 @@ export async function setupVite(app: Express, server: Server) {
   });
 }
 
-export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
-
-  if (!fs.existsSync(distPath)) {
-    throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
-    );
-  }
-
-  app.use(express.static(distPath));
-
-  // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
-  });
-}
+// ❌ serveStatic REMOVIDO - não necessário em arquitetura API-only
+// O frontend é servido por Nginx/Caddy no EasyPanel
