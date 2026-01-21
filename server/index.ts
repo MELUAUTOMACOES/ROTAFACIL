@@ -28,6 +28,11 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: false }));
 
+// 🏥 Health check endpoint (antes de middlewares de logging/auth)
+app.get("/api/health", (_req, res) => {
+  res.status(200).send("ok");
+});
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
