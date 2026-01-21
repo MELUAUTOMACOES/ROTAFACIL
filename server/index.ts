@@ -79,7 +79,7 @@ app.use((req, res, next) => {
     console.log('✅ Modo de segurança: PRODUÇÃO (autenticação ativa)');
   }
 
-  const server = await registerRoutes(app);
+  await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -92,16 +92,25 @@ app.use((req, res, next) => {
   // 🔧 Vite middleware APENAS em desenvolvimento
   // Em produção, o frontend é servido por Nginx/Caddy via EasyPanel
   if (!isProduction) {
+    const { createServer } = await import("http");
+    const server = createServer(app);
+
     const { setupVite } = await import("./vite");
     await setupVite(app, server);
     console.log('🔧 Modo desenvolvimento: Vite middleware ativo');
+
+    // Em dev, usar server.listen() para suportar HMR
+    const port = Number(process.env.PORT) || 5000;
+    server.listen(port, "0.0.0.0", () => {
+      console.log(`🚀 API rodando na porta ${port}`);
+    });
   } else {
     console.log('🚀 Modo produção: Backend API-only (frontend via proxy externo)');
-  }
 
-  // 📌 Porta configurável via env (padrão 5000)
-  const port = parseInt(process.env.PORT || "5000", 10);
-  server.listen(port, "0.0.0.0", () => {
-    log(`🚀 API rodando na porta ${port}`);
-  });
+    // Em produção, usar app.listen() diretamente
+    const port = Number(process.env.PORT) || 5000;
+    app.listen(port, "0.0.0.0", () => {
+      console.log(`🚀 API rodando na porta ${port}`);
+    });
+  }
 })();
