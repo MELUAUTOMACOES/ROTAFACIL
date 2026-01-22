@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { CheckCircle, XCircle, Loader2, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { buildApiUrl } from "@/lib/api-config";
 
 export default function VerifyEmail() {
   const [, setLocation] = useLocation();
@@ -29,7 +30,7 @@ export default function VerifyEmail() {
 
   const verifyEmail = async (token: string) => {
     try {
-      const response = await fetch("/api/auth/verify-email", {
+      const response = await fetch(buildApiUrl("/api/auth/verify-email"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -43,7 +44,7 @@ export default function VerifyEmail() {
         setStatus("success");
         setEmail(data.email);
         setMessage("Email verificado com sucesso!");
-        
+
         toast({
           title: "Email verificado",
           description: "Você será redirecionado para criar sua senha.",

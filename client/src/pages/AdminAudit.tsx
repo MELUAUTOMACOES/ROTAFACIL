@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth, getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -118,7 +119,7 @@ export default function AdminAudit() {
             if (startDate) params.set("startDate", startDate);
             if (endDate) params.set("endDate", endDate);
 
-            const response = await fetch(`/api/admin/audit?${params.toString()}`, {
+            const response = await fetch(buildApiUrl(`/api/admin/audit?${params.toString()}`), {
                 headers: getAuthHeaders(),
             });
             if (!response.ok) throw new Error("Erro ao buscar auditoria");
@@ -130,7 +131,7 @@ export default function AdminAudit() {
     const { data: stats } = useQuery({
         queryKey: ["admin-audit-stats"],
         queryFn: async () => {
-            const response = await fetch("/api/admin/audit/stats", {
+            const response = await fetch(buildApiUrl("/api/admin/audit/stats"), {
                 headers: getAuthHeaders(),
             });
             if (!response.ok) throw new Error("Erro ao buscar estatísticas");

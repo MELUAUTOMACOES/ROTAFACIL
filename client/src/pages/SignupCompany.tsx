@@ -14,6 +14,7 @@ import { buscarEnderecoPorCep } from "@/lib/cep";
 import { Loader2, Building2, User, Mail, Phone, MapPin, Briefcase, MessageSquare, Truck, Check } from "lucide-react";
 import { Link } from "wouter";
 import logoImg from "@assets/SEM FUNDO_1750819798590.png";
+import { buildApiUrl } from "@/lib/api-config";
 
 interface PinData {
   id: number;
@@ -74,7 +75,7 @@ export default function SignupCompany() {
     try {
       setIsLoading(true);
 
-      const response = await fetch("/api/auth/signup-company", {
+      const response = await fetch(buildApiUrl("/api/auth/signup-company"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),

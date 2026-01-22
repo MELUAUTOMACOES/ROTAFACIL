@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
 import {
@@ -103,37 +104,37 @@ interface WhatsAppClicksData {
 // ===================== API CALLS =====================
 
 async function fetchOverview(): Promise<OverviewData> {
-    const res = await fetch("/api/metrics/ads/overview", { headers: getAuthHeaders() });
+    const res = await fetch(buildApiUrl("/api/metrics/ads/overview"), { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Erro ao buscar overview");
     return res.json();
 }
 
 async function fetchFunnel(): Promise<FunnelData> {
-    const res = await fetch("/api/metrics/ads/funnel", { headers: getAuthHeaders() });
+    const res = await fetch(buildApiUrl("/api/metrics/ads/funnel"), { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Erro ao buscar funil");
     return res.json();
 }
 
 async function fetchCampaigns(): Promise<CampaignsData> {
-    const res = await fetch("/api/metrics/ads/campaigns", { headers: getAuthHeaders() });
+    const res = await fetch(buildApiUrl("/api/metrics/ads/campaigns"), { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Erro ao buscar campanhas");
     return res.json();
 }
 
 async function fetchBehavior(): Promise<BehaviorData> {
-    const res = await fetch("/api/metrics/ads/behavior", { headers: getAuthHeaders() });
+    const res = await fetch(buildApiUrl("/api/metrics/ads/behavior"), { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Erro ao buscar comportamento");
     return res.json();
 }
 
 async function fetchWhatsAppSettings(): Promise<WhatsAppSettings> {
-    const res = await fetch("/api/metrics/ads/whatsapp-settings", { headers: getAuthHeaders() });
+    const res = await fetch(buildApiUrl("/api/metrics/ads/whatsapp-settings"), { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Erro ao buscar configuração WhatsApp");
     return res.json();
 }
 
 async function updateWhatsAppSettings(data: { whatsappNumber: string; defaultMessage: string }) {
-    const res = await fetch("/api/metrics/ads/whatsapp-settings", {
+    const res = await fetch(buildApiUrl("/api/metrics/ads/whatsapp-settings"), {
         method: "PUT",
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -146,7 +147,7 @@ async function updateWhatsAppSettings(data: { whatsappNumber: string; defaultMes
 }
 
 async function fetchWhatsAppClicks(): Promise<WhatsAppClicksData> {
-    const res = await fetch("/api/metrics/ads/whatsapp", { headers: getAuthHeaders() });
+    const res = await fetch(buildApiUrl("/api/metrics/ads/whatsapp"), { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Erro ao buscar cliques WhatsApp");
     return res.json();
 }

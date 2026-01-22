@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -43,7 +44,7 @@ export default function AccessSchedules() {
   const { data: schedules = [], isLoading } = useQuery({
     queryKey: ["/api/access-schedules"],
     queryFn: async () => {
-      const response = await fetch("/api/access-schedules", {
+      const response = await fetch(buildApiUrl("/api/access-schedules"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
@@ -57,7 +58,7 @@ export default function AccessSchedules() {
   // Mutation para deletar tabela de horário
   const deleteMutation = useMutation({
     mutationFn: async (scheduleId: number) => {
-      const response = await fetch(`/api/access-schedules/${scheduleId}`, {
+      const response = await fetch(buildApiUrl(`/api/access-schedules/${scheduleId}`), {
         method: "DELETE",
         headers: getAuthHeaders(),
       });

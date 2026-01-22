@@ -8,6 +8,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { MessageCircle } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
+import { buildApiUrl } from "@/lib/api-config";
 
 interface WhatsAppSettings {
     whatsappNumber: string;
@@ -15,7 +16,7 @@ interface WhatsAppSettings {
 }
 
 async function fetchWhatsAppSettings(): Promise<WhatsAppSettings> {
-    const res = await fetch("/api/public/whatsapp-settings");
+    const res = await fetch(buildApiUrl("/api/public/whatsapp-settings"));
     if (!res.ok) {
         // Se não tiver configuração, retorna vazio
         return { whatsappNumber: "", defaultMessage: "" };

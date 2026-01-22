@@ -4,6 +4,7 @@ import { useLocation, useRoute } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient"; // você já usa no VehicleForm
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { normalizeItems } from "@/lib/normalize";
 import { useToast } from "@/hooks/use-toast";
 import { usePendingAppointments } from "@/hooks/usePendingAppointments";
@@ -293,7 +294,7 @@ export default function RoutesHistoryPage() {
       params.append('page', String(routesPage));
       params.append('pageSize', String(routesPageSize));
 
-      const response = await fetch(`/api/routes?${params.toString()}`, {
+      const response = await fetch(buildApiUrl(`/api/routes?${params.toString()}`), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error('Erro ao buscar rotas');
@@ -384,7 +385,7 @@ export default function RoutesHistoryPage() {
   const { data: routeDetail } = useQuery<RouteDetail>({
     queryKey: ['/api/routes', selectedRoute],
     queryFn: async () => {
-      const response = await fetch(`/api/routes/${selectedRoute}`, {
+      const response = await fetch(buildApiUrl(`/api/routes/${selectedRoute}`), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error('Erro ao buscar detalhes da rota');
@@ -409,7 +410,7 @@ export default function RoutesHistoryPage() {
     enabled: !!selectedRoute && addStopsOpen, // só busca quando o modal abrir
     queryFn: async () => {
       if (!selectedRoute) return [];
-      const res = await fetch(`/api/routes/${selectedRoute}/available-appointments`, {
+      const res = await fetch(buildApiUrl(`/api/routes/${selectedRoute}/available-appointments`), {
         headers: getAuthHeaders(),
       });
       if (!res.ok) return []; // deixa o fallback funcionar se o endpoint não existir
@@ -759,7 +760,7 @@ export default function RoutesHistoryPage() {
       appointmentId?: number;
       clientName?: string | null;
     }) => {
-      const res = await fetch(`/api/routes/${routeId}/stops/${stopId}`, {
+      const res = await fetch(buildApiUrl(`/api/routes/${routeId}/stops/${stopId}`), {
         method: "DELETE",
         headers: getAuthHeaders(),
       });
@@ -929,7 +930,7 @@ export default function RoutesHistoryPage() {
   // Buscar e exibir histórico de um agendamento
   const handleViewHistory = async (appointmentId: number) => {
     try {
-      const response = await fetch(`/api/appointments/${appointmentId}/history`, {
+      const response = await fetch(buildApiUrl(`/api/appointments/${appointmentId}/history`), {
         headers: getAuthHeaders(),
       });
 
@@ -968,7 +969,7 @@ export default function RoutesHistoryPage() {
   const { data: vehiclesData } = useQuery({
     queryKey: ["/api/vehicles"],
     queryFn: async () => {
-      const response = await fetch("/api/vehicles?page=1&pageSize=50", {
+      const response = await fetch(buildApiUrl("/api/vehicles?page=1&pageSize=50"), {
         headers: getAuthHeaders(),
       }); // "fetch" = solicitar dados ao backend
       if (!response.ok) throw new Error("Erro ao buscar veículos");
@@ -1607,7 +1608,7 @@ export default function RoutesHistoryPage() {
 
       // Registrar auditoria de exportação
       try {
-        await fetch(`/api/routes/${routeDetail.route.id}/audit-export`, {
+        await fetch(buildApiUrl(`/api/routes/${routeDetail.route.id}/audit-export`), {
           method: 'POST',
           headers: {
             ...getAuthHeaders(),

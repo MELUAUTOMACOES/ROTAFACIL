@@ -39,6 +39,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { Loader2, UserPlus, Users, Mail, Clock, CheckCircle2, XCircle } from "lucide-react";
 import Layout from "@/components/Layout";
 
@@ -61,7 +62,7 @@ export default function CompanyUsers() {
   const { data, isLoading } = useQuery({
     queryKey: ["company-users"],
     queryFn: async () => {
-      const response = await fetch("/api/company/users", {
+      const response = await fetch(buildApiUrl("/api/company/users"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error("Erro ao buscar usuários");
@@ -72,7 +73,7 @@ export default function CompanyUsers() {
   // Mutation para criar convite
   const createInvite = useMutation({
     mutationFn: async (data: CreateInvitationData) => {
-      const response = await fetch("/api/company/users/invite", {
+      const response = await fetch(buildApiUrl("/api/company/users/invite"), {
         method: "POST",
         headers: {
           ...getAuthHeaders(),

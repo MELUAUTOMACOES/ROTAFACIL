@@ -15,6 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { LGPD_VERSION } from "../../../shared/constants";
 import { Loader2, LogOut, Shield } from "lucide-react";
+import { buildApiUrl } from "@/lib/api-config";
 import logoImg from "@assets/SEM FUNDO_1750819798590.png";
 
 export default function LgpdAccept() {
@@ -37,7 +38,7 @@ export default function LgpdAccept() {
         setIsSubmitting(true);
         try {
             const token = localStorage.getItem("token");
-            const response = await fetch("/api/lgpd/accept", {
+            const response = await fetch(buildApiUrl("/api/lgpd/accept"), {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

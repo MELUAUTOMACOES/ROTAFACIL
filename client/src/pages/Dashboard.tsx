@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { normalizeItems } from "@/lib/normalize";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -106,7 +107,7 @@ export default function Dashboard() {
   const { data: appointmentsStats } = useQuery<AppointmentsStats>({
     queryKey: ["/api/dashboard/appointments-stats"],
     queryFn: async () => {
-      const res = await fetch("/api/dashboard/appointments-stats", {
+      const res = await fetch(buildApiUrl("/api/dashboard/appointments-stats"), {
         headers: getAuthHeaders(),
       });
       if (!res.ok) throw new Error("Failed to fetch appointments stats");
@@ -136,7 +137,7 @@ export default function Dashboard() {
   const { data: todayAppointments = [] } = useQuery<TodayAppointment[]>({
     queryKey: ["/api/dashboard/today-appointments"],
     queryFn: async () => {
-      const res = await fetch("/api/dashboard/today-appointments?limit=10", {
+      const res = await fetch(buildApiUrl("/api/dashboard/today-appointments?limit=10"), {
         headers: getAuthHeaders(),
       });
       if (!res.ok) throw new Error("Failed to fetch today appointments");
@@ -149,7 +150,7 @@ export default function Dashboard() {
   const { data: techniciansData } = useQuery({
     queryKey: ["/api/technicians"],
     queryFn: async () => {
-      const response = await fetch("/api/technicians?page=1&pageSize=50", { headers: getAuthHeaders() });
+      const response = await fetch(buildApiUrl("/api/technicians?page=1&pageSize=50"), { headers: getAuthHeaders() });
       return response.json();
     },
   });
@@ -158,7 +159,7 @@ export default function Dashboard() {
   const { data: servicesData } = useQuery({
     queryKey: ["/api/services"],
     queryFn: async () => {
-      const response = await fetch("/api/services?page=1&pageSize=50", { headers: getAuthHeaders() });
+      const response = await fetch(buildApiUrl("/api/services?page=1&pageSize=50"), { headers: getAuthHeaders() });
       return response.json();
     },
   });

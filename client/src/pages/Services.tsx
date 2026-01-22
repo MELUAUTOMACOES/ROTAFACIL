@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { apiRequest } from "@/lib/queryClient";
 import { normalizeItems } from "@/lib/normalize";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +36,7 @@ export default function Services() {
   const { data: servicesData, isLoading } = useQuery({
     queryKey: ["/api/services"],
     queryFn: async () => {
-      const response = await fetch("/api/services?page=1&pageSize=50", {
+      const response = await fetch(buildApiUrl("/api/services?page=1&pageSize=50"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error("Erro ao carregar serviços");

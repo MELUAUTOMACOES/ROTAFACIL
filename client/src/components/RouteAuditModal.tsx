@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, Clock, User, Plus, Minus, ArrowRightLeft, Wand2, FileDown } from 'lucide-react';
+import { buildApiUrl } from "@/lib/api-config";
 
 interface RouteAuditModalProps {
   routeId: string | null;
@@ -69,7 +70,7 @@ export default function RouteAuditModal({ routeId, open, onOpenChange }: RouteAu
   const { data: audits = [], isLoading } = useQuery<AuditEntry[]>({
     queryKey: ['/api/routes', routeId, 'audits'],
     queryFn: async () => {
-      const response = await fetch(`/api/routes/${routeId}/audits`);
+      const response = await fetch(buildApiUrl(`/api/routes/${routeId}/audits`));
       if (!response.ok) throw new Error('Erro ao buscar auditoria');
       return response.json();
     },

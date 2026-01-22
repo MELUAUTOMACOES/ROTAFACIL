@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { buildApiUrl } from "@/lib/api-config";
 import type { Client } from "@shared/schema";
 import { ClientSelectionModal } from "@/components/modals/ClientSelectionModal";
 
@@ -31,7 +32,7 @@ export function ClientSearch({ value, onValueChange, onSelect, placeholder = "Pe
     queryKey: ['/api/clients/search', searchQuery],
     queryFn: async () => {
       console.log("Busca cliente - input:", searchQuery);
-      const response = await fetch(`/api/clients/search?q=${encodeURIComponent(searchQuery)}&limit=5`, {
+      const response = await fetch(buildApiUrl(`/api/clients/search?q=${encodeURIComponent(searchQuery)}&limit=5`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
@@ -51,7 +52,7 @@ export function ClientSearch({ value, onValueChange, onSelect, placeholder = "Pe
   const { data: allClients = [] } = useQuery<Client[]>({
     queryKey: ['/api/clients'],
     queryFn: async () => {
-      const response = await fetch('/api/clients?limit=50', {
+      const response = await fetch(buildApiUrl('/api/clients?limit=50'), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },

@@ -2,7 +2,7 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { db } from '../db';
-import { appointments, routes as routesTbl, routeStops, clients, services, users, companies, technicians } from '@shared/schema';
+import { appointments, routes as routesTbl, routeStops, clients, services, users, companies, technicians } from '../../shared/schema.js';
 import { eq } from 'drizzle-orm';
 
 // Mock data setup

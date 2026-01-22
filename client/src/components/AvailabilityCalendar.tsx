@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { DndContext, useDraggable, useDroppable, DragOverlay, DragStartEvent, DragEndEvent, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { buildApiUrl } from "@/lib/api-config";
 import type { Appointment, Service, Technician, Team, TeamMember, BusinessRules, DateRestriction } from '@shared/schema';
 
 interface AvailabilityCalendarProps {
@@ -63,7 +64,7 @@ export default function AvailabilityCalendar({
   // Mutation para atualizar agendamento
   const updateAppointmentMutation = useMutation({
     mutationFn: async ({ id, newDate }: { id: number; newDate: Date }) => {
-      const response = await fetch(`/api/appointments/${id}`, {
+      const response = await fetch(buildApiUrl(`/api/appointments/${id}`), {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

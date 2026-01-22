@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Clock, FileText, Image, PenTool, History, MapPin } from 'lucide-react';
 import AppointmentLocationMap from '../maps/AppointmentLocationMap';
 import { getAuthHeaders } from '@/lib/auth';
+import { buildApiUrl } from "@/lib/api-config";
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -21,7 +22,7 @@ export function AppointmentDetailsModal({ isOpen, onClose, appointmentId }: Appo
     const { data: appointment, isLoading } = useQuery({
         queryKey: [`/api/appointments/${appointmentId}`],
         queryFn: async () => {
-            const res = await fetch(`/api/appointments/${appointmentId}`, { headers: getAuthHeaders() });
+            const res = await fetch(buildApiUrl(`/api/appointments/${appointmentId}`), { headers: getAuthHeaders() });
             if (!res.ok) throw new Error('Failed to fetch');
             return res.json();
         },
@@ -31,7 +32,7 @@ export function AppointmentDetailsModal({ isOpen, onClose, appointmentId }: Appo
     const { data: history = [] } = useQuery({
         queryKey: [`/api/appointments/${appointmentId}/history`],
         queryFn: async () => {
-            const res = await fetch(`/api/appointments/${appointmentId}/history`, { headers: getAuthHeaders() });
+            const res = await fetch(buildApiUrl(`/api/appointments/${appointmentId}/history`), { headers: getAuthHeaders() });
             if (!res.ok) throw new Error('Failed to fetch');
             return res.json();
         },

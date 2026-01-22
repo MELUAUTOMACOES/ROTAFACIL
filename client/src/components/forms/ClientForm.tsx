@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { buildApiUrl } from "@/lib/api-config";
 
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Users, Mail, Phone, MapPin } from "lucide-react";
@@ -114,7 +115,7 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
       if (!cpfInput || cpfInput.length < 11) return { exists: false };
       console.log("Validação de CPF:", cpfInput);
 
-      const response = await fetch(`/api/clients/validate-cpf?cpf=${encodeURIComponent(cpfInput)}`, {
+      const response = await fetch(buildApiUrl(`/api/clients/validate-cpf?cpf=${encodeURIComponent(cpfInput)}`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },

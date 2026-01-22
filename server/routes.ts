@@ -1573,8 +1573,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
       const result = await storage.getClients(req.user.userId, page, limit);
-      logEgressSize(req, result); // 📊 Instrumentação
-      res.json(result);
+
+      // 🔄 Transformar {data, total} em {items, pagination} para compatibilidade com frontend
+      const totalPages = Math.ceil(result.total / limit);
+      const response = {
+        items: result.data,
+        pagination: {
+          page,
+          pageSize: limit,
+          total: result.total,
+          totalPages
+        }
+      };
+
+      logEgressSize(req, response); // 📊 Instrumentação
+      res.json(response);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

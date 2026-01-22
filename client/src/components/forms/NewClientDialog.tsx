@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { UserPlus, Mail, Phone, MapPin } from "lucide-react";
+import { buildApiUrl } from "@/lib/api-config";
 
 interface NewClientDialogProps {
   onClientCreated: (client: Client) => void;
@@ -52,7 +53,7 @@ export default function NewClientDialog({ onClientCreated, children }: NewClient
       if (!cpfInput || cpfInput.length < 11) return { exists: false };
       console.log("Validação de CPF:", cpfInput);
 
-      const response = await fetch(`/api/clients/validate-cpf?cpf=${encodeURIComponent(cpfInput)}`, {
+      const response = await fetch(buildApiUrl(`/api/clients/validate-cpf?cpf=${encodeURIComponent(cpfInput)}`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
@@ -122,7 +123,7 @@ export default function NewClientDialog({ onClientCreated, children }: NewClient
         lng: data.lng ?? null,
       });
 
-      const response = await fetch("/api/clients", {
+      const response = await fetch(buildApiUrl("/api/clients"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

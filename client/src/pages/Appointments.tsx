@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders, useAuth } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { apiRequest } from "@/lib/queryClient";
 import { normalizeItems } from "@/lib/normalize";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -358,7 +359,7 @@ export default function Appointments() {
         params.append('assignedId', serverAssignedId);
       }
 
-      const response = await fetch(`/api/appointments?${params.toString()}`, {
+      const response = await fetch(buildApiUrl(`/api/appointments?${params.toString()}`), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error('Failed to fetch appointments');
@@ -390,7 +391,7 @@ export default function Appointments() {
   const { data: clientsData } = useQuery({
     queryKey: ["/api/clients"],
     queryFn: async () => {
-      const response = await fetch("/api/clients?limit=50", {
+      const response = await fetch(buildApiUrl("/api/clients?limit=50"), {
         headers: getAuthHeaders(),
       });
       return response.json();
@@ -426,7 +427,7 @@ export default function Appointments() {
         start: monthStart.toISOString(),
         end: monthEnd.toISOString(),
       });
-      const response = await fetch(`/api/date-restrictions?${params.toString()}`, {
+      const response = await fetch(buildApiUrl(`/api/date-restrictions?${params.toString()}`), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error("Failed to fetch date restrictions");
@@ -438,7 +439,7 @@ export default function Appointments() {
   const { data: servicesData } = useQuery({
     queryKey: ["/api/services"],
     queryFn: async () => {
-      const response = await fetch("/api/services?page=1&pageSize=50", {
+      const response = await fetch(buildApiUrl("/api/services?page=1&pageSize=50"), {
         headers: getAuthHeaders(),
       });
       return response.json();
@@ -451,7 +452,7 @@ export default function Appointments() {
   const { data: techniciansData } = useQuery({
     queryKey: ["/api/technicians"],
     queryFn: async () => {
-      const response = await fetch("/api/technicians?page=1&pageSize=50", {
+      const response = await fetch(buildApiUrl("/api/technicians?page=1&pageSize=50"), {
         headers: getAuthHeaders(),
       });
       return response.json();
@@ -464,7 +465,7 @@ export default function Appointments() {
   const { data: teamsData } = useQuery({
     queryKey: ["/api/teams"],
     queryFn: async () => {
-      const response = await fetch("/api/teams?page=1&pageSize=50", {
+      const response = await fetch(buildApiUrl("/api/teams?page=1&pageSize=50"), {
         headers: getAuthHeaders(),
       });
       return response.json();
@@ -477,7 +478,7 @@ export default function Appointments() {
   const { data: businessRules } = useQuery({
     queryKey: ["/api/business-rules"],
     queryFn: async () => {
-      const response = await fetch("/api/business-rules", {
+      const response = await fetch(buildApiUrl("/api/business-rules"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) return null;
@@ -490,7 +491,7 @@ export default function Appointments() {
   const { data: teamMembers = [] } = useQuery({
     queryKey: ["/api/team-members"],
     queryFn: async () => {
-      const response = await fetch("/api/team-members", {
+      const response = await fetch(buildApiUrl("/api/team-members"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) return [];
@@ -653,7 +654,7 @@ export default function Appointments() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
-      const response = await fetch(`/api/appointments/${id}`, {
+      const response = await fetch(buildApiUrl(`/api/appointments/${id}`), {
         method: "PATCH",
         headers: {
           ...getAuthHeaders(),
@@ -809,7 +810,7 @@ export default function Appointments() {
       // Chamar API do backend para obter rota SEM otimização (mas com polyline calculada)
       console.log("🗺️ [ROUTE] Chamando API do backend para gerar rota sem otimização...");
 
-      const res = await fetch("/api/routes/optimize", {
+      const res = await fetch(buildApiUrl("/api/routes/optimize"), {
         method: "POST",
         headers: {
           ...getAuthHeaders(),
@@ -954,7 +955,7 @@ export default function Appointments() {
 
       // 1) Pré-geocodificar (não-bloqueante): apenas chama a API e ignora avisos
       try {
-        const geoRes = await fetch("/api/appointments/geocode-missing", {
+        const geoRes = await fetch(buildApiUrl("/api/appointments/geocode-missing"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ appointmentIds: selectedAppointmentIds }),
@@ -970,7 +971,7 @@ export default function Appointments() {
       const tryOptimize = async (attempt: number) => {
         console.log(`🗺️ [ROUTE] Tentativa ${attempt} de otimização...`);
 
-        const res = await fetch("/api/routes/optimize", {
+        const res = await fetch(buildApiUrl("/api/routes/optimize"), {
           method: "POST",
           headers: {
             ...getAuthHeaders(),
@@ -1153,7 +1154,7 @@ export default function Appointments() {
 
       console.log("💾 [ROUTE] Salvando rota:", { isOptimized: isRouteOptimized, appointmentIds: selectedAppointmentIds });
 
-      const res = await fetch("/api/routes/optimize", {
+      const res = await fetch(buildApiUrl("/api/routes/optimize"), {
         method: "POST",
         headers: {
           ...getAuthHeaders(),
@@ -2310,7 +2311,7 @@ export default function Appointments() {
   // Handler para visualizar histórico
   const handleViewHistory = async (appointmentId: number) => {
     try {
-      const response = await fetch(`/api/appointments/${appointmentId}/history`, {
+      const response = await fetch(buildApiUrl(`/api/appointments/${appointmentId}/history`), {
         headers: getAuthHeaders(),
       });
 

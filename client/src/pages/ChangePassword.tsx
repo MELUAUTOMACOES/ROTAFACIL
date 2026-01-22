@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { changePasswordSchema } from "@shared/schema";
 import type { ChangePasswordData } from "@shared/schema";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 
 interface ChangePasswordProps {
   isRequired?: boolean;
@@ -37,7 +38,7 @@ export default function ChangePassword({ isRequired = false }: ChangePasswordPro
 
   const onSubmit = async (data: ChangePasswordData) => {
     try {
-      const response = await fetch("/api/auth/change-password", {
+      const response = await fetch(buildApiUrl("/api/auth/change-password"), {
         method: "POST",
         headers: {
           ...getAuthHeaders(),
@@ -101,7 +102,7 @@ export default function ChangePassword({ isRequired = false }: ChangePasswordPro
             {isRequired ? "Alterar Senha Obrigatória" : "Alterar Senha"}
           </CardTitle>
           <CardDescription>
-            {isRequired 
+            {isRequired
               ? "Por segurança, você precisa alterar sua senha antes de continuar"
               : "Mantenha sua conta segura alterando sua senha regularmente"
             }

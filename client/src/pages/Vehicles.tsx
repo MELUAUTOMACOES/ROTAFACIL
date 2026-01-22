@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { apiRequest } from "@/lib/queryClient";
 import { normalizeItems } from "@/lib/normalize";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,7 +40,7 @@ export default function Vehicles() {
   const { data: vehiclesData, isLoading } = useQuery({
     queryKey: ["/api/vehicles"],
     queryFn: async () => {
-      const response = await fetch("/api/vehicles?page=1&pageSize=50", {
+      const response = await fetch(buildApiUrl("/api/vehicles?page=1&pageSize=50"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error("Erro ao carregar veículos");
@@ -53,7 +54,7 @@ export default function Vehicles() {
   const { data: techniciansData, isLoading: isLoadingTechs } = useQuery({
     queryKey: ["/api/technicians"],
     queryFn: async () => {
-      const response = await fetch("/api/technicians?page=1&pageSize=50", {
+      const response = await fetch(buildApiUrl("/api/technicians?page=1&pageSize=50"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error("Erro ao carregar técnicos");
@@ -67,7 +68,7 @@ export default function Vehicles() {
   const { data: teamsData, isLoading: isLoadingTeams } = useQuery({
     queryKey: ["/api/teams"],
     queryFn: async () => {
-      const response = await fetch("/api/teams?page=1&pageSize=50", {
+      const response = await fetch(buildApiUrl("/api/teams?page=1&pageSize=50"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error("Erro ao carregar equipes");
@@ -469,7 +470,7 @@ function MaintenanceTab({
   const { data: allMaintenances = [], isLoading } = useQuery<VehicleMaintenance[]>({
     queryKey: ["/api/vehicle-maintenances"],
     queryFn: async () => {
-      const response = await fetch("/api/vehicle-maintenances", {
+      const response = await fetch(buildApiUrl("/api/vehicle-maintenances"), {
         headers: getAuthHeaders(),
       });
       return response.json();

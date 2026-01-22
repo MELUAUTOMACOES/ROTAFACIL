@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { apiRequest } from "./queryClient";
+import { buildApiUrl } from "./api-config";
 import type { User } from "../../../shared/schema";
 
 interface AuthContextType {
@@ -33,7 +34,7 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
         return;
       }
 
-      const response = await fetch("/api/auth/me", {
+      const response = await fetch(buildApiUrl("/api/auth/me"), {
         headers: {
           Authorization: `Bearer ${token}`,
         },

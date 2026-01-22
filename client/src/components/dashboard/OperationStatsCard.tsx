@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -58,7 +59,7 @@ export function OperationStatsCard({ startDate, endDate, technicianId, teamId }:
             if (technicianId) params.set("technicianId", technicianId.toString());
             if (teamId) params.set("teamId", teamId.toString());
 
-            const res = await fetch(`/api/dashboard/financial-metrics-v2?${params.toString()}`, {
+            const res = await fetch(buildApiUrl(`/api/dashboard/financial-metrics-v2?${params.toString()}`), {
                 headers: getAuthHeaders(),
             });
             if (!res.ok) throw new Error("Failed to fetch metrics");
@@ -72,7 +73,7 @@ export function OperationStatsCard({ startDate, endDate, technicianId, teamId }:
     const { data: todayStats, isLoading: isLoadingToday } = useQuery<AppointmentsStatsResponse>({
         queryKey: ["/api/dashboard/appointments-stats"],
         queryFn: async () => {
-            const res = await fetch("/api/dashboard/appointments-stats", {
+            const res = await fetch(buildApiUrl("/api/dashboard/appointments-stats"), {
                 headers: getAuthHeaders(),
             });
             if (!res.ok) throw new Error("Failed to fetch today stats");

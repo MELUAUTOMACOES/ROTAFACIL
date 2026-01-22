@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Users, UserPlus, MapPin, Clock as ClockIcon } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { buildApiUrl } from "@/lib/api-config";
 
 // Função para buscar endereço por CEP - idêntica ao cadastro de técnico
 async function buscarEnderecoPorCep(cep: string) {
@@ -50,14 +51,14 @@ const teamFormSchema = z.object({
 
 type ExtendedTeamForm = z.infer<typeof teamFormSchema>;
 
-export default function TeamForm({ 
-  team, 
-  technicians, 
-  services, 
-  onClose 
+export default function TeamForm({
+  team,
+  technicians,
+  services,
+  onClose
 }: TeamFormProps) {
   console.log("🏗️ TempTeamForm renderizado com dados:", { team, technicians: technicians.length, services: services.length });
-  
+
   const [selectedTechnicians, setSelectedTechnicians] = useState<number[]>([]);
   const [selectedServices, setSelectedServices] = useState<number[]>(
     team?.serviceIds ? team.serviceIds.map(id => parseInt(id)) : []
@@ -71,7 +72,7 @@ export default function TeamForm({
     queryKey: ["/api/team-members", team?.id],
     queryFn: async () => {
       if (!team) return [];
-      const response = await fetch(`/api/team-members/${team.id}`, {
+      const response = await fetch(buildApiUrl(`/api/team-members/${team.id}`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -162,7 +163,7 @@ export default function TeamForm({
       setSelectedServices([]);
       console.log('✅ Formulário limpo para nova equipe');
     }
-    }, [team?.id]);
+  }, [team?.id]);
 
   // Atualizar técnicos selecionados quando os membros da equipe são carregados
   useEffect(() => {
@@ -244,7 +245,7 @@ export default function TeamForm({
       const updatedTeam = await response.json();
 
       // Remover todos os membros existentes da equipe
-      const currentMembers = await fetch(`/api/team-members/${team?.id}`, {
+      const currentMembers = await fetch(buildApiUrl(`/api/team-members/${team?.id}`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -256,7 +257,7 @@ export default function TeamForm({
 
         if (members.length > 0) {
           await Promise.all(
-            members.map((member: any) => 
+            members.map((member: any) =>
               apiRequest("DELETE", `/api/team-members/${member.id}`)
             )
           );
@@ -296,17 +297,17 @@ export default function TeamForm({
   });
 
   const onSubmit = (data: ExtendedTeamForm) => {
-    console.log("🔧 onSubmit disparado!", { 
-      team, 
-      data, 
-      selectedTechnicians, 
+    console.log("🔧 onSubmit disparado!", {
+      team,
+      data,
+      selectedTechnicians,
       selectedServices,
       formState: {
         isValid: form.formState.isValid,
         errors: form.formState.errors
       }
     });
-    
+
     const formData = {
       ...data,
       technicianIds: selectedTechnicians, // number[]
@@ -383,13 +384,13 @@ export default function TeamForm({
       </DialogHeader>
 
       <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit((data) => {
-              console.log("🛎️ onSubmit disparado COM CERTEZA!", { team, data });
-              onSubmit(data);
-            })}
-            className="space-y-6"
-          >
+        <form
+          onSubmit={form.handleSubmit((data) => {
+            console.log("🛎️ onSubmit disparado COM CERTEZA!", { team, data });
+            onSubmit(data);
+          })}
+          className="space-y-6"
+        >
 
           {/* Nome da Equipe */}
           <FormField
@@ -543,7 +544,7 @@ export default function TeamForm({
             <p className="text-sm text-gray-500">
               Defina os horários e dias de trabalho da equipe. Estes horários serão usados para calcular a disponibilidade.
             </p>
-            
+
             <div className="grid gap-4 md:grid-cols-3">
               <FormField
                 control={form.control}
@@ -665,7 +666,7 @@ export default function TeamForm({
                       <Checkbox
                         id={`technician-${technician.id}`}
                         checked={selectedTechnicians.includes(technician.id)}
-                        onCheckedChange={(checked) => 
+                        onCheckedChange={(checked) =>
                           handleTechnicianToggle(technician.id, checked as boolean)
                         }
                       />
@@ -702,7 +703,7 @@ export default function TeamForm({
                       <Checkbox
                         id={`service-${service.id}`}
                         checked={selectedServices.includes(service.id)}
-                        onCheckedChange={(checked) => 
+                        onCheckedChange={(checked) =>
                           handleServiceToggle(service.id, checked as boolean)
                         }
                       />
@@ -733,7 +734,7 @@ export default function TeamForm({
             <Button type="button" variant="outline" onClick={onClose}>
               Cancelar
             </Button>
-            <Button 
+            <Button
               type="submit"
               disabled={team ? updateTeamMutation.isPending : createTeamMutation.isPending}
               className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"

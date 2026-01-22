@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Navigation, Clock, MapPin, ChevronRight, Users, Eye, Route as RouteIcon, Loader2, CheckCircle2, Circle } from "lucide-react";
 import { Link } from "wouter";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 
 interface RouteInProgress {
     id: string;
@@ -69,7 +70,7 @@ export function RoutesInProgressCard() {
     const { data: routeDetail, isLoading: isLoadingDetail } = useQuery<RouteDetail>({
         queryKey: ["/api/routes", selectedRouteId],
         queryFn: async () => {
-            const res = await fetch(`/api/routes/${selectedRouteId}`, {
+            const res = await fetch(buildApiUrl(`/api/routes/${selectedRouteId}`), {
                 headers: getAuthHeaders(),
             });
             if (!res.ok) throw new Error("Erro ao buscar detalhes da rota");
@@ -82,7 +83,7 @@ export function RoutesInProgressCard() {
     const { data: appointmentsData } = useQuery({
         queryKey: ["/api/appointments"],
         queryFn: async () => {
-            const res = await fetch("/api/appointments", {
+            const res = await fetch(buildApiUrl("/api/appointments"), {
                 headers: getAuthHeaders(),
             });
             if (!res.ok) throw new Error("Erro ao buscar agendamentos");

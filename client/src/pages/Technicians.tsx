@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { apiRequest } from "@/lib/queryClient";
 import { normalizeItems } from "@/lib/normalize";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,7 +51,7 @@ export default function Technicians() {
   const { data: techniciansData, isLoading: techniciansLoading } = useQuery({
     queryKey: ["/api/technicians"],
     queryFn: async () => {
-      const response = await fetch("/api/technicians?page=1&pageSize=50", {
+      const response = await fetch(buildApiUrl("/api/technicians?page=1&pageSize=50"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
@@ -86,7 +87,7 @@ export default function Technicians() {
   const { data: teamsData, isLoading: teamsLoading } = useQuery({
     queryKey: ["/api/teams"],
     queryFn: async () => {
-      const response = await fetch("/api/teams?page=1&pageSize=50", {
+      const response = await fetch(buildApiUrl("/api/teams?page=1&pageSize=50"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
@@ -109,7 +110,7 @@ export default function Technicians() {
   const { data: servicesData, isLoading: servicesLoading } = useQuery({
     queryKey: ["/api/services"],
     queryFn: async () => {
-      const response = await fetch("/api/services?page=1&pageSize=50", {
+      const response = await fetch(buildApiUrl("/api/services?page=1&pageSize=50"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
@@ -129,7 +130,7 @@ export default function Technicians() {
       if (teams.length === 0) return [];
 
       const memberPromises = teams.map(async (team: Team) => {
-        const response = await fetch(`/api/team-members/${team.id}`, {
+        const response = await fetch(buildApiUrl(`/api/team-members/${team.id}`), {
           headers: getAuthHeaders(),
         });
         if (!response.ok) return [];
@@ -147,7 +148,7 @@ export default function Technicians() {
   const { data: businessRules } = useQuery({
     queryKey: ["/api/business-rules"],
     queryFn: async () => {
-      const response = await fetch("/api/business-rules", {
+      const response = await fetch(buildApiUrl("/api/business-rules"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) return null;

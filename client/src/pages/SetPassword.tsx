@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Lock, Eye, EyeOff, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { buildApiUrl } from "@/lib/api-config";
 import { setFirstPasswordSchema } from "@shared/schema";
 import type { SetFirstPasswordData } from "@shared/schema";
 
@@ -38,7 +39,7 @@ export default function SetPassword() {
 
   const onSubmit = async (data: SetFirstPasswordData) => {
     try {
-      const response = await fetch("/api/auth/set-first-password", {
+      const response = await fetch(buildApiUrl("/api/auth/set-first-password"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

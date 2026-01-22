@@ -15,6 +15,7 @@ import { Calendar, Clock, MapPin, UserPlus, Edit3, AlertCircle } from "lucide-re
 import NewClientDialog from "./NewClientDialog";
 import ClientForm from "./ClientForm";
 import { buscarEnderecoPorCep } from "@/lib/cep";
+import { buildApiUrl } from "@/lib/api-config";
 
 // 💵 Utilitários para máscara de moeda (BRL)
 const formatCurrencyBRL = (value: string | number | null | undefined) => {
@@ -182,7 +183,7 @@ export default function AppointmentForm({
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertAppointment) => {
-      const response = await fetch("/api/appointments", {
+      const response = await fetch(buildApiUrl("/api/appointments"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -219,7 +220,7 @@ export default function AppointmentForm({
 
   const updateMutation = useMutation({
     mutationFn: async (data: InsertAppointment) => {
-      const response = await fetch(`/api/appointments/${appointment?.id}`, {
+      const response = await fetch(buildApiUrl(`/api/appointments/${appointment?.id}`), {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

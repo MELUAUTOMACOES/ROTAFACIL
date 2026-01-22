@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +47,7 @@ export default function UserManagement() {
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["/api/users"],
     queryFn: async () => {
-      const response = await fetch("/api/users", {
+      const response = await fetch(buildApiUrl("/api/users"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
@@ -60,7 +61,7 @@ export default function UserManagement() {
   // Mutation para deletar usuário
   const deleteMutation = useMutation({
     mutationFn: async (userId: number) => {
-      const response = await fetch(`/api/users/${userId}`, {
+      const response = await fetch(buildApiUrl(`/api/users/${userId}`), {
         method: "DELETE",
         headers: getAuthHeaders(),
       });
@@ -90,7 +91,7 @@ export default function UserManagement() {
   // Mutation para reenviar email de verificação
   const resendEmailMutation = useMutation({
     mutationFn: async (userId: number) => {
-      const response = await fetch(`/api/users/${userId}/resend-verification`, {
+      const response = await fetch(buildApiUrl(`/api/users/${userId}/resend-verification`), {
         method: "POST",
         headers: getAuthHeaders(),
       });

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,7 +46,7 @@ export default function VehicleDocumentsSection({ vehicleId }: VehicleDocumentsS
     const { data: documents = [], isLoading } = useQuery<VehicleDocument[]>({
         queryKey: [`/api/vehicles/${vehicleId}/documents`],
         queryFn: async () => {
-            const response = await fetch(`/api/vehicles/${vehicleId}/documents`, {
+            const response = await fetch(buildApiUrl(`/api/vehicles/${vehicleId}/documents`), {
                 headers: getAuthHeaders(),
             });
             return response.json();
@@ -305,10 +306,10 @@ export default function VehicleDocumentsSection({ vehicleId }: VehicleDocumentsS
                         <div
                             key={doc.id}
                             className={`flex items-center justify-between p-3 border rounded-lg ${isExpired(doc.expirationDate)
-                                    ? "border-red-300 bg-red-50"
-                                    : isExpiring(doc.expirationDate)
-                                        ? "border-yellow-300 bg-yellow-50"
-                                        : "bg-white"
+                                ? "border-red-300 bg-red-50"
+                                : isExpiring(doc.expirationDate)
+                                    ? "border-yellow-300 bg-yellow-50"
+                                    : "bg-white"
                                 }`}
                         >
                             <div className="flex items-center space-x-3">

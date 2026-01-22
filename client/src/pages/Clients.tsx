@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,7 +49,7 @@ export default function Clients() {
   const { data: clientsResponse, isLoading } = useQuery<ClientsResponse>({
     queryKey: ["/api/clients", page, pageSize],
     queryFn: async () => {
-      const response = await fetch(`/api/clients?page=${page}&limit=${pageSize}`, {
+      const response = await fetch(buildApiUrl(`/api/clients?page=${page}&limit=${pageSize}`), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error("Erro ao carregar clientes");
@@ -56,8 +57,8 @@ export default function Clients() {
     },
   });
 
-  const clients = clientsResponse?.items || clientsResponse?.data || [];
-  const pagination = clientsResponse?.pagination || { page: 1, pageSize: 25, total: clientsResponse?.total || 0, totalPages: Math.ceil((clientsResponse?.total || 0) / pageSize) };
+  const clients = clientsResponse?.items || [];
+  const pagination = clientsResponse?.pagination || { page: 1, pageSize: 25, total: 0, totalPages: 0 };
 
   // Filtragem client-side (para busca rápida na página atual)
   const filteredClients = clients.filter((client: Client) => {

@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Search, Calendar } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { normalizeItems } from "@/lib/normalize";
 import { Service, Technician, BusinessRules, Client, Team } from "@shared/schema";
 import { useLocation } from "wouter";
@@ -59,7 +60,7 @@ export default function FindDate() {
   const { data: servicesData, isLoading: isLoadingServices, error: errorServices } = useQuery({
     queryKey: ["/api/services"],
     queryFn: async () => {
-      const response = await fetch("/api/services?page=1&pageSize=50", { headers: getAuthHeaders() });
+      const response = await fetch(buildApiUrl("/api/services?page=1&pageSize=50"), { headers: getAuthHeaders() });
       return response.json();
     },
   });
@@ -69,7 +70,7 @@ export default function FindDate() {
   const { data: techniciansData, isLoading: isLoadingTechnicians, error: errorTechnicians } = useQuery({
     queryKey: ["/api/technicians"],
     queryFn: async () => {
-      const response = await fetch("/api/technicians?page=1&pageSize=50", { headers: getAuthHeaders() });
+      const response = await fetch(buildApiUrl("/api/technicians?page=1&pageSize=50"), { headers: getAuthHeaders() });
       return response.json();
     },
   });
@@ -79,7 +80,7 @@ export default function FindDate() {
   const { data: teamsData, isLoading: isLoadingTeams, error: errorTeams } = useQuery({
     queryKey: ["/api/teams"],
     queryFn: async () => {
-      const response = await fetch("/api/teams?page=1&pageSize=50", { headers: getAuthHeaders() });
+      const response = await fetch(buildApiUrl("/api/teams?page=1&pageSize=50"), { headers: getAuthHeaders() });
       return response.json();
     },
   });
@@ -202,7 +203,7 @@ export default function FindDate() {
     };
 
     try {
-      const response = await fetch("/api/scheduling/find-available-dates", {
+      const response = await fetch(buildApiUrl("/api/scheduling/find-available-dates"), {
         method: "POST",
         headers,
         body: JSON.stringify({

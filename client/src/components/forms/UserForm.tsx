@@ -2,6 +2,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import InputMask from "react-input-mask";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,7 +81,7 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
   const { data: accessSchedules = [] } = useQuery({
     queryKey: ["/api/access-schedules"],
     queryFn: async () => {
-      const response = await fetch("/api/access-schedules", {
+      const response = await fetch(buildApiUrl("/api/access-schedules"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) return [];
@@ -120,7 +121,7 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
       const url = isEditing ? `/api/users/${user.id}` : "/api/users";
       const method = isEditing ? "PUT" : "POST";
 
-      const response = await fetch(url, {
+      const response = await fetch(buildApiUrl(url), {
         method,
         headers: {
           ...getAuthHeaders(),

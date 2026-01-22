@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth";
 import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { ArrowLeft, Users, Building2, Activity, TrendingUp, BarChart3, Calendar } from "lucide-react";
 import Layout from "@/components/Layout";
 
@@ -80,7 +81,7 @@ export default function AdminMetrics() {
     const { data: overview, isLoading: loadingOverview } = useQuery<MetricsOverview>({
         queryKey: ["metrics-overview"],
         queryFn: async () => {
-            const res = await fetch("/api/admin/metrics/overview", { headers: getAuthHeaders() });
+            const res = await fetch(buildApiUrl("/api/admin/metrics/overview"), { headers: getAuthHeaders() });
             if (!res.ok) throw new Error("Erro ao buscar overview");
             return res.json();
         },
@@ -90,7 +91,7 @@ export default function AdminMetrics() {
     const { data: topFeatures, isLoading: loadingTopFeatures } = useQuery<TopFeature[]>({
         queryKey: ["metrics-top-features", period],
         queryFn: async () => {
-            const res = await fetch(`/api/admin/metrics/top-features?period=${period}&limit=15`, { headers: getAuthHeaders() });
+            const res = await fetch(buildApiUrl(`/api/admin/metrics/top-features?period=${period}&limit=15`), { headers: getAuthHeaders() });
             if (!res.ok) throw new Error("Erro ao buscar top features");
             return res.json();
         },
@@ -100,7 +101,7 @@ export default function AdminMetrics() {
     const { data: usersActivity, isLoading: loadingActivity } = useQuery<UserActivity[]>({
         queryKey: ["metrics-users-activity", period],
         queryFn: async () => {
-            const res = await fetch(`/api/admin/metrics/users-activity?period=${period}`, { headers: getAuthHeaders() });
+            const res = await fetch(buildApiUrl(`/api/admin/metrics/users-activity?period=${period}`), { headers: getAuthHeaders() });
             if (!res.ok) throw new Error("Erro ao buscar atividade");
             return res.json();
         },

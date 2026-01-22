@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { Loader2, Building2, UserPlus, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
 
@@ -44,7 +45,7 @@ export default function AcceptInvite() {
   useEffect(() => {
     const validateInvite = async () => {
       try {
-        const response = await fetch(`/api/invitations/${token}`);
+        const response = await fetch(buildApiUrl(`/api/invitations/${token}`));
         const data = await response.json();
 
         if (!response.ok) {
@@ -69,7 +70,7 @@ export default function AcceptInvite() {
     try {
       setIsAccepting(true);
 
-      const response = await fetch(`/api/invitations/${token}/accept-existing`, {
+      const response = await fetch(buildApiUrl(`/api/invitations/${token}/accept-existing`), {
         method: "POST",
         headers: {
           ...getAuthHeaders(),
@@ -109,7 +110,7 @@ export default function AcceptInvite() {
     try {
       setIsAccepting(true);
 
-      const response = await fetch(`/api/invitations/${token}/accept-new`, {
+      const response = await fetch(buildApiUrl(`/api/invitations/${token}/accept-new`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -123,7 +124,7 @@ export default function AcceptInvite() {
 
       // Salvar token de autenticação
       localStorage.setItem("token", result.token);
-      
+
       setSuccess(true);
       toast({
         title: "✅ Conta criada e convite aceito!",
