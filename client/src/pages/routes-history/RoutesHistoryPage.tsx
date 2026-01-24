@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useRoute } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -44,7 +44,12 @@ import {
   ChevronRight,
   Truck,
   Loader2,
-  FileText
+  FileText,
+  Plus,
+  Calendar,
+  Users,
+  Wrench,
+  AlertTriangle,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
@@ -247,6 +252,56 @@ export default function RoutesHistoryPage() {
 
   const [, setLocation] = useLocation();
 
+  // State for Create Route from Appointments CTA
+  const [isCreateRouteModalOpen, setIsCreateRouteModalOpen] = useState(false);
+  const [selectedApptIdsForRoute, setSelectedApptIdsForRoute] = useState<number[]>([]);
+
+  // Filter and pagination states for appointment selection modal
+  const [modalFilters, setModalFilters] = useState({
+    date: '',
+    clientSearch: '',
+    status: 'all', // 'all', 'scheduled', 'confirmed'
+    responsible: 'all',
+    service: 'all',
+  });
+  const [modalPage, setModalPage] = useState(1);
+  const modalPageSize = 10;
+
+  // Dedicated query for modal appointments with server-side pagination
+  const { data: modalAppointmentsData, isLoading: isLoadingModalAppointments } = useQuery({
+    queryKey: [
+      '/api/appointments/modal',
+      modalPage,
+      modalPageSize,
+      modalFilters.responsible,
+      isCreateRouteModalOpen, // only fetch when modal is open
+    ],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.append('page', String(modalPage));
+      params.append('pageSize', String(modalPageSize));
+
+      // Filter by responsible if selected
+      if (modalFilters.responsible !== 'all') {
+        const [type, id] = modalFilters.responsible.split(':');
+        if (type && id) {
+          params.append('assignedType', type);
+          params.append('assignedId', id);
+        }
+      }
+
+      const response = await fetch(buildApiUrl(`/api/appointments?${params.toString()}`), {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) throw new Error('Failed to fetch appointments');
+      return response.json();
+    },
+    enabled: isCreateRouteModalOpen, // Only fetch when modal is open
+    staleTime: 30_000,
+  });
+
+  const modalPagination = modalAppointmentsData?.pagination || { page: 1, pageSize: modalPageSize, total: 0, totalPages: 1 };
+
   // Capturar ID da rota da URL (/routes-history/:routeId)
   const [match, params] = useRoute("/routes-history/:routeId");
 
@@ -432,19 +487,6 @@ export default function RoutesHistoryPage() {
   });
   const appointments = normalizeItems(appointmentsData);
 
-  // (opcional) cache de clientes para exibir nome
-  const { data: clients = [] } = useQuery({
-    queryKey: ['/api/clients'],
-    queryFn: async () => {
-      const response = await fetch('/api/clients?limit=50', {
-        headers: getAuthHeaders(),
-      });
-      if (!response.ok) throw new Error('Erro ao buscar clientes');
-      const data = await response.json();
-      return normalizeItems(data);
-    }
-  });
-
   // Data da rota em YYYY-MM-DD (para filtrar por dia)
   const routeDateYMD =
     routeDetail?.route ? new Date(routeDetail.route.date).toISOString().slice(0, 10) : "";
@@ -629,6 +671,59 @@ export default function RoutesHistoryPage() {
         variant: "destructive",
       });
     }
+  });
+
+  // Mutation para criar romaneio diretamente do modal de seleção de agendamentos
+  const [isCreatingRoute, setIsCreatingRoute] = useState(false);
+  const createRouteFromModalMutation = useMutation({
+    mutationFn: async (appointmentIds: number[]) => {
+      const res = await apiRequest("POST", "/api/routes/optimize", {
+        appointmentIds,
+        endAtStart: false,
+        skipOptimization: true, // Salva na ordem atual sem otimizar
+        preview: false, // CRITICAL: false para salvar no banco, true ou undefined = apenas preview
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || error.message || "Erro ao criar romaneio");
+      }
+      return res.json();
+    },
+    onMutate: () => {
+      setIsCreatingRoute(true);
+    },
+    onSuccess: (data) => {
+      console.log("📦 Resposta da criação de rota:", JSON.stringify(data, null, 2));
+      const routeNumber = data?.route?.displayNumber || data?.displayNumber || data?.route?.id || data?.id || '';
+      toast({
+        title: "Romaneio criado com sucesso!",
+        description: `Romaneio #${routeNumber} foi criado com ${selectedApptIdsForRoute.length} parada(s).`,
+      });
+      // Limpa modal e estados
+      setIsCreateRouteModalOpen(false);
+      setSelectedApptIdsForRoute([]);
+      setModalFilters({ date: '', clientSearch: '', status: 'all', responsible: 'all', service: 'all' });
+      setModalPage(1);
+      // Force refetch para atualizar a lista imediatamente
+      queryClient.refetchQueries({ queryKey: ['/api/routes'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+      // Abre o romaneio recém-criado na modal
+      const routeId = data?.route?.id || data?.id;
+      if (routeId) {
+        console.log("🔓 Abrindo rota:", routeId);
+        setSelectedRoute(routeId);
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erro ao criar romaneio",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setIsCreatingRoute(false);
+    },
   });
 
   // Função helper para verificar se a rota é editável baseado no status
@@ -977,6 +1072,67 @@ export default function RoutesHistoryPage() {
     },
   });
   const vehicles = normalizeItems<any>(vehiclesData);
+
+  // carrega serviços para filtro do modal de seleção de agendamentos
+  const { data: servicesData } = useQuery({
+    queryKey: ["/api/services"],
+    queryFn: async () => {
+      const response = await fetch(buildApiUrl("/api/services?page=1&pageSize=50"), {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) throw new Error("Erro ao buscar serviços");
+      return response.json();
+    },
+    staleTime: 5 * 60_000,
+  });
+  const services = normalizeItems<any>(servicesData);
+
+  // carrega clientes para filtro do modal e nome no card
+  const { data: clientsData } = useQuery({
+    queryKey: ["/api/clients"],
+    queryFn: async () => {
+      const response = await fetch(buildApiUrl("/api/clients?page=1&pageSize=100"), {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) throw new Error("Erro ao buscar clientes");
+      return response.json();
+    },
+    staleTime: 5 * 60_000,
+  });
+  const clients = normalizeItems<any>(clientsData);
+
+  // Filter modal appointments client-side for remaining filters
+  // (Moved here because it depends on clients being defined)
+  const filteredModalAppointments = useMemo(() => {
+    const items = modalAppointmentsData?.items || [];
+
+    return items.filter((apt: any) => {
+      // Status filter - only scheduled or confirmed
+      const aptStatus = apt?.status || '';
+      if (aptStatus !== 'scheduled' && aptStatus !== 'confirmed') return false;
+      if (modalFilters.status !== 'all' && aptStatus !== modalFilters.status) return false;
+
+      // Date filter
+      if (modalFilters.date) {
+        const aptDate = new Date(apt.scheduledDate).toLocaleDateString('en-CA'); // YYYY-MM-DD
+        if (aptDate !== modalFilters.date) return false;
+      }
+
+      // Client search
+      if (modalFilters.clientSearch) {
+        const client = clients.find((c: any) => String(c.id) === String(apt?.clientId));
+        const clientName = client?.name?.toLowerCase() || '';
+        if (!clientName.includes(modalFilters.clientSearch.toLowerCase())) return false;
+      }
+
+      // Service filter
+      if (modalFilters.service !== 'all') {
+        if (String(apt.serviceId) !== modalFilters.service) return false;
+      }
+
+      return true;
+    });
+  }, [modalAppointmentsData, modalFilters, clients, services]);
 
   // helpers
   const getVehicleById = (id?: number | null) =>
@@ -1806,6 +1962,30 @@ export default function RoutesHistoryPage() {
         </div>
         <p className="text-gray-600">Visualize e gerencie os romaneios e o histórico de rotas otimizadas</p>
       </div>
+
+      {/* CTA Fixo - Criar Rota a partir de Agendamentos */}
+      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-zinc-800 dark:to-zinc-900 border-blue-200 dark:border-zinc-700">
+        <CardContent className="p-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-zinc-100 flex items-center gap-2">
+                <Plus className="h-5 w-5 text-blue-600" />
+                Criar novo romaneio
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-zinc-400 mt-1">
+                Selecione os agendamentos para criar um romaneio e otimizar a rota.
+              </p>
+            </div>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={() => setIsCreateRouteModalOpen(true)}
+            >
+              <Calendar className="h-4 w-4 mr-2" />
+              Selecionar agendamentos e criar rota
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="romaneios" className="w-full">
         <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
@@ -2790,6 +2970,332 @@ export default function RoutesHistoryPage() {
           </DialogHeader>
           <div className="flex-1 rounded-lg overflow-hidden relative" style={{ minHeight: '500px' }}>
             {trackingRouteId && <RouteTrackingMap routeId={trackingRouteId} height="500px" />}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal - Selecionar Agendamentos para Criar Rota */}
+      <Dialog open={isCreateRouteModalOpen} onOpenChange={(open) => {
+        setIsCreateRouteModalOpen(open);
+        if (!open) {
+          // Reset filters and selection when closing
+          setModalFilters({ date: '', clientSearch: '', status: 'all', responsible: 'all', service: 'all' });
+          setModalPage(1);
+          setSelectedApptIdsForRoute([]);
+        }
+      }}>
+        <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-blue-600" />
+              Selecionar Agendamentos para Romaneio
+            </DialogTitle>
+            <DialogDescription>
+              Filtre e selecione os agendamentos com status "Agendado" ou "Confirmado" para criar um novo romaneio.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Warning about same responsible */}
+          <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-amber-800 dark:text-amber-200 text-sm">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+            <span>
+              <strong>Importante:</strong> Todos os agendamentos selecionados devem pertencer ao <strong>mesmo responsável</strong> (mesmo técnico ou mesma equipe).
+            </span>
+          </div>
+
+          {/* Filters */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 py-4 border-b">
+            {/* Date Filter */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-600 dark:text-zinc-400">Data</label>
+              <Input
+                type="date"
+                value={modalFilters.date}
+                onChange={(e) => setModalFilters(prev => ({ ...prev, date: e.target.value }))}
+                className="h-9"
+              />
+            </div>
+
+            {/* Client Search */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-600 dark:text-zinc-400">Cliente</label>
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                <Input
+                  placeholder="Buscar cliente..."
+                  value={modalFilters.clientSearch}
+                  onChange={(e) => setModalFilters(prev => ({ ...prev, clientSearch: e.target.value }))}
+                  className="h-9 pl-7"
+                />
+              </div>
+            </div>
+
+            {/* Status Filter */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-600 dark:text-zinc-400">Status</label>
+              <Select
+                value={modalFilters.status}
+                onValueChange={(value) => setModalFilters(prev => ({ ...prev, status: value }))}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="scheduled">Agendado</SelectItem>
+                  <SelectItem value="confirmed">Confirmado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Responsible Filter */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-600 dark:text-zinc-400">Responsável</label>
+              <Select
+                value={modalFilters.responsible}
+                onValueChange={(value) => {
+                  setModalFilters(prev => ({ ...prev, responsible: value }));
+                  setModalPage(1); // Reset to first page when filter changes
+                }}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Responsável" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {technicians.map((tech: any) => (
+                    <SelectItem key={`tech-${tech.id}`} value={`technician:${tech.id}`}>
+                      👤 {tech.name}
+                    </SelectItem>
+                  ))}
+                  {teams.map((team: any) => (
+                    <SelectItem key={`team-${team.id}`} value={`team:${team.id}`}>
+                      👥 {team.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Service Filter */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-600 dark:text-zinc-400">Serviço</label>
+              <Select
+                value={modalFilters.service}
+                onValueChange={(value) => setModalFilters(prev => ({ ...prev, service: value }))}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Serviço" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {services.map((svc: any) => (
+                    <SelectItem key={svc.id} value={String(svc.id)}>
+                      {svc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Appointments List */}
+          <ScrollArea className="flex-1 pr-4 min-h-[300px]">
+            {isLoadingModalAppointments ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              </div>
+            ) : filteredModalAppointments.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <Calendar className="h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-zinc-100 mb-2">
+                  Nenhum agendamento encontrado
+                </h3>
+                <p className="text-gray-500 dark:text-zinc-400">
+                  Não há agendamentos com os filtros selecionados.
+                </p>
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => {
+                    setModalFilters({ date: '', clientSearch: '', status: 'all', responsible: 'all', service: 'all' });
+                    setModalPage(1);
+                  }}
+                >
+                  Limpar filtros
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredModalAppointments.map((apt: any) => {
+                  const isSelected = selectedApptIdsForRoute.includes(apt.id);
+                  const client = clients.find((c: any) => String(c.id) === String(apt?.clientId));
+                  const service = services.find((s: any) => s.id === apt.serviceId);
+                  const responsibleName = apt.technicianId
+                    ? technicians.find((t: any) => t.id === apt.technicianId)?.name || "Técnico"
+                    : apt.teamId
+                      ? teams.find((t: any) => t.id === apt.teamId)?.name || "Equipe"
+                      : "Não atribuído";
+                  const responsibleIcon = apt.teamId ? <Users className="h-4 w-4" /> : <User className="h-4 w-4" />;
+
+                  return (
+                    <div
+                      key={apt.id}
+                      className={`
+                        border rounded-lg p-3 cursor-pointer transition-all
+                        ${isSelected
+                          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                          : "border-gray-200 dark:border-zinc-700 hover:border-blue-300"
+                        }
+                      `}
+                      onClick={() => {
+                        setSelectedApptIdsForRoute(prev =>
+                          isSelected
+                            ? prev.filter(id => id !== apt.id)
+                            : [...prev, apt.id]
+                        );
+                      }}
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Checkbox */}
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => { }}
+                          className="mt-1 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        />
+
+                        <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {/* Left column */}
+                          <div>
+                            {/* Header: Client name + ID + Status */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-gray-900 dark:text-zinc-100 truncate">
+                                {client?.name || "Cliente não identificado"}
+                              </span>
+                              <span className="text-xs text-gray-500">#{apt.id}</span>
+                              <Badge className={apt.status === "scheduled" ? "bg-blue-100 text-blue-800" : "bg-cyan-100 text-cyan-800"}>
+                                {apt.status === "scheduled" ? "Agendado" : "Confirmado"}
+                              </Badge>
+                            </div>
+
+                            {/* Date and time */}
+                            <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-zinc-400 mt-1">
+                              <Calendar className="h-3.5 w-3.5" />
+                              <span>
+                                {new Date(apt.scheduledDate).toLocaleDateString("pt-BR")} às{" "}
+                                {new Date(apt.scheduledDate).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+
+                            {/* Service */}
+                            <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-zinc-400 mt-1">
+                              <Wrench className="h-3.5 w-3.5" />
+                              <span>{service?.name || `Serviço #${apt.serviceId}`}</span>
+                            </div>
+                          </div>
+
+                          {/* Right column */}
+                          <div>
+                            {/* Address */}
+                            <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-zinc-400">
+                              <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                              <span className="truncate">
+                                {joinParts(apt.logradouro, apt.numero, apt.bairro, apt.cidade)}
+                              </span>
+                            </div>
+                            {apt.cep && (
+                              <div className="text-xs text-gray-500 ml-5">CEP: {apt.cep}</div>
+                            )}
+
+                            {/* Responsible + Duration */}
+                            <div className="flex items-center justify-between mt-1">
+                              <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-zinc-400">
+                                {responsibleIcon}
+                                <span>{responsibleName}</span>
+                              </div>
+                              {apt.duration && (
+                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                  <Clock className="h-3 w-3" />
+                                  <span>{apt.duration} min</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
+
+          {/* Pagination - only show if there are more pages with filtered results */}
+          {modalPagination.totalPages > 1 && filteredModalAppointments.length >= modalPageSize && (
+            <div className="flex items-center justify-center gap-2 py-3 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={modalPage <= 1}
+                onClick={() => setModalPage(p => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm text-gray-600 dark:text-zinc-400">
+                Página {modalPage} de {modalPagination.totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={modalPage >= modalPagination.totalPages}
+                onClick={() => setModalPage(p => Math.min(modalPagination.totalPages, p + 1))}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          <Separator />
+
+          <div className="flex items-center justify-between pt-2">
+            <span className="text-sm text-gray-600 dark:text-zinc-400">
+              {selectedApptIdsForRoute.length} agendamento(s) selecionado(s)
+              {filteredModalAppointments.length > 0 && ` de ${filteredModalAppointments.length} disponíveis`}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsCreateRouteModalOpen(false);
+                  setSelectedApptIdsForRoute([]);
+                  setModalFilters({ date: '', clientSearch: '', status: 'all', responsible: 'all', service: 'all' });
+                  setModalPage(1);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                disabled={selectedApptIdsForRoute.length === 0 || isCreatingRoute}
+                onClick={() => {
+                  // Criar romaneio diretamente via API
+                  createRouteFromModalMutation.mutate(selectedApptIdsForRoute);
+                }}
+              >
+                {isCreatingRoute ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Criando...
+                  </>
+                ) : (
+                  <>
+                    <RouteIcon className="h-4 w-4 mr-2" />
+                    Criar Romaneio ({selectedApptIdsForRoute.length})
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

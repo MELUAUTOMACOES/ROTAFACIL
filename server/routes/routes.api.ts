@@ -1459,7 +1459,8 @@ export function registerRoutesAPI(app: Express) {
             .select({
               maxNum: sql<number>`COALESCE(MAX(${routesTbl.displayNumber}), 0)`,
             })
-            .from(routesTbl);
+            .from(routesTbl)
+            .where(eq(routesTbl.userId, req.user.userId)); // 🔧 Filtrar por userId para numeração sequencial por empresa
           nextDisplayNumber = (maxRes?.maxNum ?? 0) + 1;
         }
 

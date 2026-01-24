@@ -21,6 +21,7 @@ import AppointmentForm from "@/components/forms/AppointmentForm";
 import AvailabilityCalendar from "@/components/AvailabilityCalendar";
 import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
 import { AppointmentHistoryModal } from "@/components/modals/AppointmentHistoryModal";
+import OnboardingBlock from "@/components/OnboardingBlock";
 import { cn } from "@/lib/utils";
 import {
   format,
@@ -474,6 +475,20 @@ export default function Appointments() {
     refetchOnWindowFocus: false,
   });
   const teams = normalizeItems<Team>(teamsData);
+
+  // Query for vehicles (needed for onboarding block)
+  const { data: vehiclesData } = useQuery({
+    queryKey: ["/api/vehicles"],
+    queryFn: async () => {
+      const response = await fetch(buildApiUrl("/api/vehicles?page=1&pageSize=50"), {
+        headers: getAuthHeaders(),
+      });
+      return response.json();
+    },
+    staleTime: 2 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const vehicles = normalizeItems<any>(vehiclesData);
 
   const { data: businessRules } = useQuery({
     queryKey: ["/api/business-rules"],
@@ -2387,6 +2402,19 @@ export default function Appointments() {
           </Button>
         </div>
       </div>
+
+      {/* Onboarding Block - Show only when no appointments exist */}
+      {appointments.length === 0 && (
+        <OnboardingBlock
+          counts={{
+            services: services.length,
+            vehicles: vehicles.length,
+            technicians: technicians.length,
+            teams: teams.length,
+            clients: clients.length,
+          }}
+        />
+      )}
 
       {/* New Compact Filter Bar */}
       <div className="bg-white dark:bg-zinc-900 border-b dark:border-zinc-800 sticky top-0 z-10 px-6 py-3 shadow-sm space-y-3">
