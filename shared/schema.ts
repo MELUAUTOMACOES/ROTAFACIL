@@ -325,8 +325,9 @@ export const businessRules = pgTable("business_rules", {
   metaVariacaoTempoServico: integer("meta_variacao_tempo_servico").default(15), // % de variação aceitável do tempo previsto do serviço
   metaUtilizacaoDiaria: integer("meta_utilizacao_diaria").default(80), // % de utilização diária da jornada (tempo em atendimento vs jornada)
   slaHorasPendencia: integer("sla_horas_pendencia").default(48), // SLA: horas para resolver pendência (tempo entre prestador finalizar e admin resolver)
-  // Mensagem WhatsApp para prestadores
+  // Mensagens WhatsApp
   whatsappMessageTemplate: text("whatsapp_message_template").default("Olá, {nome_cliente}! Sou da {nome_empresa}, estou a caminho para realizar o serviço {nome_servico}. Previsão de chegada: {horario_estimado}."),
+  whatsappAppointmentMessageTemplate: text("whatsapp_appointment_message_template").default("Olá, {nome_cliente}! Confirmamos seu agendamento de {nome_servico} para {data_agendamento}. Endereço: {endereco}."),
   userId: integer("user_id").notNull().references(() => users.id),
   companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -700,6 +701,9 @@ export const insertBusinessRulesSchema = createInsertSchema(businessRules).omit(
   metaVariacaoTempoServico: z.number().min(5).max(100).optional(),
   metaUtilizacaoDiaria: z.number().min(50).max(100).optional(),
   slaHorasPendencia: z.number().min(1).max(168).optional(),
+  // Mensagens WhatsApp
+  whatsappMessageTemplate: z.string().optional(),
+  whatsappAppointmentMessageTemplate: z.string().optional(),
 });
 
 // Login schema

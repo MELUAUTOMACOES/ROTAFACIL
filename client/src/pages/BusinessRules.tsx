@@ -55,8 +55,9 @@ export default function BusinessRulesPage() {
       metaVariacaoTempoServico: 15,
       metaUtilizacaoDiaria: 80,
       slaHorasPendencia: 48,
-      // Mensagem WhatsApp
+      // Mensagens WhatsApp
       whatsappMessageTemplate: "Olá, {nome_cliente}! Sou da {nome_empresa}, estou a caminho para realizar o serviço {nome_servico}. Previsão de chegada: {horario_estimado}.",
+      whatsappAppointmentMessageTemplate: "Olá, {nome_cliente}! Confirmamos seu agendamento de {nome_servico} para {data_agendamento}. Endereço: {endereco}.",
     },
   });
 
@@ -90,8 +91,9 @@ export default function BusinessRulesPage() {
         metaVariacaoTempoServico: (businessRules as any).metaVariacaoTempoServico || 15,
         metaUtilizacaoDiaria: (businessRules as any).metaUtilizacaoDiaria || 80,
         slaHorasPendencia: (businessRules as any).slaHorasPendencia || 48,
-        // Mensagem WhatsApp
+        // Mensagens WhatsApp
         whatsappMessageTemplate: (businessRules as any).whatsappMessageTemplate || "Olá, {nome_cliente}! Sou da {nome_empresa}, estou a caminho para realizar o serviço {nome_servico}. Previsão de chegada: {horario_estimado}.",
+        whatsappAppointmentMessageTemplate: (businessRules as any).whatsappAppointmentMessageTemplate || "Olá, {nome_cliente}! Confirmamos seu agendamento de {nome_servico} para {data_agendamento}. Endereço: {endereco}.",
       });
     }
   }, [businessRules, form]);
@@ -774,58 +776,100 @@ export default function BusinessRulesPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <MessageCircle className="h-5 w-5" />
-                    Mensagem WhatsApp para Prestadores
+                    Mensagens WhatsApp
                   </CardTitle>
                   <CardDescription>
-                    Configure a mensagem padrão que será enviada aos clientes via WhatsApp
+                    Configure as mensagens padrão que serão enviadas aos clientes via WhatsApp
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="whatsappMessageTemplate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Mensagem Padrão</FormLabel>
-                        <FormControl>
-                          <textarea
-                            className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                            placeholder="Digite sua mensagem..."
-                            {...field}
-                            value={field.value || ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  {/* Seção 1: Mensagem "A Caminho" (Prestadores) */}
+                  <div className="space-y-4 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div>
+                      <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                        Mensagem "A Caminho" (Para Prestadores)
+                      </h3>
+                      <p className="text-sm text-blue-700 dark:text-blue-300">
+                        Usado quando o prestador clica no botão WhatsApp durante a execução da rota
+                      </p>
+                    </div>
+                    <FormField
+                      control={form.control}
+                      name="whatsappMessageTemplate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Template da Mensagem</FormLabel>
+                          <FormControl>
+                            <textarea
+                              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                              placeholder="Digite sua mensagem..."
+                              {...field}
+                              value={field.value || ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-blue-800 mb-2">Variáveis Disponíveis:</h4>
+                  {/* Seção 2: Mensagem de Agendamento (Confirmação) */}
+                  <div className="space-y-4 p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                    <div>
+                      <h3 className="font-semibold text-green-900 dark:text-green-100 mb-1">
+                        Mensagem de Agendamento (Confirmação)
+                      </h3>
+                      <p className="text-sm text-green-700 dark:text-green-300">
+                        Usado nos cards de agendamento e no histórico de rotas
+                      </p>
+                    </div>
+                    <FormField
+                      control={form.control}
+                      name="whatsappAppointmentMessageTemplate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Template da Mensagem</FormLabel>
+                          <FormControl>
+                            <textarea
+                              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                              placeholder="Digite sua mensagem..."
+                              {...field}
+                              value={field.value || ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* Card de Variáveis Disponíveis */}
+                  <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                    <h4 className="font-semibold text-amber-900 dark:text-amber-100 mb-2">Variáveis Disponíveis:</h4>
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div className="flex items-center gap-2">
-                        <code className="bg-blue-100 px-2 py-0.5 rounded text-blue-700">{'{nome_cliente}'}</code>
-                        <span className="text-blue-600">Nome do cliente</span>
+                        <code className="bg-amber-100 dark:bg-amber-900 px-2 py-0.5 rounded text-amber-800 dark:text-amber-200">{'{nome_cliente}'}</code>
+                        <span className="text-amber-700 dark:text-amber-300">Nome do cliente</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <code className="bg-blue-100 px-2 py-0.5 rounded text-blue-700">{'{nome_empresa}'}</code>
-                        <span className="text-blue-600">Nome da empresa</span>
+                        <code className="bg-amber-100 dark:bg-amber-900 px-2 py-0.5 rounded text-amber-800 dark:text-amber-200">{'{nome_empresa}'}</code>
+                        <span className="text-amber-700 dark:text-amber-300">Nome da empresa</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <code className="bg-blue-100 px-2 py-0.5 rounded text-blue-700">{'{nome_servico}'}</code>
-                        <span className="text-blue-600">Serviço agendado</span>
+                        <code className="bg-amber-100 dark:bg-amber-900 px-2 py-0.5 rounded text-amber-800 dark:text-amber-200">{'{nome_servico}'}</code>
+                        <span className="text-amber-700 dark:text-amber-300">Serviço agendado</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <code className="bg-blue-100 px-2 py-0.5 rounded text-blue-700">{'{data_agendamento}'}</code>
-                        <span className="text-blue-600">Data do serviço</span>
+                        <code className="bg-amber-100 dark:bg-amber-900 px-2 py-0.5 rounded text-amber-800 dark:text-amber-200">{'{data_agendamento}'}</code>
+                        <span className="text-amber-700 dark:text-amber-300">Data do serviço</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <code className="bg-blue-100 px-2 py-0.5 rounded text-blue-700">{'{horario_estimado}'}</code>
-                        <span className="text-blue-600">Horário previsto</span>
+                        <code className="bg-amber-100 dark:bg-amber-900 px-2 py-0.5 rounded text-amber-800 dark:text-amber-200">{'{horario_estimado}'}</code>
+                        <span className="text-amber-700 dark:text-amber-300">Horário previsto</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <code className="bg-blue-100 px-2 py-0.5 rounded text-blue-700">{'{endereco}'}</code>
-                        <span className="text-blue-600">Endereço do cliente</span>
+                        <code className="bg-amber-100 dark:bg-amber-900 px-2 py-0.5 rounded text-amber-800 dark:text-amber-200">{'{endereco}'}</code>
+                        <span className="text-amber-700 dark:text-amber-300">Endereço do cliente</span>
                       </div>
                     </div>
                   </div>
