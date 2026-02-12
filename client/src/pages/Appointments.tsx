@@ -1002,7 +1002,10 @@ export default function Appointments() {
       try {
         const geoRes = await fetch(buildApiUrl("/api/appointments/geocode-missing"), {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            ...getAuthHeaders(),
+            "Content-Type": "application/json"
+          },
           body: JSON.stringify({ appointmentIds: selectedAppointmentIds }),
         });
 
