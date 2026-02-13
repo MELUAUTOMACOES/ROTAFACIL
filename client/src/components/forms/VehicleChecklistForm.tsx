@@ -120,23 +120,32 @@ export default function VehicleChecklistForm({ open, onClose }: VehicleChecklist
         },
     });
 
+    // Helper: extrai array de respostas que podem ser {items:[...]} ou [...]
+    const toArray = (data: any): any[] => {
+        if (Array.isArray(data)) return data;
+        if (data && typeof data === 'object' && Array.isArray(data.items)) return data.items;
+        return [];
+    };
+
     // Buscar veículos
-    const { data: vehicles } = useQuery({
+    const { data: vehiclesRaw } = useQuery({
         queryKey: ["/api/vehicles"],
         queryFn: async () => {
             const res = await apiRequest("GET", "/api/vehicles");
             return res.json();
         },
     });
+    const vehiclesList = toArray(vehiclesRaw);
 
     // Buscar técnicos
-    const { data: technicians } = useQuery({
+    const { data: techniciansRaw } = useQuery({
         queryKey: ["/api/technicians"],
         queryFn: async () => {
             const res = await apiRequest("GET", "/api/technicians");
             return res.json();
         },
     });
+    const techniciansList = toArray(techniciansRaw);
 
     const createMutation = useMutation({
         mutationFn: async (data: any) => {
@@ -344,7 +353,7 @@ export default function VehicleChecklistForm({ open, onClose }: VehicleChecklist
                                 <SelectValue placeholder="Selecione o veículo" />
                             </SelectTrigger>
                             <SelectContent>
-                                {vehicles?.map((vehicle: any) => (
+                                {vehiclesList.map((vehicle: any) => (
                                     <SelectItem key={vehicle.id} value={vehicle.id.toString()}>
                                         {vehicle.plate} - {vehicle.brand} {vehicle.model}
                                     </SelectItem>
@@ -366,7 +375,7 @@ export default function VehicleChecklistForm({ open, onClose }: VehicleChecklist
                                 <SelectValue placeholder="Selecione o responsável" />
                             </SelectTrigger>
                             <SelectContent>
-                                {technicians?.map((tech: any) => (
+                                {techniciansList.map((tech: any) => (
                                     <SelectItem key={tech.id} value={tech.id.toString()}>
                                         {tech.name}
                                     </SelectItem>

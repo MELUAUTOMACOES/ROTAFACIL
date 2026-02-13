@@ -64,22 +64,32 @@ export default function VehicleChecklistTab({ }: VehicleChecklistTabProps) {
         checklistType: "",
     });
 
-    const { data: vehicles } = useQuery({
+    const { data: vehicles = [] } = useQuery({
         queryKey: ["/api/vehicles"],
         queryFn: async () => {
             const res = await apiRequest("GET", "/api/vehicles");
-            return res.json();
+            const data = await res.json();
+            console.log("🚗 [DEBUG] Vehicles API response:", data, "Is Array?", Array.isArray(data));
+            // A API retorna {items: [...]} ao invés de array direto
+            if (data && typeof data === 'object' && Array.isArray(data.items)) {
+                return data.items;
+            }
+            // Garantir que sempre retorna um array
+            return Array.isArray(data) ? data : [];
         },
     });
 
-    const { data: checklists, isLoading } = useQuery({
+    const { data: checklists = [], isLoading } = useQuery({
         queryKey: ["/api/vehicle-checklists", filters],
         queryFn: async () => {
             const params = new URLSearchParams();
             if (filters.vehicleId) params.append("vehicleId", filters.vehicleId);
             if (filters.checklistType) params.append("checklistType", filters.checklistType);
             const res = await apiRequest("GET", `/api/vehicle-checklists?${params.toString()}`);
-            return res.json();
+            const data = await res.json();
+            console.log("📋 [DEBUG] Checklists API response:", data, "Is Array?", Array.isArray(data));
+            // Garantir que sempre retorna um array
+            return Array.isArray(data) ? data : [];
         },
     });
 
@@ -166,7 +176,7 @@ export default function VehicleChecklistTab({ }: VehicleChecklistTabProps) {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">Todos os veículos</SelectItem>
-                            {vehicles?.map((vehicle: any) => (
+                            {(Array.isArray(vehicles) ? vehicles : (vehicles as any)?.items ?? []).map((vehicle: any) => (
                                 <SelectItem key={vehicle.id} value={vehicle.id.toString()}>
                                     {vehicle.plate} - {vehicle.model}
                                 </SelectItem>
