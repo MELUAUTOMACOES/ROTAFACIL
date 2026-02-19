@@ -912,21 +912,64 @@ export function validateCnpj(cnpj: string): boolean {
   return true;
 }
 
+// Helper: validar telefone brasileiro (10-11 dígitos reais, ao menos 3 dígitos distintos)
+function validatePhone(value: string): boolean {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 10 || digits.length > 11) return false;
+  // Rejeitar telefones com todos os dígitos iguais (ex: 0000000000)
+  const uniqueDigits = new Set(digits.split(""));
+  return uniqueDigits.size >= 3;
+}
+
+// Helper: validar CEP (8 dígitos reais, não todos iguais)
+function validateCep(value: string): boolean {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length !== 8) return false;
+  return !/^(\d)\1{7}$/.test(digits);
+}
+
+// UFs válidas do Brasil
+const VALID_UFS = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
+  "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
+  "SP", "SE", "TO"
+] as const;
+
 // Schema para cadastro de nova empresa + admin
 export const signupCompanySchema = z.object({
   // Dados da empresa
   company: z.object({
-    name: z.string().min(3, "Nome da empresa deve ter no mínimo 3 caracteres"),
+    name: z.string()
+      .min(3, "Nome da empresa deve ter no mínimo 3 caracteres")
+      .max(120, "Nome da empresa não pode exceder 120 caracteres"),
     cnpj: z.string()
-      .regex(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/, "CNPJ deve estar no formato XX.XXX.XXX/XXXX-XX")
+      .refine(
+        (val) => val.replace(/\D/g, "").length === 14,
+        "CNPJ deve conter 14 dígitos"
+      )
       .refine(validateCnpj, "CNPJ inválido — verifique os dígitos verificadores"),
-    telefone: z.string().min(10, "Telefone é obrigatório"),
-    email: z.string().email("Email da empresa inválido"),
-    cep: z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no formato XXXXX-XXX"),
-    logradouro: z.string().min(3, "Logradouro é obrigatório"),
-    numero: z.string().min(1, "Número é obrigatório"),
-    cidade: z.string().min(2, "Cidade é obrigatória"),
-    estado: z.string().length(2, "Estado deve ter 2 caracteres"),
+    telefone: z.string()
+      .refine(validatePhone, "Telefone inválido — informe um número com DDD (10 ou 11 dígitos)"),
+    email: z.string()
+      .min(1, "Email da empresa é obrigatório")
+      .email("Email da empresa inválido — verifique se contém @ e um domínio válido"),
+    cep: z.string()
+      .refine(validateCep, "CEP inválido — informe 8 dígitos válidos"),
+    logradouro: z.string()
+      .min(3, "Logradouro é obrigatório")
+      .max(200, "Logradouro não pode exceder 200 caracteres"),
+    numero: z.string()
+      .min(1, "Número é obrigatório")
+      .max(20, "Número não pode exceder 20 caracteres"),
+    cidade: z.string()
+      .min(2, "Cidade é obrigatória")
+      .max(100, "Cidade não pode exceder 100 caracteres"),
+    estado: z.string()
+      .length(2, "Estado deve ter 2 caracteres")
+      .refine(
+        (val) => VALID_UFS.includes(val.toUpperCase() as any),
+        "UF inválida — informe uma sigla válida (ex: SP, RJ, MG)"
+      ),
     plan: z.enum(["free", "basic", "professional", "enterprise", "custom"]).optional().default("free"),
     segmento: z.string().optional(),
     servicos: z.array(z.string()).optional(),
@@ -935,9 +978,18 @@ export const signupCompanySchema = z.object({
   }),
   // Dados do administrador
   admin: z.object({
-    name: z.string().min(3, "Nome do administrador deve ter no mínimo 3 caracteres"),
-    email: z.string().email("Email do administrador inválido"),
-    phone: z.string().min(10, "Telefone do administrador é obrigatório"),
+    name: z.string()
+      .min(3, "Nome deve ter no mínimo 3 caracteres")
+      .max(100, "Nome não pode exceder 100 caracteres")
+      .refine(
+        (val) => val.trim().split(/\s+/).length >= 2,
+        "Informe nome e sobrenome"
+      ),
+    email: z.string()
+      .min(1, "Email é obrigatório")
+      .email("Email inválido — verifique se contém @ e um domínio válido"),
+    phone: z.string()
+      .refine(validatePhone, "Telefone inválido — informe um número com DDD (10 ou 11 dígitos)"),
   }),
 });
 

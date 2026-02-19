@@ -66,6 +66,7 @@ export default function SignupCompany() {
     watch,
   } = useForm<SignupCompanyData>({
     resolver: zodResolver(signupCompanySchema),
+    mode: "onBlur",
   });
 
   const selectedServicos = watch("company.servicos") || [];
