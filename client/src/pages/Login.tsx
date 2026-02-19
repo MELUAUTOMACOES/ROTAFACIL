@@ -26,10 +26,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 interface LoginFormData {
   username: string;
   password: string;
-  confirmPassword: string;
-  name: string;
-  email: string;
-  company: string;
   rememberMe: boolean;
 }
 
@@ -42,9 +38,8 @@ interface PinData {
 }
 
 export default function Login() {
-  const { login, register } = useAuth();
+  const { login } = useAuth();
   const [, setLocation] = useLocation();
-  const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,10 +49,6 @@ export default function Login() {
   const [formData, setFormData] = useState<LoginFormData>({
     username: "",
     password: "",
-    confirmPassword: "",
-    name: "",
-    email: "",
-    company: "",
     rememberMe: false,
   });
 
@@ -78,26 +69,8 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      if (isLogin) {
-        await login(formData.username, formData.password);
-        // Se chegou aqui, login foi bem sucedido
-        setLocation("/dashboard");
-      } else {
-        if (formData.password !== formData.confirmPassword) {
-          setError("As senhas não coincidem");
-          setIsLoading(false);
-          return;
-        }
-
-        await register({
-          username: formData.username,
-          password: formData.password,
-          name: formData.name,
-          email: formData.email,
-        });
-        // Se chegou aqui, registro foi bem sucedido
-        setLocation("/dashboard");
-      }
+      await login(formData.username, formData.password);
+      setLocation("/dashboard");
     } catch (err: any) {
       setError(err.message || "Erro ao processar sua solicitação");
     } finally {
@@ -279,13 +252,10 @@ export default function Login() {
                 </div>
 
                 <h2 className="text-2xl font-bold text-white mb-2">
-                  {isLogin ? "Entrar na conta" : "Criar conta"}
+                  Entrar na conta
                 </h2>
                 <p className="text-slate-400 text-sm">
-                  {isLogin
-                    ? "Acesse sua conta para gerenciar sua operação"
-                    : "Preencha os dados para criar sua conta"
-                  }
+                  Acesse sua conta para gerenciar sua operação
                 </p>
               </div>
 
@@ -297,51 +267,6 @@ export default function Login() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-5">
-                {!isLogin && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="name" className="text-slate-200 text-sm">Nome completo</Label>
-                      <Input
-                        id="name"
-                        name="name"
-                        type="text"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        className="bg-zinc-800 border-zinc-700 text-white placeholder:text-slate-500 focus:border-amber-500 focus:ring-amber-500"
-                        placeholder="Seu nome"
-                        required={!isLogin}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="email" className="text-slate-200 text-sm">E-mail</Label>
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        className="bg-zinc-800 border-zinc-700 text-white placeholder:text-slate-500 focus:border-amber-500 focus:ring-amber-500"
-                        placeholder="seu@email.com"
-                        required={!isLogin}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="company" className="text-slate-200 text-sm">Empresa</Label>
-                      <Input
-                        id="company"
-                        name="company"
-                        type="text"
-                        value={formData.company}
-                        onChange={handleInputChange}
-                        className="bg-zinc-800 border-zinc-700 text-white placeholder:text-slate-500 focus:border-amber-500 focus:ring-amber-500"
-                        placeholder="Nome da empresa"
-                        required={!isLogin}
-                      />
-                    </div>
-                  </>
-                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="username" className="text-slate-200 text-sm">Email</Label>
@@ -384,52 +309,33 @@ export default function Login() {
                   </div>
                 </div>
 
-                {!isLogin && (
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword" className="text-slate-200 text-sm">Confirmar senha</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
-                      <Input
-                        id="confirmPassword"
-                        name="confirmPassword"
-                        type={showPassword ? "text" : "password"}
-                        value={formData.confirmPassword}
-                        onChange={handleInputChange}
-                        className="bg-zinc-800 border-zinc-700 text-white placeholder:text-slate-500 pl-10 focus:border-amber-500 focus:ring-amber-500"
-                        placeholder="Confirme sua senha"
-                        required={!isLogin}
-                      />
-                    </div>
-                  </div>
-                )}
 
-                {isLogin && (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="rememberMe"
-                        name="rememberMe"
-                        checked={formData.rememberMe}
-                        onCheckedChange={(checked) =>
-                          setFormData(prev => ({ ...prev, rememberMe: checked === true }))
-                        }
-                        className="border-zinc-600 data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
-                      />
-                      <Label htmlFor="rememberMe" className="text-sm text-slate-400 cursor-pointer">
-                        Lembrar de mim
-                      </Label>
-                    </div>
-                    <Link href="/forgot-password">
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="text-sm text-amber-500 hover:text-amber-400 p-0 h-auto"
-                      >
-                        Esqueci a senha
-                      </Button>
-                    </Link>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="rememberMe"
+                      name="rememberMe"
+                      checked={formData.rememberMe}
+                      onCheckedChange={(checked) =>
+                        setFormData(prev => ({ ...prev, rememberMe: checked === true }))
+                      }
+                      className="border-zinc-600 data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
+                    />
+                    <Label htmlFor="rememberMe" className="text-sm text-slate-400 cursor-pointer">
+                      Lembrar de mim
+                    </Label>
                   </div>
-                )}
+                  <Link href="/forgot-password">
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="text-sm text-amber-500 hover:text-amber-400 p-0 h-auto"
+                    >
+                      Esqueci a senha
+                    </Button>
+                  </Link>
+                </div>
 
                 <Button
                   type="submit"
@@ -439,37 +345,25 @@ export default function Login() {
                   {isLoading ? (
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Processando...
+                      Entrando...
                     </div>
-                  ) : isLogin ? (
-                    "Entrar"
                   ) : (
-                    "Criar conta"
+                    "Entrar"
                   )}
                 </Button>
               </form>
 
               <div className="mt-6 text-center">
                 <p className="text-sm text-slate-400">
-                  {isLogin ? "Não tem uma conta? " : "Já tem uma conta? "}
-                  {isLogin ? (
-                    <Link href="/#precos">
-                      <Button
-                        variant="link"
-                        className="font-medium text-amber-500 hover:text-amber-400 p-0"
-                      >
-                        Veja os planos
-                      </Button>
-                    </Link>
-                  ) : (
+                  Não tem uma conta?{" "}
+                  <Link href="/signup-company">
                     <Button
                       variant="link"
                       className="font-medium text-amber-500 hover:text-amber-400 p-0"
-                      onClick={() => setIsLogin(true)}
                     >
-                      Faça login
+                      Cadastre sua empresa
                     </Button>
-                  )}
+                  </Link>
                 </p>
               </div>
             </CardContent>

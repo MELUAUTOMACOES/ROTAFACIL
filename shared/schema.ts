@@ -885,12 +885,41 @@ export const insertInvitationSchema = createInsertSchema(invitations).omit({
 // Roles enum para multiempresa
 export const roleEnum = z.enum(["ADMIN", "ADMINISTRATIVO", "OPERADOR"]);
 
+// Validação de dígitos verificadores do CNPJ
+export function validateCnpj(cnpj: string): boolean {
+  // Remove caracteres não numéricos
+  const digits = cnpj.replace(/\D/g, "");
+  if (digits.length !== 14) return false;
+
+  // Rejeita CNPJs com todos os dígitos iguais (ex: 00.000.000/0000-00)
+  if (/^(\d)\1{13}$/.test(digits)) return false;
+
+  const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += parseInt(digits[i]) * weights1[i];
+  let remainder = sum % 11;
+  const digit1 = remainder < 2 ? 0 : 11 - remainder;
+  if (parseInt(digits[12]) !== digit1) return false;
+
+  sum = 0;
+  for (let i = 0; i < 13; i++) sum += parseInt(digits[i]) * weights2[i];
+  remainder = sum % 11;
+  const digit2 = remainder < 2 ? 0 : 11 - remainder;
+  if (parseInt(digits[13]) !== digit2) return false;
+
+  return true;
+}
+
 // Schema para cadastro de nova empresa + admin
 export const signupCompanySchema = z.object({
   // Dados da empresa
   company: z.object({
     name: z.string().min(3, "Nome da empresa deve ter no mínimo 3 caracteres"),
-    cnpj: z.string().regex(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/, "CNPJ deve estar no formato XX.XXX.XXX/XXXX-XX"),
+    cnpj: z.string()
+      .regex(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/, "CNPJ deve estar no formato XX.XXX.XXX/XXXX-XX")
+      .refine(validateCnpj, "CNPJ inválido — verifique os dígitos verificadores"),
     telefone: z.string().min(10, "Telefone é obrigatório"),
     email: z.string().email("Email da empresa inválido"),
     cep: z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no formato XXXXX-XXX"),
@@ -898,6 +927,7 @@ export const signupCompanySchema = z.object({
     numero: z.string().min(1, "Número é obrigatório"),
     cidade: z.string().min(2, "Cidade é obrigatória"),
     estado: z.string().length(2, "Estado deve ter 2 caracteres"),
+    plan: z.enum(["free", "basic", "professional", "enterprise", "custom"]).optional().default("free"),
     segmento: z.string().optional(),
     servicos: z.array(z.string()).optional(),
     comoConheceu: z.string().optional(),

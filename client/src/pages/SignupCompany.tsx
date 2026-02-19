@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signupCompanySchema, type SignupCompanyData } from "@shared/schema";
@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { buscarEnderecoPorCep } from "@/lib/cep";
 import { Loader2, Building2, User, Mail, Phone, MapPin, Briefcase, MessageSquare, Truck, Check } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import logoImg from "@assets/SEM FUNDO_1750819798590.png";
 import { buildApiUrl } from "@/lib/api-config";
 
@@ -27,8 +27,25 @@ interface PinData {
 export default function SignupCompany() {
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const { toast } = useToast();
   const [pins, setPins] = useState<PinData[]>([]);
+  const searchString = useSearch();
+
+  // Ler plano da URL (?plan=professional)
+  const selectedPlan = useMemo(() => {
+    const params = new URLSearchParams(searchString);
+    const plan = params.get("plan");
+    const validPlans = ["free", "basic", "professional", "enterprise"] as const;
+    return validPlans.includes(plan as any) ? (plan as typeof validPlans[number]) : "free";
+  }, [searchString]);
+
+  const planLabels: Record<string, string> = {
+    free: "Grátis",
+    basic: "Básico",
+    professional: "Profissional",
+    enterprise: "Empresarial",
+  };
 
   useEffect(() => {
     const newPins = Array.from({ length: 8 }, (_, i) => ({
@@ -52,6 +69,11 @@ export default function SignupCompany() {
   });
 
   const selectedServicos = watch("company.servicos") || [];
+
+  // Setar plano no form quando muda
+  useEffect(() => {
+    setValue("company.plan", selectedPlan);
+  }, [selectedPlan, setValue]);
 
   const handleCepBlur = async (cep: string) => {
     const cleanCep = cep.replace(/\D/g, "");
@@ -238,6 +260,17 @@ export default function SignupCompany() {
 
           <form onSubmit={handleSubmit(onSubmit)}>
             <div className="space-y-6">
+              {/* Badge do plano selecionado */}
+              {selectedPlan !== "free" && (
+                <div className="flex items-center justify-center">
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/15 border border-amber-500/30">
+                    <Check className="h-4 w-4 text-amber-500" />
+                    <span className="text-sm text-amber-400 font-medium">
+                      Plano selecionado: <strong>{planLabels[selectedPlan]}</strong>
+                    </span>
+                  </div>
+                </div>
+              )}
               {/* Dados da Empresa */}
               <Card className="bg-zinc-900 border-zinc-800">
                 <CardHeader>
@@ -559,6 +592,27 @@ export default function SignupCompany() {
                 </CardContent>
               </Card>
 
+              {/* Aceite LGPD/Termos */}
+              <div className="flex items-start space-x-3 p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
+                <Checkbox
+                  id="acceptTerms"
+                  checked={acceptedTerms}
+                  onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
+                  className="border-zinc-600 data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500 mt-0.5"
+                />
+                <Label htmlFor="acceptTerms" className="text-sm text-slate-400 leading-relaxed cursor-pointer">
+                  Li e aceito os{" "}
+                  <Link href="/privacy" className="text-amber-500 hover:text-amber-400 underline underline-offset-2">
+                    Termos de Uso
+                  </Link>{" "}
+                  e a{" "}
+                  <Link href="/cookies" className="text-amber-500 hover:text-amber-400 underline underline-offset-2">
+                    Política de Privacidade
+                  </Link>{" "}
+                  do Rota Fácil.
+                </Label>
+              </div>
+
               {/* Botões */}
               <div className="flex gap-4">
                 <Button
@@ -572,7 +626,7 @@ export default function SignupCompany() {
                 <Button
                   type="submit"
                   className="flex-1 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white"
-                  disabled={isLoading}
+                  disabled={isLoading || !acceptedTerms}
                 >
                   {isLoading ? (
                     <>

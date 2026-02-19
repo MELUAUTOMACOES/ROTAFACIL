@@ -221,7 +221,7 @@ export default function Home() {
 
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-            <Link href="/login">
+            <Link href="/signup-company">
               <Button
                 size="lg"
                 className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold px-8 h-14 text-base shadow-lg shadow-amber-500/25 transition-all hover:shadow-amber-500/40 hover:scale-105"
@@ -722,7 +722,7 @@ export default function Home() {
                     Histórico 30 dias
                   </li>
                 </ul>
-                <Link href="/login">
+                <Link href="/signup-company?plan=basic">
                   <Button variant="outline" className="w-full border-zinc-700 text-zinc-900 bg-white hover:bg-zinc-100 hover:text-zinc-900 h-12">
                     Escolher plano
                   </Button>
@@ -771,7 +771,7 @@ export default function Home() {
                     Histórico 120 dias
                   </li>
                 </ul>
-                <Link href="/login">
+                <Link href="/signup-company?plan=professional">
                   <Button className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-zinc-900 font-semibold h-12 shadow-lg shadow-amber-500/25">
                     Escolher plano
                   </Button>
@@ -814,7 +814,7 @@ export default function Home() {
                     Histórico 360 dias
                   </li>
                 </ul>
-                <Link href="/login">
+                <Link href="/signup-company?plan=enterprise">
                   <Button variant="outline" className="w-full border-zinc-700 text-zinc-900 bg-white hover:bg-zinc-100 hover:text-zinc-900 h-12">
                     Escolher plano
                   </Button>
@@ -926,7 +926,7 @@ export default function Home() {
           <p className="text-slate-400 text-lg md:text-xl mb-10">
             Comece hoje mesmo e veja a diferença na sua gestão de frotas.
           </p>
-          <Link href="/login">
+          <Link href="/signup-company">
             <Button
               size="lg"
               className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold px-12 h-16 text-lg shadow-lg shadow-amber-500/25 transition-all hover:shadow-amber-500/40 hover:scale-105"
