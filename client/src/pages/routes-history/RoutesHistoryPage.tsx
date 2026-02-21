@@ -134,6 +134,8 @@ type BusinessRules = {
   enderecoEmpresaCidade?: string;
   enderecoEmpresaCep?: string;
   enderecoEmpresaEstado?: string;
+  maximoParadasPorRota?: string | number | null;
+  slaHorasPendencia?: string | number | null;
 };
 
 
@@ -485,7 +487,7 @@ export default function RoutesHistoryPage() {
       return response.json();
     }
   });
-  const appointments = normalizeItems(appointmentsData);
+  const appointments = normalizeItems<any>(appointmentsData);
 
   // Data da rota em YYYY-MM-DD (para filtrar por dia)
   const routeDateYMD =
@@ -514,9 +516,10 @@ export default function RoutesHistoryPage() {
 
   // selecionar/deselecionar um agendamento
   const toggleSelectAppt = (id: number) => {
-    setSelectedToAdd((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+    setSelectedToAdd((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      return [...prev, id];
+    });
   };
 
   // (opcional) debug
@@ -1167,6 +1170,11 @@ export default function RoutesHistoryPage() {
       return r.ok ? r.json() : null;
     }
   });
+
+  // Máximo de paradas por rota (usado nos modais de criação e adição de paradas)
+  const maxStopsLimit = businessRules?.maximoParadasPorRota ? Number(businessRules.maximoParadasPorRota) : 0;
+  const currentStopsCount = (routeDetail?.stops || []).length;
+  const remainingStopsForAdd = maxStopsLimit > 0 ? Math.max(0, maxStopsLimit - currentStopsCount) : Infinity;
 
   const formatDistance = (meters: number) => {
     if (meters >= 1000) {
@@ -2288,56 +2296,78 @@ export default function RoutesHistoryPage() {
                     <TableHead>Rota</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Responsável</TableHead>
+                    <TableHead>Tempo Pendente</TableHead>
                     <TableHead>Status Execução</TableHead>
                     <TableHead>Notas</TableHead>
                     <TableHead>Ação</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pendingAppointments.map((apt: any) => (
-                    <TableRow key={apt.id}>
-                      <TableCell>{fmtDate(apt.routeDate)}</TableCell>
-                      <TableCell>{apt.routeTitle}</TableCell>
-                      <TableCell>{apt.clientName}</TableCell>
-                      <TableCell>{apt.responsibleName}</TableCell>
-                      <TableCell>
-                        {/* 💵 Se paymentStatus é 'nao_pago', mostrar 'Falta Pagamento' */}
-                        {apt.paymentStatus === 'nao_pago' ? (
-                          <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200">
-                            💵 Falta Pagamento
-                          </Badge>
-                        ) : (
+                  {pendingAppointments.map((apt: any) => {
+                    // SLA: calcular tempo pendente
+                    const slaHoras = businessRules?.slaHorasPendencia ? Number(businessRules.slaHorasPendencia) : 48;
+                    const routeFinished = apt.routeFinishedAt ? new Date(apt.routeFinishedAt) : (apt.routeDate ? new Date(apt.routeDate) : null);
+                    const horasPendente = routeFinished ? Math.max(0, (Date.now() - routeFinished.getTime()) / (1000 * 60 * 60)) : 0;
+                    const slaPct = slaHoras > 0 ? horasPendente / slaHoras : 0;
+                    // Cor da linha baseada no SLA
+                    const slaRowClass = slaPct >= 1 ? 'bg-red-50 dark:bg-red-950/20' : slaPct >= 0.75 ? 'bg-yellow-50 dark:bg-yellow-950/20' : '';
+                    // Formato de tempo pendente
+                    const tempoPendente = horasPendente < 1 ? 'Agora' : horasPendente < 24 ? `${Math.round(horasPendente)}h atrás` : `${Math.round(horasPendente / 24)}d atrás`;
+
+                    return (
+                      <TableRow key={apt.id} className={slaRowClass}>
+                        <TableCell>{fmtDate(apt.routeDate)}</TableCell>
+                        <TableCell>{apt.routeTitle}</TableCell>
+                        <TableCell>{apt.clientName}</TableCell>
+                        <TableCell>{apt.responsibleName}</TableCell>
+                        <TableCell>
                           <Badge variant="outline" className={
-                            apt.executionStatus === 'concluido'
-                              ? 'bg-green-100 text-green-800 border-green-200'
-                              : 'bg-red-100 text-red-800 border-red-200'
+                            slaPct >= 1 ? 'bg-red-100 text-red-800 border-red-300' :
+                              slaPct >= 0.75 ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                                'bg-green-100 text-green-800 border-green-300'
                           }>
-                            {apt.executionStatus === 'concluido' ? 'Concluído' :
-                              apt.executionStatus === 'nao_realizado_cliente_ausente' ? 'Cliente Ausente' :
-                                apt.executionStatus === 'nao_realizado_cliente_pediu_remarcacao' ? 'Remarcar' :
-                                  apt.executionStatus === 'nao_realizado_problema_tecnico' ? 'Problema Técnico' :
-                                    apt.executionStatus === 'nao_realizado_endereco_incorreto' ? 'Endereço Incorreto' :
-                                      apt.executionStatus === 'nao_realizado_cliente_recusou' ? 'Cliente Recusou' :
-                                        apt.executionStatus === 'nao_realizado_falta_material' ? 'Falta Material' :
-                                          apt.executionStatus || 'Pendente'}
+                            {slaPct >= 1 ? '⏰ ' : ''}{tempoPendente}
                           </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="max-w-[200px] truncate" title={apt.executionNotes}>{apt.executionNotes || '-'}</TableCell>
-                      <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleResolvePending(apt)}
-                        >
-                          Resolver
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell>
+                          {/* 💵 Se paymentStatus é 'nao_pago', mostrar 'Falta Pagamento' */}
+                          {apt.paymentStatus === 'nao_pago' ? (
+                            <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200">
+                              💵 Falta Pagamento
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className={
+                              apt.executionStatus === 'concluido'
+                                ? 'bg-green-100 text-green-800 border-green-200'
+                                : 'bg-red-100 text-red-800 border-red-200'
+                            }>
+                              {apt.executionStatus === 'concluido' ? 'Concluído' :
+                                apt.executionStatus === 'nao_realizado_cliente_ausente' ? 'Cliente Ausente' :
+                                  apt.executionStatus === 'nao_realizado_cliente_pediu_remarcacao' ? 'Remarcar' :
+                                    apt.executionStatus === 'nao_realizado_problema_tecnico' ? 'Problema Técnico' :
+                                      apt.executionStatus === 'nao_realizado_endereco_incorreto' ? 'Endereço Incorreto' :
+                                        apt.executionStatus === 'nao_realizado_cliente_recusou' ? 'Cliente Recusou' :
+                                          apt.executionStatus === 'nao_realizado_falta_material' ? 'Falta Material' :
+                                            apt.executionStatus || 'Pendente'}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="max-w-[200px] truncate" title={apt.executionNotes}>{apt.executionNotes || '-'}</TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleResolvePending(apt)}
+                          >
+                            Resolver
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                   {pendingAppointments.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-4 text-gray-500">Nenhuma pendência encontrada.</TableCell>
+                      <TableCell colSpan={8} className="text-center py-4 text-gray-500">Nenhuma pendência encontrada.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -3149,11 +3179,12 @@ export default function RoutesHistoryPage() {
                         }
                       `}
                       onClick={() => {
-                        setSelectedApptIdsForRoute(prev =>
-                          isSelected
-                            ? prev.filter(id => id !== apt.id)
-                            : [...prev, apt.id]
-                        );
+                        setSelectedApptIdsForRoute(prev => {
+                          if (isSelected) return prev.filter(id => id !== apt.id);
+                          // Bloquear se atingiu o limite de paradas
+                          if (maxStopsLimit > 0 && prev.length >= maxStopsLimit) return prev;
+                          return [...prev, apt.id];
+                        });
                       }}
                     >
                       <div className="flex items-start gap-3">
@@ -3261,8 +3292,18 @@ export default function RoutesHistoryPage() {
           <div className="flex items-center justify-between pt-2">
             <span className="text-sm text-gray-600 dark:text-zinc-400">
               {selectedApptIdsForRoute.length} agendamento(s) selecionado(s)
+              {maxStopsLimit > 0 && (
+                <span className={selectedApptIdsForRoute.length >= maxStopsLimit ? 'text-red-600 font-semibold ml-1' : 'ml-1'}>
+                  (máx: {maxStopsLimit})
+                </span>
+              )}
               {filteredModalAppointments.length > 0 && ` de ${filteredModalAppointments.length} disponíveis`}
             </span>
+            {maxStopsLimit > 0 && selectedApptIdsForRoute.length >= maxStopsLimit && (
+              <Badge variant="destructive" className="text-xs">
+                ⚠️ Limite de {maxStopsLimit} paradas atingido
+              </Badge>
+            )}
             <div className="flex gap-2">
               <Button
                 variant="outline"

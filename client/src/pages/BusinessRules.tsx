@@ -164,15 +164,12 @@ export default function BusinessRulesPage() {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-5 max-w-3xl">
+            <TabsList className="grid w-full grid-cols-4 max-w-3xl">
               <TabsTrigger value="rotas" className="flex items-center gap-2">
                 <Route className="h-4 w-4" />
                 Rotas
               </TabsTrigger>
-              <TabsTrigger value="veiculos" className="flex items-center gap-2">
-                <Fuel className="h-4 w-4" />
-                Veículos
-              </TabsTrigger>
+              {/* Aba Veículos oculta — valores definidos nos registros de abastecimento */}
               <TabsTrigger value="metas" className="flex items-center gap-2">
                 <Target className="h-4 w-4" />
                 Metas
@@ -339,16 +336,19 @@ export default function BusinessRulesPage() {
                       name="tempoDeslocamentoBuffer"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Tempo de deslocamento (buffer em minutos)</FormLabel>
+                          <FormLabel>Tempo de deslocamento (buffer em minutos) — 🚧 Em desenvolvimento</FormLabel>
                           <FormControl>
                             <Input
                               type="number"
                               min="5"
                               max="60"
                               {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value))}
+                              disabled
                             />
                           </FormControl>
+                          <FormDescription>
+                            Reservado para cálculo de buffer no deslocamento (em desenvolvimento).
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -358,8 +358,8 @@ export default function BusinessRulesPage() {
               </Card>
             </TabsContent>
 
-            {/* Tab: Veículos (Combustível) */}
-            <TabsContent value="veiculos" className="mt-6">
+            {/* Tab: Veículos (Combustível) — OCULTA (valores definidos nos registros de abastecimento) */}
+            <TabsContent value="veiculos" className="mt-6 hidden">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">

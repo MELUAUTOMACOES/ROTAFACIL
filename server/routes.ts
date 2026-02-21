@@ -8,9 +8,10 @@ import { db } from "./db"; // ajuste o caminho se o seu db estiver noutro arquiv
 import {
   routes, routeStops, appointments, clients, users, dailyAvailability, vehicleChecklists, vehicleChecklistItems, teamMembers, pendingResolutions, appointmentHistory,
   routeOccurrences,
-  trackingLocations
+  trackingLocations,
+  businessRules
 } from "@shared/schema";
-import { asc, desc, eq, inArray, sql, and, or, gte } from "drizzle-orm";
+import { asc, desc, eq, inArray, sql, and, or, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { format } from "date-fns";
 import {
@@ -2961,7 +2962,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const preparedResponsibles: Array<{
         info: typeof responsibles[0];
-        baseAddress: { cep: string, logradouro: string, numero: string, cidade: string, estado: string };
+        baseAddress: { cep: string, logradouro: string, numero: string, bairro: string, cidade: string, estado: string };
         diasTrabalho: string[];
       }> = [];
 
@@ -2973,7 +2974,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const responsible of responsibles) {
         // Buscar horários de trabalho
         let horarioInicioTrabalho: string, horarioFimTrabalho: string, horarioAlmocoMinutos: number, diasTrabalho: string[];
-        let baseAddress: { cep: string, logradouro: string, numero: string, cidade: string, estado: string };
+        let baseAddress: { cep: string, logradouro: string, numero: string, bairro: string, cidade: string, estado: string };
 
         if (responsible.type === 'technician') {
           const tech = await storage.getTechnician(responsible.id, userId);
@@ -2989,6 +2990,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               cep: tech.enderecoInicioCep,
               logradouro: tech.enderecoInicioLogradouro || '',
               numero: tech.enderecoInicioNumero || '',
+              bairro: tech.enderecoInicioBairro || '',
               cidade: tech.enderecoInicioCidade || '',
               estado: tech.enderecoInicioEstado || ''
             };
@@ -2997,6 +2999,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               cep: businessRules.enderecoEmpresaCep,
               logradouro: businessRules.enderecoEmpresaLogradouro,
               numero: businessRules.enderecoEmpresaNumero,
+              bairro: businessRules.enderecoEmpresaBairro,
               cidade: businessRules.enderecoEmpresaCidade,
               estado: businessRules.enderecoEmpresaEstado
             };
@@ -3015,6 +3018,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               cep: team.enderecoInicioCep,
               logradouro: team.enderecoInicioLogradouro || '',
               numero: team.enderecoInicioNumero || '',
+              bairro: team.enderecoInicioBairro || '',
               cidade: team.enderecoInicioCidade || '',
               estado: team.enderecoInicioEstado || ''
             };
@@ -3023,6 +3027,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               cep: businessRules.enderecoEmpresaCep,
               logradouro: businessRules.enderecoEmpresaLogradouro,
               numero: businessRules.enderecoEmpresaNumero,
+              bairro: businessRules.enderecoEmpresaBairro,
               cidade: businessRules.enderecoEmpresaCidade,
               estado: businessRules.enderecoEmpresaEstado
             };
@@ -4708,6 +4713,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
           error: "Alguns agendamentos não possuem coordenadas do cliente (lat/lng). Geocodifique os clientes primeiro.",
           missing: noCoords.map(a => a.id),
         });
+      }
+
+      // 🚫 Validação: Máximo de paradas por rota
+      const [brRule] = await db.select().from(businessRules).where(eq(businessRules.userId, req.user.userId)).limit(1);
+      if (brRule) {
+        const maxStops = (brRule as any).maximoParadasPorRota;
+        if (maxStops && Number(maxStops) > 0) {
+          // Contar paradas existentes na rota
+          const [countRow] = await db
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(routeStops)
+            .where(eq(routeStops.routeId, routeId));
+          const currentStops = Number(countRow?.count || 0);
+          const totalAfterAdd = currentStops + appts.length;
+          if (totalAfterAdd > Number(maxStops)) {
+            const remaining = Math.max(0, Number(maxStops) - currentStops);
+            return res.status(400).json({
+              error: `Limite de paradas excedido. A rota já possui ${currentStops} parada(s) e o máximo é ${maxStops}. Você pode adicionar no máximo ${remaining} parada(s).`,
+              maxStops: Number(maxStops),
+              currentStops,
+              requested: appts.length,
+              remaining,
+            });
+          }
+        }
       }
 
       // Próximo 'order' da rota

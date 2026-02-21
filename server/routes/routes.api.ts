@@ -795,6 +795,20 @@ export function registerRoutesAPI(app: Express) {
           .where(eq(businessRules.userId, req.user.userId))
           .limit(1);
 
+        // 🚫 Validação: Máximo de paradas por rota
+        if (brs.length > 0) {
+          const maxStops = (brs[0] as any).maximoParadasPorRota;
+          if (maxStops && Number(maxStops) > 0 && appointmentIdsNorm.length > Number(maxStops)) {
+            console.log(`❌ [MAX STOPS] Tentativa de criar rota com ${appointmentIdsNorm.length} paradas, limite: ${maxStops}`);
+            return res.status(400).json({
+              error: `Limite de paradas excedido`,
+              message: `O máximo de paradas por rota é ${maxStops}. Você selecionou ${appointmentIdsNorm.length} agendamentos.`,
+              maxStops: Number(maxStops),
+              requested: appointmentIdsNorm.length,
+            });
+          }
+        }
+
         // 1. Buscar agendamentos + dados do cliente (incluindo lat/lng e endereço)
         console.log("🔍 Buscando agendamentos:", appointmentIdsNorm);
         const appointmentList = await db
@@ -1971,6 +1985,29 @@ export function registerRoutesAPI(app: Express) {
         const toInsertNums = idsNum.filter((n) => !alreadyNums.has(n));
         if (toInsertNums.length === 0) {
           return res.json({ ok: true, inserted: 0, skipped: idsNum.length });
+        }
+
+        // 🚫 Validação: Máximo de paradas por rota
+        const [brRule] = await db
+          .select()
+          .from(businessRules)
+          .where(eq(businessRules.userId, req.user.userId))
+          .limit(1);
+        if (brRule) {
+          const maxStops = (brRule as any).maximoParadasPorRota;
+          const currentStops = already.length;
+          const totalAfterAdd = currentStops + toInsertNums.length;
+          if (maxStops && Number(maxStops) > 0 && totalAfterAdd > Number(maxStops)) {
+            const remaining = Math.max(0, Number(maxStops) - currentStops);
+            console.log(`❌ [MAX STOPS] Tentativa de adicionar ${toInsertNums.length} paradas. Atual: ${currentStops}, Máx: ${maxStops}`);
+            return res.status(400).json({
+              message: `Limite de paradas excedido. A rota já possui ${currentStops} parada(s) e o máximo é ${maxStops}. Você pode adicionar no máximo ${remaining} parada(s).`,
+              maxStops: Number(maxStops),
+              currentStops,
+              requested: toInsertNums.length,
+              remaining,
+            });
+          }
         }
 
         // 🔒 VALIDAÇÃO: Bloquear agendamentos que já estão em rotas confirmadas/finalizadas
