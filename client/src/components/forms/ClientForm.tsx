@@ -262,21 +262,32 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
         </div>
 
         <div>
-          <Label htmlFor="cpf">CPF *</Label>
+          <Label htmlFor="cpf">CPF / CNPJ *</Label>
           <Input
-            placeholder="000.000.000-00"
+            placeholder="000.000.000-00 ou 00.000.000/0001-00"
             className={`mt-1 ${cpfError ? 'border-red-500' : ''}`}
-            maxLength={14}
+            maxLength={18}
             value={cpfInput}
             onChange={(e) => {
-              let value = e.target.value.replace(/\D/g, '');
-              console.log("Validação de CPF:", value);
-
-              if (value.length > 11) {
-                value = value.slice(0, 11);
+              let digits = e.target.value.replace(/\D/g, '');
+              // Limitar a 14 dígitos (CNPJ)
+              digits = digits.slice(0, 14);
+              let formattedValue = '';
+              if (digits.length <= 11) {
+                // Máscara CPF: 000.000.000-00
+                if (digits.length > 9) {
+                  formattedValue = digits.slice(0, 3) + '.' + digits.slice(3, 6) + '.' + digits.slice(6, 9) + '-' + digits.slice(9);
+                } else if (digits.length > 6) {
+                  formattedValue = digits.slice(0, 3) + '.' + digits.slice(3, 6) + '.' + digits.slice(6);
+                } else if (digits.length > 3) {
+                  formattedValue = digits.slice(0, 3) + '.' + digits.slice(3);
+                } else {
+                  formattedValue = digits;
+                }
+              } else {
+                // Máscara CNPJ: 00.000.000/0001-00
+                formattedValue = digits.slice(0, 2) + '.' + digits.slice(2, 5) + '.' + digits.slice(5, 8) + '/' + digits.slice(8, 12) + '-' + digits.slice(12, 14);
               }
-              const formattedValue = value.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, '$1.$2.$3-$4');
-
               setCpfInput(formattedValue);
               form.setValue("cpf", formattedValue);
             }}

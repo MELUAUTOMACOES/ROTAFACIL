@@ -139,8 +139,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
       permission: 'all',
       items: [
         { name: "Serviços", href: "/services", icon: Wrench },
-        { name: "Veículos", href: "/vehicles", icon: Car },
         { name: "Técnicos / Equipes", href: "/technicians", icon: UserCog },
+        { name: "Veículos", href: "/vehicles", icon: Car },
         { name: "Clientes", href: "/clients", icon: Users },
       ]
     },

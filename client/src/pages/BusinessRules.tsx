@@ -26,6 +26,15 @@ export default function BusinessRulesPage() {
     enabled: !!user,
   });
 
+  // 🏢 Busca dados da empresa para pré-popular o endereço
+  const { data: companyInfo } = useQuery<{
+    id: number; name: string; cep: string; logradouro: string;
+    numero: string; cidade: string; estado: string;
+  }>({
+    queryKey: ['/api/company/info'],
+    enabled: !!user,
+  });
+
   const form = useForm<InsertBusinessRules>({
     resolver: zodResolver(insertBusinessRulesSchema),
     defaultValues: {
@@ -60,6 +69,45 @@ export default function BusinessRulesPage() {
       whatsappAppointmentMessageTemplate: "Olá, {nome_cliente}! Confirmamos seu agendamento de {nome_servico} para {data_agendamento}. Endereço: {endereco}.",
     },
   });
+
+  // 🏢 Auto-preenche endereço da empresa nas regras de negócio se ainda não foi salvo
+  useEffect(() => {
+    if (companyInfo && businessRules && !businessRules.enderecoEmpresaCep) {
+      // Buscar detalhes do CEP (para obter o bairro também)
+      const fillFromCompany = async () => {
+        try {
+          const cleanCep = companyInfo.cep?.replace(/\D/g, '') || '';
+          let bairro = '';
+          if (cleanCep.length === 8) {
+            const endereco = await buscarEnderecoPorCep(cleanCep);
+            bairro = endereco.bairro || '';
+          }
+          // Formatar CEP com máscara
+          const formattedCep = cleanCep.length === 8
+            ? `${cleanCep.slice(0, 5)}-${cleanCep.slice(5)}`
+            : companyInfo.cep || '';
+          form.setValue('enderecoEmpresaCep', formattedCep);
+          form.setValue('enderecoEmpresaLogradouro', companyInfo.logradouro || '');
+          form.setValue('enderecoEmpresaNumero', companyInfo.numero || '');
+          form.setValue('enderecoEmpresaBairro', bairro);
+          form.setValue('enderecoEmpresaCidade', companyInfo.cidade || '');
+          form.setValue('enderecoEmpresaEstado', companyInfo.estado || '');
+          toast({
+            title: "Endereço pré-preenchido",
+            description: "Endereço da empresa importado do cadastro. Confirme e salve as regras.",
+          });
+        } catch (err) {
+          // Preencher sem bairro em caso de erro na busca do CEP
+          form.setValue('enderecoEmpresaCep', companyInfo.cep || '');
+          form.setValue('enderecoEmpresaLogradouro', companyInfo.logradouro || '');
+          form.setValue('enderecoEmpresaNumero', companyInfo.numero || '');
+          form.setValue('enderecoEmpresaCidade', companyInfo.cidade || '');
+          form.setValue('enderecoEmpresaEstado', companyInfo.estado || '');
+        }
+      };
+      fillFromCompany();
+    }
+  }, [companyInfo, businessRules, form, toast]);
 
   // Reset form when data loads
   useEffect(() => {

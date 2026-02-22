@@ -72,10 +72,10 @@ function getInitialValues(vehicle: Vehicle | null | undefined): InitialFormValue
   // Normalizar fuelType para lowercase
   let fuelTypeRaw: string = vehicle.fuelType || "gasolina";
   fuelTypeRaw = fuelTypeRaw.trim().toLowerCase();
-  
+
   const validFuelTypes: FuelTypeKey[] = ["gasolina", "etanol", "diesel_s500", "diesel_s10", "eletrico", "hibrido"];
-  const fuelType: FuelTypeKey = validFuelTypes.includes(fuelTypeRaw as FuelTypeKey) 
-    ? (fuelTypeRaw as FuelTypeKey) 
+  const fuelType: FuelTypeKey = validFuelTypes.includes(fuelTypeRaw as FuelTypeKey)
+    ? (fuelTypeRaw as FuelTypeKey)
     : "gasolina";
 
   // Garantir IDs numéricos válidos
@@ -127,10 +127,10 @@ export default function VehicleForm({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState(initialTab);
-  
+
   // Calcular valores iniciais uma vez na montagem
   const initialValues = getInitialValues(vehicle);
-  
+
   const [assignmentType, setAssignmentType] = useState<"technician" | "team">(
     initialValues.assignmentType
   );
@@ -265,31 +265,26 @@ export default function VehicleForm({
         <div>
           <Label htmlFor="plate">Placa *</Label>
           <Input
-            placeholder="AAA-1234 ou AAA1A23"
+            placeholder="AAA-1234 ou AAA1B23"
             className="mt-1"
             style={{ textTransform: "uppercase" }}
             value={form.watch("plate") || ""}
+            maxLength={8}
             onChange={(e) => {
-              let v = e.target.value
-                .toUpperCase()
-                // remove qualquer caracter que não seja letra ou número
-                .replace(/[^A-Z0-9]/g, "");
-
-              // corta sempre para 7 chars (AAA1234 ou AAA1A23 têm 7 caracteres)
+              // Remove tudo que não for letra ou número
+              let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+              // Limitar a 7 caracteres brutos
               v = v.slice(0, 7);
-
-              // Se for EXATAMENTE 3 letras + 4 números, insere hífen: AAA-1234
-              if (/^[A-Z]{3}[0-9]{4}$/.test(v)) {
-                v = `${v.slice(0, 3)}-${v.slice(3)}`;
+              // Inserir hífen após as 3 primeiras letras se já existem 4+ chars
+              if (v.length >= 4 && /^[A-Z]{3}/.test(v)) {
+                v = v.slice(0, 3) + '-' + v.slice(3);
               }
-
-              // atualiza o valor no RHF, disparando validação
               form.setValue("plate", v, { shouldValidate: true });
             }}
           />
           {form.formState.errors.plate && (
             <p className="text-sm text-red-600 mt-1">
-              {form.formState.errors.plate.message}
+              Informe uma placa válida: <strong>AAA-1234</strong> (padrão antigo) ou <strong>AAA1B23</strong> (Mercosul)
             </p>
           )}
         </div>

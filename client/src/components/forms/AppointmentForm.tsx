@@ -1011,8 +1011,8 @@ export default function AppointmentForm({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
+                        <SelectItem value="antecipado">✅ Antecipado (já pago antecipado)</SelectItem>
                         <SelectItem value="no_ato">🤝 No Ato (cobrar na hora)</SelectItem>
-                        <SelectItem value="antecipado">✅ Antecipado (já pago)</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

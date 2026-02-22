@@ -287,17 +287,27 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
               name="documento"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>CPF *</FormLabel>
+                  <FormLabel>CPF / CNPJ *</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="000.000.000-00"
-                      maxLength={14}
+                      placeholder="000.000.000-00 ou 00.000.000/0001-00"
+                      maxLength={18}
                       {...field}
                       onChange={(e) => {
-                        let value = e.target.value.replace(/\D/g, '');
-                        if (value.length > 3) value = value.slice(0, 3) + '.' + value.slice(3);
-                        if (value.length > 7) value = value.slice(0, 7) + '.' + value.slice(7);
-                        if (value.length > 11) value = value.slice(0, 11) + '-' + value.slice(11, 13);
+                        let digits = e.target.value.replace(/\D/g, '');
+                        // Limitar a 14 dígitos (CNPJ)
+                        digits = digits.slice(0, 14);
+                        let value = '';
+                        if (digits.length <= 11) {
+                          // Máscara CPF: 000.000.000-00
+                          if (digits.length > 3) value = digits.slice(0, 3) + '.' + digits.slice(3);
+                          else value = digits;
+                          if (digits.length > 6) value = digits.slice(0, 3) + '.' + digits.slice(3, 6) + '.' + digits.slice(6);
+                          if (digits.length > 9) value = digits.slice(0, 3) + '.' + digits.slice(3, 6) + '.' + digits.slice(6, 9) + '-' + digits.slice(9);
+                        } else {
+                          // Máscara CNPJ: 00.000.000/0001-00
+                          value = digits.slice(0, 2) + '.' + digits.slice(2, 5) + '.' + digits.slice(5, 8) + '/' + digits.slice(8, 12) + '-' + digits.slice(12, 14);
+                        }
                         field.onChange(value);
                       }}
                     />

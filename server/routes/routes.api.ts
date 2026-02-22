@@ -22,6 +22,7 @@ import {
 import { eq, and, gte, lte, like, or, desc, inArray, sql, asc, ne } from "drizzle-orm";
 import { trackFeatureUsage } from "./metrics.routes";
 import { logEgressSize } from "../utils/egressLogger";
+import { authenticateToken } from "../middleware/auth.middleware";
 
 // Extend Request type for authenticated user
 interface AuthenticatedRequest extends Request {
@@ -406,18 +407,8 @@ async function geocodeEnderecoServer(
 }
 
 export function registerRoutesAPI(app: Express) {
-  // Middleware simples de autenticação (reutilizando a lógica existente)
-  const authenticateToken = (req: any, res: any, next: any) => {
-    // Em modo DEV, criar um usuário fake para testes
-    if (process.env.DEV_MODE === "true") {
-      req.user = { userId: 1 };
-      return next();
-    }
-
-    // TODO: Implementar autenticação real
-    req.user = { userId: 1 };
-    next();
-  };
+  // 🔐 authenticateToken real importado de server/middleware/auth.middleware.ts
+  // Valida JWT e popula req.user com userId, companyId, role, isSuperAdmin.
 
   // Endpoint temporário para migração display_number
   app.post(
@@ -760,7 +751,7 @@ export function registerRoutesAPI(app: Express) {
     }
   });
 
-  // ==== POST /api/routes ====
+  // ==== POST /api/routes/optimize ====
   app.post(
     "/api/routes/optimize",
     authenticateToken,
@@ -769,6 +760,11 @@ export function registerRoutesAPI(app: Express) {
       console.log("Body recebido:", JSON.stringify(req.body, null, 2));
 
       try {
+        // 🔒 Guard: companyId obrigatório (garante isolamento multi-empresa)
+        if (!req.user?.companyId) {
+          console.log("❌ [OPTIMIZE] req.user.companyId ausente — bloqueando acesso");
+          return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+        }
         const validation = optimizeRouteSchema.safeParse(req.body);
         if (!validation.success) {
           console.log("❌ ERRO: Validação falhou");
@@ -1559,6 +1555,12 @@ export function registerRoutesAPI(app: Express) {
     console.log("Query params:", JSON.stringify(req.query, null, 2));
 
     try {
+      // 🔒 Guard: companyId obrigatório (garante isolamento multi-empresa)
+      if (!req.user?.companyId) {
+        console.log("❌ [GET /api/routes] req.user.companyId ausente — bloqueando acesso");
+        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+      }
+
       const {
         from,
         to,
@@ -1576,12 +1578,9 @@ export function registerRoutesAPI(app: Express) {
 
       const conditions = [];
 
-      // 🔒 Filtro de userId para isolamento entre empresas
-      // Aceita rotas do usuário OU rotas sem userId (legado/compatibilidade)
-      conditions.push(or(
-        eq(routesTbl.userId, req.user.userId),
-        sql`${routesTbl.userId} IS NULL`
-      ));
+      // 🔒 Filtro estrito por userId — sem fallback para user_id IS NULL
+      // Rotas legadas sem userId NÃO são expostas (evita vazamento entre empresas)
+      conditions.push(eq(routesTbl.userId, req.user.userId));
 
       if (from) {
         conditions.push(gte(routesTbl.date, new Date(from as string)));
@@ -1696,24 +1695,26 @@ export function registerRoutesAPI(app: Express) {
       console.log("Route ID:", req.params.id);
 
       try {
+        // 🔒 Guard: companyId obrigatório
+        if (!req.user?.companyId) {
+          return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+        }
+
         const routeId = req.params.id;
 
-        // Buscar rota
+        // Buscar rota garantindo ownership por userId
         const [route] = await db
           .select()
           .from(routesTbl)
-          .where(eq(routesTbl.id, routeId));
+          .where(and(
+            eq(routesTbl.id, routeId),
+            eq(routesTbl.userId, req.user.userId)
+          ));
 
         if (!route) {
-          console.log("❌ ERRO: Rota não encontrada");
+          console.log("❌ ERRO: Rota não encontrada ou sem permissão");
           console.log("==== LOG FIM: /api/routes/:id (NÃO ENCONTRADA) ====");
           return res.status(404).json({ error: "Rota não encontrada" });
-        }
-
-        // 🔒 Verificar se a rota pertence ao usuário (se tiver userId preenchido)
-        if (route.userId && route.userId !== req.user.userId) {
-          console.log("❌ ERRO: Rota não pertence ao usuário");
-          return res.status(403).json({ error: "Sem permissão para acessar esta rota" });
         }
 
         // 1) Buscar paradas da rota
@@ -1831,9 +1832,14 @@ export function registerRoutesAPI(app: Express) {
     authenticateToken,
     async (req: any, res: Response) => {
       try {
+        // 🔒 Guard: companyId obrigatório
+        if (!req.user?.companyId) {
+          return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+        }
+
         const routeId = req.params.id;
 
-        // 1. Obter a rota para saber a data
+        // 1. Obter a rota para saber a data — verificando ownership
         const [route] = await db
           .select({
             id: routesTbl.id,
@@ -1843,7 +1849,10 @@ export function registerRoutesAPI(app: Express) {
             responsibleId: routesTbl.responsibleId,
           })
           .from(routesTbl)
-          .where(eq(routesTbl.id, routeId))
+          .where(and(
+            eq(routesTbl.id, routeId),
+            eq(routesTbl.userId, req.user.userId)
+          ))
           .limit(1);
 
         if (!route) {
@@ -1952,11 +1961,14 @@ export function registerRoutesAPI(app: Express) {
           return res.status(400).json({ message: "appointmentIds (array) é obrigatório" });
         }
 
-        // rota existe?
+        // rota existe e pertence ao usuário logado?
         const [route] = await db
           .select({ id: routesTbl.id })
           .from(routesTbl)
-          .where(eq(routesTbl.id, routeId))
+          .where(and(
+            eq(routesTbl.id, routeId),
+            eq(routesTbl.userId, req.user.userId)
+          ))
           .limit(1);
         if (!route) return res.status(404).json({ message: "Rota não encontrada" });
 
@@ -2481,11 +2493,14 @@ export function registerRoutesAPI(app: Express) {
           return res.status(400).json({ error: "Status inválido" });
         const { status } = parsed.data;
 
-        // Busca o status anterior para registrar na auditoria
+        // Busca o status anterior para registrar na auditoria — verifica ownership
         const [currentRoute] = await db
           .select()
           .from(routesTbl)
-          .where(eq(routesTbl.id, routeId));
+          .where(and(
+            eq(routesTbl.id, routeId),
+            eq(routesTbl.userId, req.user.userId)
+          ));
 
         if (!currentRoute)
           return res.status(404).json({ error: "Rota não encontrada" });
@@ -2703,7 +2718,10 @@ export function registerRoutesAPI(app: Express) {
         const [route] = await db
           .select()
           .from(routesTbl)
-          .where(eq(routesTbl.id, routeId));
+          .where(and(
+            eq(routesTbl.id, routeId),
+            eq(routesTbl.userId, userId)
+          ));
 
         if (!route) {
           return res.status(404).json({ error: "Rota não encontrada" });
@@ -2746,11 +2764,14 @@ export function registerRoutesAPI(app: Express) {
         const routeId = req.params.id;
         const userId = req.user.userId;
 
-        // Verifica se a rota existe
+        // Verifica se a rota existe e pertence ao usuário
         const [route] = await db
           .select()
           .from(routesTbl)
-          .where(eq(routesTbl.id, routeId));
+          .where(and(
+            eq(routesTbl.id, routeId),
+            eq(routesTbl.userId, userId)
+          ));
 
         if (!route) {
           return res.status(404).json({ error: "Rota não encontrada" });

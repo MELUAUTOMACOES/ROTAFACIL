@@ -960,7 +960,7 @@ export default function PrestadoresPage() {
 
             {/* Occurrence Modal */}
             <Dialog open={showOccurrenceModal} onOpenChange={setShowOccurrenceModal}>
-                <DialogContent className="sm:max-w-md">
+                <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <FileWarning className="w-5 h-5 text-orange-500" />
@@ -968,7 +968,7 @@ export default function PrestadoresPage() {
                         </DialogTitle>
                     </DialogHeader>
 
-                    <div className="space-y-4 py-4">
+                    <div className="space-y-4 py-4 overflow-y-auto flex-1">
                         <Label className="font-medium">Tipo de Ocorrência</Label>
                         <div className="grid grid-cols-2 gap-3">
                             <button

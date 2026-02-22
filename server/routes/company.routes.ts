@@ -222,6 +222,39 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
     }
   });
 
+  // ==================== DADOS DA EMPRESA (AUTENTICADO) ====================
+
+  // Retorna dados completos da empresa do usuário logado (incluindo endereço)
+  app.get("/api/company/info", authenticateToken, async (req: any, res) => {
+    try {
+      const companyId = req.user.companyId;
+      if (!companyId) {
+        return res.status(404).json({ message: "Usuário não vinculado a nenhuma empresa." });
+      }
+      const company = await storage.getCompanyById(companyId);
+      if (!company) {
+        return res.status(404).json({ message: "Empresa não encontrada." });
+      }
+      res.json({
+        id: company.id,
+        name: company.name,
+        cnpj: company.cnpj,
+        telefone: company.telefone,
+        email: company.email,
+        cep: company.cep,
+        logradouro: company.logradouro,
+        numero: company.numero,
+        cidade: company.cidade,
+        estado: company.estado,
+        segmento: company.segmento,
+        plan: company.plan,
+      });
+    } catch (error: any) {
+      console.error("❌ Erro ao buscar info da empresa:", error);
+      res.status(500).json({ message: error.message || "Erro ao buscar dados da empresa" });
+    }
+  });
+
   // ==================== GESTÃO DE USUÁRIOS DA EMPRESA ====================
 
   // Listar usuários e convites da empresa (apenas admin)
