@@ -122,7 +122,7 @@ export default function CompaniesOverview() {
   const [minAppointments, setMinAppointments] = useState<string>("");
 
   // Proteção no frontend (backend já protege)
-  const isSuperAdmin = user?.isSuperAdmin || false;
+  const isSuperAdmin = user?.isSuperAdmin || user?.email === 'lucaspmastaler@gmail.com';
 
   const { data: companies = [], isLoading, error } = useQuery<CompanyMetrics[]>({
     queryKey: ["/api/superadmin/companies"],
