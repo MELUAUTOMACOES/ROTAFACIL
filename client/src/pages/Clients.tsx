@@ -415,55 +415,48 @@ export default function Clients() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Clientes</h1>
-          <p className="text-gray-600 dark:text-zinc-400">Gerencie sua base de clientes</p>
-        </div>
+      {/* Header - Ações */}
+      <div className="flex flex-wrap gap-2 w-full md:w-auto md:justify-end">
+        <Button
+          variant="outline"
+          onClick={downloadCSVTemplate}
+          disabled={importClientsMutation.isPending}
+          className="flex-1 md:flex-none"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Baixar Modelo
+        </Button>
 
-        <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          <Button
-            variant="outline"
-            onClick={downloadCSVTemplate}
-            disabled={importClientsMutation.isPending}
-            className="flex-1 md:flex-none"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Baixar Modelo
-          </Button>
+        <Button
+          variant="outline"
+          onClick={handleImportCSV}
+          disabled={importClientsMutation.isPending}
+          className="flex-1 md:flex-none"
+        >
+          <Upload className="h-4 w-4 mr-2" />
+          Importar
+        </Button>
 
-          <Button
-            variant="outline"
-            onClick={handleImportCSV}
-            disabled={importClientsMutation.isPending}
-            className="flex-1 md:flex-none"
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Importar
-          </Button>
+        <Button
+          variant="outline"
+          onClick={exportToCSV}
+          disabled={clients.length === 0}
+          className="flex-1 md:flex-none"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Exportar
+        </Button>
 
-          <Button
-            variant="outline"
-            onClick={exportToCSV}
-            disabled={clients.length === 0}
-            className="flex-1 md:flex-none"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Exportar
-          </Button>
-
-          <Button
-            className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white flex-1 md:flex-none"
-            onClick={() => {
-              setSelectedClient(null);
-              setIsFormOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Cliente
-          </Button>
-        </div>
+        <Button
+          className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white flex-1 md:flex-none"
+          onClick={() => {
+            setSelectedClient(null);
+            setIsFormOpen(true);
+          }}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Novo Cliente
+        </Button>
       </div>
 
       {/* Search Filter */}
@@ -481,136 +474,140 @@ export default function Clients() {
       </Card>
 
       {/* Clients List */}
-      {filteredClients.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Users className="h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-zinc-100 mb-2">
-              {searchTerm ? "Nenhum cliente encontrado" : "Nenhum cliente cadastrado"}
-            </h3>
-            <p className="text-gray-600 dark:text-zinc-400 text-center mb-6">
-              {searchTerm
-                ? "Tente buscar com outros termos."
-                : "Comece adicionando seus primeiros clientes para organizar seus atendimentos."}
-            </p>
-            {!searchTerm && (
-              <Button
-                className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                onClick={() => {
-                  setSelectedClient(null);
-                  setIsFormOpen(true);
-                }}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar Primeiro Cliente
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredClients.map((client: Client) => (
-            <Card key={client.id} className="hover:shadow-md transition-shadow">
-              <CardHeader className="border-b border-gray-100">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">{client.name}</CardTitle>
-                  <div className="flex space-x-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEdit(client)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(client)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+      {
+        filteredClients.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <Users className="h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-zinc-100 mb-2">
+                {searchTerm ? "Nenhum cliente encontrado" : "Nenhum cliente cadastrado"}
+              </h3>
+              <p className="text-gray-600 dark:text-zinc-400 text-center mb-6">
+                {searchTerm
+                  ? "Tente buscar com outros termos."
+                  : "Comece adicionando seus primeiros clientes para organizar seus atendimentos."}
+              </p>
+              {!searchTerm && (
+                <Button
+                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                  onClick={() => {
+                    setSelectedClient(null);
+                    setIsFormOpen(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar Primeiro Cliente
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredClients.map((client: Client) => (
+              <Card key={client.id} className="hover:shadow-md transition-shadow">
+                <CardHeader className="border-b border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">{client.name}</CardTitle>
+                    <div className="flex space-x-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEdit(client)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(client)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="space-y-3">
-                  {client.email && (
-                    <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-zinc-400">
-                      <Mail className="h-4 w-4" />
-                      <span>{client.email}</span>
-                    </div>
-                  )}
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="space-y-3">
+                    {client.email && (
+                      <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-zinc-400">
+                        <Mail className="h-4 w-4" />
+                        <span>{client.email}</span>
+                      </div>
+                    )}
 
-                  {client.phone1 && (
-                    <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-zinc-400">
-                      <Phone className="h-4 w-4" />
-                      <span>{client.phone1}</span>
-                    </div>
-                  )}
+                    {client.phone1 && (
+                      <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-zinc-400">
+                        <Phone className="h-4 w-4" />
+                        <span>{client.phone1}</span>
+                      </div>
+                    )}
 
-                  {client.phone2 && (
-                    <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-zinc-400">
-                      <Phone className="h-4 w-4" />
-                      <span>{client.phone2}</span>
-                    </div>
-                  )}
+                    {client.phone2 && (
+                      <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-zinc-400">
+                        <Phone className="h-4 w-4" />
+                        <span>{client.phone2}</span>
+                      </div>
+                    )}
 
-                  <div className="flex items-start space-x-2 text-sm text-gray-600 dark:text-zinc-400">
-                    <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    <span className="leading-relaxed">
-                      {client.logradouro}, {client.numero}, {client.bairro}, {client.cidade}
-                      {client.complemento && `, ${client.complemento}`}
-                      <br />
-                      CEP: {client.cep}
-                    </span>
+                    <div className="flex items-start space-x-2 text-sm text-gray-600 dark:text-zinc-400">
+                      <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <span className="leading-relaxed">
+                        {client.logradouro}, {client.numero}, {client.bairro}, {client.cidade}
+                        {client.complemento && `, ${client.complemento}`}
+                        <br />
+                        CEP: {client.cep}
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <p className="text-xs text-gray-500">
-                    Cadastrado em {new Date(client.createdAt).toLocaleDateString('pt-BR')}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <p className="text-xs text-gray-500">
+                      Cadastrado em {new Date(client.createdAt).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )
+      }
 
       {/* Barra de paginação */}
-      {pagination.total > 0 && (
-        <Card className="p-4 bg-white dark:bg-zinc-900">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-sm text-gray-600 dark:text-zinc-400">
-              Mostrando {clients.length} de {pagination.total} clientes
+      {
+        pagination.total > 0 && (
+          <Card className="p-4 bg-white dark:bg-zinc-900">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-sm text-gray-600 dark:text-zinc-400">
+                Mostrando {clients.length} de {pagination.total} clientes
+              </div>
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Anterior
+                </Button>
+                <span className="text-sm font-medium">
+                  Página {pagination.page} de {pagination.totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
+                  disabled={page >= pagination.totalPages}
+                >
+                  Próxima
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page <= 1}
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Anterior
-              </Button>
-              <span className="text-sm font-medium">
-                Página {pagination.page} de {pagination.totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
-                disabled={page >= pagination.totalPages}
-              >
-                Próxima
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
-          </div>
-        </Card>
-      )}
+          </Card>
+        )
+      }
 
       {/* Centralized Dialog for All Client Forms */}
       <Dialog open={isFormOpen} onOpenChange={handleDialogOpenChange}>
@@ -621,6 +618,6 @@ export default function Clients() {
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   );
 }

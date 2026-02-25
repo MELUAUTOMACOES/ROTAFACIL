@@ -227,9 +227,8 @@ export default function Dashboard() {
   return (
     <TooltipProvider>
       <div id="dashboard-capture" className="space-y-6" ref={dashboardRef}>
-        {/* Header com Título e Compartilhar */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-zinc-100">Dashboard</h1>
+        {/* Ação: Compartilhar */}
+        <div className="flex justify-end">
           <Button variant="outline" onClick={handleShare} className="gap-2">
             <Share2 className="h-4 w-4" />
             Compartilhar

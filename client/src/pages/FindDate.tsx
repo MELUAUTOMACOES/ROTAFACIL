@@ -330,14 +330,6 @@ export default function FindDate() {
 
   return (
     <div className="container mx-auto p-6 space-y-8">
-      <div className="flex items-center space-x-2">
-        <Search className="h-8 w-8 text-burnt-yellow" />
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-zinc-100">Encontre uma data</h1>
-          <p className="text-gray-600">Encontre as melhores datas disponíveis para seu agendamento</p>
-        </div>
-      </div>
-
       <Card>
         <CardHeader className="cursor-pointer" onClick={() => setIsFiltersCollapsed(!isFiltersCollapsed)}>
           <div className="flex items-center justify-between">

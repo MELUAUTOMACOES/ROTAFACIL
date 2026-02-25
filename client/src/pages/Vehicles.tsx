@@ -186,28 +186,21 @@ export default function Vehicles() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Veículos</h1>
-          <p className="text-gray-600">Gerencie a frota de veículos da empresa</p>
-        </div>
-
-        <div className="flex space-x-2">
-          {activeTab === "veiculos" && (
-            <Button
-              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-              onClick={() => {
-                setSelectedVehicle(null);
-                setInitialFormTab("dados");
-                setIsFormOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Veículo
-            </Button>
-          )}
-        </div>
+      {/* Ações */}
+      <div className="flex justify-end space-x-2">
+        {activeTab === "veiculos" && (
+          <Button
+            className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+            onClick={() => {
+              setSelectedVehicle(null);
+              setInitialFormTab("dados");
+              setIsFormOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Veículo
+          </Button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -440,7 +433,7 @@ export default function Vehicles() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   );
 }
 

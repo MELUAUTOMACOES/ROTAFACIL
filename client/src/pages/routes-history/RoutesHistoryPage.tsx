@@ -1962,14 +1962,6 @@ export default function RoutesHistoryPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <History className="h-6 w-6 text-burnt-yellow" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Romaneios - Histórico de Rotas</h1>
-        </div>
-        <p className="text-gray-600">Visualize e gerencie os romaneios e o histórico de rotas otimizadas</p>
-      </div>
 
       {/* CTA Fixo - Criar Rota a partir de Agendamentos */}
       <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-zinc-800 dark:to-zinc-900 border-blue-200 dark:border-zinc-700">

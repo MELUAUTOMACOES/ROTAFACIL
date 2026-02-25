@@ -301,11 +301,6 @@ export default function Technicians() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Técnicos/Equipes</h1>
-        <p className="text-gray-600 dark:text-zinc-400">Gerencie sua equipe técnica e organize equipes especializadas</p>
-      </div>
 
       {/* Tabs para Técnicos e Equipes */}
       <Tabs defaultValue="technicians" className="space-y-6">

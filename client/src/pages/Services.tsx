@@ -127,13 +127,8 @@ export default function Services() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Serviços</h1>
-          <p className="text-gray-600 dark:text-zinc-400">Gerencie os tipos de serviços oferecidos</p>
-        </div>
-
+      {/* Ação */}
+      <div className="flex justify-end">
         <Button
           className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
           onClick={() => {

@@ -2390,50 +2390,42 @@ export default function Appointments() {
 
   return (
     <div className="space-y-6">
-      {/* Header - Mobile-First Responsive */}
-      <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-zinc-100">Agendamentos</h1>
-          <p className="text-gray-600 dark:text-zinc-400">Gerencie todos os seus agendamentos</p>
-        </div>
-
-        {/* Action Buttons - Stack on mobile */}
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-            <Button
-              variant="ghost"
-              onClick={downloadCSVTemplate}
-              className="text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-50 w-full sm:w-auto"
-            >
-              Baixar CSV Modelo
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={handleImportCSV}
-              className="border-blue-600 text-blue-600 hover:bg-blue-50 w-full sm:w-auto"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Importar CSV
-            </Button>
-          </div>
+      {/* Action Buttons - Stack on mobile */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end md:gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+          <Button
+            variant="ghost"
+            onClick={downloadCSVTemplate}
+            className="text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-50 w-full sm:w-auto"
+          >
+            Baixar CSV Modelo
+          </Button>
 
           <Button
-            className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white w-full md:w-auto"
-            onClick={() => {
-              console.log("🆕 [DEBUG] Novo Agendamento - Botão clicado");
-              console.log(
-                "🆕 [DEBUG] Novo Agendamento - Limpando selectedAppointment e prefilledData",
-              );
-              setSelectedAppointment(null);
-              setPrefilledData(null);
-              setIsFormOpen(true);
-            }}
+            variant="outline"
+            onClick={handleImportCSV}
+            className="border-blue-600 text-blue-600 hover:bg-blue-50 w-full sm:w-auto"
           >
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Agendamento
+            <Upload className="h-4 w-4 mr-2" />
+            Importar CSV
           </Button>
         </div>
+
+        <Button
+          className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white w-full md:w-auto"
+          onClick={() => {
+            console.log("🆕 [DEBUG] Novo Agendamento - Botão clicado");
+            console.log(
+              "🆕 [DEBUG] Novo Agendamento - Limpando selectedAppointment e prefilledData",
+            );
+            setSelectedAppointment(null);
+            setPrefilledData(null);
+            setIsFormOpen(true);
+          }}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Novo Agendamento
+        </Button>
       </div>
 
       {/* Onboarding Block - Show only when no appointments exist */}
@@ -2447,7 +2439,8 @@ export default function Appointments() {
             clients: clients.length,
           }}
         />
-      )}
+      )
+      }
 
       {/* New Compact Filter Bar */}
       <div className="bg-white dark:bg-zinc-900 border-b dark:border-zinc-800 sticky top-0 z-10 px-6 py-3 shadow-sm space-y-3">
@@ -2582,421 +2575,423 @@ export default function Appointments() {
       </div>
 
       {/* Content Area - List or Calendar View */}
-      {viewMode === "list" ? (
-        /* List View */
-        filteredAppointments.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Calendar className="h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {appointments.length === 0
-                  ? "Nenhum agendamento encontrado"
-                  : "Nenhum agendamento encontrado com os filtros aplicados"}
-              </h3>
-              <p className="text-gray-600 text-center mb-6">
-                {appointments.length === 0
-                  ? "Comece criando seu primeiro agendamento para organizar seus atendimentos técnicos."
-                  : "Tente ajustar os filtros ou limpar todos os filtros para ver mais agendamentos."}
-              </p>
-              <Button
-                className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                onClick={() => {
-                  setPrefilledData(null);
-                  setSelectedAppointment(null);
-                  setIsFormOpen(true);
-                }}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Criar Primeiro Agendamento
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-4">
-            {/* Selection Header */}
-            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 rounded-lg border dark:border-zinc-800">
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="select-all"
-                    checked={isAllSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = isPartiallySelected;
-                    }}
-                    onChange={(e) => handleSelectAll(e.target.checked)}
-                    className="w-4 h-4 text-burnt-yellow bg-gray-100 dark:bg-zinc-800 border-gray-300 dark:border-zinc-600 rounded focus:ring-burnt-yellow focus:ring-2"
-                  />
-                  <label
-                    htmlFor="select-all"
-                    className="text-sm font-medium text-gray-700 dark:text-zinc-300"
-                  >
-                    Selecionar Todos
-                  </label>
+      {
+        viewMode === "list" ? (
+          /* List View */
+          filteredAppointments.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Calendar className="h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {appointments.length === 0
+                    ? "Nenhum agendamento encontrado"
+                    : "Nenhum agendamento encontrado com os filtros aplicados"}
+                </h3>
+                <p className="text-gray-600 text-center mb-6">
+                  {appointments.length === 0
+                    ? "Comece criando seu primeiro agendamento para organizar seus atendimentos técnicos."
+                    : "Tente ajustar os filtros ou limpar todos os filtros para ver mais agendamentos."}
+                </p>
+                <Button
+                  className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                  onClick={() => {
+                    setPrefilledData(null);
+                    setSelectedAppointment(null);
+                    setIsFormOpen(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Criar Primeiro Agendamento
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {/* Selection Header */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-900 rounded-lg border dark:border-zinc-800">
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="select-all"
+                      checked={isAllSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = isPartiallySelected;
+                      }}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="w-4 h-4 text-burnt-yellow bg-gray-100 dark:bg-zinc-800 border-gray-300 dark:border-zinc-600 rounded focus:ring-burnt-yellow focus:ring-2"
+                    />
+                    <label
+                      htmlFor="select-all"
+                      className="text-sm font-medium text-gray-700 dark:text-zinc-300"
+                    >
+                      Selecionar Todos
+                    </label>
+                  </div>
+                  {selectedAppointmentIds.length > 0 && (
+                    <span className="text-sm text-gray-600 dark:text-zinc-400">
+                      {selectedAppointmentIds.length} de{" "}
+                      {filteredAppointments.length} selecionados
+                    </span>
+                  )}
                 </div>
-                {selectedAppointmentIds.length > 0 && (
-                  <span className="text-sm text-gray-600 dark:text-zinc-400">
-                    {selectedAppointmentIds.length} de{" "}
-                    {filteredAppointments.length} selecionados
-                  </span>
-                )}
+
               </div>
 
-            </div>
-
-            {/* Appointments List - Agrupado por Data */}
-            <div className="space-y-6">
-              {paginatedGroupedAppointments.map((group) => (
-                <div key={group.date} className="space-y-4">
-                  {/* Linha de separação com a data */}
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1 border-t border-gray-300 dark:border-zinc-700"></div>
-                    <div className="px-4 py-2 bg-burnt-yellow text-white font-semibold rounded-lg shadow-sm">
-                      {group.date}
+              {/* Appointments List - Agrupado por Data */}
+              <div className="space-y-6">
+                {paginatedGroupedAppointments.map((group) => (
+                  <div key={group.date} className="space-y-4">
+                    {/* Linha de separação com a data */}
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1 border-t border-gray-300 dark:border-zinc-700"></div>
+                      <div className="px-4 py-2 bg-burnt-yellow text-white font-semibold rounded-lg shadow-sm">
+                        {group.date}
+                      </div>
+                      <div className="flex-1 border-t border-gray-300 dark:border-zinc-700"></div>
                     </div>
-                    <div className="flex-1 border-t border-gray-300 dark:border-zinc-700"></div>
-                  </div>
 
-                  {/* Agendamentos do dia */}
-                  <div className="grid gap-4">
-                    {group.appointments.map((appointment: Appointment) => {
-                      const client = getClient(appointment.clientId);
-                      const service = getService(appointment.serviceId);
-                      const responsible = getResponsibleInfo(appointment);
-                      const { date, time } = formatDateTime(appointment.scheduledDate.toString());
-                      const isSelected = selectedAppointmentIds.includes(appointment.id);
+                    {/* Agendamentos do dia */}
+                    <div className="grid gap-4">
+                      {group.appointments.map((appointment: Appointment) => {
+                        const client = getClient(appointment.clientId);
+                        const service = getService(appointment.serviceId);
+                        const responsible = getResponsibleInfo(appointment);
+                        const { date, time } = formatDateTime(appointment.scheduledDate.toString());
+                        const isSelected = selectedAppointmentIds.includes(appointment.id);
 
-                      // helper para alternar seleção
-                      const toggleSelection = () =>
-                        handleAppointmentSelection(appointment.id, !isSelected);
+                        // helper para alternar seleção
+                        const toggleSelection = () =>
+                          handleAppointmentSelection(appointment.id, !isSelected);
 
-                      // evita que cliques em elementos internos (checkbox/botões) propaguem
-                      const stop = (e: React.MouseEvent | React.KeyboardEvent) => e.stopPropagation();
+                        // evita que cliques em elementos internos (checkbox/botões) propaguem
+                        const stop = (e: React.MouseEvent | React.KeyboardEvent) => e.stopPropagation();
 
-                      return (
-                        <Card
-                          key={appointment.id}
-                          onClick={(appointment as any).routeInfo ? undefined : toggleSelection}
-                          onKeyDown={(e) => {
-                            if (!(appointment as any).routeInfo && (e.key === "Enter" || e.key === " ")) {
-                              stop(e);
-                              toggleSelection();
-                            }
-                          }}
-                          role="checkbox"
-                          aria-checked={isSelected}
-                          tabIndex={(appointment as any).routeInfo ? -1 : 0}
-                          className={`select-none transition-shadow ${(appointment as any).routeInfo
-                            ? "opacity-75 cursor-not-allowed"
-                            : "cursor-pointer hover:shadow-md"
-                            } ${isSelected ? "ring-2 ring-burnt-yellow" : ""
-                            }`}
-                        >
-                          <CardContent className="p-6">
-                            <div className="flex flex-col md:flex-row items-start justify-between gap-4 md:gap-0">
-                              <div className="flex items-start space-x-3 w-full md:flex-1">
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  disabled={(appointment as any).routeInfo !== null && (appointment as any).routeInfo !== undefined}
-                                  onClick={stop}
-                                  onChange={(e) =>
-                                    handleAppointmentSelection(appointment.id, e.target.checked)
-                                  }
-                                  className="w-4 h-4 text-burnt-yellow bg-gray-100 dark:bg-zinc-800 border-gray-300 dark:border-zinc-600 rounded focus:ring-burnt-yellow focus:ring-2 mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex flex-wrap items-center gap-2 mb-3">
-                                    <h3 className="text-lg font-semibold text-gray-900 dark:text-zinc-100">
-                                      {client?.name || "Cliente não encontrado"}
-                                      <span className="ml-2 text-sm font-normal text-gray-500 dark:text-zinc-500">#{appointment.id}</span>
-                                    </h3>
+                        return (
+                          <Card
+                            key={appointment.id}
+                            onClick={(appointment as any).routeInfo ? undefined : toggleSelection}
+                            onKeyDown={(e) => {
+                              if (!(appointment as any).routeInfo && (e.key === "Enter" || e.key === " ")) {
+                                stop(e);
+                                toggleSelection();
+                              }
+                            }}
+                            role="checkbox"
+                            aria-checked={isSelected}
+                            tabIndex={(appointment as any).routeInfo ? -1 : 0}
+                            className={`select-none transition-shadow ${(appointment as any).routeInfo
+                              ? "opacity-75 cursor-not-allowed"
+                              : "cursor-pointer hover:shadow-md"
+                              } ${isSelected ? "ring-2 ring-burnt-yellow" : ""
+                              }`}
+                          >
+                            <CardContent className="p-6">
+                              <div className="flex flex-col md:flex-row items-start justify-between gap-4 md:gap-0">
+                                <div className="flex items-start space-x-3 w-full md:flex-1">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    disabled={(appointment as any).routeInfo !== null && (appointment as any).routeInfo !== undefined}
+                                    onClick={stop}
+                                    onChange={(e) =>
+                                      handleAppointmentSelection(appointment.id, e.target.checked)
+                                    }
+                                    className="w-4 h-4 text-burnt-yellow bg-gray-100 dark:bg-zinc-800 border-gray-300 dark:border-zinc-600 rounded focus:ring-burnt-yellow focus:ring-2 mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                                      <h3 className="text-lg font-semibold text-gray-900 dark:text-zinc-100">
+                                        {client?.name || "Cliente não encontrado"}
+                                        <span className="ml-2 text-sm font-normal text-gray-500 dark:text-zinc-500">#{appointment.id}</span>
+                                      </h3>
 
-                                    {/* Dropdown de Status - só editável para scheduled/rescheduled */}
-                                    {(appointment.status === 'scheduled' || appointment.status === 'rescheduled') ? (
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <button
-                                            onClick={stop}
-                                            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium transition-colors hover:opacity-80 ${getStatusColor(appointment.status)}`}
-                                          >
-                                            {getStatusText(appointment.status)}
-                                            <ChevronDown className="h-3 w-3" />
-                                          </button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent onClick={stop}>
-                                          <DropdownMenuItem
-                                            onClick={() =>
-                                              updateStatusMutation.mutate({
-                                                id: appointment.id,
-                                                status: "scheduled",
-                                              })
-                                            }
-                                          >
-                                            Agendado
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem
-                                            onClick={() =>
-                                              updateStatusMutation.mutate({
-                                                id: appointment.id,
-                                                status: "in_progress",
-                                              })
-                                            }
-                                          >
-                                            Em Andamento
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem
-                                            onClick={() =>
-                                              updateStatusMutation.mutate({
-                                                id: appointment.id,
-                                                status: "completed",
-                                              })
-                                            }
-                                          >
-                                            Concluído
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem
-                                            onClick={() =>
-                                              updateStatusMutation.mutate({
-                                                id: appointment.id,
-                                                status: "cancelled",
-                                              })
-                                            }
-                                          >
-                                            Cancelado
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem
-                                            onClick={() =>
-                                              updateStatusMutation.mutate({
-                                                id: appointment.id,
-                                                status: "rescheduled",
-                                              })
-                                            }
-                                          >
-                                            Remarcado
-                                          </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
-                                    ) : (
-                                      // Badge estático para status não editáveis (confirmed, in_progress, completed, cancelled)
-                                      <span
-                                        className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(appointment.status)}`}
-                                        title="Status não pode ser alterado manualmente"
-                                      >
-                                        {getStatusText(appointment.status)}
-                                      </span>
-                                    )}
-
-                                    <Badge className={getPriorityColor(appointment.priority)}>
-                                      {getPriorityText(appointment.priority)}
-                                    </Badge>
-
-
-                                    {/* Badge de Romaneio Confirmado/Finalizado */}
-                                    {(appointment as any).routeInfo && (
-                                      <Link href={`/routes-history/${(appointment as any).routeInfo.displayNumber}`}>
-                                        <Badge className="bg-orange-100 text-orange-800 border border-orange-300 hover:bg-orange-200 cursor-pointer">
-                                          🚚 Romaneio {(appointment as any).routeInfo.status === 'confirmado' ? 'Confirmado' : 'Finalizado'} #{(appointment as any).routeInfo.displayNumber}
-                                        </Badge>
-                                      </Link>
-                                    )}
-                                  </div>
-
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 dark:text-zinc-400">
-                                    <div className="flex items-center space-x-2">
-                                      <Calendar className="h-4 w-4" />
-                                      {appointment.allDay ? (
-                                        <span className="font-semibold text-red-700">
-                                          📅 {date} - DIA INTEIRO
-                                        </span>
+                                      {/* Dropdown de Status - só editável para scheduled/rescheduled */}
+                                      {(appointment.status === 'scheduled' || appointment.status === 'rescheduled') ? (
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <button
+                                              onClick={stop}
+                                              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium transition-colors hover:opacity-80 ${getStatusColor(appointment.status)}`}
+                                            >
+                                              {getStatusText(appointment.status)}
+                                              <ChevronDown className="h-3 w-3" />
+                                            </button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent onClick={stop}>
+                                            <DropdownMenuItem
+                                              onClick={() =>
+                                                updateStatusMutation.mutate({
+                                                  id: appointment.id,
+                                                  status: "scheduled",
+                                                })
+                                              }
+                                            >
+                                              Agendado
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                              onClick={() =>
+                                                updateStatusMutation.mutate({
+                                                  id: appointment.id,
+                                                  status: "in_progress",
+                                                })
+                                              }
+                                            >
+                                              Em Andamento
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                              onClick={() =>
+                                                updateStatusMutation.mutate({
+                                                  id: appointment.id,
+                                                  status: "completed",
+                                                })
+                                              }
+                                            >
+                                              Concluído
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                              onClick={() =>
+                                                updateStatusMutation.mutate({
+                                                  id: appointment.id,
+                                                  status: "cancelled",
+                                                })
+                                              }
+                                            >
+                                              Cancelado
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                              onClick={() =>
+                                                updateStatusMutation.mutate({
+                                                  id: appointment.id,
+                                                  status: "rescheduled",
+                                                })
+                                              }
+                                            >
+                                              Remarcado
+                                            </DropdownMenuItem>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
                                       ) : (
-                                        <span>
-                                          {date} às {time}
+                                        // Badge estático para status não editáveis (confirmed, in_progress, completed, cancelled)
+                                        <span
+                                          className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(appointment.status)}`}
+                                          title="Status não pode ser alterado manualmente"
+                                        >
+                                          {getStatusText(appointment.status)}
                                         </span>
+                                      )}
+
+                                      <Badge className={getPriorityColor(appointment.priority)}>
+                                        {getPriorityText(appointment.priority)}
+                                      </Badge>
+
+
+                                      {/* Badge de Romaneio Confirmado/Finalizado */}
+                                      {(appointment as any).routeInfo && (
+                                        <Link href={`/routes-history/${(appointment as any).routeInfo.displayNumber}`}>
+                                          <Badge className="bg-orange-100 text-orange-800 border border-orange-300 hover:bg-orange-200 cursor-pointer">
+                                            🚚 Romaneio {(appointment as any).routeInfo.status === 'confirmado' ? 'Confirmado' : 'Finalizado'} #{(appointment as any).routeInfo.displayNumber}
+                                          </Badge>
+                                        </Link>
                                       )}
                                     </div>
 
-                                    <div className="flex items-center space-x-2">
-                                      <User className="h-4 w-4" />
-                                      <span>{responsible.displayName}</span>
-                                    </div>
-
-                                    <div className="flex items-center space-x-2">
-                                      <MapPin className="h-4 w-4" />
-                                      <span>
-                                        {client ? (
-                                          <>
-                                            {client.logradouro || "Logradouro não informado"}
-                                            {client.numero ? `, ${client.numero}` : ""}
-                                            {client.bairro ? `, ${client.bairro}` : ""}
-                                            {client.cidade ? `, ${client.cidade}` : ""}
-                                            {client.cep ? ` - ${client.cep}` : ""}
-                                            {client.complemento
-                                              ? `, ${client.complemento.toUpperCase()}`
-                                              : ""}
-                                          </>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 dark:text-zinc-400">
+                                      <div className="flex items-center space-x-2">
+                                        <Calendar className="h-4 w-4" />
+                                        {appointment.allDay ? (
+                                          <span className="font-semibold text-red-700">
+                                            📅 {date} - DIA INTEIRO
+                                          </span>
                                         ) : (
-                                          <span style={{ color: "red" }}>
-                                            Cliente não encontrado
+                                          <span>
+                                            {date} às {time}
                                           </span>
                                         )}
-                                      </span>
+                                      </div>
+
+                                      <div className="flex items-center space-x-2">
+                                        <User className="h-4 w-4" />
+                                        <span>{responsible.displayName}</span>
+                                      </div>
+
+                                      <div className="flex items-center space-x-2">
+                                        <MapPin className="h-4 w-4" />
+                                        <span>
+                                          {client ? (
+                                            <>
+                                              {client.logradouro || "Logradouro não informado"}
+                                              {client.numero ? `, ${client.numero}` : ""}
+                                              {client.bairro ? `, ${client.bairro}` : ""}
+                                              {client.cidade ? `, ${client.cidade}` : ""}
+                                              {client.cep ? ` - ${client.cep}` : ""}
+                                              {client.complemento
+                                                ? `, ${client.complemento.toUpperCase()}`
+                                                : ""}
+                                            </>
+                                          ) : (
+                                            <span style={{ color: "red" }}>
+                                              Cliente não encontrado
+                                            </span>
+                                          )}
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-center space-x-2">
+                                        <Clock className="h-4 w-4" />
+                                        <span>
+                                          {service?.duration ? `${service.duration} min` : "Tempo não informado"}
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-center space-x-2">
+                                        <Wrench className="h-4 w-4" />
+                                        <span>{service?.name || "Serviço não encontrado"}</span>
+                                      </div>
                                     </div>
 
-                                    <div className="flex items-center space-x-2">
-                                      <Clock className="h-4 w-4" />
-                                      <span>
-                                        {service?.duration ? `${service.duration} min` : "Tempo não informado"}
-                                      </span>
-                                    </div>
-
-                                    <div className="flex items-center space-x-2">
-                                      <Wrench className="h-4 w-4" />
-                                      <span>{service?.name || "Serviço não encontrado"}</span>
-                                    </div>
+                                    {appointment.notes && (
+                                      <div className="mt-3 p-3 bg-gray-50 dark:bg-zinc-800 rounded-lg">
+                                        <p className="text-sm text-gray-700 dark:text-zinc-300">{appointment.notes}</p>
+                                      </div>
+                                    )}
                                   </div>
+                                </div>
 
-                                  {appointment.notes && (
-                                    <div className="mt-3 p-3 bg-gray-50 dark:bg-zinc-800 rounded-lg">
-                                      <p className="text-sm text-gray-700 dark:text-zinc-300">{appointment.notes}</p>
-                                    </div>
+                                <div className="flex space-x-2 w-full md:w-auto justify-end md:ml-4">
+                                  {/* Botão WhatsApp */}
+                                  {client?.phone1 && generateWhatsAppLinkForAppointment(client.phone1, appointment, client, service) && (
+                                    <a
+                                      href={generateWhatsAppLinkForAppointment(client.phone1, appointment, client, service)!}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={stop}
+                                      className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-green-500 bg-green-500 hover:bg-green-600 text-white h-9 w-9"
+                                      title={`WhatsApp: ${client.phone1}`}
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                                      </svg>
+                                    </a>
                                   )}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      stop(e);
+                                      handleViewHistory(appointment.id);
+                                    }}
+                                    title="Ver histórico de alterações"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      stop(e);
+                                      handleEdit(appointment);
+                                    }}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      stop(e);
+                                      handleDelete(appointment);
+                                    }}
+                                    className="text-red-600 hover:text-red-700 hover:border-red-300"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
                                 </div>
                               </div>
-
-                              <div className="flex space-x-2 w-full md:w-auto justify-end md:ml-4">
-                                {/* Botão WhatsApp */}
-                                {client?.phone1 && generateWhatsAppLinkForAppointment(client.phone1, appointment, client, service) && (
-                                  <a
-                                    href={generateWhatsAppLinkForAppointment(client.phone1, appointment, client, service)!}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={stop}
-                                    className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-green-500 bg-green-500 hover:bg-green-600 text-white h-9 w-9"
-                                    title={`WhatsApp: ${client.phone1}`}
-                                  >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-                                    </svg>
-                                  </a>
-                                )}
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    stop(e);
-                                    handleViewHistory(appointment.id);
-                                  }}
-                                  title="Ver histórico de alterações"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    stop(e);
-                                    handleEdit(appointment);
-                                  }}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    stop(e);
-                                    handleDelete(appointment);
-                                  }}
-                                  className="text-red-600 hover:text-red-700 hover:border-red-300"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
                   </div>
+                ))}
+              </div>
+
+              {/* Paginação CLIENT-SIDE (página atual de resultados) */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-4 mt-8 pb-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                  >
+                    ← Anterior
+                  </Button>
+
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Página {currentPage} de {totalPages} ({filteredAppointments.length} agendamentos)
+                  </span>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Próxima →
+                  </Button>
                 </div>
-              ))}
+              )}
+
+              {/* Paginação SERVER-SIDE (carregar mais do banco) */}
+              {serverPagination.totalPages > 1 && (
+                <div className="flex items-center justify-center gap-4 py-4 border-t border-gray-200 dark:border-gray-700">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setServerPage((prev) => Math.max(prev - 1, 1))}
+                    disabled={serverPage <= 1 || isLoading}
+                  >
+                    ⏪ Página anterior (servidor)
+                  </Button>
+
+                  <span className="text-xs text-muted-foreground">
+                    Bloco {serverPage}/{serverPagination.totalPages} • {serverPagination.total} total no banco
+                  </span>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setServerPage((prev) => Math.min(prev + 1, serverPagination.totalPages))}
+                    disabled={serverPage >= serverPagination.totalPages || isLoading}
+                  >
+                    Próxima página (servidor) ⏩
+                  </Button>
+                </div>
+              )}
             </div>
-
-            {/* Paginação CLIENT-SIDE (página atual de resultados) */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-4 mt-8 pb-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                >
-                  ← Anterior
-                </Button>
-
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Página {currentPage} de {totalPages} ({filteredAppointments.length} agendamentos)
-                </span>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
-                >
-                  Próxima →
-                </Button>
-              </div>
-            )}
-
-            {/* Paginação SERVER-SIDE (carregar mais do banco) */}
-            {serverPagination.totalPages > 1 && (
-              <div className="flex items-center justify-center gap-4 py-4 border-t border-gray-200 dark:border-gray-700">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setServerPage((prev) => Math.max(prev - 1, 1))}
-                  disabled={serverPage <= 1 || isLoading}
-                >
-                  ⏪ Página anterior (servidor)
-                </Button>
-
-                <span className="text-xs text-muted-foreground">
-                  Bloco {serverPage}/{serverPagination.totalPages} • {serverPagination.total} total no banco
-                </span>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setServerPage((prev) => Math.min(prev + 1, serverPagination.totalPages))}
-                  disabled={serverPage >= serverPagination.totalPages || isLoading}
-                >
-                  Próxima página (servidor) ⏩
-                </Button>
-              </div>
-            )}
-          </div>
+          )
+        ) : (
+          /* Calendar View (Antigo Availability) */
+          <Card>
+            <CardContent className="p-6">
+              <AvailabilityCalendar
+                appointments={calendarFilteredAppointments}
+                services={services}
+                technicians={calendarResources.technicians}
+                teams={calendarResources.teams}
+                teamMembers={teamMembers}
+                businessRules={businessRules}
+                currentDate={availabilityDate}
+                onDateChange={setAvailabilityDate}
+                dateRestrictions={dateRestrictions}
+                onEditAppointment={handleEdit}
+              />
+            </CardContent>
+          </Card>
         )
-      ) : (
-        /* Calendar View (Antigo Availability) */
-        <Card>
-          <CardContent className="p-6">
-            <AvailabilityCalendar
-              appointments={calendarFilteredAppointments}
-              services={services}
-              technicians={calendarResources.technicians}
-              teams={calendarResources.teams}
-              teamMembers={teamMembers}
-              businessRules={businessRules}
-              currentDate={availabilityDate}
-              onDateChange={setAvailabilityDate}
-              dateRestrictions={dateRestrictions}
-              onEditAppointment={handleEdit}
-            />
-          </CardContent>
-        </Card>
-      )}
+      }
 
       {/* Centralized Dialog for All Appointment Forms */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
@@ -3191,264 +3186,268 @@ export default function Appointments() {
       </Dialog>
 
       {/* Route Optimization Drawer */}
-      {isRouteDrawerOpen && (
-        <div className="fixed inset-0 z-[9999]">
-          {/* Overlay cobre a viewport inteira */}
-          <div
-            className="fixed inset-0 bg-black/50"
-            onClick={() => setIsRouteDrawerOpen(false)}
-          />
+      {
+        isRouteDrawerOpen && (
+          <div className="fixed inset-0 z-[9999]">
+            {/* Overlay cobre a viewport inteira */}
+            <div
+              className="fixed inset-0 bg-black/50"
+              onClick={() => setIsRouteDrawerOpen(false)}
+            />
 
-          {/* Painel à direita */}
-          <section
-            className="
+            {/* Painel à direita */}
+            <section
+              className="
               fixed right-0 top-0 h-full w-full bg-white shadow-xl
               max-w-[90vw] md:max-w-[60vw] lg:max-w-[40vw]
             "
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className="flex h-full flex-col">
-              {/* Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-zinc-100 flex items-center">
-                  <Navigation className="h-5 w-5 mr-2 text-burnt-yellow" />
-                  {optimizedRoute?.route?.id || savedInfo ? "Rota Otimizada" : "Visualização de Rota"}
-                </h2>
-                <button
-                  onClick={() => setIsRouteDrawerOpen(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className="flex h-full flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-zinc-100 flex items-center">
+                    <Navigation className="h-5 w-5 mr-2 text-burnt-yellow" />
+                    {optimizedRoute?.route?.id || savedInfo ? "Rota Otimizada" : "Visualização de Rota"}
+                  </h2>
+                  <button
+                    onClick={() => setIsRouteDrawerOpen(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
 
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto p-6">
-                {(isOptimizing || isViewing) && (
-                  <div className="p-4 text-sm text-gray-600 flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#DAA520] mr-3"></div>
-                    {isOptimizing ? "Otimizando rota, aguarde..." : "Carregando, aguarde..."}
-                  </div>
-                )}
-
-                {!isOptimizing && !isViewing && optimizedRoute && (
-                  <div className="space-y-6">
-                    {/* Mapa com altura garantida para evitar 0px */}
-                    <div className="relative w-full h-[420px] md:h-[480px] rounded-lg overflow-hidden border">
-                      <div className="absolute inset-0">
-                        <OptimizedRouteMap
-                          key={`${Boolean(polyline)}-${routeWaypoints?.length ?? 0}-${isRouteDrawerOpen ? 'open' : 'closed'}`}
-                          routeGeoJson={polyline ?? undefined}
-                          waypoints={routeWaypoints ?? undefined}
-                          startWaypoint={startWaypoint}
-                        />
-                      </div>
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-6">
+                  {(isOptimizing || isViewing) && (
+                    <div className="p-4 text-sm text-gray-600 flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#DAA520] mr-3"></div>
+                      {isOptimizing ? "Otimizando rota, aguarde..." : "Carregando, aguarde..."}
                     </div>
+                  )}
 
-                    {/* Summary */}
-                    <div className="bg-[#DAA520]/10 rounded-lg p-4">
-                      <h3 className="font-semibold text-gray-900 dark:text-zinc-100 mb-2">
-                        Resumo da Rota
-                      </h3>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span>Paradas:</span>
-                          <span className="font-medium">
-                            {optimizedRoute.route?.stopsCount ??
-                              optimizedRoute.stops?.length ??
-                              0}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Distância Total:</span>
-                          <span className="font-medium text-blue-600">
-                            {optimizedRoute.route?.distanceTotal
-                              ? `${(optimizedRoute.route.distanceTotal / 1000).toFixed(1)} km`
-                              : "N/A"}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Tempo Estimado:</span>
-                          <span className="font-medium text-green-600">
-                            {optimizedRoute.route?.durationTotal
-                              ? `${Math.round(optimizedRoute.route.durationTotal / 60)} min`
-                              : "N/A"}
-                          </span>
+                  {!isOptimizing && !isViewing && optimizedRoute && (
+                    <div className="space-y-6">
+                      {/* Mapa com altura garantida para evitar 0px */}
+                      <div className="relative w-full h-[420px] md:h-[480px] rounded-lg overflow-hidden border">
+                        <div className="absolute inset-0">
+                          <OptimizedRouteMap
+                            key={`${Boolean(polyline)}-${routeWaypoints?.length ?? 0}-${isRouteDrawerOpen ? 'open' : 'closed'}`}
+                            routeGeoJson={polyline ?? undefined}
+                            waypoints={routeWaypoints ?? undefined}
+                            startWaypoint={startWaypoint}
+                          />
                         </div>
                       </div>
-                    </div>
 
-                    {/* Ordem Otimizada */}
-                    <div>
-                      <h3 className="font-semibold text-gray-900 dark:text-zinc-100 mb-4">
-                        Ordem Otimizada
-                      </h3>
-
-                      {/* Início da rota (endereço da empresa) */}
-                      {optimizedRoute.start && (
-                        <div className="bg-gray-50 dark:bg-zinc-800 rounded-lg p-4 mb-3">
-                          <div className="flex items-start space-x-3">
-                            <div className="flex-shrink-0 w-6 h-6 bg-gray-400 text-white rounded-full flex items-center justify-center">
-                              <img src="/brand/rotafacil-pin.png" alt="Início" className="w-3.5 h-3.5" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-medium text-gray-900 dark:text-zinc-100 truncate">Início da rota</h4>
-                              <p className="text-sm text-gray-600 dark:text-zinc-400 truncate">{optimizedRoute.start.address}</p>
-                            </div>
+                      {/* Summary */}
+                      <div className="bg-[#DAA520]/10 rounded-lg p-4">
+                        <h3 className="font-semibold text-gray-900 dark:text-zinc-100 mb-2">
+                          Resumo da Rota
+                        </h3>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span>Paradas:</span>
+                            <span className="font-medium">
+                              {optimizedRoute.route?.stopsCount ??
+                                optimizedRoute.stops?.length ??
+                                0}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Distância Total:</span>
+                            <span className="font-medium text-blue-600">
+                              {optimizedRoute.route?.distanceTotal
+                                ? `${(optimizedRoute.route.distanceTotal / 1000).toFixed(1)} km`
+                                : "N/A"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Tempo Estimado:</span>
+                            <span className="font-medium text-green-600">
+                              {optimizedRoute.route?.durationTotal
+                                ? `${Math.round(optimizedRoute.route.durationTotal / 60)} min`
+                                : "N/A"}
+                            </span>
                           </div>
                         </div>
-                      )}
+                      </div>
 
-                      <div className="space-y-3">
-                        {optimizedRoute.stops?.map(
-                          (stop: any, index: number) => {
-                            const dt = stop.scheduledDate
-                              ? new Date(stop.scheduledDate)
-                              : null;
-                            const date = dt
-                              ? dt.toLocaleDateString("pt-BR")
-                              : null;
-                            const time = dt
-                              ? dt.toLocaleTimeString("pt-BR", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                              : null;
+                      {/* Ordem Otimizada */}
+                      <div>
+                        <h3 className="font-semibold text-gray-900 dark:text-zinc-100 mb-4">
+                          Ordem Otimizada
+                        </h3>
 
-                            return (
-                              <div
-                                key={`${stop.appointmentId}-${index}`}
-                                className="bg-gray-50 dark:bg-zinc-800 rounded-lg p-4"
-                              >
-                                <div className="flex items-start space-x-3">
-                                  <div className="flex-shrink-0 w-6 h-6 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-medium">
-                                    {index + 1}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <h4 className="font-medium text-gray-900 dark:text-zinc-100 truncate">
-                                      {stop.clientName || "Cliente"}
-                                    </h4>
-                                    {stop.serviceName && (
-                                      <p className="text-sm text-gray-600 dark:text-zinc-400 truncate">
-                                        {stop.serviceName}
-                                      </p>
-                                    )}
-                                    {dt && (
-                                      <p className="text-sm text-gray-500 dark:text-zinc-500">
-                                        {date} às {time}
-                                      </p>
-                                    )}
-                                    <p className="text-sm text-gray-500 dark:text-zinc-500 truncate">
-                                      {stop.address}
-                                    </p>
-                                  </div>
-                                  <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                                </div>
+                        {/* Início da rota (endereço da empresa) */}
+                        {optimizedRoute.start && (
+                          <div className="bg-gray-50 dark:bg-zinc-800 rounded-lg p-4 mb-3">
+                            <div className="flex items-start space-x-3">
+                              <div className="flex-shrink-0 w-6 h-6 bg-gray-400 text-white rounded-full flex items-center justify-center">
+                                <img src="/brand/rotafacil-pin.png" alt="Início" className="w-3.5 h-3.5" />
                               </div>
-                            );
-                          },
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-gray-900 dark:text-zinc-100 truncate">Início da rota</h4>
+                                <p className="text-sm text-gray-600 dark:text-zinc-400 truncate">{optimizedRoute.start.address}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="space-y-3">
+                          {optimizedRoute.stops?.map(
+                            (stop: any, index: number) => {
+                              const dt = stop.scheduledDate
+                                ? new Date(stop.scheduledDate)
+                                : null;
+                              const date = dt
+                                ? dt.toLocaleDateString("pt-BR")
+                                : null;
+                              const time = dt
+                                ? dt.toLocaleTimeString("pt-BR", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                                : null;
+
+                              return (
+                                <div
+                                  key={`${stop.appointmentId}-${index}`}
+                                  className="bg-gray-50 dark:bg-zinc-800 rounded-lg p-4"
+                                >
+                                  <div className="flex items-start space-x-3">
+                                    <div className="flex-shrink-0 w-6 h-6 bg-burnt-yellow text-white rounded-full flex items-center justify-center text-sm font-medium">
+                                      {index + 1}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <h4 className="font-medium text-gray-900 dark:text-zinc-100 truncate">
+                                        {stop.clientName || "Cliente"}
+                                      </h4>
+                                      {stop.serviceName && (
+                                        <p className="text-sm text-gray-600 dark:text-zinc-400 truncate">
+                                          {stop.serviceName}
+                                        </p>
+                                      )}
+                                      {dt && (
+                                        <p className="text-sm text-gray-500 dark:text-zinc-500">
+                                          {date} às {time}
+                                        </p>
+                                      )}
+                                      <p className="text-sm text-gray-500 dark:text-zinc-500 truncate">
+                                        {stop.address}
+                                      </p>
+                                    </div>
+                                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                  </div>
+                                </div>
+                              );
+                            },
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="space-y-3">
+                        {/* Botão de otimizar (aparece apenas se ainda não foi otimizado E há mais de 1 agendamento) */}
+                        {!optimizedRoute.route?.id && !savedInfo && !isRouteOptimized && selectedAppointmentIds.length > 1 && (
+                          <Button
+                            className="w-full bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+                            onClick={handleOptimizeRoute}
+                            disabled={isOptimizing}
+                          >
+                            {isOptimizing ? "Otimizando..." : "Otimizar Rota"}
+                          </Button>
+                        )}
+
+                        {/* Botão de salvar aparece sempre (tanto otimizado quanto não otimizado) */}
+                        {!optimizedRoute.route?.id && !savedInfo && (
+                          <Button
+                            className="w-full bg-green-600 hover:bg-green-700 text-white"
+                            onClick={handleSaveRoute}
+                            disabled={isOptimizing}
+                          >
+                            Salvar Rota {!isRouteOptimized && "(na ordem atual)"}
+                          </Button>
+                        )}
+
+                        {/* Botões padrão */}
+                        <Button
+                          className="w-full bg-black hover:bg-gray-800 text-white"
+                          onClick={() => openInGoogleMaps(routeWaypoints, endAtStart)}
+                          disabled={!routeWaypoints || routeWaypoints.length < 2}
+                        >
+                          Iniciar Navegação
+                        </Button>
+                        <Button variant="outline" className="w-full">
+                          Exportar Rota
+                        </Button>
+
+                        {/* Aviso de rota salva + botão Ver no Histórico */}
+                        {savedInfo && (
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            <div className="text-sm">
+                              <span className="font-medium">
+                                Rota salva com sucesso
+                              </span>
+                              <span className="ml-1">
+                                ID #{savedInfo.displayNumber}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className="px-3 py-2 rounded-xl bg-[#DAA520] text-black hover:bg-[#B8860B] transition"
+                              onClick={() =>
+                                window.open(
+                                  `/routes-history?open=${savedInfo.id}&id=${savedInfo.displayNumber}`,
+                                  "_blank",
+                                )
+                              }
+                            >
+                              Ver no Histórico
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
-
-                    {/* Action Buttons */}
-                    <div className="space-y-3">
-                      {/* Botão de otimizar (aparece apenas se ainda não foi otimizado E há mais de 1 agendamento) */}
-                      {!optimizedRoute.route?.id && !savedInfo && !isRouteOptimized && selectedAppointmentIds.length > 1 && (
-                        <Button
-                          className="w-full bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                          onClick={handleOptimizeRoute}
-                          disabled={isOptimizing}
-                        >
-                          {isOptimizing ? "Otimizando..." : "Otimizar Rota"}
-                        </Button>
-                      )}
-
-                      {/* Botão de salvar aparece sempre (tanto otimizado quanto não otimizado) */}
-                      {!optimizedRoute.route?.id && !savedInfo && (
-                        <Button
-                          className="w-full bg-green-600 hover:bg-green-700 text-white"
-                          onClick={handleSaveRoute}
-                          disabled={isOptimizing}
-                        >
-                          Salvar Rota {!isRouteOptimized && "(na ordem atual)"}
-                        </Button>
-                      )}
-
-                      {/* Botões padrão */}
-                      <Button
-                        className="w-full bg-black hover:bg-gray-800 text-white"
-                        onClick={() => openInGoogleMaps(routeWaypoints, endAtStart)}
-                        disabled={!routeWaypoints || routeWaypoints.length < 2}
-                      >
-                        Iniciar Navegação
-                      </Button>
-                      <Button variant="outline" className="w-full">
-                        Exportar Rota
-                      </Button>
-
-                      {/* Aviso de rota salva + botão Ver no Histórico */}
-                      {savedInfo && (
-                        <div className="mt-3 flex items-center justify-between gap-2">
-                          <div className="text-sm">
-                            <span className="font-medium">
-                              Rota salva com sucesso
-                            </span>
-                            <span className="ml-1">
-                              ID #{savedInfo.displayNumber}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            className="px-3 py-2 rounded-xl bg-[#DAA520] text-black hover:bg-[#B8860B] transition"
-                            onClick={() =>
-                              window.open(
-                                `/routes-history?open=${savedInfo.id}&id=${savedInfo.displayNumber}`,
-                                "_blank",
-                              )
-                            }
-                          >
-                            Ver no Histórico
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          </section>
-        </div>
-      )}
+            </section>
+          </div>
+        )
+      }
 
       {/* Botão flutuante para otimizar rotas */}
-      {selectedAppointmentIds.length > 0 && (
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
-          {/* Checkbox "Terminar no ponto inicial" - Mobile: ícone, Desktop: com texto */}
-          <label className="flex items-center gap-2 bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-[#B8860B] border border-[#DAA520] cursor-pointer hover:bg-gray-50">
-            <input
-              type="checkbox"
-              checked={endAtStart}
-              onChange={(e) => setEndAtStart(e.target.checked)}
-              className="h-4 w-4 rounded border-[#DAA520] text-[#DAA520] focus:ring-[#DAA520]"
-            />
-            <span className="hidden sm:inline">Terminar no início</span>
-            <span className="sm:hidden">↩️</span>
-          </label>
+      {
+        selectedAppointmentIds.length > 0 && (
+          <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+            {/* Checkbox "Terminar no ponto inicial" - Mobile: ícone, Desktop: com texto */}
+            <label className="flex items-center gap-2 bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-[#B8860B] border border-[#DAA520] cursor-pointer hover:bg-gray-50">
+              <input
+                type="checkbox"
+                checked={endAtStart}
+                onChange={(e) => setEndAtStart(e.target.checked)}
+                className="h-4 w-4 rounded border-[#DAA520] text-[#DAA520] focus:ring-[#DAA520]"
+              />
+              <span className="hidden sm:inline">Terminar no início</span>
+              <span className="sm:hidden">↩️</span>
+            </label>
 
-          {/* Botão principal de visualizar rota */}
-          <Button
-            onClick={handleViewRoute}
-            className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white shadow-lg hover:shadow-xl transition-all"
-            size="lg"
-          >
-            <Route className="h-5 w-5 sm:mr-2" />
-            <span className="hidden sm:inline">Visualizar Rota</span>
-            <span className="sm:hidden text-xs">({selectedAppointmentIds.length})</span>
-          </Button>
-        </div>
-      )}
+            {/* Botão principal de visualizar rota */}
+            <Button
+              onClick={handleViewRoute}
+              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white shadow-lg hover:shadow-xl transition-all"
+              size="lg"
+            >
+              <Route className="h-5 w-5 sm:mr-2" />
+              <span className="hidden sm:inline">Visualizar Rota</span>
+              <span className="sm:hidden text-xs">({selectedAppointmentIds.length})</span>
+            </Button>
+          </div>
+        )
+      }
 
       {/* Modal de confirmação de exclusão */}
       <DeleteConfirmationDialog
@@ -3466,6 +3465,6 @@ export default function Appointments() {
         appointmentId={historyAppointmentId || 0}
         history={appointmentHistory}
       />
-    </div>
+    </div >
   );
 }
