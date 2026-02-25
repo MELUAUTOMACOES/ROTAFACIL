@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent, ChangeEvent } from "react";
-import { useAuth } from "@/lib/auth";
+import { useAuth, type CompanySelectionData } from "@/lib/auth";
 import { useLocation, Link } from "wouter";
+import CompanySelector from "@/components/CompanySelector";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,13 +39,15 @@ interface PinData {
 }
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, selectCompany } = useAuth();
   const [, setLocation] = useLocation();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [pins, setPins] = useState<PinData[]>([]);
+  // 🏢 Estado para seleção de empresa (multi-tenant)
+  const [companySelectionData, setCompanySelectionData] = useState<CompanySelectionData | null>(null);
 
   const [formData, setFormData] = useState<LoginFormData>({
     username: "",
@@ -69,13 +72,38 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      await login(formData.username, formData.password);
+      const result = await login(formData.username, formData.password);
+      
+      // 🏢 Se precisa selecionar empresa, mostrar modal
+      if (result && result.requireCompanySelection) {
+        setCompanySelectionData(result);
+        return;
+      }
+
       setLocation("/dashboard");
     } catch (err: any) {
       setError(err.message || "Erro ao processar sua solicitação");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // 🏢 Callback quando usuário seleciona uma empresa no modal
+  const handleCompanySelect = async (companyId: number) => {
+    if (!companySelectionData) return;
+    try {
+      await selectCompany(companySelectionData.selectionToken, companyId);
+      setCompanySelectionData(null);
+      setLocation("/dashboard");
+    } catch (err: any) {
+      setError(err.message || "Erro ao selecionar empresa");
+      setCompanySelectionData(null);
+    }
+  };
+
+  const handleCompanyCancel = () => {
+    setCompanySelectionData(null);
+    setError(null);
   };
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -370,6 +398,17 @@ export default function Login() {
           </Card>
         </div>
       </div>
+
+      {/* 🏢 Modal de seleção de empresa (multi-tenant) */}
+      {companySelectionData && (
+        <CompanySelector
+          open={true}
+          companies={companySelectionData.companies}
+          userName={companySelectionData.userName}
+          onSelect={handleCompanySelect}
+          onCancel={handleCompanyCancel}
+        />
+      )}
 
       {/* CSS for animations */}
       <style>{`

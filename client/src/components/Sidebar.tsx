@@ -11,6 +11,14 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Calendar,
   Car,
   Users,
@@ -34,7 +42,10 @@ import {
   BarChart3,
   FileSearch,
   TrendingUp,
-  Building2
+  Building2,
+  ChevronsUpDown,
+  Check,
+  Loader2
 } from "lucide-react";
 import {
   Tooltip,
@@ -43,6 +54,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -67,8 +79,31 @@ type NavGroup = {
 
 export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCollapse }: SidebarProps) {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, switchCompany, userCompanies } = useAuth();
   const { pendingCount } = usePendingAppointments();
+  const { toast } = useToast();
+  const [isSwitching, setIsSwitching] = useState(false);
+
+  // 🏢 Company Switcher: trocar de empresa
+  const handleSwitchCompany = async (companyId: number) => {
+    if (user?.companyId === companyId) return; // Já está nesta empresa
+    setIsSwitching(true);
+    try {
+      await switchCompany(companyId);
+      toast({
+        title: "Empresa alterada",
+        description: "Dados recarregados para a nova empresa.",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Erro ao trocar empresa",
+        description: err.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSwitching(false);
+    }
+  };
 
   // State for open submenus
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
@@ -222,6 +257,65 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
             <X className="h-5 w-5" />
           </Button>
         </div>
+
+        {/* 🏢 Company Switcher - só aparece se usuário tem 2+ empresas */}
+        {userCompanies.length > 1 && !isCollapsed && (
+          <div className="px-3 pt-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-900 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-left">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <Building2 className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs text-gray-500 dark:text-zinc-500">Empresa</p>
+                      <p className="text-sm font-medium text-gray-900 dark:text-zinc-100 truncate">
+                        {user?.company?.name || 'Selecione'}
+                      </p>
+                    </div>
+                  </div>
+                  {isSwitching ? (
+                    <Loader2 className="h-4 w-4 text-amber-500 animate-spin flex-shrink-0" />
+                  ) : (
+                    <ChevronsUpDown className="h-4 w-4 text-gray-400 dark:text-zinc-500 flex-shrink-0" />
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuLabel>Trocar empresa</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {userCompanies.map((comp) => (
+                  <DropdownMenuItem
+                    key={comp.companyId}
+                    onClick={() => handleSwitchCompany(comp.companyId)}
+                    className="cursor-pointer"
+                  >
+                    <Building2 className="h-4 w-4 mr-2 text-amber-500" />
+                    <span className="flex-1 truncate">{comp.companyName}</span>
+                    {user?.companyId === comp.companyId && (
+                      <Check className="h-4 w-4 ml-2 text-amber-500" />
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+        {/* Company Switcher collapsed - tooltip */}
+        {userCompanies.length > 1 && isCollapsed && (
+          <div className="px-2 pt-3 flex justify-center">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => { if (toggleCollapse) toggleCollapse(); }}
+                  className="w-10 h-10 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-900 hover:bg-gray-100 dark:hover:bg-zinc-800 flex items-center justify-center transition-colors"
+                >
+                  <Building2 className="h-4 w-4 text-amber-500" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Trocar empresa</TooltipContent>
+            </Tooltip>
+          </div>
+        )}
 
         {/* Navigation - Scrollable Area */}
         <nav className="flex-1 overflow-y-auto mt-6 px-3 pb-4 custom-scrollbar">

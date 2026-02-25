@@ -41,7 +41,10 @@ export function registerSuperadminRoutes(
         // 1) Buscar todas as empresas
         const allCompanies = await db.select().from(companies);
 
-        // 2) Queries agregadas por company_id (uma query por métrica, agrupada)
+        // 2) Queries agregadas por company_id
+        // ⚠️ companyId é nullable em todas as tabelas — dados vinculados via userId.
+        // Estratégia: COALESCE(tabela.company_id, memberships.company_id) para resolver
+        // a empresa corretamente mesmo quando company_id está NULL na tabela.
         const [
           clientCounts,
           userCounts,
@@ -52,16 +55,17 @@ export function registerSuperadminRoutes(
           routeCounts,
           routeKmTotals,
         ] = await Promise.all([
-          // Clientes por empresa
+          // Clientes por empresa (via userId → memberships)
           db
             .select({
-              companyId: clients.companyId,
-              total: sql<number>`count(*)::int`,
+              companyId: sql<number>`coalesce(${clients.companyId}, ${memberships.companyId})`,
+              total: sql<number>`count(distinct ${clients.id})::int`,
             })
             .from(clients)
-            .groupBy(clients.companyId),
+            .leftJoin(memberships, eq(clients.userId, memberships.userId))
+            .groupBy(sql`coalesce(${clients.companyId}, ${memberships.companyId})`),
 
-          // Usuários por empresa (via memberships)
+          // Usuários por empresa (via memberships — já funciona corretamente)
           db
             .select({
               companyId: memberships.companyId,
@@ -71,43 +75,47 @@ export function registerSuperadminRoutes(
             .where(eq(memberships.isActive, true))
             .groupBy(memberships.companyId),
 
-          // Agendamentos por empresa
+          // Agendamentos por empresa (via userId → memberships)
           db
             .select({
-              companyId: appointments.companyId,
-              total: sql<number>`count(*)::int`,
+              companyId: sql<number>`coalesce(${appointments.companyId}, ${memberships.companyId})`,
+              total: sql<number>`count(distinct ${appointments.id})::int`,
             })
             .from(appointments)
-            .groupBy(appointments.companyId),
+            .leftJoin(memberships, eq(appointments.userId, memberships.userId))
+            .groupBy(sql`coalesce(${appointments.companyId}, ${memberships.companyId})`),
 
-          // Equipes por empresa
+          // Equipes por empresa (via userId → memberships)
           db
             .select({
-              companyId: teams.companyId,
-              total: sql<number>`count(*)::int`,
+              companyId: sql<number>`coalesce(${teams.companyId}, ${memberships.companyId})`,
+              total: sql<number>`count(distinct ${teams.id})::int`,
             })
             .from(teams)
-            .groupBy(teams.companyId),
+            .leftJoin(memberships, eq(teams.userId, memberships.userId))
+            .groupBy(sql`coalesce(${teams.companyId}, ${memberships.companyId})`),
 
-          // Técnicos por empresa
+          // Técnicos por empresa (via userId → memberships)
           db
             .select({
-              companyId: technicians.companyId,
-              total: sql<number>`count(*)::int`,
+              companyId: sql<number>`coalesce(${technicians.companyId}, ${memberships.companyId})`,
+              total: sql<number>`count(distinct ${technicians.id})::int`,
             })
             .from(technicians)
-            .groupBy(technicians.companyId),
+            .leftJoin(memberships, eq(technicians.userId, memberships.userId))
+            .groupBy(sql`coalesce(${technicians.companyId}, ${memberships.companyId})`),
 
-          // Veículos por empresa
+          // Veículos por empresa (via userId → memberships)
           db
             .select({
-              companyId: vehicles.companyId,
-              total: sql<number>`count(*)::int`,
+              companyId: sql<number>`coalesce(${vehicles.companyId}, ${memberships.companyId})`,
+              total: sql<number>`count(distinct ${vehicles.id})::int`,
             })
             .from(vehicles)
-            .groupBy(vehicles.companyId),
+            .leftJoin(memberships, eq(vehicles.userId, memberships.userId))
+            .groupBy(sql`coalesce(${vehicles.companyId}, ${memberships.companyId})`),
 
-          // Rotas (romaneios) por empresa — routes tem userId, join com memberships
+          // Rotas por empresa (routes não tem companyId, apenas userId → memberships)
           db
             .select({
               companyId: memberships.companyId,

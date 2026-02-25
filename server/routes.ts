@@ -1377,12 +1377,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Buscar memberships do usuário (multiempresa)
       const memberships = await storage.getMembershipsByUserId(user.id);
 
-      // Se usuário tem memberships, usar o primeiro como padrão (pode ser expandido para seleção no futuro)
+      // 🏢 MULTI-TENANT: Se usuário tem 2+ empresas, exigir seleção
+      if (memberships.length > 1) {
+        // Buscar dados de todas as empresas para exibição no frontend
+        const companiesList = await Promise.all(
+          memberships.map(async (m) => {
+            const comp = await storage.getCompanyById(m.companyId);
+            return {
+              companyId: m.companyId,
+              companyRole: m.role,
+              companyName: comp?.name || 'Empresa desconhecida',
+              companyCnpj: comp?.cnpj || '',
+            };
+          })
+        );
+
+        console.log(`🏢 [LOGIN] Usuário ${user.email} tem ${memberships.length} empresas. Exigindo seleção.`);
+
+        return res.json({
+          requireCompanySelection: true,
+          userId: user.id,
+          userName: user.name,
+          companies: companiesList,
+          // Token temporário para a etapa de seleção (curta duração, sem companyId)
+          selectionToken: jwt.sign({
+            userId: user.id,
+            email: user.email,
+            purpose: 'company_selection',
+          }, JWT_SECRET, { expiresIn: '5m' }),
+        });
+      }
+
+      // Se tem 0 ou 1 membership, login direto (comportamento original)
       let companyId: number | undefined;
       let companyRole: string | undefined;
       let company: any | undefined;
 
-      if (memberships.length > 0) {
+      if (memberships.length === 1) {
         const primaryMembership = memberships[0];
         companyId = primaryMembership.companyId;
         companyRole = primaryMembership.role;
@@ -1490,6 +1521,172 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 🏢 MULTI-TENANT: Seleção de empresa após login (2ª etapa)
+  app.post("/api/auth/select-company", async (req, res) => {
+    try {
+      const { selectionToken, companyId } = req.body;
+
+      if (!selectionToken || !companyId) {
+        return res.status(400).json({ message: "Token de seleção e companyId são obrigatórios." });
+      }
+
+      // Verificar token temporário de seleção
+      let decoded: any;
+      try {
+        decoded = jwt.verify(selectionToken, JWT_SECRET);
+      } catch (err) {
+        return res.status(403).json({ message: "Token de seleção expirado ou inválido. Faça login novamente." });
+      }
+
+      if (decoded.purpose !== 'company_selection') {
+        return res.status(403).json({ message: "Token inválido para esta operação." });
+      }
+
+      const userId = decoded.userId;
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "Usuário não encontrado." });
+      }
+
+      // Verificar se o usuário realmente tem membership nesta empresa
+      const membership = await storage.getMembership(userId, companyId);
+      if (!membership) {
+        return res.status(403).json({ message: "Você não tem acesso a esta empresa." });
+      }
+
+      const company = await storage.getCompanyById(companyId);
+
+      // Gerar token definitivo com companyId
+      const token = jwt.sign({
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        companyId: companyId,
+        companyRole: membership.role,
+      }, JWT_SECRET, { expiresIn: '24h' });
+
+      // 🔐 Registrar login no log de auditoria
+      try {
+        await storage.logAudit({
+          userId: user.id,
+          action: 'login',
+          resource: 'auth',
+          details: { email: user.email, companyId, companySelection: true },
+          ipAddress: req.ip || req.headers['x-forwarded-for']?.toString(),
+          userAgent: req.headers['user-agent'],
+        });
+        trackCompanyAudit({
+          userId: user.id,
+          companyId: companyId || null,
+          userName: user.name,
+          feature: "auth",
+          action: "login",
+          description: `Fez login selecionando empresa: ${company?.name || companyId}`,
+          ipAddress: req.ip || req.headers['x-forwarded-for']?.toString() || null,
+        });
+      } catch (auditError) {
+        console.error('⚠️ Erro ao registrar log de auditoria:', auditError);
+      }
+
+      console.log(`✅ [SELECT-COMPANY] Usuário ${user.email} selecionou empresa ${company?.name} (ID: ${companyId})`);
+
+      res.json({
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          plan: user.plan,
+          role: user.role,
+          isSuperAdmin: user.isSuperAdmin || false,
+          requirePasswordChange: user.requirePasswordChange,
+          companyId: companyId,
+          companyRole: membership.role,
+          company: company ? { id: company.id, name: company.name } : undefined,
+          lgpdAccepted: user.lgpdAccepted,
+          lgpdAcceptedAt: user.lgpdAcceptedAt,
+          lgpdVersion: user.lgpdVersion,
+        },
+        token,
+      });
+    } catch (error: any) {
+      console.error("❌ [SELECT-COMPANY] Erro:", error);
+      res.status(500).json({ message: error.message || "Erro ao selecionar empresa." });
+    }
+  });
+
+  // 🏢 MULTI-TENANT: Trocar de empresa após já estar logado (Company Switcher)
+  app.post("/api/auth/switch-company", authenticateToken, async (req: any, res) => {
+    try {
+      const { companyId } = req.body;
+      const userId = req.user.userId;
+
+      if (!companyId) {
+        return res.status(400).json({ message: "companyId é obrigatório." });
+      }
+
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "Usuário não encontrado." });
+      }
+
+      // Verificar se o usuário realmente tem membership nesta empresa
+      const membership = await storage.getMembership(userId, companyId);
+      if (!membership) {
+        return res.status(403).json({ message: "Você não tem acesso a esta empresa." });
+      }
+
+      const company = await storage.getCompanyById(companyId);
+
+      // Gerar novo token com o novo companyId
+      const token = jwt.sign({
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        companyId: companyId,
+        companyRole: membership.role,
+      }, JWT_SECRET, { expiresIn: '24h' });
+
+      // 🔐 Auditoria
+      try {
+        trackCompanyAudit({
+          userId: user.id,
+          companyId: companyId || null,
+          userName: user.name,
+          feature: "auth",
+          action: "switch_company",
+          description: `Trocou para empresa: ${company?.name || companyId}`,
+          ipAddress: req.ip || req.headers['x-forwarded-for']?.toString() || null,
+        });
+      } catch (auditError) {
+        console.error('⚠️ Erro ao registrar auditoria de troca:', auditError);
+      }
+
+      console.log(`🔄 [SWITCH-COMPANY] Usuário ${user.email} trocou para empresa ${company?.name} (ID: ${companyId})`);
+
+      res.json({
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          plan: user.plan,
+          role: user.role,
+          isSuperAdmin: user.isSuperAdmin || false,
+          requirePasswordChange: user.requirePasswordChange,
+          companyId: companyId,
+          companyRole: membership.role,
+          company: company ? { id: company.id, name: company.name } : undefined,
+          lgpdAccepted: user.lgpdAccepted,
+          lgpdAcceptedAt: user.lgpdAcceptedAt,
+          lgpdVersion: user.lgpdVersion,
+        },
+        token,
+      });
+    } catch (error: any) {
+      console.error("❌ [SWITCH-COMPANY] Erro:", error);
+      res.status(500).json({ message: error.message || "Erro ao trocar de empresa." });
+    }
+  });
+
   app.get("/api/auth/me", authenticateToken, async (req: any, res) => {
     try {
       const user = await storage.getUserById(req.user.userId);
@@ -1522,10 +1719,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: company.id,
           name: company.name,
         } : undefined,
-        memberships: memberships.map(m => ({
-          companyId: m.companyId,
-          role: m.role,
-          isActive: m.isActive,
+        memberships: await Promise.all(memberships.map(async (m) => {
+          const comp = await storage.getCompanyById(m.companyId);
+          return {
+            companyId: m.companyId,
+            role: m.role,
+            isActive: m.isActive,
+            companyName: comp?.name || `Empresa #${m.companyId}`,
+            companyCnpj: comp?.cnpj || '',
+          };
         })),
         // 🔐 LGPD - Campos de aceite de termos
         lgpdAccepted: user.lgpdAccepted,
