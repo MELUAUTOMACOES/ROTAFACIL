@@ -30,6 +30,7 @@ import CompanyUsers from "./pages/CompanyUsers";
 import AdminMetrics from "./pages/AdminMetrics";
 import AdminAudit from "./pages/AdminAudit";
 import Ads from "./pages/Ads";
+import CompaniesOverview from "./pages/superadmin/CompaniesOverview";
 import LgpdAccept from "./pages/LgpdAccept";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import CookiePolicy from "./pages/CookiePolicy";
@@ -108,6 +109,7 @@ function AppRoutes() {
             <Route path="/convite/:token" component={AcceptInvite} />
             <Route path="/admin/audit" component={AdminAudit} />
             <Route path="/ads" component={Ads} />
+            <Route path="/superadmin/empresas" component={CompaniesOverview} />
 
             <Route path="/change-password" component={() => <ChangePassword isRequired={false} />} />
             <Route component={NotFound} />

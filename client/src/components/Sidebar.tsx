@@ -33,7 +33,8 @@ import {
   Truck,
   BarChart3,
   FileSearch,
-  TrendingUp
+  TrendingUp,
+  Building2
 } from "lucide-react";
 import {
   Tooltip,
@@ -159,6 +160,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
       icon: Lock,
       permission: 'superadmin',
       items: [
+        { name: "Empresas", href: "/superadmin/empresas", icon: Building2 },
         { name: "ADS", href: "/ads", icon: TrendingUp },
         { name: "Métricas", href: "/admin/metrics", icon: BarChart3 },
       ]

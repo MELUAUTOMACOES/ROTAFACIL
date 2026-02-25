@@ -38,6 +38,7 @@ import { registerMetricsRoutes, trackFeatureUsage } from "./routes/metrics.route
 import { registerAuditRoutes } from "./routes/audit.routes";
 import { registerDashboardRoutes } from "./routes/dashboard.routes";
 import { registerAdsMetricsRoutes } from "./routes/ads-metrics.routes";
+import { registerSuperadminRoutes } from "./routes/superadmin.routes";
 import { trackCompanyAudit, getAuditDescription } from "./audit.helpers";
 import { isAccessAllowed, getAccessDeniedMessage } from "./access-schedule-validator";
 import { requireLgpdAccepted } from "./middleware/lgpd.middleware";
@@ -5143,6 +5144,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Registrar rotas do dashboard (métricas e KPIs)
   registerDashboardRoutes(app, authenticateToken);
 
+  // 🔐 Registrar rotas de SuperAdmin (métricas por empresa)
+  registerSuperadminRoutes(app, authenticateToken);
+
   const httpServer = createServer(app);
 
   // CEP Proxy to avoid CORS
@@ -5199,9 +5203,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Erro interno ao buscar CEP" });
     }
   });
-
-  // 📊 Registrar rotas de métricas ADS
-  registerAdsMetricsRoutes(app, authenticateToken);
 
   return httpServer;
 }
