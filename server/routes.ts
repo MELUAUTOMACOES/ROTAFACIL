@@ -541,10 +541,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await Promise.all(activeRoutesWithId.map(async (r) => {
         let name = "Desconhecido";
         if (r.responsibleType === 'technician') {
-          const tech = await storage.getTechnician(Number(r.responsibleId), req.user.userId);
+          const tech = await storage.getTechnician(Number(r.responsibleId), req.user.userId, req.user.companyId);
           if (tech) name = tech.name;
         } else if (r.responsibleType === 'team') {
-          const team = await storage.getTeam(Number(r.responsibleId), req.user.userId);
+          const team = await storage.getTeam(Number(r.responsibleId), req.user.userId, req.user.companyId);
           if (team) name = team.name;
         }
 
@@ -754,6 +754,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: error.message });
     }
   });
+
 
   // 3.5 Registrar ocorrência na rota (pausas como almoço, abastecimento, etc.)
   app.post("/api/provider/route/:id/occurrence", authenticateToken, async (req: any, res) => {
@@ -1771,14 +1772,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Se não houver parâmetros de paginação, retorna todos os clientes (compatibilidade)
       if (!req.query.page && !req.query.limit) {
-        const result = await storage.getAllClients(req.user.userId);
+        const result = await storage.getAllClients(req.user.userId, req.user.companyId);
         logEgressSize(req, result); // 📊 Instrumentação
         return res.json(result);
       }
 
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
-      const result = await storage.getClients(req.user.userId, page, limit);
+      const result = await storage.getClients(req.user.userId, page, limit, req.user.companyId);
 
       // 🔄 Transformar {data, total} em {items, pagination} para compatibilidade com frontend
       const totalPages = Math.ceil(result.total / limit);
@@ -1810,7 +1811,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ data: [], total: 0 });
       }
 
-      const result = await storage.searchClients(q.trim(), req.user.userId, page, limit);
+      const result = await storage.searchClients(q.trim(), req.user.userId, page, limit, req.user.companyId);
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1826,7 +1827,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ exists: false });
       }
 
-      const existingClient = await storage.getClientByCpf(cpf, req.user.userId);
+      const existingClient = await storage.getClientByCpf(cpf, req.user.userId, req.user.companyId);
 
       if (existingClient) {
         console.log("CPF já cadastrado:", cpf, "Nome:", existingClient.name);
@@ -1847,7 +1848,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/clients", authenticateToken, async (req: any, res) => {
     try {
       const clientData = insertClientSchema.parse(req.body);
-      const client = await storage.createClient(clientData, req.user.userId);
+      const client = await storage.createClient(clientData, req.user.userId, req.user.companyId);
       trackFeatureUsage(req.user.userId, "clients", "create", req.user.companyId, { id: client.id });
       trackCompanyAudit({
         userId: req.user.userId,
@@ -1869,7 +1870,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("📝 [PUT /clients] payload recebido:", req.body); // <- vê se lat/lng estão vindo
       const clientData = insertClientSchema.partial().parse(req.body);
       console.log("📝 [PUT /clients] payload após Zod:", clientData); // <- confirma que lat/lng passaram
-      const client = await storage.updateClient(id, clientData, req.user.userId);
+      const client = await storage.updateClient(id, clientData, req.user.userId, req.user.companyId);
       trackFeatureUsage(req.user.userId, "clients", "update", req.user.companyId, { id: client.id });
       trackCompanyAudit({
         userId: req.user.userId,
@@ -1903,7 +1904,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           console.log(`📝 Criando cliente: ${clientData.name}`);
           const validatedData = insertClientSchema.parse(clientData);
-          const createdClient = await storage.createClient(validatedData, req.user.userId);
+          const createdClient = await storage.createClient(validatedData, req.user.userId, req.user.companyId);
 
           successCount++;
           processedItems.push({
@@ -1961,7 +1962,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/clients/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const success = await storage.deleteClient(id, req.user.userId);
+      const success = await storage.deleteClient(id, req.user.userId, req.user.companyId);
       if (!success) {
         return res.status(404).json({ message: "Client not found" });
       }
@@ -1987,11 +1988,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const search = req.query.search as string;
       const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
 
-      const result = await storage.getServicesPaged(req.user.userId, page, pageSize, search, isActive);
+      const result = await storage.getServicesPaged(req.user.userId, page, pageSize, search, isActive, req.user.companyId);
       logEgressSize(req, result);
       res.json(result);
     } catch (error: any) {
-      console.error("❌ [SERVICES] Erro ao listar:", error);
+      console.error(" [SERVICES] Erro ao listar:", error);
       res.status(500).json({ message: error.message });
     }
   });
@@ -1999,7 +2000,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/services", authenticateToken, async (req: any, res) => {
     try {
       const serviceData = insertServiceSchema.parse(req.body);
-      const service = await storage.createService(serviceData, req.user.userId);
+      const service = await storage.createService(serviceData, req.user.userId, req.user.companyId);
       trackFeatureUsage(req.user.userId, "services", "create", req.user.companyId, { id: service.id });
       trackCompanyAudit({
         userId: req.user.userId,
@@ -2019,7 +2020,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const serviceData = insertServiceSchema.partial().parse(req.body);
-      const service = await storage.updateService(id, serviceData, req.user.userId);
+      const service = await storage.updateService(id, serviceData, req.user.userId, req.user.companyId);
       res.json(service);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -2029,7 +2030,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/services/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const success = await storage.deleteService(id, req.user.userId);
+      const success = await storage.deleteService(id, req.user.userId, req.user.companyId);
       if (!success) {
         return res.status(404).json({ message: "Service not found" });
       }
@@ -2056,11 +2057,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const teamId = req.query.teamId ? parseInt(req.query.teamId as string) : undefined;
       const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
 
-      const result = await storage.getTechniciansPaged(req.user.userId, page, pageSize, search, teamId, isActive);
+      const result = await storage.getTechniciansPaged(req.user.userId, page, pageSize, search, teamId, isActive, req.user.companyId);
       logEgressSize(req, result);
       res.json(result);
     } catch (error: any) {
-      console.error("❌ [TECHNICIANS] Erro ao listar:", error);
+      console.error(" [TECHNICIANS] Erro ao listar:", error);
       res.status(500).json({ message: error.message });
     }
   });
@@ -2072,25 +2073,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const technicianData = insertTechnicianSchema.parse(req.body);
-      console.log("✅ Dados validados pelo schema");
+      console.log(" Dados validados pelo schema");
 
-      const technician = await storage.createTechnician(technicianData, req.user.userId);
-      console.log("✅ Técnico criado com sucesso:");
+      const technician = await storage.createTechnician(technicianData, req.user.userId, req.user.companyId);
+      console.log(" Técnico criado com sucesso:");
       console.log(`ID: ${technician.id}, Nome: ${technician.name}`);
       console.log("==== LOG FIM: POST /api/technicians (SUCESSO) ====");
 
       trackFeatureUsage(req.user.userId, "technicians", "create", req.user.companyId, { id: technician.id });
-      trackCompanyAudit({
-        userId: req.user.userId,
-        companyId: req.user.companyId,
-        feature: "technicians",
-        action: "create",
-        resourceId: technician.id,
-        description: `Criou técnico "${technician.name}"`
-      });
       res.json(technician);
     } catch (error: any) {
-      console.log("❌ ERRO ao criar técnico:");
+      console.log(" ERRO ao criar técnico:");
       console.log("Tipo do erro:", error.constructor.name);
       console.log("Mensagem:", error.message);
       if (error.name === 'ZodError') {
@@ -2107,7 +2100,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const technicianData = insertTechnicianSchema.partial().parse(req.body);
-      const technician = await storage.updateTechnician(id, technicianData, req.user.userId);
+      const technician = await storage.updateTechnician(id, technicianData, req.user.userId, req.user.companyId);
       res.json(technician);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -2117,7 +2110,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/technicians/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const success = await storage.deleteTechnician(id, req.user.userId);
+      const success = await storage.deleteTechnician(id, req.user.userId, req.user.companyId);
       if (!success) {
         return res.status(404).json({ message: "Technician not found" });
       }
@@ -2130,71 +2123,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Team Members
   app.get("/api/team-members", authenticateToken, async (req: any, res) => {
     try {
-      const teamMembers = await storage.getAllTeamMembers(req.user.userId);
+      const teamMembers = await storage.getAllTeamMembers(req.user.userId, req.user.companyId);
       res.json(teamMembers);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  // Vehicles routes
-  app.get("/api/vehicles", authenticateToken, async (req: any, res) => {
-    try {
-      const page = Math.max(1, parseInt(req.query.page as string) || 1);
-      const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string) || 25));
-      const search = req.query.search as string;
-      const responsibleType = req.query.responsibleType as string;
-      const responsibleId = req.query.responsibleId ? parseInt(req.query.responsibleId as string) : undefined;
-
-      const result = await storage.getVehiclesPaged(req.user.userId, page, pageSize, search, responsibleType, responsibleId);
-      logEgressSize(req, result);
-      res.json(result);
-    } catch (error: any) {
-      console.error("❌ [VEHICLES] Erro ao listar:", error);
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.post("/api/vehicles", authenticateToken, async (req: any, res) => {
-    try {
-      const vehicleData = insertVehicleSchema.parse(req.body);
-      const vehicle = await storage.createVehicle(vehicleData, req.user.userId);
-      trackFeatureUsage(req.user.userId, "vehicles", "create", req.user.companyId, { id: vehicle.id });
-      trackCompanyAudit({
-        userId: req.user.userId,
-        companyId: req.user.companyId,
-        feature: "vehicles",
-        action: "create",
-        resourceId: vehicle.id,
-        description: `Criou veículo "${vehicle.plate}"`
-      });
-      res.json(vehicle);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message });
-    }
-  });
-
-  app.put("/api/vehicles/:id", authenticateToken, async (req: any, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      console.log(`🔧 [UPDATE VEHICLE] ID: ${id}, Body:`, req.body);
-      const vehicleData = insertVehicleSchema.parse(req.body);
-      console.log(`🔧 [UPDATE VEHICLE] Parsed Data:`, vehicleData);
-      const vehicle = await storage.updateVehicle(id, vehicleData, req.user.userId);
-      res.json(vehicle);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message });
-    }
-  });
-
-  app.delete("/api/vehicles/:id", authenticateToken, async (req: any, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const success = await storage.deleteVehicle(id, req.user.userId);
-      if (!success) {
-        return res.status(404).json({ message: "Vehicle not found" });
-      }
-      res.json({ message: "Vehicle deleted successfully" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -2701,7 +2631,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/appointments/date/:date", authenticateToken, async (req: any, res) => {
     try {
       const date = req.params.date;
-      const appointments = await storage.getAppointmentsByDate(date, req.user.userId);
+      const appointments = await storage.getAppointmentsByDate(date, req.user.userId, req.user.companyId);
       res.json(appointments);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2749,7 +2679,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: workScheduleValidation.message });
       }
 
-      const appointment = await storage.createAppointment(appointmentData, req.user.userId);
+      const appointment = await storage.createAppointment(appointmentData, req.user.userId, req.user.companyId);
 
       // Atualizar disponibilidade após criar agendamento
       await updateAvailabilityForAppointment(req.user.userId, appointment);
@@ -2788,7 +2718,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Criar cliente automaticamente se necessário
           if (!clientId && appointmentData.clientData) {
             try {
-              const newClient = await storage.createClient(appointmentData.clientData, req.user.userId);
+              const newClient = await storage.createClient(appointmentData.clientData, req.user.userId, req.user.companyId);
               clientId = newClient.id;
               console.log(`📝 Cliente criado automaticamente: ${appointmentData.clientData.name} (ID: ${clientId})`);
             } catch (clientError: any) {
@@ -2868,7 +2798,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
 
-          const createdAppointment = await storage.createAppointment(validatedData, req.user.userId);
+          const createdAppointment = await storage.createAppointment(validatedData, req.user.userId, req.user.companyId);
 
           // Atualizar disponibilidade após criar agendamento
           await updateAvailabilityForAppointment(req.user.userId, createdAppointment);
@@ -2942,7 +2872,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const id = parseInt(req.params.id);
-      const appointment = await storage.getAppointment(id, req.user.userId);
+      const appointment = await storage.getAppointment(id, req.user.userId, req.user.companyId);
       // Also allow getting appointment if user is admin (implemented via storage.getAppointment checking userId currently, 
       // but maybe we need broader access? For now, keep STRICT owner check as per rules)
 
@@ -2964,12 +2894,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // First check if appointment exists and user has access
-      const appointment = await storage.getAppointment(id, req.user.userId);
+      const appointment = await storage.getAppointment(id, req.user.userId, req.user.companyId);
       if (!appointment) {
         return res.status(404).json({ message: "Agendamento não encontrado" });
       }
 
-      const history = await storage.getAppointmentHistory(id);
+      const history = await storage.getAppointmentHistory(id, req.user.userId, req.user.companyId);
       res.json(history);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2994,13 +2924,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Buscar serviço para obter duração
-      const service = await storage.getService(serviceId, userId);
+      const service = await storage.getService(serviceId, userId, companyId);
       if (!service) {
         return res.status(400).json({ message: "Serviço não encontrado" });
       }
 
       // Buscar regras de negócio
-      const businessRules = await storage.getBusinessRules(userId);
+      const businessRules = await storage.getBusinessRules(userId, companyId);
       if (!businessRules) {
         return res.status(400).json({ message: "Regras de negócio não configuradas" });
       }
@@ -3033,7 +2963,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (clientId) {
         // Buscar coordenadas do cliente
-        const client = await storage.getClient(clientId, userId);
+        const client = await storage.getClient(clientId, userId, companyId);
         if (!client) {
           return res.status(400).json({ message: "Cliente não encontrado" });
         }
@@ -3077,19 +3007,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (technicianId) {
         // Técnico específico
-        const tech = await storage.getTechnician(technicianId, userId);
+        const tech = await storage.getTechnician(technicianId, userId, companyId);
         if (tech && tech.serviceIds?.includes(serviceId.toString())) {
           responsibles.push({ type: 'technician', id: tech.id, name: tech.name });
         }
       } else if (teamId) {
         // Equipe específica
-        const team = await storage.getTeam(teamId, userId);
+        const team = await storage.getTeam(teamId, userId, companyId);
         if (team && team.serviceIds?.includes(serviceId.toString())) {
           responsibles.push({ type: 'team', id: team.id, name: team.name });
         }
       } else {
         // Buscar todos os técnicos compatíveis
-        const allTechnicians = await storage.getTechnicians(userId);
+        const allTechnicians = await storage.getTechnicians(userId, companyId);
         for (const tech of allTechnicians) {
           if (tech.serviceIds?.includes(serviceId.toString()) && tech.isActive) {
             responsibles.push({ type: 'technician', id: tech.id, name: tech.name });
@@ -3097,7 +3027,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Buscar todas as equipes compatíveis
-        const allTeams = await storage.getTeams(userId);
+        const allTeams = await storage.getTeams(userId, companyId);
         for (const team of allTeams) {
           if (team.serviceIds?.includes(serviceId.toString())) {
             responsibles.push({ type: 'team', id: team.id, name: team.name });
@@ -3182,7 +3112,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let baseAddress: { cep: string, logradouro: string, numero: string, bairro: string, cidade: string, estado: string };
 
         if (responsible.type === 'technician') {
-          const tech = await storage.getTechnician(responsible.id, userId);
+          const tech = await storage.getTechnician(responsible.id, userId, companyId);
           if (!tech) continue;
 
           horarioInicioTrabalho = tech.horarioInicioTrabalho || '08:00';
@@ -3210,7 +3140,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             };
           }
         } else {
-          const team = await storage.getTeam(responsible.id, userId);
+          const team = await storage.getTeam(responsible.id, userId, companyId);
           if (!team) continue;
 
           horarioInicioTrabalho = team.horarioInicioTrabalho || '08:00';
@@ -3659,7 +3589,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`🔧 [UPDATE] Atualizando agendamento ${id}:`, appointmentData);
 
       // 🔒 VALIDAÇÃO: Só permite edição de agendamentos com status 'scheduled' ou 'rescheduled'
-      const existingAppointment = await storage.getAppointment(id, req.user.userId);
+      const existingAppointment = await storage.getAppointment(id, req.user.userId, req.user.companyId);
       if (!existingAppointment) {
         return res.status(404).json({ message: "Agendamento não encontrado" });
       }
@@ -3702,9 +3632,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Buscar agendamento original para rastrear mudanças
-      const originalAppointment = await storage.getAppointment(id, req.user.userId);
+      const originalAppointment = await storage.getAppointment(id, req.user.userId, req.user.companyId);
 
-      const appointment = await storage.updateAppointment(id, appointmentData, req.user.userId);
+      const appointment = await storage.updateAppointment(id, appointmentData, req.user.userId, req.user.companyId);
       console.log(`✅ [UPDATE] Agendamento atualizado com sucesso: ${appointment.id}`);
 
       // Criar descrição detalhada das mudanças
@@ -3807,7 +3737,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             appointmentData.scheduledDate = dateObj.toISOString();
             console.log(`🔄 [PATCH] Data parseada: ${appointmentData.scheduledDate}`);
-          } catch (dateError) {
+          } catch (dateError: any) {
             console.log(`❌ [PATCH] Erro ao processar data:`, dateError);
             console.log("==== LOG FIM: PATCH /api/appointments (ERRO DATA) ====");
             return res.status(400).json({ message: `Data inválida: ${appointmentData.scheduledDate}` });
@@ -3816,7 +3746,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Buscar agendamento original para validação
-      const originalAppointment = await storage.getAppointment(id, req.user.userId);
+      const originalAppointment = await storage.getAppointment(id, req.user.userId, req.user.companyId);
       if (!originalAppointment) {
         return res.status(404).json({ message: "Agendamento não encontrado" });
       }
@@ -3890,7 +3820,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         appointmentData.rescheduleCount = (originalAppointment.rescheduleCount || 0) + 1;
       }
 
-      const appointment = await storage.updateAppointment(id, appointmentData, req.user.userId);
+      const appointment = await storage.updateAppointment(id, appointmentData, req.user.userId, req.user.companyId);
 
       // Atualizar disponibilidade da data antiga se mudou a data
       if (dateChanged) {
@@ -3952,9 +3882,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`🗑️ Tentando deletar agendamento ID: ${id}`);
 
       // Buscar agendamento antes de deletar para atualizar disponibilidade
-      const appointmentToDelete = await storage.getAppointment(id, req.user.userId);
+      const appointmentToDelete = await storage.getAppointment(id, req.user.userId, req.user.companyId);
 
-      const success = await storage.deleteAppointment(id, req.user.userId);
+      const success = await storage.deleteAppointment(id, req.user.userId, req.user.companyId);
       if (!success) {
         console.log(`❌ Agendamento ${id} não encontrado para o usuário`);
         console.log("==== LOG FIM: DELETE /api/appointments (NÃO ENCONTRADO) ====");
@@ -3992,7 +3922,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Pega TODOS os appointments do usuário e filtra pelos IDs informados
       // (usamos storage para manter o padrão do projeto)
-      const all = await storage.getAppointments(req.user.userId);
+      const all = await storage.getAppointments(req.user.userId, req.user.companyId);
       const rows = all.filter((a: any) => ids.includes(a.id));
 
       const updatedIds: number[] = [];
@@ -4461,7 +4391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Appointment IDs are required" });
       }
 
-      const optimizedRoute = await storage.optimizeRoute(appointmentIds, req.user.userId);
+      const optimizedRoute = await storage.optimizeRoute(appointmentIds, req.user.userId, req.user.companyId);
       res.json(optimizedRoute);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -4471,7 +4401,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Checklists routes
   app.get("/api/checklists", authenticateToken, async (req: any, res) => {
     try {
-      const checklists = await storage.getChecklists(req.user.userId);
+      const checklists = await storage.getChecklists(req.user.userId, req.user.companyId);  
       res.json(checklists);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -4481,7 +4411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/checklists", authenticateToken, async (req: any, res) => {
     try {
       const checklistData = insertChecklistSchema.parse(req.body);
-      const checklist = await storage.createChecklist(checklistData, req.user.userId);
+      const checklist = await storage.createChecklist(checklistData, req.user.userId, req.user.companyId);
       res.json(checklist);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -4492,7 +4422,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const checklistData = insertChecklistSchema.partial().parse(req.body);
-      const checklist = await storage.updateChecklist(id, checklistData, req.user.userId);
+      const checklist = await storage.updateChecklist(id, checklistData, req.user.userId, req.user.companyId);
       res.json(checklist);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -4502,7 +4432,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/checklists/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const success = await storage.deleteChecklist(id, req.user.userId);
+      const success = await storage.deleteChecklist(id, req.user.userId, req.user.companyId);
       if (!success) {
         return res.status(404).json({ message: "Checklist not found" });
       }
@@ -4515,7 +4445,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Business Rules routes
   app.get("/api/business-rules", authenticateToken, async (req: any, res) => {
     try {
-      const businessRules = await storage.getBusinessRules(req.user.userId);
+      const businessRules = await storage.getBusinessRules(req.user.userId, req.user.companyId);
       res.json(businessRules || {});
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -4525,7 +4455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/business-rules", authenticateToken, async (req: any, res) => {
     try {
       const businessRulesData = insertBusinessRulesSchema.parse(req.body);
-      const businessRules = await storage.createBusinessRules(businessRulesData, req.user.userId);
+      const businessRules = await storage.createBusinessRules(businessRulesData, req.user.userId, req.user.companyId);
       res.json(businessRules);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -4536,145 +4466,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const businessRulesData = insertBusinessRulesSchema.partial().parse(req.body);
-      const businessRules = await storage.updateBusinessRules(id, businessRulesData, req.user.userId);
+      const businessRules = await storage.updateBusinessRules(id, businessRulesData, req.user.userId, req.user.companyId);
       res.json(businessRules);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
-    }
-  });
-
-  // Daily Availability routes - Consulta de disponibilidade por dia/responsável
-  app.get("/api/daily-availability", authenticateToken, async (req: any, res) => {
-    try {
-      const { startDate, endDate, responsibleType, responsibleId } = req.query;
-
-      const { dailyAvailability } = await import("@shared/schema");
-      const { and, eq, gte, lte, sql } = await import("drizzle-orm");
-
-      const conditions = [eq(dailyAvailability.userId, req.user.userId)];
-
-      if (startDate) {
-        conditions.push(gte(dailyAvailability.date, new Date(startDate as string)));
-      }
-      if (endDate) {
-        conditions.push(lte(dailyAvailability.date, new Date(endDate as string)));
-      }
-      if (responsibleType) {
-        conditions.push(eq(dailyAvailability.responsibleType, responsibleType as string));
-      }
-      if (responsibleId) {
-        conditions.push(eq(dailyAvailability.responsibleId, parseInt(responsibleId as string)));
-      }
-
-      const availability = await db.query.dailyAvailability.findMany({
-        where: and(...conditions),
-        orderBy: (dailyAvailability, { asc }) => [asc(dailyAvailability.date)],
-      });
-
-      res.json(availability);
-    } catch (error: any) {
-      console.error("❌ [AVAILABILITY] Erro ao consultar disponibilidade:", error);
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  // Teams routes - Nova funcionalidade conforme solicitado
-  app.get("/api/teams", authenticateToken, async (req: any, res) => {
-    try {
-      const page = Math.max(1, parseInt(req.query.page as string) || 1);
-      const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string) || 25));
-      const search = req.query.search as string;
-
-      const result = await storage.getTeamsPaged(req.user.userId, page, pageSize, search);
-      logEgressSize(req, result);
-      res.json(result);
-    } catch (error: any) {
-      console.error("❌ [TEAMS] Erro ao listar:", error);
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.get("/api/teams/:id", authenticateToken, async (req: any, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const team = await storage.getTeam(id, req.user.userId);
-      if (!team) {
-        return res.status(404).json({ message: "Team not found" });
-      }
-      res.json(team);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.post("/api/teams", authenticateToken, async (req: any, res) => {
-    try {
-      const teamData = insertTeamSchema.parse(req.body);
-      const team = await storage.createTeam(teamData, req.user.userId);
-      res.json(team);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message });
-    }
-  });
-
-  app.patch("/api/teams/:id", authenticateToken, async (req: any, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const teamData = insertTeamSchema.partial().parse(req.body);
-      const team = await storage.updateTeam(id, teamData, req.user.userId);
-      res.json(team);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message });
-    }
-  });
-
-  app.delete("/api/teams/:id", authenticateToken, async (req: any, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const success = await storage.deleteTeam(id, req.user.userId);
-      if (!success) {
-        return res.status(404).json({ message: "Team not found" });
-      }
-      res.json({ message: "Team deleted successfully" });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  // Team members routes - Para gerenciar membros das equipes
-  app.get("/api/team-members/:teamId", authenticateToken, async (req: any, res) => {
-    try {
-      const teamId = parseInt(req.params.teamId);
-      // getTeamMembers agora espera apenas userId, pois retorna todos os membros
-      // Se precisar filtrar por teamId, fazer no array retornado ou criar método específico
-      const members = await storage.getAllTeamMembers(req.user.userId);
-      const teamMembers = members.filter(m => m.teamId === teamId);
-      res.json(teamMembers);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.post("/api/team-members", authenticateToken, async (req: any, res) => {
-    try {
-      const memberData = insertTeamMemberSchema.parse(req.body);
-      const member = await storage.createTeamMember(memberData, req.user.userId);
-      res.json(member);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message });
-    }
-  });
-
-  app.delete("/api/team-members/:id", authenticateToken, async (req: any, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const success = await storage.deleteTeamMember(id, req.user.userId);
-      if (!success) {
-        return res.status(404).json({ message: "Team member not found" });
-      }
-      res.json({ message: "Team member removed successfully" });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
     }
   });
 
@@ -4683,6 +4478,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/route", async (req, res) => {
     console.log("==== LOG INÍCIO: /api/route ====");
+    // ... (rest of the code remains the same)
     console.log("Query params recebidos:");
     console.log(JSON.stringify(req.query, null, 2));
 

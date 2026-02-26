@@ -51,6 +51,7 @@ export interface IStorage {
 
   // User Management (Admin)
   getAllUsers(createdBy?: number): Promise<User[]>;
+  getUsersByCompanyId(companyId: number): Promise<User[]>;
   createUserByAdmin(userData: any, adminId: number): Promise<User>;
   updateUserByAdmin(userId: number, userData: any): Promise<User>;
   deleteUser(userId: number): Promise<boolean>;
@@ -60,72 +61,72 @@ export interface IStorage {
   setRequirePasswordChange(userId: number, require: boolean): Promise<void>;
 
   // Clients
-  getAllClients(userId: number): Promise<Client[]>;
-  getClients(userId: number, page?: number, limit?: number): Promise<{ data: Client[], total: number }>;
-  getClient(id: number, userId: number): Promise<Client | undefined>;
-  getClientByCpf(cpf: string, userId: number): Promise<Client | undefined>;
-  createClient(client: InsertClient, userId: number): Promise<Client>;
-  updateClient(id: number, client: Partial<InsertClient>, userId: number): Promise<Client>;
-  deleteClient(id: number, userId: number): Promise<boolean>;
-  searchClients(query: string, userId: number, page?: number, limit?: number): Promise<{ data: Client[], total: number }>;
+  getAllClients(userId: number, companyId?: number | null): Promise<Client[]>;
+  getClients(userId: number, page?: number, limit?: number, companyId?: number | null): Promise<{ data: Client[], total: number }>;
+  getClient(id: number, userId: number, companyId?: number | null): Promise<Client | undefined>;
+  getClientByCpf(cpf: string, userId: number, companyId?: number | null): Promise<Client | undefined>;
+  createClient(client: InsertClient, userId: number, companyId?: number | null): Promise<Client>;
+  updateClient(id: number, client: Partial<InsertClient>, userId: number, companyId?: number | null): Promise<Client>;
+  deleteClient(id: number, userId: number, companyId?: number | null): Promise<boolean>;
+  searchClients(query: string, userId: number, page?: number, limit?: number, companyId?: number | null): Promise<{ data: Client[], total: number }>;
 
   // Services
-  getServices(userId: number): Promise<Service[]>;
-  getServicesPaged(userId: number, page: number, pageSize: number, search?: string, isActive?: boolean): Promise<{ items: Service[], pagination: { page: number, pageSize: number, total: number, totalPages: number } }>;
-  getService(id: number, userId: number): Promise<Service | undefined>;
-  createService(service: InsertService, userId: number): Promise<Service>;
-  updateService(id: number, service: Partial<InsertService>, userId: number): Promise<Service>;
-  deleteService(id: number, userId: number): Promise<boolean>;
+  getServices(userId: number, companyId?: number | null): Promise<Service[]>;
+  getServicesPaged(userId: number, page: number, pageSize: number, search?: string, isActive?: boolean, companyId?: number | null): Promise<{ items: Service[], pagination: { page: number, pageSize: number, total: number, totalPages: number } }>;
+  getService(id: number, userId: number, companyId?: number | null): Promise<Service | undefined>;
+  createService(service: InsertService, userId: number, companyId?: number | null): Promise<Service>;
+  updateService(id: number, service: Partial<InsertService>, userId: number, companyId?: number | null): Promise<Service>;
+  deleteService(id: number, userId: number, companyId?: number | null): Promise<boolean>;
 
   // Technicians
-  getTechnicians(userId: number): Promise<Technician[]>;
-  getTechniciansPaged(userId: number, page: number, pageSize: number, search?: string, teamId?: number, isActive?: boolean): Promise<{ items: Technician[], pagination: { page: number, pageSize: number, total: number, totalPages: number } }>;
-  getTechnician(id: number, userId: number): Promise<Technician | undefined>;
-  createTechnician(technician: InsertTechnician, userId: number): Promise<Technician>;
-  updateTechnician(id: number, technician: Partial<InsertTechnician>, userId: number): Promise<Technician>;
-  deleteTechnician(id: number, userId: number): Promise<boolean>;
+  getTechnicians(userId: number, companyId?: number | null): Promise<Technician[]>;
+  getTechniciansPaged(userId: number, page: number, pageSize: number, search?: string, teamId?: number, isActive?: boolean, companyId?: number | null): Promise<{ items: Technician[], pagination: { page: number, pageSize: number, total: number, totalPages: number } }>;
+  getTechnician(id: number, userId: number, companyId?: number | null): Promise<Technician | undefined>;
+  createTechnician(technician: InsertTechnician, userId: number, companyId?: number | null): Promise<Technician>;
+  updateTechnician(id: number, technician: Partial<InsertTechnician>, userId: number, companyId?: number | null): Promise<Technician>;
+  deleteTechnician(id: number, userId: number, companyId?: number | null): Promise<boolean>;
 
   // Vehicles
-  getVehicles(userId: number): Promise<Vehicle[]>;
-  getVehiclesPaged(userId: number, page: number, pageSize: number, search?: string, responsibleType?: string, responsibleId?: number): Promise<{ items: Vehicle[], pagination: { page: number, pageSize: number, total: number, totalPages: number } }>;
-  getVehicle(id: number, userId: number): Promise<Vehicle | undefined>;
-  createVehicle(vehicle: InsertVehicle, userId: number): Promise<Vehicle>;
-  updateVehicle(id: number, vehicle: Partial<InsertVehicle>, userId: number): Promise<Vehicle>;
-  deleteVehicle(id: number, userId: number): Promise<boolean>;
+  getVehicles(userId: number, companyId?: number | null): Promise<Vehicle[]>;
+  getVehiclesPaged(userId: number, page: number, pageSize: number, search?: string, responsibleType?: string, responsibleId?: number, companyId?: number | null): Promise<{ items: Vehicle[], pagination: { page: number, pageSize: number, total: number, totalPages: number } }>;
+  getVehicle(id: number, userId: number, companyId?: number | null): Promise<Vehicle | undefined>;
+  createVehicle(vehicle: InsertVehicle, userId: number, companyId?: number | null): Promise<Vehicle>;
+  updateVehicle(id: number, vehicle: Partial<InsertVehicle>, userId: number, companyId?: number | null): Promise<Vehicle>;
+  deleteVehicle(id: number, userId: number, companyId?: number | null): Promise<boolean>;
 
   // Appointments
-  getAppointments(userId: number): Promise<Appointment[]>;
-  getAppointment(id: number, userId: number): Promise<Appointment | undefined>;
-  createAppointment(appointment: InsertAppointment, userId: number): Promise<Appointment>;
-  updateAppointment(id: number, appointment: Partial<InsertAppointment>, userId: number): Promise<Appointment>;
-  deleteAppointment(id: number, userId: number): Promise<boolean>;
-  getAppointmentsByDate(date: string, userId: number): Promise<Appointment[]>;
+  getAppointments(userId: number, companyId?: number | null): Promise<Appointment[]>;
+  getAppointment(id: number, userId: number, companyId?: number | null): Promise<Appointment | undefined>;
+  createAppointment(appointment: InsertAppointment, userId: number, companyId?: number | null): Promise<Appointment>;
+  updateAppointment(id: number, appointment: Partial<InsertAppointment>, userId: number, companyId?: number | null): Promise<Appointment>;
+  deleteAppointment(id: number, userId: number, companyId?: number | null): Promise<boolean>;
+  getAppointmentsByDate(date: string, userId: number, companyId?: number | null): Promise<Appointment[]>;
 
   // Checklists
-  getChecklists(userId: number): Promise<Checklist[]>;
+  getChecklists(userId: number, companyId?: number | null): Promise<Checklist[]>;
   getChecklist(id: number, userId: number): Promise<Checklist | undefined>;
-  createChecklist(checklist: InsertChecklist, userId: number): Promise<Checklist>;
-  updateChecklist(id: number, checklist: Partial<InsertChecklist>, userId: number): Promise<Checklist>;
-  deleteChecklist(id: number, userId: number): Promise<boolean>;
+  createChecklist(checklist: InsertChecklist, userId: number, companyId?: number | null): Promise<Checklist>;
+  updateChecklist(id: number, checklist: Partial<InsertChecklist>, userId: number, companyId?: number | null): Promise<Checklist>;
+  deleteChecklist(id: number, userId: number, companyId?: number | null): Promise<boolean>;
 
   // Business Rules
-  getBusinessRules(userId: number): Promise<BusinessRules | undefined>;
-  createBusinessRules(businessRules: InsertBusinessRules, userId: number): Promise<BusinessRules>;
-  updateBusinessRules(id: number, businessRules: Partial<InsertBusinessRules>, userId: number): Promise<BusinessRules>;
+  getBusinessRules(userId: number, companyId?: number | null): Promise<BusinessRules | undefined>;
+  createBusinessRules(businessRules: InsertBusinessRules, userId: number, companyId?: number | null): Promise<BusinessRules>;
+  updateBusinessRules(id: number, businessRules: Partial<InsertBusinessRules>, userId: number, companyId?: number | null): Promise<BusinessRules>;
 
   // Teams - Operações para equipes conforme solicitado
-  getTeams(userId: number): Promise<Team[]>;
-  getTeam(id: number, userId: number): Promise<Team | undefined>;
-  createTeam(team: InsertTeam, userId: number): Promise<Team>;
-  updateTeam(id: number, team: Partial<InsertTeam>, userId: number): Promise<Team>;
-  deleteTeam(id: number, userId: number): Promise<boolean>;
-  getTeamMembers(teamId: number, userId: number): Promise<TeamMember[]>;
-  getAllTeamMembers(userId: number): Promise<TeamMember[]>;
-  createTeamMember(teamMember: InsertTeamMember, userId: number): Promise<TeamMember>;
-  deleteTeamMember(id: number, userId: number): Promise<boolean>;
+  getTeams(userId: number, companyId?: number | null): Promise<Team[]>;
+  getTeam(id: number, userId: number, companyId?: number | null): Promise<Team | undefined>;
+  createTeam(team: InsertTeam, userId: number, companyId?: number | null): Promise<Team>;
+  updateTeam(id: number, team: Partial<InsertTeam>, userId: number, companyId?: number | null): Promise<Team>;
+  deleteTeam(id: number, userId: number, companyId?: number | null): Promise<boolean>;
+  getTeamMembers(teamId: number, userId: number, companyId?: number | null): Promise<TeamMember[]>;
+  getAllTeamMembers(userId: number, companyId?: number | null): Promise<TeamMember[]>;
+  createTeamMember(teamMember: InsertTeamMember, userId: number, companyId?: number | null): Promise<TeamMember>;
+  deleteTeamMember(id: number, userId: number, companyId?: number | null): Promise<boolean>;
 
   // Route optimization
-  optimizeRoute(appointmentIds: number[], userId: number): Promise<{ optimizedOrder: Appointment[], totalDistance: number, estimatedTime: number }>;
+  optimizeRoute(appointmentIds: number[], userId: number, companyId?: number | null): Promise<{ optimizedOrder: Appointment[], totalDistance: number, estimatedTime: number }>;
 
   // Access Schedules
   getAccessSchedules(userId: number): Promise<AccessSchedule[]>;
@@ -180,7 +181,7 @@ export interface IStorage {
   updateRouteDate(id: string, date: Date, userId: number): Promise<Route>;
   getRouteStops(routeId: string): Promise<RouteStop[]>;
   getPendingAppointments(userId: number): Promise<any[]>;
-  getAppointmentHistory(appointmentId: number): Promise<AppointmentHistory[]>;
+  getAppointmentHistory(appointmentId: number, userId?: number, companyId?: number | null): Promise<AppointmentHistory[]>;
   createAppointmentHistory(data: InsertAppointmentHistory, changedBy: number, ownerId: number): Promise<AppointmentHistory>;
 
   // Vehicle Documents
@@ -283,6 +284,16 @@ export class DatabaseStorage implements IStorage {
     }
     // Caso contrário, retornar todos (apenas para compatibilidade, não deve ser usado)
     return await db.select().from(users);
+  }
+
+  async getUsersByCompanyId(companyId: number): Promise<User[]> {
+    // 🏢 MULTI-TENANT: Buscar todos os usuários que têm membership ativa nesta empresa
+    const result = await db
+      .select({ user: users })
+      .from(memberships)
+      .innerJoin(users, eq(memberships.userId, users.id))
+      .where(and(eq(memberships.companyId, companyId), eq(memberships.isActive, true)));
+    return result.map(r => r.user);
   }
 
   async createUserByAdmin(userData: any, adminId: number): Promise<User> {
@@ -432,7 +443,7 @@ export class DatabaseStorage implements IStorage {
     return route;
   }
 
-  async getAppointmentHistory(appointmentId: number): Promise<AppointmentHistory[]> {
+  async getAppointmentHistory(appointmentId: number, userId?: number, companyId?: number | null): Promise<AppointmentHistory[]> {
     return db.select()
       .from(appointmentHistory)
       .where(eq(appointmentHistory.appointmentId, appointmentId))
@@ -454,29 +465,39 @@ export class DatabaseStorage implements IStorage {
     return history;
   }
 
+  // 🏢 Helper: retorna filtro por companyId (OBRIGATÓRIO - multi-tenant)
+  private ownerFilter(table: any, companyId: number) {
+    // Se companyId inválido, retorna condição impossível (não vaza dados)
+    if (!companyId) {
+      return eq(table.companyId, -1);
+    }
+    return eq(table.companyId, companyId);
+  }
+
   // Clients
-  async getAllClients(userId: number): Promise<Client[]> {
+  async getAllClients(userId: number, companyId?: number | null): Promise<Client[]> {
     return await db
       .select()
       .from(clients)
-      .where(eq(clients.userId, userId))
+      .where(this.ownerFilter(clients, companyId))
       .orderBy(sql`${clients.createdAt} DESC`);
   }
 
-  async getClients(userId: number, page: number = 1, limit: number = 20): Promise<{ data: Client[], total: number }> {
+  async getClients(userId: number, page: number = 1, limit: number = 20, companyId?: number | null): Promise<{ data: Client[], total: number }> {
     const offset = (page - 1) * limit;
+    const filter = this.ownerFilter(clients, companyId);
 
     const [countResult] = await db
       .select({ count: sql<number>`count(*)` })
       .from(clients)
-      .where(eq(clients.userId, userId));
+      .where(filter);
 
     const total = Number(countResult?.count || 0);
 
     const data = await db
       .select()
       .from(clients)
-      .where(eq(clients.userId, userId))
+      .where(filter)
       .orderBy(sql`${clients.createdAt} DESC`)
       .limit(limit)
       .offset(offset);
@@ -484,43 +505,44 @@ export class DatabaseStorage implements IStorage {
     return { data, total };
   }
 
-  async getClient(id: number, userId: number): Promise<Client | undefined> {
-    const [client] = await db.select().from(clients).where(and(eq(clients.id, id), eq(clients.userId, userId)));
+  async getClient(id: number, userId: number, companyId?: number | null): Promise<Client | undefined> {
+    const [client] = await db.select().from(clients).where(and(eq(clients.id, id), this.ownerFilter(clients, companyId)));
     return client || undefined;
   }
 
-  async getClientByCpf(cpf: string, userId: number): Promise<Client | undefined> {
-    const [client] = await db.select().from(clients).where(and(eq(clients.cpf, cpf), eq(clients.userId, userId)));
+  async getClientByCpf(cpf: string, userId: number, companyId?: number | null): Promise<Client | undefined> {
+    const [client] = await db.select().from(clients).where(and(eq(clients.cpf, cpf), this.ownerFilter(clients, companyId)));
     return client || undefined;
   }
 
-  async createClient(insertClient: InsertClient, userId: number): Promise<Client> {
+  async createClient(insertClient: InsertClient, userId: number, companyId?: number | null): Promise<Client> {
     const [client] = await db
       .insert(clients)
-      .values({ ...insertClient, userId })
+      .values({ ...insertClient, userId, companyId: companyId ?? null })
       .returning();
     return client;
   }
 
-  async updateClient(id: number, clientData: Partial<InsertClient>, userId: number): Promise<Client> {
+  async updateClient(id: number, clientData: Partial<InsertClient>, userId: number, companyId?: number | null): Promise<Client> {
     const [client] = await db
       .update(clients)
       .set(clientData)
-      .where(and(eq(clients.id, id), eq(clients.userId, userId)))
+      .where(and(eq(clients.id, id), this.ownerFilter(clients, companyId)))
       .returning();
     return client;
   }
 
-  async deleteClient(id: number, userId: number): Promise<boolean> {
+  async deleteClient(id: number, userId: number, companyId?: number | null): Promise<boolean> {
     const result = await db
       .delete(clients)
-      .where(and(eq(clients.id, id), eq(clients.userId, userId)));
+      .where(and(eq(clients.id, id), this.ownerFilter(clients, companyId)));
     return (result.rowCount || 0) > 0;
   }
 
-  async searchClients(query: string, userId: number, page: number = 1, limit: number = 20): Promise<{ data: Client[], total: number }> {
+  async searchClients(query: string, userId: number, page: number = 1, limit: number = 20, companyId?: number | null): Promise<{ data: Client[], total: number }> {
     console.log("Busca cliente - input:", query);
     const searchTerm = `%${query}%`;
+    const filter = this.ownerFilter(clients, companyId);
 
     // Tenta limpar a query para ver se é apenas números (busca por CPF)
     const numericQuery = query.replace(/\D/g, '');
@@ -530,7 +552,7 @@ export class DatabaseStorage implements IStorage {
 
     if (isCpfSearch) {
       whereClause = and(
-        eq(clients.userId, userId),
+        filter,
         or(
           ilike(clients.name, searchTerm),
           ilike(clients.cpf, searchTerm),
@@ -539,7 +561,7 @@ export class DatabaseStorage implements IStorage {
       );
     } else {
       whereClause = and(
-        eq(clients.userId, userId),
+        filter,
         or(
           ilike(clients.name, searchTerm),
           ilike(clients.cpf, searchTerm)
@@ -567,12 +589,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Services
-  async getServices(userId: number): Promise<Service[]> {
-    return await db.select().from(services).where(eq(services.userId, userId));
+  async getServices(userId: number, companyId?: number | null): Promise<Service[]> {
+    return await db.select().from(services).where(this.ownerFilter(services, companyId));
   }
 
-  async getServicesPaged(userId: number, page: number, pageSize: number, search?: string, isActive?: boolean) {
-    const conditions = [eq(services.userId, userId)];
+  async getServicesPaged(userId: number, page: number, pageSize: number, search?: string, isActive?: boolean, companyId?: number | null) {
+    const conditions = [this.ownerFilter(services, companyId)];
 
     if (search) {
       conditions.push(
@@ -613,42 +635,42 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getService(id: number, userId: number): Promise<Service | undefined> {
-    const [service] = await db.select().from(services).where(and(eq(services.id, id), eq(services.userId, userId)));
+  async getService(id: number, userId: number, companyId?: number | null): Promise<Service | undefined> {
+    const [service] = await db.select().from(services).where(and(eq(services.id, id), this.ownerFilter(services, companyId)));
     return service || undefined;
   }
 
-  async createService(insertService: InsertService, userId: number): Promise<Service> {
+  async createService(insertService: InsertService, userId: number, companyId?: number | null): Promise<Service> {
     const [service] = await db
       .insert(services)
-      .values({ ...insertService, userId })
+      .values({ ...insertService, userId, companyId: companyId ?? null })
       .returning();
     return service;
   }
 
-  async updateService(id: number, serviceData: Partial<InsertService>, userId: number): Promise<Service> {
+  async updateService(id: number, serviceData: Partial<InsertService>, userId: number, companyId?: number | null): Promise<Service> {
     const [service] = await db
       .update(services)
       .set(serviceData)
-      .where(and(eq(services.id, id), eq(services.userId, userId)))
+      .where(and(eq(services.id, id), this.ownerFilter(services, companyId)))
       .returning();
     return service;
   }
 
-  async deleteService(id: number, userId: number): Promise<boolean> {
+  async deleteService(id: number, userId: number, companyId?: number | null): Promise<boolean> {
     const result = await db
       .delete(services)
-      .where(and(eq(services.id, id), eq(services.userId, userId)));
+      .where(and(eq(services.id, id), this.ownerFilter(services, companyId)));
     return (result.rowCount || 0) > 0;
   }
 
   // Technicians
-  async getTechnicians(userId: number): Promise<Technician[]> {
-    return await db.select().from(technicians).where(eq(technicians.userId, userId));
+  async getTechnicians(userId: number, companyId?: number | null): Promise<Technician[]> {
+    return await db.select().from(technicians).where(this.ownerFilter(technicians, companyId));
   }
 
-  async getTechniciansPaged(userId: number, page: number, pageSize: number, search?: string, teamId?: number, isActive?: boolean) {
-    const conditions = [eq(technicians.userId, userId)];
+  async getTechniciansPaged(userId: number, page: number, pageSize: number, search?: string, teamId?: number, isActive?: boolean, companyId?: number | null) {
+    const conditions = [this.ownerFilter(technicians, companyId)];
 
     if (search) {
       conditions.push(
@@ -690,42 +712,42 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getTechnician(id: number, userId: number): Promise<Technician | undefined> {
-    const [technician] = await db.select().from(technicians).where(and(eq(technicians.id, id), eq(technicians.userId, userId)));
+  async getTechnician(id: number, userId: number, companyId?: number | null): Promise<Technician | undefined> {
+    const [technician] = await db.select().from(technicians).where(and(eq(technicians.id, id), this.ownerFilter(technicians, companyId)));
     return technician || undefined;
   }
 
-  async createTechnician(insertTechnician: InsertTechnician, userId: number): Promise<Technician> {
+  async createTechnician(insertTechnician: InsertTechnician, userId: number, companyId?: number | null): Promise<Technician> {
     const [technician] = await db
       .insert(technicians)
-      .values({ ...insertTechnician, userId })
+      .values({ ...insertTechnician, userId, companyId: companyId ?? null })
       .returning();
     return technician;
   }
 
-  async updateTechnician(id: number, technicianData: Partial<InsertTechnician>, userId: number): Promise<Technician> {
+  async updateTechnician(id: number, technicianData: Partial<InsertTechnician>, userId: number, companyId?: number | null): Promise<Technician> {
     const [technician] = await db
       .update(technicians)
       .set(technicianData)
-      .where(and(eq(technicians.id, id), eq(technicians.userId, userId)))
+      .where(and(eq(technicians.id, id), this.ownerFilter(technicians, companyId)))
       .returning();
     return technician;
   }
 
-  async deleteTechnician(id: number, userId: number): Promise<boolean> {
+  async deleteTechnician(id: number, userId: number, companyId?: number | null): Promise<boolean> {
     const result = await db
       .delete(technicians)
-      .where(and(eq(technicians.id, id), eq(technicians.userId, userId)));
+      .where(and(eq(technicians.id, id), this.ownerFilter(technicians, companyId)));
     return (result.rowCount || 0) > 0;
   }
 
   // Vehicles
-  async getVehicles(userId: number): Promise<Vehicle[]> {
-    return await db.select().from(vehicles).where(eq(vehicles.userId, userId));
+  async getVehicles(userId: number, companyId?: number | null): Promise<Vehicle[]> {
+    return await db.select().from(vehicles).where(this.ownerFilter(vehicles, companyId));
   }
 
-  async getVehiclesPaged(userId: number, page: number, pageSize: number, search?: string, responsibleType?: string, responsibleId?: number) {
-    const conditions = [eq(vehicles.userId, userId)];
+  async getVehiclesPaged(userId: number, page: number, pageSize: number, search?: string, responsibleType?: string, responsibleId?: number, companyId?: number | null) {
+    const conditions = [this.ownerFilter(vehicles, companyId)];
 
     if (search) {
       conditions.push(
@@ -768,12 +790,12 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getVehicle(id: number, userId: number): Promise<Vehicle | undefined> {
-    const [vehicle] = await db.select().from(vehicles).where(and(eq(vehicles.id, id), eq(vehicles.userId, userId)));
+  async getVehicle(id: number, userId: number, companyId?: number | null): Promise<Vehicle | undefined> {
+    const [vehicle] = await db.select().from(vehicles).where(and(eq(vehicles.id, id), this.ownerFilter(vehicles, companyId)));
     return vehicle || undefined;
   }
 
-  async createVehicle(insertVehicle: InsertVehicle, userId: number): Promise<Vehicle> {
+  async createVehicle(insertVehicle: InsertVehicle, userId: number, companyId?: number | null): Promise<Vehicle> {
     // 🔒 Validar unicidade: apenas 1 veículo por técnico/equipe
     if (insertVehicle.technicianId) {
       const [existing] = await db
@@ -811,12 +833,12 @@ export class DatabaseStorage implements IStorage {
 
     const [vehicle] = await db
       .insert(vehicles)
-      .values({ ...insertVehicle, userId } as any)
+      .values({ ...insertVehicle, userId, companyId: companyId ?? null } as any)
       .returning();
     return vehicle;
   }
 
-  async updateVehicle(id: number, vehicleData: Partial<InsertVehicle>, userId: number): Promise<Vehicle> {
+  async updateVehicle(id: number, vehicleData: Partial<InsertVehicle>, userId: number, companyId?: number | null): Promise<Vehicle> {
     // 🔒 Validar unicidade: apenas 1 veículo por técnico/equipe
     if (vehicleData.technicianId) {
       const [existing] = await db
@@ -857,37 +879,37 @@ export class DatabaseStorage implements IStorage {
     const [vehicle] = await db
       .update(vehicles)
       .set(vehicleData as any)
-      .where(and(eq(vehicles.id, id), eq(vehicles.userId, userId)))
+      .where(and(eq(vehicles.id, id), this.ownerFilter(vehicles, companyId)))
       .returning();
     return vehicle;
   }
 
-  async deleteVehicle(id: number, userId: number): Promise<boolean> {
+  async deleteVehicle(id: number, userId: number, companyId?: number | null): Promise<boolean> {
     const result = await db
       .delete(vehicles)
-      .where(and(eq(vehicles.id, id), eq(vehicles.userId, userId)));
+      .where(and(eq(vehicles.id, id), this.ownerFilter(vehicles, companyId)));
     return (result.rowCount || 0) > 0;
   }
 
   // Appointments
-  async getAppointments(userId: number): Promise<Appointment[]> {
-    return await db.select().from(appointments).where(eq(appointments.userId, userId));
+  async getAppointments(userId: number, companyId?: number | null): Promise<Appointment[]> {
+    return await db.select().from(appointments).where(this.ownerFilter(appointments, companyId));
   }
 
-  async getAppointment(id: number, userId: number): Promise<Appointment | undefined> {
-    const [appointment] = await db.select().from(appointments).where(and(eq(appointments.id, id), eq(appointments.userId, userId)));
+  async getAppointment(id: number, userId: number, companyId?: number | null): Promise<Appointment | undefined> {
+    const [appointment] = await db.select().from(appointments).where(and(eq(appointments.id, id), this.ownerFilter(appointments, companyId)));
     return appointment || undefined;
   }
 
-  async createAppointment(insertAppointment: InsertAppointment, userId: number): Promise<Appointment> {
+  async createAppointment(insertAppointment: InsertAppointment, userId: number, companyId?: number | null): Promise<Appointment> {
     const [appointment] = await db
       .insert(appointments)
-      .values({ ...insertAppointment, userId })
+      .values({ ...insertAppointment, userId, companyId: companyId ?? null })
       .returning();
     return appointment;
   }
 
-  async updateAppointment(id: number, appointmentData: Partial<InsertAppointment>, userId: number): Promise<Appointment> {
+  async updateAppointment(id: number, appointmentData: Partial<InsertAppointment>, userId: number, companyId?: number | null): Promise<Appointment> {
     // Processar scheduledDate se presente
     const processedData = { ...appointmentData };
     if (processedData.scheduledDate) {
@@ -908,20 +930,20 @@ export class DatabaseStorage implements IStorage {
     const [appointment] = await db
       .update(appointments)
       .set(processedData)
-      .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
+      .where(and(eq(appointments.id, id), this.ownerFilter(appointments, companyId)))
       .returning();
 
     return appointment;
   }
 
-  async deleteAppointment(id: number, userId: number): Promise<boolean> {
+  async deleteAppointment(id: number, userId: number, companyId?: number | null): Promise<boolean> {
     const result = await db
       .delete(appointments)
-      .where(and(eq(appointments.id, id), eq(appointments.userId, userId)));
+      .where(and(eq(appointments.id, id), this.ownerFilter(appointments, companyId)));
     return (result.rowCount || 0) > 0;
   }
 
-  async getAppointmentsByDate(date: string, userId: number): Promise<Appointment[]> {
+  async getAppointmentsByDate(date: string, userId: number, companyId?: number | null): Promise<Appointment[]> {
     // Converter string de data para range do dia inteiro
     const targetDate = new Date(date);
     const startOfDay = new Date(targetDate);
@@ -932,15 +954,15 @@ export class DatabaseStorage implements IStorage {
     return await db.select()
       .from(appointments)
       .where(and(
-        eq(appointments.userId, userId),
+        this.ownerFilter(appointments, companyId),
         gte(appointments.scheduledDate, startOfDay),
         lte(appointments.scheduledDate, endOfDay)
       ));
   }
 
   // Checklists
-  async getChecklists(userId: number): Promise<Checklist[]> {
-    return await db.select().from(checklists).where(eq(checklists.userId, userId));
+  async getChecklists(userId: number, companyId?: number | null): Promise<Checklist[]> {
+    return await db.select().from(checklists).where(this.ownerFilter(checklists, companyId));
   }
 
   async getChecklist(id: number, userId: number): Promise<Checklist | undefined> {
@@ -948,56 +970,56 @@ export class DatabaseStorage implements IStorage {
     return checklist || undefined;
   }
 
-  async createChecklist(insertChecklist: InsertChecklist, userId: number): Promise<Checklist> {
+  async createChecklist(insertChecklist: InsertChecklist, userId: number, companyId?: number | null): Promise<Checklist> {
     const [checklist] = await db
       .insert(checklists)
-      .values({ ...insertChecklist, userId })
+      .values({ ...insertChecklist, userId, companyId: companyId ?? null } as any)
       .returning();
     return checklist;
   }
 
-  async updateChecklist(id: number, checklistData: Partial<InsertChecklist>, userId: number): Promise<Checklist> {
+  async updateChecklist(id: number, checklistData: Partial<InsertChecklist>, userId: number, companyId?: number | null): Promise<Checklist> {
     const [checklist] = await db
       .update(checklists)
       .set(checklistData)
-      .where(and(eq(checklists.id, id), eq(checklists.userId, userId)))
+      .where(and(eq(checklists.id, id), this.ownerFilter(checklists, companyId)))
       .returning();
     return checklist;
   }
 
-  async deleteChecklist(id: number, userId: number): Promise<boolean> {
+  async deleteChecklist(id: number, userId: number, companyId?: number | null): Promise<boolean> {
     const result = await db
       .delete(checklists)
-      .where(and(eq(checklists.id, id), eq(checklists.userId, userId)));
+      .where(and(eq(checklists.id, id), this.ownerFilter(checklists, companyId)));
     return (result.rowCount || 0) > 0;
   }
 
   // Business Rules
-  async getBusinessRules(userId: number): Promise<BusinessRules | undefined> {
-    const [rules] = await db.select().from(businessRules).where(eq(businessRules.userId, userId));
+  async getBusinessRules(userId: number, companyId?: number | null): Promise<BusinessRules | undefined> {
+    const [rules] = await db.select().from(businessRules).where(this.ownerFilter(businessRules, companyId));
     return rules || undefined;
   }
 
-  async createBusinessRules(insertBusinessRules: InsertBusinessRules, userId: number): Promise<BusinessRules> {
+  async createBusinessRules(insertBusinessRules: InsertBusinessRules, userId: number, companyId?: number | null): Promise<BusinessRules> {
     const [rules] = await db
       .insert(businessRules)
-      .values({ ...insertBusinessRules, userId } as any)
+      .values({ ...insertBusinessRules, userId, companyId: companyId ?? null } as any)
       .returning();
     return rules;
   }
 
-  async updateBusinessRules(id: number, rulesData: Partial<InsertBusinessRules>, userId: number): Promise<BusinessRules> {
+  async updateBusinessRules(id: number, rulesData: Partial<InsertBusinessRules>, userId: number, companyId?: number | null): Promise<BusinessRules> {
     const [rules] = await db
       .update(businessRules)
       .set(rulesData as any)
-      .where(and(eq(businessRules.id, id), eq(businessRules.userId, userId)))
+      .where(and(eq(businessRules.id, id), this.ownerFilter(businessRules, companyId)))
       .returning();
     return rules;
   }
 
   // Route optimization
-  async optimizeRoute(appointmentIds: number[], userId: number): Promise<{ optimizedOrder: Appointment[], totalDistance: number, estimatedTime: number }> {
-    const allAppointments = await db.select().from(appointments).where(eq(appointments.userId, userId));
+  async optimizeRoute(appointmentIds: number[], userId: number, companyId?: number | null): Promise<{ optimizedOrder: Appointment[], totalDistance: number, estimatedTime: number }> {
+    const allAppointments = await db.select().from(appointments).where(this.ownerFilter(appointments, companyId));
     const appointmentsList = allAppointments.filter(apt => appointmentIds.includes(apt.id));
 
     // Simple optimization - in production you'd implement actual routing algorithms
@@ -1009,12 +1031,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Teams - Implementação das operações de equipes conforme solicitado
-  async getTeams(userId: number): Promise<Team[]> {
-    return await db.select().from(teams).where(eq(teams.userId, userId));
+  async getTeams(userId: number, companyId?: number | null): Promise<Team[]> {
+    return await db.select().from(teams).where(this.ownerFilter(teams, companyId));
   }
 
-  async getTeamsPaged(userId: number, page: number, pageSize: number, search?: string) {
-    const conditions = [eq(teams.userId, userId)];
+  async getTeamsPaged(userId: number, page: number, pageSize: number, search?: string, companyId?: number | null) {
+    const conditions = [this.ownerFilter(teams, companyId)];
 
     if (search) {
       conditions.push(ilike(teams.name, `%${search}%`));
@@ -1045,47 +1067,47 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getTeam(id: number, userId: number): Promise<Team | undefined> {
-    const [team] = await db.select().from(teams).where(and(eq(teams.id, id), eq(teams.userId, userId)));
+  async getTeam(id: number, userId: number, companyId?: number | null): Promise<Team | undefined> {
+    const [team] = await db.select().from(teams).where(and(eq(teams.id, id), this.ownerFilter(teams, companyId)));
     return team || undefined;
   }
 
-  async createTeam(insertTeam: InsertTeam, userId: number): Promise<Team> {
-    const [team] = await db.insert(teams).values({ ...insertTeam, userId }).returning();
+  async createTeam(insertTeam: InsertTeam, userId: number, companyId?: number | null): Promise<Team> {
+    const [team] = await db.insert(teams).values({ ...insertTeam, userId, companyId: companyId ?? null }).returning();
     return team;
   }
 
-  async updateTeam(id: number, teamData: Partial<InsertTeam>, userId: number): Promise<Team> {
+  async updateTeam(id: number, teamData: Partial<InsertTeam>, userId: number, companyId?: number | null): Promise<Team> {
     const [team] = await db.update(teams)
       .set(teamData)
-      .where(and(eq(teams.id, id), eq(teams.userId, userId)))
+      .where(and(eq(teams.id, id), this.ownerFilter(teams, companyId)))
       .returning();
     return team;
   }
 
-  async deleteTeam(id: number, userId: number): Promise<boolean> {
+  async deleteTeam(id: number, userId: number, companyId?: number | null): Promise<boolean> {
     // Remove membros da equipe primeiro
-    await db.delete(teamMembers).where(and(eq(teamMembers.teamId, id), eq(teamMembers.userId, userId)));
+    await db.delete(teamMembers).where(and(eq(teamMembers.teamId, id), this.ownerFilter(teamMembers, companyId)));
 
-    const result = await db.delete(teams).where(and(eq(teams.id, id), eq(teams.userId, userId)));
+    const result = await db.delete(teams).where(and(eq(teams.id, id), this.ownerFilter(teams, companyId)));
     return (result.rowCount || 0) > 0;
   }
 
-  async getTeamMembers(teamId: number, userId: number): Promise<TeamMember[]> {
-    return await db.select().from(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+  async getTeamMembers(teamId: number, userId: number, companyId?: number | null): Promise<TeamMember[]> {
+    return await db.select().from(teamMembers).where(and(eq(teamMembers.teamId, teamId), this.ownerFilter(teamMembers, companyId)));
   }
 
-  async getAllTeamMembers(userId: number): Promise<TeamMember[]> {
-    return await db.select().from(teamMembers).where(eq(teamMembers.userId, userId));
+  async getAllTeamMembers(userId: number, companyId?: number | null): Promise<TeamMember[]> {
+    return await db.select().from(teamMembers).where(this.ownerFilter(teamMembers, companyId));
   }
 
-  async createTeamMember(insertTeamMember: InsertTeamMember, userId: number): Promise<TeamMember> {
+  async createTeamMember(insertTeamMember: InsertTeamMember, userId: number, companyId?: number | null): Promise<TeamMember> {
     const [teamMember] = await db.insert(teamMembers).values({ ...insertTeamMember, userId }).returning();
     return teamMember;
   }
 
-  async deleteTeamMember(id: number, userId: number): Promise<boolean> {
-    const result = await db.delete(teamMembers).where(and(eq(teamMembers.id, id), eq(teamMembers.userId, userId)));
+  async deleteTeamMember(id: number, userId: number, companyId?: number | null): Promise<boolean> {
+    const result = await db.delete(teamMembers).where(and(eq(teamMembers.id, id), this.ownerFilter(teamMembers, companyId)));
     return (result.rowCount || 0) > 0;
   }
 

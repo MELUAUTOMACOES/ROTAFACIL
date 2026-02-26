@@ -48,15 +48,21 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
   
   // ==================== ROTAS DE GESTÃO DE USUÁRIOS (ADMIN) ====================
   
-  // Listar todos os usuários (apenas admin)
+  // Listar todos os usuários da empresa (apenas admin)
   app.get("/api/users", authenticateToken, requireAdmin, async (req: any, res) => {
     try {
-      // 🔒 CRÍTICO: Filtrar apenas usuários criados pelo admin logado para garantir isolamento
+      const companyId = req.user.companyId;
+      
+      if (companyId) {
+        // 🔒 MULTI-TENANT: Listar usuários da empresa via memberships
+        const companyUsers = await storage.getUsersByCompanyId(companyId);
+        const sanitizedUsers = companyUsers.map(({ password, emailVerificationToken, ...user }: any) => user);
+        return res.json(sanitizedUsers);
+      }
+      
+      // Fallback: Se admin não tem companyId (legado), usar createdBy
       const users = await storage.getAllUsers(req.user.userId);
-      
-      // Não enviar passwords no response
       const sanitizedUsers = users.map(({ password, emailVerificationToken, ...user }) => user);
-      
       res.json(sanitizedUsers);
     } catch (error: any) {
       console.error("❌ Erro ao listar usuários:", error);
@@ -64,24 +70,63 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
     }
   });
   
-  // Criar novo usuário (apenas admin)
+  // Criar novo usuário (apenas admin) — MULTI-TENANT
   app.post("/api/users", authenticateToken, requireAdmin, async (req: any, res) => {
     try {
       console.log("📝 [USER MANAGEMENT] Criando novo usuário");
       console.log("Dados recebidos:", req.body);
       
       const userData = createUserByAdminSchema.parse(req.body);
+      const adminCompanyId = req.user.companyId;
       
-      // Verificar se email já existe
+      // Verificar se email já existe no sistema
       const existingUser = await storage.getUserByEmail(userData.email);
+      
       if (existingUser) {
+        // 🏢 MULTI-TENANT: Usuário já existe — verificar se já tem membership nesta empresa
+        if (adminCompanyId) {
+          const existingMembership = await storage.getMembership(existingUser.id, adminCompanyId);
+          if (existingMembership) {
+            return res.status(400).json({ 
+              message: "Este usuário já pertence à sua empresa." 
+            });
+          }
+          
+          // Usuário existe mas NÃO está nesta empresa → criar membership
+          await storage.createMembership({
+            userId: existingUser.id,
+            companyId: adminCompanyId,
+            role: userData.role === 'admin' ? 'ADMIN' : userData.role === 'operador' ? 'OPERADOR' : 'ADMINISTRATIVO',
+          });
+          
+          console.log(`🏢 [USER MANAGEMENT] Usuário ${existingUser.email} adicionado à empresa ${adminCompanyId} via membership`);
+          
+          const { password, emailVerificationToken, ...sanitizedUser } = existingUser;
+          return res.json({ 
+            user: sanitizedUser,
+            message: 'Usuário já existente foi adicionado à sua empresa com sucesso.',
+            addedToCompany: true,
+          });
+        }
+        
+        // Sem companyId (legado) — manter comportamento antigo
         return res.status(400).json({ 
           message: "Este email já está cadastrado no sistema." 
         });
       }
       
-      // Criar usuário com senha temporária
+      // Usuário NÃO existe — criar user + membership
       const user = await storage.createUserByAdmin(userData, req.user.userId);
+      
+      // 🏢 MULTI-TENANT: Criar membership na empresa do admin
+      if (adminCompanyId) {
+        await storage.createMembership({
+          userId: user.id,
+          companyId: adminCompanyId,
+          role: userData.role === 'admin' ? 'ADMIN' : userData.role === 'operador' ? 'OPERADOR' : 'ADMINISTRATIVO',
+        });
+        console.log(`🏢 [USER MANAGEMENT] Membership criada para user ${user.id} na empresa ${adminCompanyId}`);
+      }
       
       // Gerar token de verificação de email
       const token = generateVerificationToken();
@@ -150,19 +195,43 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
     }
   });
   
-  // Deletar usuário (apenas admin)
+  // Deletar usuário da empresa (apenas admin) — MULTI-TENANT
   app.delete("/api/users/:id", authenticateToken, requireAdmin, async (req: any, res) => {
     try {
       const userId = parseInt(req.params.id);
+      const adminCompanyId = req.user.companyId;
       
       // Não permitir que admin delete a si mesmo
       if (userId === req.user.userId) {
         return res.status(400).json({ 
-          message: "Você não pode deletar sua própria conta." 
+          message: "Você não pode remover sua própria conta." 
         });
       }
       
-      console.log(`🗑️ [USER MANAGEMENT] Deletando usuário ID: ${userId}`);
+      if (adminCompanyId) {
+        // 🏢 MULTI-TENANT: Remover membership da empresa, NÃO deletar o user
+        const membership = await storage.getMembership(userId, adminCompanyId);
+        if (!membership) {
+          return res.status(404).json({ message: "Usuário não encontrado nesta empresa" });
+        }
+        
+        await storage.deleteMembership(userId, adminCompanyId);
+        
+        console.log(`🏢 [USER MANAGEMENT] Membership removida: user ${userId} da empresa ${adminCompanyId}`);
+        
+        // Verificar se o user ainda tem memberships em outras empresas
+        const remainingMemberships = await storage.getMembershipsByUserId(userId);
+        if (remainingMemberships.length === 0) {
+          // Sem mais empresas — desativar o usuário (soft delete)
+          await storage.updateUserByAdmin(userId, { isActive: false });
+          console.log(`⚠️ [USER MANAGEMENT] Usuário ${userId} desativado (sem mais empresas)`);
+        }
+        
+        return res.json({ message: "Usuário removido da empresa com sucesso" });
+      }
+      
+      // Fallback legado: hard delete
+      console.log(`🗑️ [USER MANAGEMENT] Deletando usuário ID: ${userId} (modo legado)`);
       
       const success = await storage.deleteUser(userId);
       

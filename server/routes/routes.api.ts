@@ -28,6 +28,7 @@ import { authenticateToken } from "../middleware/auth.middleware";
 interface AuthenticatedRequest extends Request {
   user: {
     userId: number;
+    companyId?: number | null;
   };
 }
 
@@ -96,10 +97,20 @@ async function createRouteAudit(
   }
 }
 
+// Helper para filtrar por companyId (OBRIGATÓRIO - multi-tenant)
+function ownerFilter(table: any, companyId: number) {
+  // Se companyId inválido, retorna condição impossível (não vaza dados)
+  if (!companyId) {
+    return eq(table.companyId, -1);
+  }
+  return eq(table.companyId, companyId);
+}
+
 async function resolveStartForRoute(
   userId: number,
   responsibleType: "technician" | "team",
-  responsibleId: string | number
+  responsibleId: string | number,
+  companyId?: number | null
 ): Promise<{ lat: number; lng: number; address: string }> {
   // 1) tenta endereço do técnico/equipe; 2) cai para endereço da empresa (businessRules); 3) fallback Curitiba
   type EntityAddr = {
@@ -145,7 +156,7 @@ async function resolveStartForRoute(
         enderecoInicioEstado: technicians.enderecoInicioEstado,
       })
       .from(technicians)
-      .where(and(eq(technicians.id, Number(responsibleId)), eq(technicians.userId, userId)))
+      .where(and(eq(technicians.id, Number(responsibleId)), ownerFilter(technicians, companyId)))
       .limit(1);
 
     if (t?.enderecoInicioCidade && (t.enderecoInicioCep || t.enderecoInicioLogradouro)) {
@@ -167,7 +178,7 @@ async function resolveStartForRoute(
         enderecoInicioEstado: teams.enderecoInicioEstado,
       })
       .from(teams)
-      .where(and(eq(teams.id, Number(responsibleId)), eq(teams.userId, userId)))
+      .where(and(eq(teams.id, Number(responsibleId)), ownerFilter(teams, companyId)))
       .limit(1);
 
     if (tm?.enderecoInicioCidade && (tm.enderecoInicioCep || tm.enderecoInicioLogradouro)) {
@@ -180,7 +191,7 @@ async function resolveStartForRoute(
   }
 
   if (!tentativas.length) {
-    const brs = await db.select().from(businessRules).where(eq(businessRules.userId, userId)).limit(1);
+    const brs = await db.select().from(businessRules).where(ownerFilter(businessRules, companyId)).limit(1);
     if (brs.length) {
       const br = brs[0];
       tentativas = buildTentativas({
@@ -463,7 +474,8 @@ export function registerRoutesAPI(app: Express) {
         const startInfo = await resolveStartForRoute(
           req.user.userId,
           responsibleType,
-          responsibleId
+          responsibleId,
+          req.user.companyId
         );
 
         res.json(startInfo);
@@ -530,6 +542,9 @@ export function registerRoutesAPI(app: Express) {
   // ==== POST /api/routes/:id/optimize ====
   app.post("/api/routes/:id/optimize", authenticateToken, async (req: any, res) => {
     try {
+      const { companyId } = req.user;
+      if (!companyId) return res.status(403).json({ error: "Empresa não selecionada ou inválida." });
+
       const routeId = req.params.id;
       const terminarNoPontoInicial = !!req.body?.terminarNoPontoInicial;
 
@@ -574,7 +589,8 @@ export function registerRoutesAPI(app: Express) {
       const startInfo = await resolveStartForRoute(
         req.user.userId,
         route.responsibleType as "technician" | "team",
-        route.responsibleId
+        route.responsibleId,
+        req.user.companyId
       );
       const startLngLat: [number, number] = [
         Number(Number(startInfo.lng).toFixed(6)),
@@ -788,7 +804,7 @@ export function registerRoutesAPI(app: Express) {
         const brs = await db
           .select()
           .from(businessRules)
-          .where(eq(businessRules.userId, req.user.userId))
+          .where(ownerFilter(businessRules, req.user.companyId))
           .limit(1);
 
         // 🚫 Validação: Máximo de paradas por rota
@@ -837,7 +853,7 @@ export function registerRoutesAPI(app: Express) {
           })
           .from(appointments)
           .leftJoin(clients, eq(appointments.clientId, clients.id))
-          .where(eq(appointments.userId, req.user.userId));
+          .where(ownerFilter(appointments, req.user.companyId));
 
         // Reordenar conforme a lista de IDs recebida (para respeitar a seleção do usuário)
         const appointmentMap = new Map(appointmentList.map((app) => [app.id, app]));
@@ -1806,7 +1822,8 @@ export function registerRoutesAPI(app: Express) {
         const start = await resolveStartForRoute(
           (req as any).user.userId,
           route.responsibleType as "technician" | "team",
-          route.responsibleId
+          route.responsibleId,
+          (req as any).user.companyId
         );
 
         res.json({
@@ -1884,7 +1901,7 @@ export function registerRoutesAPI(app: Express) {
           .leftJoin(clients, eq(appointments.clientId, clients.id))
           .where(
             and(
-              eq(appointments.userId, req.user.userId),
+              ownerFilter(appointments, req.user.companyId),
               gte(appointments.scheduledDate, start),
               lte(appointments.scheduledDate, end),
               or(
@@ -1954,6 +1971,9 @@ export function registerRoutesAPI(app: Express) {
     authenticateToken,
     async (req: any, res: Response) => {
       try {
+        const { companyId } = req.user;
+        if (!companyId) return res.status(403).json({ error: "Empresa não selecionada ou inválida." });
+
         const { routeId } = req.params;
         const { appointmentIds } = req.body as { appointmentIds: (string | number)[] };
 
@@ -2003,7 +2023,7 @@ export function registerRoutesAPI(app: Express) {
         const [brRule] = await db
           .select()
           .from(businessRules)
-          .where(eq(businessRules.userId, req.user.userId))
+          .where(ownerFilter(businessRules, req.user.companyId))
           .limit(1);
         if (brRule) {
           const maxStops = (brRule as any).maximoParadasPorRota;
@@ -2076,7 +2096,7 @@ export function registerRoutesAPI(app: Express) {
           .from(appointments)
           .leftJoin(clients, eq(appointments.clientId, clients.id))
           .where(and(
-            eq(appointments.userId, req.user.userId),
+            ownerFilter(appointments, req.user.companyId),
             inArray(appointments.id, toInsertNums),
           ));
 
@@ -2348,7 +2368,8 @@ export function registerRoutesAPI(app: Express) {
         const startInfo = await resolveStartForRoute(
           req.user.userId,
           route.responsibleType as "technician" | "team",
-          route.responsibleId
+          route.responsibleId,
+          req.user.companyId
         );
         const startLngLat: [number, number] = [
           Number(Number(startInfo.lng).toFixed(6)),
