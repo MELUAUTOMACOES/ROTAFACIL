@@ -104,7 +104,7 @@ export const clients = pgTable("clients", {
   email: text("email"),
   phone1: text("phone1"),
   phone2: text("phone2"),
-  cpf: text("cpf").notNull().unique(),
+  cpf: text("cpf").notNull(),
   cep: text("cep").notNull(),
   bairro: text("bairro").notNull(),
   cidade: text("cidade").notNull(),
@@ -384,7 +384,8 @@ export const routes = pgTable("routes", {
   status: varchar("status", { length: 24 }).notNull().default("draft"), // draft|confirmado|finalizado|cancelado
   polylineGeoJson: jsonb("polyline_geojson"), // GeoJSON LineString
   displayNumber: integer("display_number").notNull().default(0),
-  userId: integer("user_id").references(() => users.id), // 🔒 Isolamento entre empresas (opcional até migration)
+  userId: integer("user_id").references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id), // 🔒 Isolamento multi-tenant obrigatório
   // ⏱️ Campos de rastreamento de tempo do prestador
   routeStartedAt: timestamp("route_started_at"), // Quando prestador clicou "Iniciar Rota"
   routeFinishedAt: timestamp("route_finished_at"), // Quando clicou "Fechar Romaneio"

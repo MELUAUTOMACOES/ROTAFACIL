@@ -1920,9 +1920,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Melhorar mensagem de erro para CPFs duplicados
           let friendlyErrorMessage = error.message;
 
-          if (error.message && error.message.includes('clients_cpf_unique')) {
+          if (error.message && (error.message.includes('clients_cpf_company_unique') || error.message.includes('clients_cpf_unique'))) {
             console.log(`🚫 CPF duplicado detectado: ${clientData.cpf || 'N/A'}`);
-            friendlyErrorMessage = `Erro na importação: CPF ${clientData.cpf} já está cadastrado.`;
+            friendlyErrorMessage = `Erro na importação: CPF ${clientData.cpf} já está cadastrado nesta empresa.`;
             console.log(`✏️ Mensagem de erro melhorada: ${friendlyErrorMessage}`);
           }
 
@@ -2120,11 +2120,224 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== TEAMS ROUTES ====================
+
+  app.get("/api/teams", authenticateToken, async (req: any, res) => {
+    try {
+      if (!req.user?.companyId) {
+        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+      }
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string) || 50));
+      const search = req.query.search as string;
+
+      const result = await storage.getTeamsPaged(req.user.userId, page, pageSize, search, req.user.companyId);
+      logEgressSize(req, result);
+      res.json(result);
+    } catch (error: any) {
+      console.error("❌ [TEAMS] Erro ao listar:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/teams/:id", authenticateToken, async (req: any, res) => {
+    try {
+      if (!req.user?.companyId) {
+        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+      }
+      const id = parseInt(req.params.id);
+      const team = await storage.getTeam(id, req.user.userId, req.user.companyId);
+      if (!team) {
+        return res.status(404).json({ message: "Equipe não encontrada" });
+      }
+      res.json(team);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/teams", authenticateToken, async (req: any, res) => {
+    try {
+      if (!req.user?.companyId) {
+        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+      }
+      const teamData = insertTeamSchema.parse(req.body);
+      const team = await storage.createTeam(teamData, req.user.userId, req.user.companyId);
+      trackFeatureUsage(req.user.userId, "teams", "create", req.user.companyId, { id: team.id });
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "teams",
+        action: "create",
+        resourceId: team.id,
+        description: `Criou equipe "${team.name}"`
+      });
+      res.json(team);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/teams/:id", authenticateToken, async (req: any, res) => {
+    try {
+      if (!req.user?.companyId) {
+        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+      }
+      const id = parseInt(req.params.id);
+      const teamData = insertTeamSchema.partial().parse(req.body);
+      const team = await storage.updateTeam(id, teamData, req.user.userId, req.user.companyId);
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "teams",
+        action: "update",
+        resourceId: team.id,
+        description: `Atualizou equipe "${team.name}"`
+      });
+      res.json(team);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/teams/:id", authenticateToken, async (req: any, res) => {
+    try {
+      if (!req.user?.companyId) {
+        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+      }
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteTeam(id, req.user.userId, req.user.companyId);
+      if (!success) {
+        return res.status(404).json({ message: "Equipe não encontrada" });
+      }
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "teams",
+        action: "delete",
+        resourceId: id,
+        description: `Excluiu equipe #${id}`
+      });
+      res.json({ message: "Equipe excluída com sucesso" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Team Members
   app.get("/api/team-members", authenticateToken, async (req: any, res) => {
     try {
       const teamMembers = await storage.getAllTeamMembers(req.user.userId, req.user.companyId);
       res.json(teamMembers);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== VEHICLES ROUTES ====================
+
+  app.get("/api/vehicles", authenticateToken, async (req: any, res) => {
+    try {
+      if (!req.user?.companyId) {
+        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+      }
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string) || 50));
+      const search = req.query.search as string;
+      const responsibleType = req.query.responsibleType as string;
+      const responsibleId = req.query.responsibleId ? parseInt(req.query.responsibleId as string) : undefined;
+
+      const result = await storage.getVehiclesPaged(req.user.userId, page, pageSize, search, responsibleType, responsibleId, req.user.companyId);
+      logEgressSize(req, result);
+      res.json(result);
+    } catch (error: any) {
+      console.error("❌ [VEHICLES] Erro ao listar:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/vehicles/:id", authenticateToken, async (req: any, res) => {
+    try {
+      if (!req.user?.companyId) {
+        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+      }
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "ID inválido" });
+      }
+      const vehicle = await storage.getVehicle(id, req.user.userId, req.user.companyId);
+      if (!vehicle) {
+        return res.status(404).json({ message: "Veículo não encontrado" });
+      }
+      res.json(vehicle);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/vehicles", authenticateToken, async (req: any, res) => {
+    try {
+      if (!req.user?.companyId) {
+        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+      }
+      const vehicleData = insertVehicleSchema.parse(req.body);
+      const vehicle = await storage.createVehicle(vehicleData, req.user.userId, req.user.companyId);
+      trackFeatureUsage(req.user.userId, "vehicles", "create", req.user.companyId, { id: vehicle.id });
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "vehicles",
+        action: "create",
+        resourceId: vehicle.id,
+        description: `Criou veículo "${vehicle.plate}"`
+      });
+      res.json(vehicle);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/vehicles/:id", authenticateToken, async (req: any, res) => {
+    try {
+      if (!req.user?.companyId) {
+        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+      }
+      const id = parseInt(req.params.id);
+      const vehicleData = insertVehicleSchema.partial().parse(req.body);
+      const vehicle = await storage.updateVehicle(id, vehicleData, req.user.userId, req.user.companyId);
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "vehicles",
+        action: "update",
+        resourceId: vehicle.id,
+        description: `Atualizou veículo "${vehicle.plate}"`
+      });
+      res.json(vehicle);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/vehicles/:id", authenticateToken, async (req: any, res) => {
+    try {
+      if (!req.user?.companyId) {
+        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+      }
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteVehicle(id, req.user.userId, req.user.companyId);
+      if (!success) {
+        return res.status(404).json({ message: "Veículo não encontrado" });
+      }
+      trackCompanyAudit({
+        userId: req.user.userId,
+        companyId: req.user.companyId,
+        feature: "vehicles",
+        action: "delete",
+        resourceId: id,
+        description: `Excluiu veículo #${id}`
+      });
+      res.json({ message: "Veículo excluído com sucesso" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -5143,6 +5356,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Registrar rotas do dashboard (métricas e KPIs)
   registerDashboardRoutes(app, authenticateToken);
+
+  // Registrar rotas de métricas de ADS/Marketing
+  registerAdsMetricsRoutes(app, authenticateToken);
 
   // 🔐 Registrar rotas de SuperAdmin (métricas por empresa)
   registerSuperadminRoutes(app, authenticateToken);

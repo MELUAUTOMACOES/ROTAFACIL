@@ -116,6 +116,7 @@ export interface IStorage {
 
   // Teams - Operações para equipes conforme solicitado
   getTeams(userId: number, companyId?: number | null): Promise<Team[]>;
+  getTeamsPaged(userId: number, page: number, pageSize: number, search?: string, companyId?: number | null): Promise<{ items: Team[], pagination: { page: number, pageSize: number, total: number, totalPages: number } }>;
   getTeam(id: number, userId: number, companyId?: number | null): Promise<Team | undefined>;
   createTeam(team: InsertTeam, userId: number, companyId?: number | null): Promise<Team>;
   updateTeam(id: number, team: Partial<InsertTeam>, userId: number, companyId?: number | null): Promise<Team>;

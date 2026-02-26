@@ -492,6 +492,11 @@ export function registerRoutesAPI(app: Express) {
       const routeId = req.params.id;
       const { date } = req.body;
 
+      // 🔒 Guard: companyId obrigatório
+      if (!req.user?.companyId) {
+        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+      }
+
       if (!date) {
         return res.status(400).json({ message: "Data é obrigatória" });
       }
@@ -501,23 +506,10 @@ export function registerRoutesAPI(app: Express) {
         return res.status(400).json({ message: "Data inválida" });
       }
 
-      // TODO: Adicionar storage.updateRouteDate na interface IStorage e implementar no DatabaseStorage
-      // Já adicionei no passo anterior, agora é só usar.
-      // Como o storage é importado de ../storage (que exporta a instância 'storage'), precisamos garantir que estamos usando a instância correta.
-      // O arquivo routes.api.ts importa 'db' de '../db', mas não 'storage'.
-      // Vou usar 'db' diretamente aqui ou importar 'storage'.
-      // Melhor usar 'db' direto aqui se 'storage' não estiver disponível no escopo, 
-      // MAS o padrão do projeto é usar storage. 
-      // Vou verificar imports. O arquivo routes.api.ts NÃO importa 'storage' de '../storage'.
-      // Vou adicionar o import do storage no topo do arquivo ou usar db direto.
-      // Usando db direto para evitar mexer nos imports lá em cima e causar conflito, 
-      // mas espere, eu já editei o storage.ts. O ideal é usar o storage.
-      // Vou usar db direto aqui para ser consistente com o resto deste arquivo que usa db bastante.
-
       const [updatedRoute] = await db
         .update(routesTbl)
         .set({ date: newDate, updatedAt: new Date() })
-        .where(eq(routesTbl.id, routeId))
+        .where(and(eq(routesTbl.id, routeId), ownerFilter(routesTbl, req.user.companyId)))
         .returning();
 
       if (!updatedRoute) {
@@ -1486,7 +1478,7 @@ export function registerRoutesAPI(app: Express) {
               maxNum: sql<number>`COALESCE(MAX(${routesTbl.displayNumber}), 0)`,
             })
             .from(routesTbl)
-            .where(eq(routesTbl.userId, req.user.userId)); // 🔧 Filtrar por userId para numeração sequencial por empresa
+            .where(ownerFilter(routesTbl, req.user.companyId)); // 🔧 Filtrar por companyId para numeração sequencial por empresa
           nextDisplayNumber = (maxRes?.maxNum ?? 0) + 1;
         }
 
@@ -1507,7 +1499,8 @@ export function registerRoutesAPI(app: Express) {
             status: routeData.status,
             polylineGeoJson: routeData.polylineGeoJson,
             displayNumber: nextDisplayNumber,
-            userId: req.user.userId, // 🔒 Isolamento entre empresas
+            userId: req.user.userId,
+            companyId: req.user.companyId, // 🔒 Isolamento multi-tenant obrigatório
           })
           .returning();
 
@@ -1594,9 +1587,8 @@ export function registerRoutesAPI(app: Express) {
 
       const conditions = [];
 
-      // 🔒 Filtro estrito por userId — sem fallback para user_id IS NULL
-      // Rotas legadas sem userId NÃO são expostas (evita vazamento entre empresas)
-      conditions.push(eq(routesTbl.userId, req.user.userId));
+      // 🔒 Filtro estrito por companyId — isolamento multi-tenant
+      conditions.push(ownerFilter(routesTbl, req.user.companyId));
 
       if (from) {
         conditions.push(gte(routesTbl.date, new Date(from as string)));
@@ -1724,7 +1716,7 @@ export function registerRoutesAPI(app: Express) {
           .from(routesTbl)
           .where(and(
             eq(routesTbl.id, routeId),
-            eq(routesTbl.userId, req.user.userId)
+            ownerFilter(routesTbl, req.user.companyId)
           ));
 
         if (!route) {
@@ -1868,7 +1860,7 @@ export function registerRoutesAPI(app: Express) {
           .from(routesTbl)
           .where(and(
             eq(routesTbl.id, routeId),
-            eq(routesTbl.userId, req.user.userId)
+            ownerFilter(routesTbl, req.user.companyId)
           ))
           .limit(1);
 
@@ -1981,13 +1973,13 @@ export function registerRoutesAPI(app: Express) {
           return res.status(400).json({ message: "appointmentIds (array) é obrigatório" });
         }
 
-        // rota existe e pertence ao usuário logado?
+        // rota existe e pertence à empresa?
         const [route] = await db
           .select({ id: routesTbl.id })
           .from(routesTbl)
           .where(and(
             eq(routesTbl.id, routeId),
-            eq(routesTbl.userId, req.user.userId)
+            ownerFilter(routesTbl, req.user.companyId)
           ))
           .limit(1);
         if (!route) return res.status(404).json({ message: "Rota não encontrada" });
@@ -2514,13 +2506,13 @@ export function registerRoutesAPI(app: Express) {
           return res.status(400).json({ error: "Status inválido" });
         const { status } = parsed.data;
 
-        // Busca o status anterior para registrar na auditoria — verifica ownership
+        // Busca o status anterior para registrar na auditoria — verifica ownership por companyId
         const [currentRoute] = await db
           .select()
           .from(routesTbl)
           .where(and(
             eq(routesTbl.id, routeId),
-            eq(routesTbl.userId, req.user.userId)
+            ownerFilter(routesTbl, req.user.companyId)
           ));
 
         if (!currentRoute)
@@ -2696,7 +2688,7 @@ export function registerRoutesAPI(app: Express) {
         const [updated] = await db
           .update(routesTbl)
           .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
-          .where(eq(routesTbl.id, routeId))
+          .where(and(eq(routesTbl.id, routeId), ownerFilter(routesTbl, req.user.companyId)))
           .returning();
 
         // Mapeia os status para português
@@ -2735,13 +2727,13 @@ export function registerRoutesAPI(app: Express) {
         const routeId = req.params.id;
         const userId = req.user.userId;
 
-        // Verifica se a rota existe e pertence ao usuário
+        // Verifica se a rota existe e pertence à empresa
         const [route] = await db
           .select()
           .from(routesTbl)
           .where(and(
             eq(routesTbl.id, routeId),
-            eq(routesTbl.userId, userId)
+            ownerFilter(routesTbl, req.user.companyId)
           ));
 
         if (!route) {
@@ -2785,13 +2777,13 @@ export function registerRoutesAPI(app: Express) {
         const routeId = req.params.id;
         const userId = req.user.userId;
 
-        // Verifica se a rota existe e pertence ao usuário
+        // Verifica se a rota existe e pertence à empresa
         const [route] = await db
           .select()
           .from(routesTbl)
           .where(and(
             eq(routesTbl.id, routeId),
-            eq(routesTbl.userId, userId)
+            ownerFilter(routesTbl, req.user.companyId)
           ));
 
         if (!route) {
