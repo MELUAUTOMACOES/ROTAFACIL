@@ -1927,6 +1927,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const clientData = clients[i];
         try {
           console.log(`📝 Criando cliente: ${clientData.name}`);
+          
+          // 🔧 Normalizar e validar CEP antes de salvar
+          if (clientData.cep) {
+            const cepNormalizado = formatCep(clientData.cep);
+            if (cepNormalizado) {
+              clientData.cep = cepNormalizado;
+              console.log(`  ✅ CEP normalizado: ${clientData.cep}`);
+            } else {
+              console.warn(`  ⚠️ CEP inválido (não tem 8 dígitos): "${clientData.cep}"`);
+            }
+          } else {
+            console.warn(`  ⚠️ Cliente sem CEP`);
+          }
+
+          // 🔧 Validar campos obrigatórios não estejam vazios
+          const camposVazios = [];
+          if (!clientData.logradouro || clientData.logradouro.trim() === '') camposVazios.push('logradouro');
+          if (!clientData.numero || clientData.numero.trim() === '') camposVazios.push('numero');
+          if (!clientData.bairro || clientData.bairro.trim() === '') camposVazios.push('bairro');
+          if (!clientData.cidade || clientData.cidade.trim() === '') camposVazios.push('cidade');
+          
+          if (camposVazios.length > 0) {
+            console.warn(`  ⚠️ Cliente com campos vazios: ${camposVazios.join(', ')}`);
+          }
+
           const validatedData = insertClientSchema.parse(clientData);
           const createdClient = await storage.createClient(validatedData, req.user.userId, req.user.companyId);
 

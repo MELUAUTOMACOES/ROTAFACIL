@@ -387,14 +387,54 @@ export default function AppointmentForm({
   const handleClientChange = (clientId: string) => {
     const client = clients.find(c => c.id === parseInt(clientId));
     if (client) {
+      console.log("📋 [AUTO-FILL] Cliente selecionado:", {
+        id: client.id,
+        nome: client.name,
+        cep: client.cep,
+        logradouro: client.logradouro,
+        numero: client.numero,
+        bairro: client.bairro,
+        cidade: client.cidade,
+        complemento: client.complemento
+      });
+
       setSelectedClient(client.id);
+      
       // Auto-fill address fields from selected client
-      form.setValue("cep", client.cep);
-      form.setValue("logradouro", client.logradouro);
-      form.setValue("numero", client.numero);
-      form.setValue("complemento", client.complemento || "");
-      form.setValue("bairro", client.bairro || "Não informado");
-      form.setValue("cidade", client.cidade || "Não informado");
+      // Validação defensiva: só preencher se o campo não estiver vazio/null
+      const cepValue = client.cep || "";
+      const logradouroValue = client.logradouro || "";
+      const numeroValue = client.numero || "";
+      const complementoValue = client.complemento || "";
+      const bairroValue = client.bairro || "Não informado";
+      const cidadeValue = client.cidade || "Não informado";
+
+      console.log("📋 [AUTO-FILL] Preenchendo campos:", {
+        cep: cepValue,
+        logradouro: logradouroValue,
+        numero: numeroValue,
+        complemento: complementoValue,
+        bairro: bairroValue,
+        cidade: cidadeValue
+      });
+
+      form.setValue("cep", cepValue);
+      form.setValue("logradouro", logradouroValue);
+      form.setValue("numero", numeroValue);
+      form.setValue("complemento", complementoValue);
+      form.setValue("bairro", bairroValue);
+      form.setValue("cidade", cidadeValue);
+
+      // Avisar se algum campo crítico está vazio
+      if (!cepValue || !logradouroValue || !cidadeValue) {
+        console.warn("⚠️ [AUTO-FILL] Cliente com dados incompletos:", {
+          semCep: !cepValue,
+          semLogradouro: !logradouroValue,
+          semCidade: !cidadeValue
+        });
+      }
+    } else {
+      console.warn("⚠️ [AUTO-FILL] Cliente não encontrado para ID:", clientId);
     }
   };
 
