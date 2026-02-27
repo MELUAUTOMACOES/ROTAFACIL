@@ -1,4 +1,4 @@
--- Migration 0029: Sistema de permissões de veículos + registro de veículo usado no romaneio
+-- Migration 0031: Sistema de permissões de veículos + registro de veículo usado no romaneio
 -- Permite que múltiplos técnicos/equipes sejam autorizados a usar um veículo
 -- Registra qual veículo foi usado em cada rota/romaneio
 

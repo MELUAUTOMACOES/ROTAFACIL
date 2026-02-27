@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
     MapPin, Calendar, Navigation, CheckCircle, Clock,
-    AlertTriangle, ChevronRight, QrCode, LogOut, Map as MapIcon, ClipboardCheck, PlayCircle, Home, UserCheck, Timer, Coffee, Wrench, Fuel, FileWarning, DollarSign, Loader2
+    AlertTriangle, ChevronRight, QrCode, LogOut, Map as MapIcon, ClipboardCheck, PlayCircle, Home, UserCheck, Timer, Coffee, Wrench, Fuel, FileWarning, DollarSign, Loader2, Car
 } from 'lucide-react';
 import QRCode from "react-qr-code";
 
