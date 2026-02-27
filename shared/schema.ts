@@ -1251,7 +1251,7 @@ export const appointmentHistory = pgTable("appointment_history", {
   // Referência à resolução de pendência, se houver
   pendingResolutionId: integer("pending_resolution_id").references(() => pendingResolutions.id),
   userId: integer("user_id").notNull().references(() => users.id),
-  companyId: integer("company_id").references(() => companies.id),
+  companyId: integer("company_id").notNull().references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

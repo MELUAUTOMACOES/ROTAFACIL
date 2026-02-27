@@ -20,7 +20,8 @@ import {
   insertChecklistSchema, insertBusinessRulesSchema, insertTeamSchema,
   insertTeamMemberSchema, extendedInsertAppointmentSchema,
   insertVehicleChecklistSchema, insertVehicleChecklistItemSchema,
-  insertVehicleMaintenanceSchema
+  insertVehicleMaintenanceSchema,
+  type InsertVehicle
 } from "@shared/schema";
 import {
   validateTechnicianTeamConflict,
@@ -220,6 +221,14 @@ function authenticateToken(req: any, res: any, next: any) {
 
 // ==================== GEO HELPERS (NOMINATIM) ====================
 
+// Normaliza CEP para formato "12345-678" (aceita com ou sem traço)
+function formatCep(cep: string | null | undefined): string | null {
+  if (!cep) return null;
+  const clean = cep.replace(/\D/g, ''); // Remove tudo que não é número
+  if (clean.length !== 8) return null; // CEP inválido
+  return `${clean.substring(0, 5)}-${clean.substring(5)}`; // Formata: 12345-678
+}
+
 // Monta um endereço completo a partir do registro do AGENDAMENTO.
 // Tenta cobrir diferentes nomes de campos que você possa ter no schema.
 function composeFullAddressFromAppointment(a: any) {
@@ -228,7 +237,7 @@ function composeFullAddressFromAppointment(a: any) {
   const neighborhood = a?.neighborhood || a?.bairro || a?.district;
   const city = a?.city || a?.cidade;
   const state = a?.state || a?.uf || a?.estado;
-  const zip = a?.zip || a?.zipcode || a?.cep;
+  const zip = formatCep(a?.zip || a?.zipcode || a?.cep); // Normaliza CEP
 
   const parts = [
     [street, number].filter(Boolean).join(", "),
@@ -386,6 +395,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 1. Obter rota ativa do prestador (Hoje)
   app.get("/api/provider/route", authenticateToken, async (req: any, res) => {
     try {
+      const companyId = requireCompanyId(req, res);
+      if (!companyId) return;
+
       const dateParam = req.query.date ? new Date(req.query.date) : new Date();
       let route;
 
@@ -424,7 +436,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (req.query.userId && req.user.role === 'admin') {
           targetUserId = parseInt(req.query.userId as string);
         }
-        route = await storage.getProviderActiveRoute(targetUserId, dateParam);
+        route = await storage.getProviderActiveRoute(targetUserId, dateParam, companyId);
       }
 
       if (!route) {
@@ -2311,7 +2323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
       }
       const id = parseInt(req.params.id);
-      const vehicleData = insertVehicleSchema.partial().parse(req.body);
+      const vehicleData = insertVehicleSchema.parse(req.body) as Partial<InsertVehicle>;
       const vehicle = await storage.updateVehicle(id, vehicleData, req.user.companyId);
       trackCompanyAudit({
         userId: req.user.userId,
@@ -3205,7 +3217,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           targetLng = client.lng;
         } else {
           // Geocodificar endereço do cliente
-          const fullAddress = `${client.logradouro}, ${client.numero}, ${client.cidade}, ${client.cep}, Brasil`;
+          const cepFormatado = formatCep(client.cep);
+          const fullAddress = `${client.logradouro}, ${client.numero}, ${client.cidade}, ${cepFormatado}, Brasil`;
           console.log("📍 [FIND-DATE] Geocodificando endereço do cliente:", fullAddress);
           await sleep(1000); // Rate limit Nominatim
           const coords = await geocodeWithNominatim(fullAddress);
@@ -3218,9 +3231,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         // Geocodificar endereço manual - USAR ENDEREÇO COMPLETO como no cadastro de clientes
         // Formato: Logradouro, Número, Cidade, CEP, Brasil
+        const cepFormatado = formatCep(cep);
         const fullAddress = logradouro && cidade
-          ? `${logradouro}, ${numero}, ${cidade}, ${cep}, Brasil`
-          : `${cep}, ${numero}, Brasil`;
+          ? `${logradouro}, ${numero}, ${cidade}, ${cepFormatado}, Brasil`
+          : `${cepFormatado}, ${numero}, Brasil`;
 
         console.log("📍 [FIND-DATE] Geocodificando endereço manual:", fullAddress);
         await sleep(1000); // Rate limit Nominatim
@@ -3566,7 +3580,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             // 2. Obter coordenadas da BASE
-            const baseFullAddress = `${baseAddress.logradouro}, ${baseAddress.numero}, ${baseAddress.cidade}, ${baseAddress.cep}, Brasil`;
+            const cepBaseFormatado1 = formatCep(baseAddress.cep);
+            const baseFullAddress = `${baseAddress.logradouro}, ${baseAddress.numero}, ${baseAddress.cidade}, ${cepBaseFormatado1}, Brasil`;
             let baseCoords: Coords;
 
             try {
@@ -3682,7 +3697,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // ========================================
             // Usar distanciaMaximaAtendida (distância base → primeiro atendimento)
 
-            const baseFullAddress = `${baseAddress.logradouro}, ${baseAddress.numero}, ${baseAddress.cidade}, ${baseAddress.cep}, Brasil`;
+            const cepBaseFormatado2 = formatCep(baseAddress.cep);
+            const baseFullAddress = `${baseAddress.logradouro}, ${baseAddress.numero}, ${baseAddress.cidade}, ${cepBaseFormatado2}, Brasil`;
             try {
               const baseCoords = await geocodeWithNominatim(baseFullAddress);
               const baseCoordsTyped: Coords = { lat: baseCoords.lat, lng: baseCoords.lng };
@@ -3911,6 +3927,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await db.insert(appointmentHistory).values({
           appointmentId: id,
           userId: req.user.userId, // Campo obrigatório
+          companyId: req.user.companyId, // 🔒 Multi-tenant obrigatório
           changedBy: req.user.userId,
           changedByName,
           changeType,

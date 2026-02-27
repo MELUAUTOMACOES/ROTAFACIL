@@ -369,6 +369,15 @@ async function getOSRMRoute(coordinates: [number, number][]): Promise<any> {
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
+
+// Normaliza CEP para formato "12345-678" (aceita com ou sem traço)
+function formatCep(cep: string | null | undefined): string | null {
+  if (!cep) return null;
+  const clean = cep.replace(/\D/g, ''); // Remove tudo que não é número
+  if (clean.length !== 8) return null; // CEP inválido
+  return `${clean.substring(0, 5)}-${clean.substring(5)}`; // Formata: 12345-678
+}
+
 async function geocodeEnderecoServer(
   endereco: string,
 ): Promise<{ lat: number; lon: number }> {
@@ -927,7 +936,7 @@ export function registerRoutesAPI(app: Express) {
           const complemento = checa(addr.complemento);
           const bairro = checa(addr.bairro);
           const cidade = checa(addr.cidade);
-          const cep = checa(addr.cep);
+          const cepNormalizado = formatCep(addr.cep); // Normaliza CEP para formato com traço
           const estado = checa(addr.estado);
 
           const full = [
@@ -936,18 +945,18 @@ export function registerRoutesAPI(app: Express) {
             complemento,
             bairro,
             cidade,
-            cep,
+            cepNormalizado,
             estado,
             "Brasil",
           ]
             .filter(Boolean)
             .join(", ");
 
-          const semNumero = [logradouro, bairro, cidade, cep, estado, "Brasil"]
+          const semNumero = [logradouro, bairro, cidade, cepNormalizado, estado, "Brasil"]
             .filter(Boolean)
             .join(", ");
 
-          const soCepCidade = [cep, cidade, estado, "Brasil"]
+          const soCepCidade = [cepNormalizado, cidade, estado, "Brasil"]
             .filter(Boolean)
             .join(", ");
 
@@ -1131,12 +1140,16 @@ export function registerRoutesAPI(app: Express) {
 
         // Monta estrutura local dos agendamentos
         const appointmentData = selectedAppointments.map((app) => {
+          // Normaliza CEPs para formato com traço (12345-678)
+          const aptCepFormatado = formatCep(app.aptCep);
+          const clientCepFormatado = formatCep(app.clientCep);
+
           const aptAddress = [
             app.aptLogradouro,
             app.aptNumero,
             app.aptBairro,
             app.aptCidade,
-            app.aptCep,
+            aptCepFormatado,
             "Brasil",
           ]
             .filter(Boolean)
@@ -1147,7 +1160,7 @@ export function registerRoutesAPI(app: Express) {
             app.clientNumero,
             app.clientBairro,
             app.clientCidade,
-            app.clientCep,
+            clientCepFormatado,
             "Brasil",
           ]
             .filter(Boolean)
@@ -1261,7 +1274,50 @@ export function registerRoutesAPI(app: Express) {
             }
           }
 
-          // 3) se nada funcionou, aborta com erro claro
+          // 3) último fallback: tentar apenas com CEP (agendamento ou cliente)
+          const cepToTry = formatCep(app.aptCep || app.clientCep);
+          if (cepToTry) {
+            try {
+              console.log(`📮 Tentando geocodificar apenas com CEP: ${cepToTry}`);
+              const geo3 = await geocodeEnderecoServer(`CEP ${cepToTry}, Brasil`);
+              app.lat = Number(geo3.lat);
+              app.lng = Number(geo3.lon);
+
+              // Se conseguiu via CEP e é o CEP do cliente, podemos salvar
+              if (app.clientId && app.clientCep === cepToTry) {
+                try {
+                  const updatePayload3: Partial<typeof clients.$inferInsert> = {};
+                  if (Number.isFinite(app.lat)) updatePayload3.lat = to6(app.lat as number);
+                  if (Number.isFinite(app.lng)) updatePayload3.lng = to6(app.lng as number);
+
+                  if (Object.keys(updatePayload3).length > 0) {
+                    await db
+                      .update(clients)
+                      .set(updatePayload3)
+                      .where(eq(clients.id, app.clientId));
+                    console.log(
+                      `💾 Coordenadas salvas no cliente ${app.clientId} (via CEP)`,
+                    );
+                  }
+                } catch (e: any) {
+                  console.warn(
+                    `⚠️ Falha ao persistir lat/lng do cliente ${app.clientId}:`,
+                    e.message,
+                  );
+                }
+              }
+
+              await sleep(1100);
+              continue;
+            } catch (e3: any) {
+              console.warn(
+                `❌ Geocodificação (CEP) falhou para ${app.id}:`,
+                e3.message,
+              );
+            }
+          }
+
+          // 4) se nada funcionou, aborta com erro claro
           console.log(
             "❌ Agendamento sem coordenadas após fallbacks:",
             app.id,
@@ -2105,8 +2161,8 @@ export function registerRoutesAPI(app: Express) {
           const num = r.aptNumero || r.clientNumero;
           const bai = r.aptBairro || r.clientBairro;
           const cid = r.aptCidade || r.clientCidade;
-          const cep = r.aptCep || r.clientCep;
-          return [log, num, bai, cid, cep, "Brasil"].filter(Boolean).join(", ");
+          const cepNormalizado = formatCep(r.aptCep || r.clientCep);
+          return [log, num, bai, cid, cepNormalizado, "Brasil"].filter(Boolean).join(", ");
         };
 
         // monta inserts (geocodifica se faltou lat/lng do cliente)

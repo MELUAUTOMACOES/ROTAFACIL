@@ -165,7 +165,7 @@ export interface IStorage {
   deleteInvitation(id: number): Promise<boolean>;
 
   // Provider Flow (userId = identidade do prestador / ator — legítimo)
-  getProviderActiveRoute(userId: number, date: Date): Promise<Route | undefined>;
+  getProviderActiveRoute(userId: number, date: Date, companyId: number): Promise<Route | undefined>;
   updateAppointmentExecution(id: number, data: {
     status?: string;
     feedback?: string | null;
@@ -183,7 +183,7 @@ export interface IStorage {
   getRouteStops(routeId: string): Promise<RouteStop[]>;
   getPendingAppointments(companyId: number): Promise<any[]>;
   getAppointmentHistory(appointmentId: number): Promise<AppointmentHistory[]>;
-  createAppointmentHistory(data: InsertAppointmentHistory, changedBy: number, ownerId: number): Promise<AppointmentHistory>;
+  createAppointmentHistory(data: InsertAppointmentHistory, changedBy: number, ownerId: number, companyId: number): Promise<AppointmentHistory>;
 
   // Vehicle Documents
   getVehicleDocuments(vehicleId: number, companyId: number): Promise<VehicleDocument[]>;
@@ -451,17 +451,19 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(appointmentHistory.changedAt));
   }
 
-  async createAppointmentHistory(data: InsertAppointmentHistory, changedBy: number, ownerId: number): Promise<AppointmentHistory> {
+  async createAppointmentHistory(data: InsertAppointmentHistory, changedBy: number, ownerId: number, companyId: number): Promise<AppointmentHistory> {
     const [history] = await db.insert(appointmentHistory).values({
       appointmentId: data.appointmentId,
       changedBy: changedBy,
       changedByName: data.changedByName,
       changeType: data.changeType,
-      reason: data.reason,
       previousData: data.previousData,
       newData: data.newData,
-      userId: ownerId, // Dono do dado
-      notes: data.notes
+      reason: data.reason,
+      notes: data.notes,
+      pendingResolutionId: data.pendingResolutionId,
+      userId: ownerId,
+      companyId,
     }).returning();
     return history;
   }
@@ -1110,9 +1112,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Provider Flow Implementation
-  async getProviderActiveRoute(userId: number, date: Date): Promise<Route | undefined> {
+  async getProviderActiveRoute(userId: number, date: Date, companyId: number): Promise<Route | undefined> {
     // 1. Buscar rotas onde o usuário é o responsável direto (technician)
     // OU onde o usuário faz parte da equipe responsável (team)
+    // 🔒 FILTRO MULTI-TENANT OBRIGATÓRIO
 
     // Normalizar data para início e fim do dia
     const startOfDay = new Date(date);
@@ -1120,20 +1123,22 @@ export class DatabaseStorage implements IStorage {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // Buscar técnico associado ao usuário
-    const [tech] = await db.select().from(technicians).where(eq(technicians.userId, userId));
+    // Buscar técnico associado ao usuário (filtrado por companyId)
+    const [tech] = await db.select().from(technicians).where(and(eq(technicians.userId, userId), eq(technicians.companyId, companyId)));
 
-    // Buscar equipes que o usuário faz parte
+    // Buscar equipes que o usuário faz parte (filtrado por companyId via teamMembers)
     const userTeams = await db
       .select({ teamId: teamMembers.teamId })
       .from(teamMembers)
-      .where(eq(teamMembers.userId, userId));
+      .where(and(eq(teamMembers.userId, userId), eq(teamMembers.companyId, companyId)));
 
     const teamIds = userTeams.map(t => t.teamId);
 
     // Construir query
     const conditions = [
       and(
+        // 🔒 Filtro multi-tenant obrigatório
+        eq(routes.companyId, companyId),
         // Comparar Apenas a DATA (ignorando hora/timezone)
         sql`DATE(${routes.date}) = DATE(${format(date, "yyyy-MM-dd")})`,
 
@@ -1215,7 +1220,10 @@ export class DatabaseStorage implements IStorage {
         newData: updateData
       };
 
-      await this.createAppointmentHistory(historyData, userId, currentAppointment.userId);
+      // 🔒 companyId obrigatório para histórico (deve estar presente após migration 0028)
+      if (currentAppointment.companyId) {
+        await this.createAppointmentHistory(historyData, userId, currentAppointment.userId, currentAppointment.companyId);
+      }
     }
 
     const [updated] = await db
