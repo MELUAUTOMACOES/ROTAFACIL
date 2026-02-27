@@ -25,8 +25,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Car, Calendar, User, Users, FileText, Fuel, Gauge } from "lucide-react";
+import { Car, Calendar, User, Users, FileText, Fuel, Gauge, CheckSquare, Shield } from "lucide-react";
 import VehicleDocumentsSection from "./VehicleDocumentsSection";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface VehicleFormProps {
   vehicle?: Vehicle | null;
@@ -35,6 +36,11 @@ interface VehicleFormProps {
   vehicles: Vehicle[];
   onClose: () => void;
   initialTab?: string;
+}
+
+interface VehicleWithAssignments extends Vehicle {
+  authorizedTechnicianIds?: number[];
+  authorizedTeamIds?: number[];
 }
 
 type FuelTypeKey = "gasolina" | "etanol" | "diesel_s500" | "diesel_s10" | "eletrico" | "hibrido";
@@ -135,6 +141,15 @@ export default function VehicleForm({
     initialValues.assignmentType
   );
 
+  // 🆕 Estados para autorizações (múltiplos técnicos/equipes)
+  const vehicleWithAssignments = vehicle as VehicleWithAssignments | null | undefined;
+  const [authorizedTechnicianIds, setAuthorizedTechnicianIds] = useState<number[]>(
+    vehicleWithAssignments?.authorizedTechnicianIds || []
+  );
+  const [authorizedTeamIds, setAuthorizedTeamIds] = useState<number[]>(
+    vehicleWithAssignments?.authorizedTeamIds || []
+  );
+
   const form = useForm<InsertVehicle>({
     resolver: zodResolver(insertVehicleSchema),
     defaultValues: {
@@ -152,7 +167,12 @@ export default function VehicleForm({
 
   const createVehicleMutation = useMutation({
     mutationFn: async (data: InsertVehicle) => {
-      const response = await apiRequest("POST", "/api/vehicles", data);
+      const payload = {
+        ...data,
+        authorizedTechnicianIds,
+        authorizedTeamIds
+      };
+      const response = await apiRequest("POST", "/api/vehicles", payload);
       return response.json();
     },
     onSuccess: (createdVehicle: Vehicle) => {
@@ -177,10 +197,15 @@ export default function VehicleForm({
 
   const updateVehicleMutation = useMutation({
     mutationFn: async (data: InsertVehicle) => {
+      const payload = {
+        ...data,
+        authorizedTechnicianIds,
+        authorizedTeamIds
+      };
       const response = await apiRequest(
         "PUT",
         `/api/vehicles/${vehicle!.id}`,
-        data,
+        payload,
       );
       return response.json();
     },
@@ -399,13 +424,120 @@ export default function VehicleForm({
           </div>
         </div>
 
+        {/* 🆕 Seção de Prestadores Autorizados */}
+        <div className="border-t pt-4 mt-4">
+          <Label className="text-base font-medium flex items-center mb-3">
+            <Shield className="h-4 w-4 mr-2 text-blue-600" />
+            Prestadores Autorizados a Usar o Veículo
+          </Label>
+          <p className="text-sm text-gray-600 mb-4">
+            Selecione quais técnicos e equipes podem utilizar este veículo no romaneio
+          </p>
+
+          <div className="grid grid-cols-2 gap-6">
+            {/* Técnicos Autorizados */}
+            <div className="space-y-3">
+              <Label className="font-medium flex items-center">
+                <User className="h-4 w-4 mr-2" />
+                Técnicos
+              </Label>
+              <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
+                {technicians.filter(t => t.isActive).length === 0 ? (
+                  <p className="text-sm text-gray-500 italic">Nenhum técnico ativo</p>
+                ) : (
+                  technicians
+                    .filter(t => t.isActive)
+                    .map((tech) => (
+                      <div key={tech.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`tech-${tech.id}`}
+                          checked={authorizedTechnicianIds.includes(tech.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setAuthorizedTechnicianIds([...authorizedTechnicianIds, tech.id]);
+                            } else {
+                              setAuthorizedTechnicianIds(
+                                authorizedTechnicianIds.filter(id => id !== tech.id)
+                              );
+                            }
+                          }}
+                        />
+                        <label
+                          htmlFor={`tech-${tech.id}`}
+                          className="text-sm cursor-pointer flex-1"
+                        >
+                          {tech.name}
+                        </label>
+                      </div>
+                    ))
+                )}
+              </div>
+              {authorizedTechnicianIds.length > 0 && (
+                <p className="text-xs text-blue-600">
+                  ✓ {authorizedTechnicianIds.length} técnico(s) autorizado(s)
+                </p>
+              )}
+            </div>
+
+            {/* Equipes Autorizadas */}
+            <div className="space-y-3">
+              <Label className="font-medium flex items-center">
+                <Users className="h-4 w-4 mr-2" />
+                Equipes
+              </Label>
+              <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
+                {teams.length === 0 ? (
+                  <p className="text-sm text-gray-500 italic">Nenhuma equipe cadastrada</p>
+                ) : (
+                  teams.map((team) => (
+                    <div key={team.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`team-${team.id}`}
+                        checked={authorizedTeamIds.includes(team.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setAuthorizedTeamIds([...authorizedTeamIds, team.id]);
+                          } else {
+                            setAuthorizedTeamIds(
+                              authorizedTeamIds.filter(id => id !== team.id)
+                            );
+                          }
+                        }}
+                      />
+                      <label
+                        htmlFor={`team-${team.id}`}
+                        className="text-sm cursor-pointer flex-1"
+                      >
+                        {team.name}
+                      </label>
+                    </div>
+                  ))
+                )}
+              </div>
+              {authorizedTeamIds.length > 0 && (
+                <p className="text-xs text-blue-600">
+                  ✓ {authorizedTeamIds.length} equipe(s) autorizada(s)
+                </p>
+              )}
+            </div>
+          </div>
+
+          {(authorizedTechnicianIds.length === 0 && authorizedTeamIds.length === 0) && (
+            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-md">
+              <p className="text-sm text-amber-800">
+                ⚠️ <strong>Atenção:</strong> Nenhum prestador autorizado. Este veículo não aparecerá na tela de prestadores.
+              </p>
+            </div>
+          )}
+        </div>
+
         <div className="space-y-4">
           <div>
             <Label className="text-base font-medium">
-              Responsável pelo Veículo *
+              Responsável pelo Veículo * (compatibilidade)
             </Label>
             <p className="text-sm text-gray-600">
-              Selecione um técnico individual ou uma equipe
+              Selecione um técnico individual ou uma equipe (campo mantido por compatibilidade)
             </p>
           </div>
 

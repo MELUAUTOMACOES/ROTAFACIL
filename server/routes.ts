@@ -9,7 +9,10 @@ import {
   routes, routeStops, appointments, clients, users, dailyAvailability, vehicleChecklists, vehicleChecklistItems, teamMembers, pendingResolutions, appointmentHistory,
   routeOccurrences,
   trackingLocations,
-  businessRules
+  businessRules,
+  vehicleAssignments,
+  technicians,
+  teams
 } from "@shared/schema";
 import { asc, desc, eq, inArray, sql, and, or, gte, lte } from "drizzle-orm";
 import { z } from "zod";
@@ -631,7 +634,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/routes/:id/start", authenticateToken, async (req: any, res) => {
     try {
       const { id } = req.params; // UUID
-      const { startLocationData } = req.body; // { lat, lng, address, timestamp }
+      const { startLocationData, vehicleId } = req.body; // { lat, lng, address, timestamp }, vehicleId (opcional)
 
       // Verificar se rota existe
       const existingRoute = await db.query.routes.findFirst({
@@ -647,11 +650,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Rota já foi iniciada" });
       }
 
-      // ⏱️ Registrar timestamp de início
+      // 🚗 Validar veículo se fornecido
+      if (vehicleId) {
+        const vehicleIdNum = parseInt(vehicleId);
+        if (!isNaN(vehicleIdNum)) {
+          // Verificar se o veículo existe e pertence à empresa
+          const vehicle = await storage.getVehicle(vehicleIdNum, req.user.companyId);
+          if (!vehicle) {
+            return res.status(404).json({ message: "Veículo não encontrado" });
+          }
+          console.log(`🚗 [PROVIDER] Rota ${id} será iniciada com veículo: ${vehicle.plate}`);
+        }
+      }
+
+      // ⏱️ Registrar timestamp de início + veículo usado
       const [route] = await db.update(routes)
         .set({
           routeStartedAt: new Date(),
           startLocationData: startLocationData || null,
+          vehicleId: vehicleId ? parseInt(vehicleId) : null,
           updatedAt: new Date()
         })
         .where(eq(routes.id, id))
@@ -2297,8 +2314,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const responsibleId = req.query.responsibleId ? parseInt(req.query.responsibleId as string) : undefined;
 
       const result = await storage.getVehiclesPaged(req.user.companyId, page, pageSize, search, responsibleType, responsibleId);
-      logEgressSize(req, result);
-      res.json(result);
+      
+      // 🆕 Enriquecer com autorizações (técnicos e equipes autorizadas)
+      const vehiclesWithAssignments = await Promise.all(
+        result.items.map(async (vehicle: any) => {
+          const assignments = await storage.getVehicleAssignments(vehicle.id, req.user.companyId);
+          
+          // Separar técnicos e equipes
+          const authorizedTechnicianIds = assignments
+            .filter(a => a.technicianId)
+            .map(a => a.technicianId);
+          const authorizedTeamIds = assignments
+            .filter(a => a.teamId)
+            .map(a => a.teamId);
+          
+          // Buscar nomes para exibição
+          const technicianNames: string[] = [];
+          const teamNames: string[] = [];
+          
+          if (authorizedTechnicianIds.length > 0) {
+            const techs = await db.select({ id: technicians.id, name: technicians.name })
+              .from(technicians)
+              .where(and(inArray(technicians.id, authorizedTechnicianIds), eq(technicians.companyId, req.user.companyId)));
+            technicianNames.push(...techs.map(t => t.name));
+          }
+          
+          if (authorizedTeamIds.length > 0) {
+            const teamsData = await db.select({ id: teams.id, name: teams.name })
+              .from(teams)
+              .where(and(inArray(teams.id, authorizedTeamIds), eq(teams.companyId, req.user.companyId)));
+            teamNames.push(...teamsData.map(t => t.name));
+          }
+          
+          return {
+            ...vehicle,
+            authorizedTechnicianIds,
+            authorizedTeamIds,
+            authorizedTechnicianNames: technicianNames,
+            authorizedTeamNames: teamNames
+          };
+        })
+      );
+      
+      const enrichedResult = {
+        ...result,
+        items: vehiclesWithAssignments
+      };
+      
+      logEgressSize(req, enrichedResult);
+      res.json(enrichedResult);
     } catch (error: any) {
       console.error("❌ [VEHICLES] Erro ao listar:", error);
       res.status(500).json({ message: error.message });
@@ -2329,8 +2393,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
       }
-      const vehicleData = insertVehicleSchema.parse(req.body);
-      const vehicle = await storage.createVehicle(vehicleData, req.user.userId, req.user.companyId); // userId kept for INSERT
+      const { authorizedTechnicianIds, authorizedTeamIds, ...vehicleData } = req.body;
+      const parsedVehicleData = insertVehicleSchema.parse(vehicleData);
+      const vehicle = await storage.createVehicle(parsedVehicleData, req.user.userId, req.user.companyId);
+      
+      console.log(`✅ [VEHICLES] Veículo criado: ${vehicle.plate} (ID: ${vehicle.id})`);
+      
+      // 🆕 Sincronizar autorizações de uso
+      if (authorizedTechnicianIds || authorizedTeamIds) {
+        const techIds = Array.isArray(authorizedTechnicianIds) ? authorizedTechnicianIds : [];
+        const teamIds = Array.isArray(authorizedTeamIds) ? authorizedTeamIds : [];
+        
+        await storage.syncVehicleAssignments(
+          vehicle.id,
+          techIds,
+          teamIds,
+          req.user.userId,
+          req.user.companyId
+        );
+        
+        console.log(`✅ [VEHICLES] Autorizações sincronizadas: ${techIds.length} técnicos, ${teamIds.length} equipes`);
+      }
+      
       trackFeatureUsage(req.user.userId, "vehicles", "create", req.user.companyId, { id: vehicle.id });
       trackCompanyAudit({
         userId: req.user.userId,
@@ -2342,6 +2426,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       res.json(vehicle);
     } catch (error: any) {
+      console.error("❌ [VEHICLES] Erro ao criar:", error);
       res.status(400).json({ message: error.message });
     }
   });
@@ -2352,8 +2437,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
       }
       const id = parseInt(req.params.id);
-      const vehicleData = insertVehicleSchema.parse(req.body) as Partial<InsertVehicle>;
-      const vehicle = await storage.updateVehicle(id, vehicleData, req.user.companyId);
+      const { authorizedTechnicianIds, authorizedTeamIds, ...vehicleData } = req.body;
+      const parsedVehicleData = insertVehicleSchema.parse(vehicleData) as Partial<InsertVehicle>;
+      const vehicle = await storage.updateVehicle(id, parsedVehicleData, req.user.companyId);
+      
+      console.log(`✅ [VEHICLES] Veículo atualizado: ${vehicle.plate} (ID: ${vehicle.id})`);
+      
+      // 🆕 Sincronizar autorizações de uso
+      if (authorizedTechnicianIds !== undefined || authorizedTeamIds !== undefined) {
+        const techIds = Array.isArray(authorizedTechnicianIds) ? authorizedTechnicianIds : [];
+        const teamIds = Array.isArray(authorizedTeamIds) ? authorizedTeamIds : [];
+        
+        await storage.syncVehicleAssignments(
+          vehicle.id,
+          techIds,
+          teamIds,
+          req.user.userId,
+          req.user.companyId
+        );
+        
+        console.log(`✅ [VEHICLES] Autorizações sincronizadas: ${techIds.length} técnicos, ${teamIds.length} equipes`);
+      }
+      
       trackCompanyAudit({
         userId: req.user.userId,
         companyId: req.user.companyId,
@@ -2364,6 +2469,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       res.json(vehicle);
     } catch (error: any) {
+      console.error("❌ [VEHICLES] Erro ao atualizar:", error);
       res.status(400).json({ message: error.message });
     }
   });
@@ -2388,6 +2494,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       res.json({ message: "Veículo excluído com sucesso" });
     } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // 🆕 Endpoint para prestadores: lista veículos que ele pode usar
+  app.get("/api/vehicles/available-for-me", authenticateToken, async (req: any, res) => {
+    try {
+      if (!req.user?.companyId) {
+        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+      }
+      
+      console.log(`🔍 [VEHICLES] Buscando veículos disponíveis para userId: ${req.user.userId}`);
+      
+      const availableVehicles = await storage.getVehiclesAvailableForUser(req.user.userId, req.user.companyId);
+      
+      console.log(`✅ [VEHICLES] ${availableVehicles.length} veículo(s) disponível(is)`);
+      
+      res.json(availableVehicles);
+    } catch (error: any) {
+      console.error("❌ [VEHICLES] Erro ao buscar veículos disponíveis:", error);
       res.status(500).json({ message: error.message });
     }
   });

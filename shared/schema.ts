@@ -193,6 +193,19 @@ export const vehicles = pgTable("vehicles", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Vehicle Assignments table - Permissões de uso de veículos (multi-tenant)
+export const vehicleAssignments = pgTable("vehicle_assignments", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull().references(() => companies.id, { onDelete: 'cascade' }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  vehicleId: integer("vehicle_id").notNull().references(() => vehicles.id, { onDelete: 'cascade' }),
+  // Exatamente UM entre technicianId ou teamId deve ser preenchido
+  technicianId: integer("technician_id").references(() => technicians.id, { onDelete: 'cascade' }),
+  teamId: integer("team_id").references(() => teams.id, { onDelete: 'cascade' }),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Appointments table
 export const appointments = pgTable("appointments", {
   id: serial("id").primaryKey(),
@@ -564,6 +577,13 @@ export const insertVehicleSchema = createInsertSchema(vehicles).omit({
   (d) => (d.technicianId ? !d.teamId : !!d.teamId),
   { message: "Selecione Técnico OU Equipe (apenas um)", path: ["technicianId"] }
 );
+
+export const insertVehicleAssignmentSchema = createInsertSchema(vehicleAssignments).omit({
+  id: true,
+  userId: true,
+  companyId: true,
+  createdAt: true,
+});
 
 export const insertAppointmentSchema = createInsertSchema(appointments).omit({
   id: true,
@@ -1323,6 +1343,8 @@ export type Technician = typeof technicians.$inferSelect;
 export type InsertTechnician = z.infer<typeof insertTechnicianSchema>;
 export type Vehicle = typeof vehicles.$inferSelect;
 export type InsertVehicle = z.infer<typeof insertVehicleSchema>;
+export type VehicleAssignment = typeof vehicleAssignments.$inferSelect;
+export type InsertVehicleAssignment = z.infer<typeof insertVehicleAssignmentSchema>;
 export type Appointment = typeof appointments.$inferSelect;
 export type InsertAppointment = z.infer<typeof extendedInsertAppointmentSchema>;
 export type Checklist = typeof checklists.$inferSelect;

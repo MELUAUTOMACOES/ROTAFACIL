@@ -4,6 +4,7 @@ import {
   type Service, type InsertService,
   type Technician, type InsertTechnician,
   type Vehicle, type InsertVehicle,
+  type VehicleAssignment, type InsertVehicleAssignment,
   type Appointment, type InsertAppointment,
   type Checklist, type InsertChecklist,
   type BusinessRules, type InsertBusinessRules,
@@ -23,7 +24,7 @@ import {
   type AppointmentHistory, type InsertAppointmentHistory,
   type FuelRecord, type InsertFuelRecord,
   type AnalyticsEvent, type InsertAnalyticsEvent,
-  users, clients, services, technicians, vehicles, appointments, appointmentHistory, checklists, businessRules, teams, teamMembers, accessSchedules,
+  users, clients, services, technicians, vehicles, vehicleAssignments, appointments, appointmentHistory, checklists, businessRules, teams, teamMembers, accessSchedules,
   companies, memberships, invitations,
   dateRestrictions,
   routes, routeStops,
@@ -94,6 +95,14 @@ export interface IStorage {
   createVehicle(vehicle: InsertVehicle, userId: number, companyId: number): Promise<Vehicle>;
   updateVehicle(id: number, vehicle: Partial<InsertVehicle>, companyId: number): Promise<Vehicle>;
   deleteVehicle(id: number, companyId: number): Promise<boolean>;
+
+  // Vehicle Assignments (Permissions)
+  getVehicleAssignments(vehicleId: number, companyId: number): Promise<VehicleAssignment[]>;
+  createVehicleAssignment(assignment: InsertVehicleAssignment, userId: number, companyId: number): Promise<VehicleAssignment>;
+  deleteVehicleAssignment(id: number, companyId: number): Promise<boolean>;
+  syncVehicleAssignments(vehicleId: number, technicianIds: number[], teamIds: number[], userId: number, companyId: number): Promise<void>;
+  getVehiclesAvailableForTechnician(technicianId: number, companyId: number): Promise<Vehicle[]>;
+  getVehiclesAvailableForUser(userId: number, companyId: number): Promise<Vehicle[]>;
 
   // Appointments
   getAppointments(companyId: number): Promise<Appointment[]>;
@@ -890,6 +899,157 @@ export class DatabaseStorage implements IStorage {
       .delete(vehicles)
       .where(and(eq(vehicles.id, id), this.byCompany(vehicles, companyId)));
     return (result.rowCount || 0) > 0;
+  }
+
+  // Vehicle Assignments (Permissions)
+  async getVehicleAssignments(vehicleId: number, companyId: number): Promise<VehicleAssignment[]> {
+    return await db
+      .select()
+      .from(vehicleAssignments)
+      .where(
+        and(
+          eq(vehicleAssignments.vehicleId, vehicleId),
+          eq(vehicleAssignments.companyId, companyId),
+          eq(vehicleAssignments.isActive, true)
+        )
+      );
+  }
+
+  async createVehicleAssignment(assignment: InsertVehicleAssignment, userId: number, companyId: number): Promise<VehicleAssignment> {
+    const [created] = await db
+      .insert(vehicleAssignments)
+      .values({ ...assignment, userId, companyId } as any)
+      .returning();
+    return created;
+  }
+
+  async deleteVehicleAssignment(id: number, companyId: number): Promise<boolean> {
+    const result = await db
+      .update(vehicleAssignments)
+      .set({ isActive: false })
+      .where(and(eq(vehicleAssignments.id, id), eq(vehicleAssignments.companyId, companyId)));
+    return (result.rowCount || 0) > 0;
+  }
+
+  async syncVehicleAssignments(
+    vehicleId: number,
+    technicianIds: number[],
+    teamIds: number[],
+    userId: number,
+    companyId: number
+  ): Promise<void> {
+    // Desativar todas as autorizações existentes para este veículo
+    await db
+      .update(vehicleAssignments)
+      .set({ isActive: false })
+      .where(
+        and(
+          eq(vehicleAssignments.vehicleId, vehicleId),
+          eq(vehicleAssignments.companyId, companyId)
+        )
+      );
+
+    // Inserir novas autorizações para técnicos
+    if (technicianIds.length > 0) {
+      const technicianAssignments = technicianIds.map(technicianId => ({
+        vehicleId,
+        technicianId,
+        teamId: null,
+        userId,
+        companyId,
+        isActive: true
+      }));
+      
+      await db.insert(vehicleAssignments).values(technicianAssignments as any);
+    }
+
+    // Inserir novas autorizações para equipes
+    if (teamIds.length > 0) {
+      const teamAssignments = teamIds.map(teamId => ({
+        vehicleId,
+        technicianId: null,
+        teamId,
+        userId,
+        companyId,
+        isActive: true
+      }));
+      
+      await db.insert(vehicleAssignments).values(teamAssignments as any);
+    }
+  }
+
+  async getVehiclesAvailableForTechnician(technicianId: number, companyId: number): Promise<Vehicle[]> {
+    // Buscar veículos autorizados diretamente para o técnico
+    const directVehicles = await db
+      .select({ vehicle: vehicles })
+      .from(vehicleAssignments)
+      .innerJoin(vehicles, eq(vehicleAssignments.vehicleId, vehicles.id))
+      .where(
+        and(
+          eq(vehicleAssignments.technicianId, technicianId),
+          eq(vehicleAssignments.companyId, companyId),
+          eq(vehicleAssignments.isActive, true),
+          eq(vehicles.companyId, companyId)
+        )
+      );
+
+    // Buscar equipes do técnico
+    const technicianTeams = await db
+      .select({ teamId: teamMembers.teamId })
+      .from(teamMembers)
+      .where(
+        and(
+          eq(teamMembers.technicianId, technicianId),
+          eq(teamMembers.companyId, companyId)
+        )
+      );
+
+    const teamIds = technicianTeams.map(t => t.teamId);
+
+    // Buscar veículos autorizados para as equipes do técnico
+    let teamVehicles: { vehicle: Vehicle }[] = [];
+    if (teamIds.length > 0) {
+      teamVehicles = await db
+        .select({ vehicle: vehicles })
+        .from(vehicleAssignments)
+        .innerJoin(vehicles, eq(vehicleAssignments.vehicleId, vehicles.id))
+        .where(
+          and(
+            inArray(vehicleAssignments.teamId, teamIds),
+            eq(vehicleAssignments.companyId, companyId),
+            eq(vehicleAssignments.isActive, true),
+            eq(vehicles.companyId, companyId)
+          )
+        );
+    }
+
+    // Combinar e remover duplicados
+    const allVehicles = [...directVehicles, ...teamVehicles];
+    const uniqueVehicles = Array.from(
+      new Map(allVehicles.map(v => [v.vehicle.id, v.vehicle])).values()
+    );
+
+    return uniqueVehicles;
+  }
+
+  async getVehiclesAvailableForUser(userId: number, companyId: number): Promise<Vehicle[]> {
+    // Buscar técnico vinculado ao usuário
+    const [technician] = await db
+      .select()
+      .from(technicians)
+      .where(
+        and(
+          eq(technicians.userId, userId),
+          eq(technicians.companyId, companyId)
+        )
+      )
+      .limit(1);
+
+    if (!technician) {
+      return [];
+    }
+
+    return await this.getVehiclesAvailableForTechnician(technician.id, companyId);
   }
 
   // Appointments
