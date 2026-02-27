@@ -9,8 +9,10 @@ export async function validateWorkSchedule(
   userId: number,
   scheduledDate: Date,
   technicianId?: number,
-  teamId?: number
+  teamId?: number,
+  companyId?: number
 ): Promise<{ valid: boolean; message?: string }> {
+  console.log(`🔍 [WORK-SCHEDULE] Validando horário: technicianId=${technicianId || 'N/A'}, teamId=${teamId || 'N/A'}, companyId=${companyId || 'N/A'}`);
   
   // Obter dia da semana (0 = domingo, 1 = segunda, ..., 6 = sábado)
   const dayOfWeek = scheduledDate.getDay();
@@ -19,12 +21,14 @@ export async function validateWorkSchedule(
   
   // Validar técnico
   if (technicianId) {
-    const technicians = await storage.getTechnicians(userId);
+    const technicians = await storage.getTechnicians(companyId!);
     const technician = technicians.find(t => t.id === technicianId);
     
     if (!technician) {
-      return { valid: false, message: 'Técnico não encontrado' };
+      console.log(`❌ [WORK-SCHEDULE] Técnico id=${technicianId} não encontrado na empresa companyId=${companyId}`);
+      return { valid: false, message: 'Técnico não encontrado nesta empresa' };
     }
+    console.log(`✅ [WORK-SCHEDULE] Técnico encontrado: "${technician.name}" (id=${technician.id})`);
     
     const workDays = technician.diasTrabalho || ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
     
@@ -39,12 +43,14 @@ export async function validateWorkSchedule(
   
   // Validar equipe
   if (teamId) {
-    const teams = await storage.getTeams(userId);
+    const teams = await storage.getTeams(companyId!);
     const team = teams.find(t => t.id === teamId);
     
     if (!team) {
-      return { valid: false, message: 'Equipe não encontrada' };
+      console.log(`❌ [WORK-SCHEDULE] Equipe id=${teamId} não encontrada na empresa companyId=${companyId}`);
+      return { valid: false, message: 'Equipe não encontrada nesta empresa' };
     }
+    console.log(`✅ [WORK-SCHEDULE] Equipe encontrada: "${team.name}" (id=${team.id})`);
     
     const workDays = team.diasTrabalho || ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
     

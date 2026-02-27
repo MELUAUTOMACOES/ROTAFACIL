@@ -85,7 +85,7 @@ export function registerAccessSchedulesRoutes(app: Express, authenticateToken: a
   // Listar todas as tabelas de horário (apenas admin)
   app.get("/api/access-schedules", authenticateToken, requireAdmin, async (req: any, res) => {
     try {
-      const schedules = await storage.getAccessSchedules(req.user.userId);
+      const schedules = await storage.getAccessSchedules(req.user.companyId);
       res.json(schedules);
     } catch (error: any) {
       console.error("❌ Erro ao listar tabelas de horário:", error);
@@ -97,7 +97,7 @@ export function registerAccessSchedulesRoutes(app: Express, authenticateToken: a
   app.get("/api/access-schedules/:id", authenticateToken, requireAdmin, async (req: any, res) => {
     try {
       const scheduleId = parseInt(req.params.id);
-      const schedule = await storage.getAccessSchedule(scheduleId, req.user.userId);
+      const schedule = await storage.getAccessSchedule(scheduleId, req.user.companyId);
       
       if (!schedule) {
         return res.status(404).json({ message: "Tabela de horário não encontrada" });
@@ -118,7 +118,7 @@ export function registerAccessSchedulesRoutes(app: Express, authenticateToken: a
       
       const scheduleData = insertAccessScheduleSchema.parse(req.body);
       
-      const schedule = await storage.createAccessSchedule(scheduleData, req.user.userId);
+      const schedule = await storage.createAccessSchedule(scheduleData, req.user.userId, req.user.companyId);
       
       console.log(`✅ [ACCESS SCHEDULES] Tabela de horário criada: ${schedule.name} (ID: ${schedule.id})`);
       
@@ -146,7 +146,7 @@ export function registerAccessSchedulesRoutes(app: Express, authenticateToken: a
       // Validação parcial para updates
       const scheduleData = req.body;
       
-      const schedule = await storage.updateAccessSchedule(scheduleId, scheduleData, req.user.userId);
+      const schedule = await storage.updateAccessSchedule(scheduleId, scheduleData, req.user.companyId);
       
       console.log(`✅ [ACCESS SCHEDULES] Tabela de horário atualizada: ${schedule.name}`);
       
@@ -164,7 +164,7 @@ export function registerAccessSchedulesRoutes(app: Express, authenticateToken: a
       
       console.log(`🗑️ [ACCESS SCHEDULES] Deletando tabela de horário ID: ${scheduleId}`);
       
-      const success = await storage.deleteAccessSchedule(scheduleId, req.user.userId);
+      const success = await storage.deleteAccessSchedule(scheduleId, req.user.companyId);
       
       if (!success) {
         return res.status(404).json({ message: "Tabela de horário não encontrada" });

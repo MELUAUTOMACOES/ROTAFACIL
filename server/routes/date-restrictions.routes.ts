@@ -21,7 +21,7 @@ export function registerDateRestrictionsRoutes(app: Express, authenticateToken: 
         endDate = new Date(String(end));
       }
 
-      const restrictions = await storage.getDateRestrictions(req.user.userId, startDate, endDate);
+      const restrictions = await storage.getDateRestrictions(req.user.companyId, startDate, endDate);
       res.json(restrictions);
     } catch (error: any) {
       console.error("❌ Erro ao listar restrições de data:", error);
@@ -67,7 +67,7 @@ export function registerDateRestrictionsRoutes(app: Express, authenticateToken: 
       const restriction = await storage.createDateRestriction({
         ...data,
         date: parsedDate,
-      }, req.user.userId);
+      }, req.user.userId, req.user.companyId);
 
       // Atualizar disponibilidade diária para refletir a restrição
       await updateDailyAvailability(
@@ -75,6 +75,7 @@ export function registerDateRestrictionsRoutes(app: Express, authenticateToken: 
         restriction.date,
         restriction.responsibleType as 'technician' | 'team',
         restriction.responsibleId,
+        req.user.companyId,
       );
 
       res.json(restriction);
@@ -89,9 +90,10 @@ export function registerDateRestrictionsRoutes(app: Express, authenticateToken: 
     try {
       const id = parseInt(req.params.id);
 
+      const drOwnerFilter = eq(dateRestrictions.companyId, req.user.companyId);
       const existing = await db.select().from(dateRestrictions).where(and(
         eq(dateRestrictions.id, id),
-        eq(dateRestrictions.userId, req.user.userId),
+        drOwnerFilter,
       ));
 
       if (!existing.length) {
@@ -100,7 +102,7 @@ export function registerDateRestrictionsRoutes(app: Express, authenticateToken: 
 
       const restriction = existing[0];
 
-      const success = await storage.deleteDateRestriction(id, req.user.userId);
+      const success = await storage.deleteDateRestriction(id, req.user.companyId);
       if (!success) {
         return res.status(404).json({ message: "Restrição de data não encontrada" });
       }
@@ -111,6 +113,7 @@ export function registerDateRestrictionsRoutes(app: Express, authenticateToken: 
         restriction.date,
         restriction.responsibleType as 'technician' | 'team',
         restriction.responsibleId,
+        req.user.companyId,
       );
 
       res.json({ message: "Restrição de data removida com sucesso" });

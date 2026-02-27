@@ -99,10 +99,6 @@ async function createRouteAudit(
 
 // Helper para filtrar por companyId (OBRIGATÓRIO - multi-tenant)
 function ownerFilter(table: any, companyId: number) {
-  // Se companyId inválido, retorna condição impossível (não vaza dados)
-  if (!companyId) {
-    return eq(table.companyId, -1);
-  }
   return eq(table.companyId, companyId);
 }
 
@@ -110,7 +106,7 @@ async function resolveStartForRoute(
   userId: number,
   responsibleType: "technician" | "team",
   responsibleId: string | number,
-  companyId?: number | null
+  companyId: number
 ): Promise<{ lat: number; lng: number; address: string }> {
   // 1) tenta endereço do técnico/equipe; 2) cai para endereço da empresa (businessRules); 3) fallback Curitiba
   type EntityAddr = {
@@ -983,7 +979,7 @@ export function registerRoutesAPI(app: Express) {
               .where(
                 and(
                   eq(technicians.id, Number(derivedResponsibleId)),
-                  eq(technicians.userId, req.user.userId),
+                  eq(technicians.companyId, req.user.companyId),
                 ),
               )
               .limit(1);
@@ -1008,7 +1004,7 @@ export function registerRoutesAPI(app: Express) {
               .where(
                 and(
                   eq(teams.id, Number(derivedResponsibleId)),
-                  eq(teams.userId, req.user.userId),
+                  eq(teams.companyId, req.user.companyId),
                 ),
               )
               .limit(1);

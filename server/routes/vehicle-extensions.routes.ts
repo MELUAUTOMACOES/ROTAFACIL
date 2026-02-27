@@ -19,6 +19,9 @@ import { notifyMaintenanceScheduled } from "../notifications";
 
 export function registerVehicleExtensionRoutes(app: Express, authenticateToken: any) {
 
+    // Helper multi-tenant: filtra estritamente por companyId (obrigatório)
+    const ownerFilter = (req: any, table: any) => eq(table.companyId, req.user.companyId);
+
     // ==================== VEHICLE MAINTENANCES (ALL) ====================
 
     // GET /api/vehicle-maintenances - Listar TODAS as manutenções do usuário
@@ -29,7 +32,7 @@ export function registerVehicleExtensionRoutes(app: Express, authenticateToken: 
             const maintenances = await db
                 .select()
                 .from(vehicleMaintenances)
-                .where(eq(vehicleMaintenances.userId, req.user.userId))
+                .where(ownerFilter(req, vehicleMaintenances))
                 .orderBy(desc(vehicleMaintenances.createdAt));
 
             console.log(`✅ [MAINTENANCE] ${maintenances.length} manutenções encontradas`);
@@ -52,10 +55,10 @@ export function registerVehicleExtensionRoutes(app: Express, authenticateToken: 
             let query = db
                 .select()
                 .from(vehicleChecklistAudits)
-                .where(eq(vehicleChecklistAudits.userId, req.user.userId));
+                .where(ownerFilter(req, vehicleChecklistAudits));
 
             // Aplicar filtros
-            const conditions: any[] = [eq(vehicleChecklistAudits.userId, req.user.userId)];
+            const conditions: any[] = [ownerFilter(req, vehicleChecklistAudits)];
 
             if (checklistId) {
                 conditions.push(eq(vehicleChecklistAudits.checklistId, parseInt(checklistId)));
@@ -91,7 +94,7 @@ export function registerVehicleExtensionRoutes(app: Express, authenticateToken: 
                 .where(
                     and(
                         eq(vehicleChecklistAudits.checklistId, checklistId),
-                        eq(vehicleChecklistAudits.userId, req.user.userId)
+                        ownerFilter(req, vehicleChecklistAudits)
                     )
                 )
                 .limit(1);
@@ -138,7 +141,7 @@ export function registerVehicleExtensionRoutes(app: Express, authenticateToken: 
                 .where(
                     and(
                         eq(vehicleChecklists.id, checklistId),
-                        eq(vehicleChecklists.userId, req.user.userId)
+                        ownerFilter(req, vehicleChecklists)
                     )
                 )
                 .limit(1);
@@ -218,7 +221,7 @@ export function registerVehicleExtensionRoutes(app: Express, authenticateToken: 
             const userVehicles = await db
                 .select()
                 .from(vehicles)
-                .where(eq(vehicles.userId, req.user.userId));
+                .where(ownerFilter(req, vehicles));
 
             const vehiclesWithIssues = [];
 
@@ -230,7 +233,7 @@ export function registerVehicleExtensionRoutes(app: Express, authenticateToken: 
                     .where(
                         and(
                             eq(vehicleChecklists.vehicleId, vehicle.id),
-                            eq(vehicleChecklists.userId, req.user.userId)
+                            ownerFilter(req, vehicleChecklists)
                         )
                     )
                     .orderBy(desc(vehicleChecklists.checkDate))
@@ -296,7 +299,7 @@ export function registerVehicleExtensionRoutes(app: Express, authenticateToken: 
                 .leftJoin(vehicles, eq(vehicleMaintenances.vehicleId, vehicles.id))
                 .where(
                     and(
-                        eq(vehicleMaintenances.userId, req.user.userId),
+                        ownerFilter(req, vehicleMaintenances),
                         eq(vehicleMaintenances.status, 'agendada'),
                         sql`${vehicleMaintenances.scheduledDate} IS NOT NULL`
                     )
@@ -345,7 +348,7 @@ export function registerVehicleExtensionRoutes(app: Express, authenticateToken: 
 
             // Base conditions
             const baseConditions = [
-                eq(vehicleMaintenances.userId, req.user.userId),
+                ownerFilter(req, vehicleMaintenances),
                 eq(vehicleMaintenances.status, "concluida"),
             ];
 
@@ -388,7 +391,7 @@ export function registerVehicleExtensionRoutes(app: Express, authenticateToken: 
             const userVehicles = await db
                 .select({ id: vehicles.id, plate: vehicles.plate, model: vehicles.model })
                 .from(vehicles)
-                .where(eq(vehicles.userId, req.user.userId));
+                .where(ownerFilter(req, vehicles));
 
             // Determinar nome do período
             let monthName = "";

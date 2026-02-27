@@ -94,6 +94,7 @@ export const accessSchedules = pgTable("access_schedules", {
   // Ex: { "monday": [{"start": "08:00", "end": "18:00"}], "tuesday": [...], ... }
   schedules: jsonb("schedules").notNull(),
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -243,6 +244,7 @@ export const checklists = pgTable("checklists", {
   items: text("items").notNull(), // JSON string of checklist items
   notes: text("notes"),
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -365,6 +367,7 @@ export const teamMembers = pgTable("team_members", {
   teamId: integer("team_id").notNull().references(() => teams.id),
   technicianId: integer("technician_id").notNull().references(() => technicians.id),
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -457,6 +460,7 @@ export const fuelRecords = pgTable("fuel_records", {
 export const dailyAvailability = pgTable("daily_availability", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   date: timestamp("date", { withTimezone: false }).notNull(), // Data do dia
   responsibleType: varchar("responsible_type", { length: 16 }).notNull(), // 'technician' | 'team'
   responsibleId: integer("responsible_id").notNull(), // ID do técnico ou equipe
@@ -473,6 +477,7 @@ export const dailyAvailability = pgTable("daily_availability", {
 export const trackingLocations = pgTable("tracking_locations", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").notNull().references(() => companies.id),
   routeId: uuid("route_id").references(() => routes.id), // Pode ser null se não tiver rota ativa
   latitude: doublePrecision("latitude").notNull(),
   longitude: doublePrecision("longitude").notNull(),
@@ -490,6 +495,7 @@ export const trackingLocations = pgTable("tracking_locations", {
 export const dateRestrictions = pgTable("date_restrictions", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   date: timestamp("date", { withTimezone: false }).notNull(), // Data afetada pela restrição (somente dia)
   responsibleType: varchar("responsible_type", { length: 16 }).notNull(), // 'technician' | 'team'
   responsibleId: integer("responsible_id").notNull(), // ID do técnico ou equipe
@@ -1081,6 +1087,7 @@ export const vehicleDocuments = pgTable("vehicle_documents", {
   expirationDate: timestamp("expiration_date"), // Data de vencimento (opcional)
   notes: text("notes"), // Observações
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -1121,6 +1128,7 @@ export const vehicleMaintenances = pgTable("vehicle_maintenances", {
   status: text("status").notNull().default("concluida"), // 'agendada' | 'concluida'
   scheduledDate: timestamp("scheduled_date"), // Data agendada (para manutenções futuras)
   userId: integer("user_id").notNull().references(() => users.id),
+  companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

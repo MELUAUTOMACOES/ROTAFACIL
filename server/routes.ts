@@ -28,6 +28,7 @@ import {
   updateDailyAvailability,
   validateDateRestriction,
 } from "./availability-helpers";
+import { requireCompanyId } from "./utils/tenant";
 import { validateWorkSchedule } from "./work-schedule-validator";
 import { registerUserManagementRoutes } from "./routes/user-management.routes";
 import { registerAccessSchedulesRoutes } from "./routes/access-schedules.routes";
@@ -472,8 +473,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const apt = appointmentsList.find(a => a.id === stop.appointmentNumericId);
         if (!apt) return { ...stop, appointment: null };
 
-        const client = await storage.getClient(apt.clientId, apt.userId); // Pode falhar se userId for diferente, mas em tese é da mesma empresa
-        const service = await storage.getService(apt.serviceId, apt.userId);
+        const client = await storage.getClient(apt.clientId, req.user.companyId);
+        const service = await storage.getService(apt.serviceId, req.user.companyId);
 
         return {
           ...stop,
@@ -541,10 +542,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await Promise.all(activeRoutesWithId.map(async (r) => {
         let name = "Desconhecido";
         if (r.responsibleType === 'technician') {
-          const tech = await storage.getTechnician(Number(r.responsibleId), req.user.userId, req.user.companyId);
+          const tech = await storage.getTechnician(Number(r.responsibleId), req.user.companyId);
           if (tech) name = tech.name;
         } else if (r.responsibleType === 'team') {
-          const team = await storage.getTeam(Number(r.responsibleId), req.user.userId, req.user.companyId);
+          const team = await storage.getTeam(Number(r.responsibleId), req.user.companyId);
           if (team) name = team.name;
         }
 
@@ -811,6 +812,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 🛰️ GEOLOCALIZAÇÃO: Receber Tracking Points
   app.post("/api/tracking/location", authenticateToken, async (req: any, res) => {
     try {
+      const companyId = requireCompanyId(req, res);
+      if (!companyId) return;
+
       const { points } = req.body; // Aceita um array de pontos ou um único ponto
 
       if (!points) {
@@ -822,6 +826,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Mapear para insert
       const insertData = locations.map((loc: any) => ({
         userId: req.user.userId,
+        companyId,
         routeId: loc.routeId || null,
         latitude: loc.latitude,
         longitude: loc.longitude,
@@ -846,11 +851,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 🛰️ GEOLOCALIZAÇÃO: Buscar rota percorrida
   app.get("/api/tracking/route/:routeId", authenticateToken, async (req: any, res) => {
     try {
+      const companyId = requireCompanyId(req, res);
+      if (!companyId) return;
+
       const { routeId } = req.params;
 
       const points = await db.select()
         .from(trackingLocations)
-        .where(eq(trackingLocations.routeId, routeId))
+        .where(and(eq(trackingLocations.companyId, companyId), eq(trackingLocations.routeId, routeId)))
         .orderBy(asc(trackingLocations.timestamp));
 
       res.json(points);
@@ -884,7 +892,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 4. Listar pendências (agendamentos não concluídos de rotas finalizadas)
   app.get("/api/pending-appointments", authenticateToken, async (req: any, res) => {
     try {
-      const pendencias = await storage.getPendingAppointments(req.user.userId);
+      const pendencias = await storage.getPendingAppointments(req.user.companyId);
       logEgressSize(req, pendencias); // 📊 Instrumentação
       res.json(pendencias);
     } catch (error: any) {
@@ -912,7 +920,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filters.endDate = new Date(endDate as string);
       }
 
-      const records = await storage.getFuelRecords(req.user.userId, filters);
+      const records = await storage.getFuelRecords(req.user.companyId, filters);
       logEgressSize(req, records); // 📊 Instrumentação
       res.json(records);
     } catch (error: any) {
@@ -954,7 +962,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/fuel-records/vehicle/:id/stats", authenticateToken, async (req: any, res) => {
     try {
       const vehicleId = parseInt(req.params.id);
-      const stats = await storage.getVehicleFuelStats(vehicleId, req.user.userId);
+      const stats = await storage.getVehicleFuelStats(vehicleId, req.user.companyId);
       res.json(stats);
     } catch (error: any) {
       console.error("❌ [FUEL] Erro ao buscar estatísticas:", error);
@@ -982,7 +990,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filters.endDate = new Date(endDate as string + "T23:59:59");
       }
 
-      const stats = await storage.getFleetFuelStats(req.user.userId, filters);
+      const stats = await storage.getFleetFuelStats(req.user.companyId, filters);
       res.json(stats);
     } catch (error: any) {
       console.error("❌ [DASHBOARD] Erro ao buscar estatísticas de combustível:", error);
@@ -1772,14 +1780,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Se não houver parâmetros de paginação, retorna todos os clientes (compatibilidade)
       if (!req.query.page && !req.query.limit) {
-        const result = await storage.getAllClients(req.user.userId, req.user.companyId);
+        const result = await storage.getAllClients(req.user.companyId);
         logEgressSize(req, result); // 📊 Instrumentação
         return res.json(result);
       }
 
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
-      const result = await storage.getClients(req.user.userId, page, limit, req.user.companyId);
+      const result = await storage.getClients(req.user.companyId, page, limit);
 
       // 🔄 Transformar {data, total} em {items, pagination} para compatibilidade com frontend
       const totalPages = Math.ceil(result.total / limit);
@@ -1811,7 +1819,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ data: [], total: 0 });
       }
 
-      const result = await storage.searchClients(q.trim(), req.user.userId, page, limit, req.user.companyId);
+      const result = await storage.searchClients(q.trim(), req.user.companyId, page, limit);
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1827,7 +1835,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ exists: false });
       }
 
-      const existingClient = await storage.getClientByCpf(cpf, req.user.userId, req.user.companyId);
+      const existingClient = await storage.getClientByCpf(cpf, req.user.companyId);
 
       if (existingClient) {
         console.log("CPF já cadastrado:", cpf, "Nome:", existingClient.name);
@@ -1870,7 +1878,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("📝 [PUT /clients] payload recebido:", req.body); // <- vê se lat/lng estão vindo
       const clientData = insertClientSchema.partial().parse(req.body);
       console.log("📝 [PUT /clients] payload após Zod:", clientData); // <- confirma que lat/lng passaram
-      const client = await storage.updateClient(id, clientData, req.user.userId, req.user.companyId);
+      const client = await storage.updateClient(id, clientData, req.user.companyId);
       trackFeatureUsage(req.user.userId, "clients", "update", req.user.companyId, { id: client.id });
       trackCompanyAudit({
         userId: req.user.userId,
@@ -1962,7 +1970,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/clients/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const success = await storage.deleteClient(id, req.user.userId, req.user.companyId);
+      const success = await storage.deleteClient(id, req.user.companyId);
       if (!success) {
         return res.status(404).json({ message: "Client not found" });
       }
@@ -1988,7 +1996,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const search = req.query.search as string;
       const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
 
-      const result = await storage.getServicesPaged(req.user.userId, page, pageSize, search, isActive, req.user.companyId);
+      const result = await storage.getServicesPaged(req.user.companyId, page, pageSize, search, isActive);
       logEgressSize(req, result);
       res.json(result);
     } catch (error: any) {
@@ -2000,7 +2008,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/services", authenticateToken, async (req: any, res) => {
     try {
       const serviceData = insertServiceSchema.parse(req.body);
-      const service = await storage.createService(serviceData, req.user.userId, req.user.companyId);
+      const service = await storage.createService(serviceData, req.user.userId, req.user.companyId); // userId kept for INSERT
       trackFeatureUsage(req.user.userId, "services", "create", req.user.companyId, { id: service.id });
       trackCompanyAudit({
         userId: req.user.userId,
@@ -2020,7 +2028,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const serviceData = insertServiceSchema.partial().parse(req.body);
-      const service = await storage.updateService(id, serviceData, req.user.userId, req.user.companyId);
+      const service = await storage.updateService(id, serviceData, req.user.companyId);
       res.json(service);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -2030,7 +2038,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/services/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const success = await storage.deleteService(id, req.user.userId, req.user.companyId);
+      const success = await storage.deleteService(id, req.user.companyId);
       if (!success) {
         return res.status(404).json({ message: "Service not found" });
       }
@@ -2057,7 +2065,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const teamId = req.query.teamId ? parseInt(req.query.teamId as string) : undefined;
       const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
 
-      const result = await storage.getTechniciansPaged(req.user.userId, page, pageSize, search, teamId, isActive, req.user.companyId);
+      const result = await storage.getTechniciansPaged(req.user.companyId, page, pageSize, search, teamId, isActive);
       logEgressSize(req, result);
       res.json(result);
     } catch (error: any) {
@@ -2075,7 +2083,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const technicianData = insertTechnicianSchema.parse(req.body);
       console.log(" Dados validados pelo schema");
 
-      const technician = await storage.createTechnician(technicianData, req.user.userId, req.user.companyId);
+      const technician = await storage.createTechnician(technicianData, req.user.userId, req.user.companyId); // userId kept for INSERT
       console.log(" Técnico criado com sucesso:");
       console.log(`ID: ${technician.id}, Nome: ${technician.name}`);
       console.log("==== LOG FIM: POST /api/technicians (SUCESSO) ====");
@@ -2100,7 +2108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const technicianData = insertTechnicianSchema.partial().parse(req.body);
-      const technician = await storage.updateTechnician(id, technicianData, req.user.userId, req.user.companyId);
+      const technician = await storage.updateTechnician(id, technicianData, req.user.companyId);
       res.json(technician);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -2110,7 +2118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/technicians/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const success = await storage.deleteTechnician(id, req.user.userId, req.user.companyId);
+      const success = await storage.deleteTechnician(id, req.user.companyId);
       if (!success) {
         return res.status(404).json({ message: "Technician not found" });
       }
@@ -2131,7 +2139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string) || 50));
       const search = req.query.search as string;
 
-      const result = await storage.getTeamsPaged(req.user.userId, page, pageSize, search, req.user.companyId);
+      const result = await storage.getTeamsPaged(req.user.companyId, page, pageSize, search);
       logEgressSize(req, result);
       res.json(result);
     } catch (error: any) {
@@ -2146,7 +2154,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
       }
       const id = parseInt(req.params.id);
-      const team = await storage.getTeam(id, req.user.userId, req.user.companyId);
+      const team = await storage.getTeam(id, req.user.companyId);
       if (!team) {
         return res.status(404).json({ message: "Equipe não encontrada" });
       }
@@ -2162,7 +2170,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
       }
       const teamData = insertTeamSchema.parse(req.body);
-      const team = await storage.createTeam(teamData, req.user.userId, req.user.companyId);
+      const team = await storage.createTeam(teamData, req.user.userId, req.user.companyId); // userId kept for INSERT
       trackFeatureUsage(req.user.userId, "teams", "create", req.user.companyId, { id: team.id });
       trackCompanyAudit({
         userId: req.user.userId,
@@ -2185,7 +2193,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const id = parseInt(req.params.id);
       const teamData = insertTeamSchema.partial().parse(req.body);
-      const team = await storage.updateTeam(id, teamData, req.user.userId, req.user.companyId);
+      const team = await storage.updateTeam(id, teamData, req.user.companyId);
       trackCompanyAudit({
         userId: req.user.userId,
         companyId: req.user.companyId,
@@ -2206,7 +2214,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
       }
       const id = parseInt(req.params.id);
-      const success = await storage.deleteTeam(id, req.user.userId, req.user.companyId);
+      const success = await storage.deleteTeam(id, req.user.companyId);
       if (!success) {
         return res.status(404).json({ message: "Equipe não encontrada" });
       }
@@ -2227,7 +2235,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Team Members
   app.get("/api/team-members", authenticateToken, async (req: any, res) => {
     try {
-      const teamMembers = await storage.getAllTeamMembers(req.user.userId, req.user.companyId);
+      const teamMembers = await storage.getAllTeamMembers(req.user.companyId);
       res.json(teamMembers);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2247,7 +2255,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const responsibleType = req.query.responsibleType as string;
       const responsibleId = req.query.responsibleId ? parseInt(req.query.responsibleId as string) : undefined;
 
-      const result = await storage.getVehiclesPaged(req.user.userId, page, pageSize, search, responsibleType, responsibleId, req.user.companyId);
+      const result = await storage.getVehiclesPaged(req.user.companyId, page, pageSize, search, responsibleType, responsibleId);
       logEgressSize(req, result);
       res.json(result);
     } catch (error: any) {
@@ -2265,7 +2273,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(id)) {
         return res.status(400).json({ message: "ID inválido" });
       }
-      const vehicle = await storage.getVehicle(id, req.user.userId, req.user.companyId);
+      const vehicle = await storage.getVehicle(id, req.user.companyId);
       if (!vehicle) {
         return res.status(404).json({ message: "Veículo não encontrado" });
       }
@@ -2281,7 +2289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
       }
       const vehicleData = insertVehicleSchema.parse(req.body);
-      const vehicle = await storage.createVehicle(vehicleData, req.user.userId, req.user.companyId);
+      const vehicle = await storage.createVehicle(vehicleData, req.user.userId, req.user.companyId); // userId kept for INSERT
       trackFeatureUsage(req.user.userId, "vehicles", "create", req.user.companyId, { id: vehicle.id });
       trackCompanyAudit({
         userId: req.user.userId,
@@ -2304,7 +2312,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const id = parseInt(req.params.id);
       const vehicleData = insertVehicleSchema.partial().parse(req.body);
-      const vehicle = await storage.updateVehicle(id, vehicleData, req.user.userId, req.user.companyId);
+      const vehicle = await storage.updateVehicle(id, vehicleData, req.user.companyId);
       trackCompanyAudit({
         userId: req.user.userId,
         companyId: req.user.companyId,
@@ -2325,7 +2333,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
       }
       const id = parseInt(req.params.id);
-      const success = await storage.deleteVehicle(id, req.user.userId, req.user.companyId);
+      const success = await storage.deleteVehicle(id, req.user.companyId);
       if (!success) {
         return res.status(404).json({ message: "Veículo não encontrado" });
       }
@@ -2349,7 +2357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/vehicles/:vehicleId/documents", authenticateToken, async (req: any, res) => {
     try {
       const vehicleId = parseInt(req.params.vehicleId);
-      const documents = await storage.getVehicleDocuments(vehicleId, req.user.userId);
+      const documents = await storage.getVehicleDocuments(vehicleId, req.user.companyId);
       res.json(documents);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2361,8 +2369,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const vehicleId = parseInt(req.params.vehicleId);
 
-      // Verificar se o veículo pertence ao usuário
-      const vehicle = await storage.getVehicle(vehicleId, req.user.userId);
+      // Verificar se o veículo pertence à empresa
+      const vehicle = await storage.getVehicle(vehicleId, req.user.companyId);
       if (!vehicle) {
         return res.status(404).json({ message: "Veículo não encontrado" });
       }
@@ -2374,7 +2382,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expirationDate: req.body.expirationDate ? new Date(req.body.expirationDate) : null,
       };
 
-      const document = await storage.createVehicleDocument(documentData, req.user.userId);
+      const document = await storage.createVehicleDocument(documentData, req.user.userId, req.user.companyId); // userId kept for INSERT
       res.json(document);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -2385,7 +2393,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/vehicles/:vehicleId/documents/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const success = await storage.deleteVehicleDocument(id, req.user.userId);
+      const success = await storage.deleteVehicleDocument(id, req.user.companyId);
       if (!success) {
         return res.status(404).json({ message: "Documento não encontrado" });
       }
@@ -2401,7 +2409,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/vehicles/:vehicleId/maintenances", authenticateToken, async (req: any, res) => {
     try {
       const vehicleId = parseInt(req.params.vehicleId);
-      const maintenances = await storage.getVehicleMaintenances(vehicleId, req.user.userId);
+      const maintenances = await storage.getVehicleMaintenances(vehicleId, req.user.companyId);
       res.json(maintenances);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2412,7 +2420,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/vehicle-maintenances/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const maintenance = await storage.getVehicleMaintenance(id, req.user.userId);
+      const maintenance = await storage.getVehicleMaintenance(id, req.user.companyId);
       if (!maintenance) {
         return res.status(404).json({ message: "Manutenção não encontrada" });
       }
@@ -2431,8 +2439,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const vehicleId = parseInt(req.params.vehicleId);
 
-      // Verificar se o veículo pertence ao usuário
-      const vehicle = await storage.getVehicle(vehicleId, req.user.userId);
+      // Verificar se o veículo pertence à empresa
+      const vehicle = await storage.getVehicle(vehicleId, req.user.companyId);
       if (!vehicle) {
         return res.status(404).json({ message: "Veículo não encontrado" });
       }
@@ -2447,7 +2455,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const maintenance = await storage.createVehicleMaintenance(
         validatedData,
-        req.user.userId
+        req.user.userId,
+        req.user.companyId
       );
 
       // Criar garantias se fornecidas
@@ -2464,7 +2473,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Buscar manutenção completa com garantias
-      const fullMaintenance = await storage.getVehicleMaintenance(maintenance.id, req.user.userId);
+      const fullMaintenance = await storage.getVehicleMaintenance(maintenance.id, req.user.companyId);
       const createdWarranties = await storage.getMaintenanceWarranties(maintenance.id);
 
       trackFeatureUsage(req.user.userId, "maintenances", "create", req.user.companyId, { id: maintenance.id });
@@ -2519,7 +2528,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Usar schema construído manualmente para validar e transformar campos alterados
       const processedData = updateSchema.parse(maintenanceData);
 
-      const maintenance = await storage.updateVehicleMaintenance(id, processedData, req.user.userId);
+      const maintenance = await storage.updateVehicleMaintenance(id, processedData, req.user.companyId);
 
       // Buscar garantias atuais
       const currentWarranties = await storage.getMaintenanceWarranties(id);
@@ -2534,7 +2543,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/vehicle-maintenances/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const success = await storage.deleteVehicleMaintenance(id, req.user.userId);
+      const success = await storage.deleteVehicleMaintenance(id, req.user.companyId);
       if (!success) {
         return res.status(404).json({ message: "Manutenção não encontrada" });
       }
@@ -2562,8 +2571,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const maintenanceId = parseInt(req.params.maintenanceId);
 
-      // Verificar se a manutenção pertence ao usuário
-      const maintenance = await storage.getVehicleMaintenance(maintenanceId, req.user.userId);
+      // Verificar se a manutenção pertence à empresa
+      const maintenance = await storage.getVehicleMaintenance(maintenanceId, req.user.companyId);
       if (!maintenance) {
         return res.status(404).json({ message: "Manutenção não encontrada" });
       }
@@ -2637,7 +2646,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // =================================================================================
       // CONSTRUIR FILTROS
       // =================================================================================
-      const conditions: any[] = [eq(appointments.userId, req.user.userId)];
+      const conditions: any[] = [eq(appointments.companyId, req.user.companyId)];
 
       // Filtro de data: from
       if (fromParam) {
@@ -2844,7 +2853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/appointments/date/:date", authenticateToken, async (req: any, res) => {
     try {
       const date = req.params.date;
-      const appointments = await storage.getAppointmentsByDate(date, req.user.userId, req.user.companyId);
+      const appointments = await storage.getAppointmentsByDate(date, req.user.companyId);
       res.json(appointments);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2855,12 +2864,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const appointmentData = extendedInsertAppointmentSchema.parse(req.body);
 
+      console.log(`📋 [APPOINTMENTS POST] companyId=${req.user.companyId}, technicianId=${appointmentData.technicianId || 'N/A'}, teamId=${appointmentData.teamId || 'N/A'}`);
+
       // Validar restrição de data (feriados / indisponibilidades)
       const dateRestrictionValidation = await validateDateRestriction(
         req.user.userId,
         new Date(appointmentData.scheduledDate),
         appointmentData.technicianId || null,
-        appointmentData.teamId || null
+        appointmentData.teamId || null,
+        req.user.companyId
       );
 
       if (!dateRestrictionValidation.valid) {
@@ -2872,7 +2884,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.user.userId,
         new Date(appointmentData.scheduledDate),
         appointmentData.technicianId || null,
-        appointmentData.teamId || null
+        appointmentData.teamId || null,
+        undefined,
+        req.user.companyId
       );
 
       if (!validation.valid) {
@@ -2885,17 +2899,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.user.userId,
         new Date(appointmentData.scheduledDate),
         appointmentData.technicianId || undefined,
-        appointmentData.teamId || undefined
+        appointmentData.teamId || undefined,
+        req.user.companyId
       );
 
       if (!workScheduleValidation.valid) {
         return res.status(400).json({ message: workScheduleValidation.message });
       }
 
-      const appointment = await storage.createAppointment(appointmentData, req.user.userId, req.user.companyId);
+      const appointment = await storage.createAppointment(appointmentData, req.user.userId, req.user.companyId); // userId kept for INSERT
 
       // Atualizar disponibilidade após criar agendamento
-      await updateAvailabilityForAppointment(req.user.userId, appointment);
+      await updateAvailabilityForAppointment(req.user.userId, appointment, req.user.companyId);
 
       trackFeatureUsage(req.user.userId, "appointments", "create", req.user.companyId, { id: appointment.id });
       trackCompanyAudit({
@@ -2958,7 +2973,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             req.user.userId,
             new Date(validatedData.scheduledDate),
             validatedData.technicianId || null,
-            validatedData.teamId || null
+            validatedData.teamId || null,
+            req.user.companyId
           );
 
           if (!dateRestrictionValidation.valid) {
@@ -2977,7 +2993,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             req.user.userId,
             new Date(validatedData.scheduledDate),
             validatedData.technicianId || null,
-            validatedData.teamId || null
+            validatedData.teamId || null,
+            undefined,
+            req.user.companyId
           );
 
           if (!validation.valid) {
@@ -2997,7 +3015,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             req.user.userId,
             new Date(validatedData.scheduledDate),
             validatedData.technicianId || undefined,
-            validatedData.teamId || undefined
+            validatedData.teamId || undefined,
+            req.user.companyId
           );
 
           if (!workScheduleValidation.valid) {
@@ -3011,10 +3030,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
 
-          const createdAppointment = await storage.createAppointment(validatedData, req.user.userId, req.user.companyId);
+          const createdAppointment = await storage.createAppointment(validatedData, req.user.userId, req.user.companyId); // userId kept for INSERT
 
           // Atualizar disponibilidade após criar agendamento
-          await updateAvailabilityForAppointment(req.user.userId, createdAppointment);
+          await updateAvailabilityForAppointment(req.user.userId, createdAppointment, req.user.companyId);
 
           console.log(`✅ Agendamento criado: ID ${createdAppointment.id}, clientId: ${createdAppointment.clientId}`);
           successCount++;
@@ -3085,7 +3104,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const id = parseInt(req.params.id);
-      const appointment = await storage.getAppointment(id, req.user.userId, req.user.companyId);
+      const appointment = await storage.getAppointment(id, req.user.companyId);
       // Also allow getting appointment if user is admin (implemented via storage.getAppointment checking userId currently, 
       // but maybe we need broader access? For now, keep STRICT owner check as per rules)
 
@@ -3107,12 +3126,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // First check if appointment exists and user has access
-      const appointment = await storage.getAppointment(id, req.user.userId, req.user.companyId);
+      const appointment = await storage.getAppointment(id, req.user.companyId);
       if (!appointment) {
         return res.status(404).json({ message: "Agendamento não encontrado" });
       }
 
-      const history = await storage.getAppointmentHistory(id, req.user.userId, req.user.companyId);
+      const history = await storage.getAppointmentHistory(id);
       res.json(history);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -3137,13 +3156,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Buscar serviço para obter duração
-      const service = await storage.getService(serviceId, userId, companyId);
+      const service = await storage.getService(serviceId, companyId);
       if (!service) {
         return res.status(400).json({ message: "Serviço não encontrado" });
       }
 
       // Buscar regras de negócio
-      const businessRules = await storage.getBusinessRules(userId, companyId);
+      const businessRules = await storage.getBusinessRules(companyId);
       if (!businessRules) {
         return res.status(400).json({ message: "Regras de negócio não configuradas" });
       }
@@ -3176,7 +3195,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (clientId) {
         // Buscar coordenadas do cliente
-        const client = await storage.getClient(clientId, userId, companyId);
+        const client = await storage.getClient(clientId, companyId);
         if (!client) {
           return res.status(400).json({ message: "Cliente não encontrado" });
         }
@@ -3220,19 +3239,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (technicianId) {
         // Técnico específico
-        const tech = await storage.getTechnician(technicianId, userId, companyId);
+        const tech = await storage.getTechnician(technicianId, companyId);
         if (tech && tech.serviceIds?.includes(serviceId.toString())) {
           responsibles.push({ type: 'technician', id: tech.id, name: tech.name });
         }
       } else if (teamId) {
         // Equipe específica
-        const team = await storage.getTeam(teamId, userId, companyId);
+        const team = await storage.getTeam(teamId, companyId);
         if (team && team.serviceIds?.includes(serviceId.toString())) {
           responsibles.push({ type: 'team', id: team.id, name: team.name });
         }
       } else {
         // Buscar todos os técnicos compatíveis
-        const allTechnicians = await storage.getTechnicians(userId, companyId);
+        const allTechnicians = await storage.getTechnicians(companyId);
         for (const tech of allTechnicians) {
           if (tech.serviceIds?.includes(serviceId.toString()) && tech.isActive) {
             responsibles.push({ type: 'technician', id: tech.id, name: tech.name });
@@ -3240,7 +3259,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Buscar todas as equipes compatíveis
-        const allTeams = await storage.getTeams(userId, companyId);
+        const allTeams = await storage.getTeams(companyId);
         for (const team of allTeams) {
           if (team.serviceIds?.includes(serviceId.toString())) {
             responsibles.push({ type: 'team', id: team.id, name: team.name });
@@ -3325,7 +3344,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let baseAddress: { cep: string, logradouro: string, numero: string, bairro: string, cidade: string, estado: string };
 
         if (responsible.type === 'technician') {
-          const tech = await storage.getTechnician(responsible.id, userId, companyId);
+          const tech = await storage.getTechnician(responsible.id, companyId);
           if (!tech) continue;
 
           horarioInicioTrabalho = tech.horarioInicioTrabalho || '08:00';
@@ -3353,7 +3372,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             };
           }
         } else {
-          const team = await storage.getTeam(responsible.id, userId, companyId);
+          const team = await storage.getTeam(responsible.id, companyId);
           if (!team) continue;
 
           horarioInicioTrabalho = team.horarioInicioTrabalho || '08:00';
@@ -3452,11 +3471,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`    ✓ Trabalha em ${currentDayName}`);
 
           // 🚀 JUST-IN-TIME AVAILABILITY UPDATE
-          await updateDailyAvailability(userId, candidateDate, responsible.type, responsible.id);
+          await updateDailyAvailability(userId, candidateDate, responsible.type, responsible.id, companyId);
 
+          const availOwnerFilter = eq(dailyAvailability.companyId, companyId);
           const availability = await db.query.dailyAvailability.findFirst({
             where: and(
-              eq(dailyAvailability.userId, userId),
+              availOwnerFilter,
               eq(dailyAvailability.responsibleType, responsible.type),
               eq(dailyAvailability.responsibleId, responsible.id),
               sql`DATE(${dailyAvailability.date}) = ${dateKey}`
@@ -3479,9 +3499,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           endOfDay.setHours(23, 59, 59, 999);
 
           // Buscar agendamentos diretos
+          const apptOwnerFilter = eq(appointments.companyId, companyId);
           let dayAppointments = await db.query.appointments.findMany({
             where: and(
-              eq(appointments.userId, userId),
+              apptOwnerFilter,
               responsible.type === 'technician'
                 ? eq(appointments.technicianId, responsible.id)
                 : eq(appointments.teamId, responsible.id),
@@ -3499,7 +3520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             for (const tm of techTeams) {
               const teamAppts = await db.query.appointments.findMany({
                 where: and(
-                  eq(appointments.userId, userId),
+                  apptOwnerFilter,
                   eq(appointments.teamId, tm.teamId),
                   sql`${appointments.scheduledDate} >= ${startOfDay.toISOString()}`,
                   sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`,
@@ -3802,7 +3823,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`🔧 [UPDATE] Atualizando agendamento ${id}:`, appointmentData);
 
       // 🔒 VALIDAÇÃO: Só permite edição de agendamentos com status 'scheduled' ou 'rescheduled'
-      const existingAppointment = await storage.getAppointment(id, req.user.userId, req.user.companyId);
+      const existingAppointment = await storage.getAppointment(id, req.user.companyId);
       if (!existingAppointment) {
         return res.status(404).json({ message: "Agendamento não encontrado" });
       }
@@ -3845,9 +3866,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Buscar agendamento original para rastrear mudanças
-      const originalAppointment = await storage.getAppointment(id, req.user.userId, req.user.companyId);
+      const originalAppointment = await storage.getAppointment(id, req.user.companyId);
 
-      const appointment = await storage.updateAppointment(id, appointmentData, req.user.userId, req.user.companyId);
+      const appointment = await storage.updateAppointment(id, appointmentData, req.user.companyId);
       console.log(`✅ [UPDATE] Agendamento atualizado com sucesso: ${appointment.id}`);
 
       // Criar descrição detalhada das mudanças
@@ -3959,7 +3980,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Buscar agendamento original para validação
-      const originalAppointment = await storage.getAppointment(id, req.user.userId, req.user.companyId);
+      const originalAppointment = await storage.getAppointment(id, req.user.companyId);
       if (!originalAppointment) {
         return res.status(404).json({ message: "Agendamento não encontrado" });
       }
@@ -3979,7 +4000,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           new Date(appointmentData.scheduledDate || originalAppointment.scheduledDate),
           appointmentData.technicianId !== undefined ? appointmentData.technicianId : originalAppointment.technicianId,
           appointmentData.teamId !== undefined ? appointmentData.teamId : originalAppointment.teamId,
-          id // Excluir o próprio agendamento da validação
+          id, // Excluir o próprio agendamento da validação
+          req.user.companyId
         );
 
         if (!validation.valid) {
@@ -3992,7 +4014,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           req.user.userId,
           new Date(appointmentData.scheduledDate || originalAppointment.scheduledDate),
           appointmentData.technicianId !== undefined ? appointmentData.technicianId : originalAppointment.technicianId,
-          appointmentData.teamId !== undefined ? appointmentData.teamId : originalAppointment.teamId
+          appointmentData.teamId !== undefined ? appointmentData.teamId : originalAppointment.teamId,
+          req.user.companyId
         );
 
         if (!workScheduleValidation.valid) {
@@ -4033,21 +4056,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         appointmentData.rescheduleCount = (originalAppointment.rescheduleCount || 0) + 1;
       }
 
-      const appointment = await storage.updateAppointment(id, appointmentData, req.user.userId, req.user.companyId);
+      const appointment = await storage.updateAppointment(id, appointmentData, req.user.companyId);
 
       // Atualizar disponibilidade da data antiga se mudou a data
       if (dateChanged) {
         const oldDate = new Date(originalAppointment.scheduledDate);
         if (originalAppointment.technicianId) {
-          await updateAvailabilityForAppointment(req.user.userId, { ...originalAppointment, scheduledDate: oldDate } as any);
+          await updateAvailabilityForAppointment(req.user.userId, { ...originalAppointment, scheduledDate: oldDate } as any, req.user.companyId);
         }
         if (originalAppointment.teamId) {
-          await updateAvailabilityForAppointment(req.user.userId, { ...originalAppointment, scheduledDate: oldDate } as any);
+          await updateAvailabilityForAppointment(req.user.userId, { ...originalAppointment, scheduledDate: oldDate } as any, req.user.companyId);
         }
       }
 
       // Atualizar disponibilidade da nova data/responsável
-      await updateAvailabilityForAppointment(req.user.userId, appointment);
+      await updateAvailabilityForAppointment(req.user.userId, appointment, req.user.companyId);
 
       console.log(`✅ [PATCH] Agendamento ${id} atualizado com sucesso`);
       console.log("==== LOG FIM: PATCH /api/appointments (SUCESSO) ====");
@@ -4095,9 +4118,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`🗑️ Tentando deletar agendamento ID: ${id}`);
 
       // Buscar agendamento antes de deletar para atualizar disponibilidade
-      const appointmentToDelete = await storage.getAppointment(id, req.user.userId, req.user.companyId);
+      const appointmentToDelete = await storage.getAppointment(id, req.user.companyId);
 
-      const success = await storage.deleteAppointment(id, req.user.userId, req.user.companyId);
+      const success = await storage.deleteAppointment(id, req.user.companyId);
       if (!success) {
         console.log(`❌ Agendamento ${id} não encontrado para o usuário`);
         console.log("==== LOG FIM: DELETE /api/appointments (NÃO ENCONTRADO) ====");
@@ -4106,7 +4129,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Atualizar disponibilidade após deletar
       if (appointmentToDelete) {
-        await updateAvailabilityForAppointment(req.user.userId, appointmentToDelete);
+        await updateAvailabilityForAppointment(req.user.userId, appointmentToDelete, req.user.companyId);
       }
 
       console.log(`✅ Agendamento ${id} deletado com sucesso`);
@@ -4135,7 +4158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Pega TODOS os appointments do usuário e filtra pelos IDs informados
       // (usamos storage para manter o padrão do projeto)
-      const all = await storage.getAppointments(req.user.userId, req.user.companyId);
+      const all = await storage.getAppointments(req.user.companyId);
       const rows = all.filter((a: any) => ids.includes(a.id));
 
       const updatedIds: number[] = [];
@@ -4220,10 +4243,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Buscar agendamento
+      const apptOwnerFilter = eq(appointments.companyId, req.user.companyId);
       const appointment = await db.query.appointments.findFirst({
         where: and(
           eq(appointments.id, appointmentId),
-          eq(appointments.userId, req.user.userId)
+          apptOwnerFilter
         ),
       });
 
@@ -4425,7 +4449,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           where: eq(appointments.id, appointmentId),
         });
         if (updatedAppointment) {
-          await updateAvailabilityForAppointment(req.user.userId, updatedAppointment);
+          await updateAvailabilityForAppointment(req.user.userId, updatedAppointment, req.user.companyId);
         }
       }
 
@@ -4464,10 +4488,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Verificar se agendamento existe e pertence ao usuário
+      const apptOwnerFilter = eq(appointments.companyId, req.user.companyId);
       const appointment = await db.query.appointments.findFirst({
         where: and(
           eq(appointments.id, appointmentId),
-          eq(appointments.userId, req.user.userId)
+          apptOwnerFilter
         ),
       });
 
@@ -4604,7 +4629,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Appointment IDs are required" });
       }
 
-      const optimizedRoute = await storage.optimizeRoute(appointmentIds, req.user.userId, req.user.companyId);
+      const optimizedRoute = await storage.optimizeRoute(appointmentIds, req.user.companyId);
       res.json(optimizedRoute);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -4614,7 +4639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Checklists routes
   app.get("/api/checklists", authenticateToken, async (req: any, res) => {
     try {
-      const checklists = await storage.getChecklists(req.user.userId, req.user.companyId);  
+      const checklists = await storage.getChecklists(req.user.companyId);  
       res.json(checklists);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -4635,7 +4660,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const checklistData = insertChecklistSchema.partial().parse(req.body);
-      const checklist = await storage.updateChecklist(id, checklistData, req.user.userId, req.user.companyId);
+      const checklist = await storage.updateChecklist(id, checklistData, req.user.companyId);
       res.json(checklist);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -4645,7 +4670,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/checklists/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const success = await storage.deleteChecklist(id, req.user.userId, req.user.companyId);
+      const success = await storage.deleteChecklist(id, req.user.companyId);
       if (!success) {
         return res.status(404).json({ message: "Checklist not found" });
       }
@@ -4658,7 +4683,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Business Rules routes
   app.get("/api/business-rules", authenticateToken, async (req: any, res) => {
     try {
-      const businessRules = await storage.getBusinessRules(req.user.userId, req.user.companyId);
+      const businessRules = await storage.getBusinessRules(req.user.companyId);
       res.json(businessRules || {});
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -4679,7 +4704,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const businessRulesData = insertBusinessRulesSchema.partial().parse(req.body);
-      const businessRules = await storage.updateBusinessRules(id, businessRulesData, req.user.userId, req.user.companyId);
+      const businessRules = await storage.updateBusinessRules(id, businessRulesData, req.user.companyId);
       res.json(businessRules);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -4930,7 +4955,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // 🚫 Validação: Máximo de paradas por rota
-      const [brRule] = await db.select().from(businessRules).where(eq(businessRules.userId, req.user.userId)).limit(1);
+      const brOwnerFilter = eq(businessRules.companyId, req.user.companyId);
+      const [brRule] = await db.select().from(businessRules).where(brOwnerFilter).limit(1);
       if (brRule) {
         const maxStops = (brRule as any).maximoParadasPorRota;
         if (maxStops && Number(maxStops) > 0) {
@@ -5057,7 +5083,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .leftJoin(clients, eq(appointments.clientId, clients.id))
         .where(
           and(
-            eq(appointments.userId, req.user.userId),
+            eq(appointments.companyId, req.user.companyId),
             gte(appointments.scheduledDate, start),
             lte(appointments.scheduledDate, end),
             eq(appointments.status, "scheduled")
@@ -5142,15 +5168,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         insertVehicleChecklistItemSchema.parse(item)
       );
 
-      // Verificar se o veículo existe e pertence ao usuário
-      const vehicle = await storage.getVehicle(checklistWithUser.vehicleId, req.user.userId);
+      // Verificar se o veículo existe e pertence à empresa
+      const vehicle = await storage.getVehicle(checklistWithUser.vehicleId, req.user.companyId);
       if (!vehicle) {
         return res.status(404).json({ message: "Veículo não encontrado" });
       }
 
       // Verificar se técnico existe
       if (checklistWithUser.technicianId) {
-        const technician = await storage.getTechnician(checklistWithUser.technicianId, req.user.userId);
+        const technician = await storage.getTechnician(checklistWithUser.technicianId, req.user.companyId);
         if (!technician) {
           return res.status(404).json({ message: "Técnico não encontrado" });
         }
@@ -5189,10 +5215,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { vehicleId, checklistType, technicianId, startDate, endDate } = req.query;
 
-      let query = db.select().from(vehicleChecklists).where(eq(vehicleChecklists.userId, req.user.userId));
+      let query = db.select().from(vehicleChecklists).where(eq(vehicleChecklists.companyId, req.user.companyId));
 
       // Aplicar filtros
-      const conditions: any[] = [eq(vehicleChecklists.userId, req.user.userId)];
+      const conditions: any[] = [eq(vehicleChecklists.companyId, req.user.companyId)];
 
       if (vehicleId) {
         conditions.push(eq(vehicleChecklists.vehicleId, parseInt(vehicleId as string)));
@@ -5218,16 +5244,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Buscar dados relacionados (veículo, técnico, items) para cada checklist
       const checklistsWithDetails = await Promise.all(checklists.map(async (checklist) => {
-        const vehicle = await storage.getVehicle(checklist.vehicleId, req.user.userId);
+        const vehicle = await storage.getVehicle(checklist.vehicleId, req.user.companyId);
 
         let responsibleName = "Desconhecido";
         if (checklist.technicianId) {
-          const tech = await storage.getTechnician(checklist.technicianId, req.user.userId);
+          const tech = await storage.getTechnician(checklist.technicianId, req.user.companyId);
           if (tech) responsibleName = tech.name;
         } else if (checklist.teamMemberId) {
           const [teamMember] = await db.select().from(teamMembers).where(eq(teamMembers.id, checklist.teamMemberId)).limit(1);
           if (teamMember) {
-            const tech = await storage.getTechnician(teamMember.technicianId, req.user.userId);
+            const tech = await storage.getTechnician(teamMember.technicianId, req.user.companyId);
             if (tech) responsibleName = tech.name;
           }
         }
@@ -5260,7 +5286,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [checklist] = await db.select().from(vehicleChecklists).where(
         and(
           eq(vehicleChecklists.id, id),
-          eq(vehicleChecklists.userId, req.user.userId)
+          eq(vehicleChecklists.companyId, req.user.companyId)
         )
       ).limit(1);
 
@@ -5269,16 +5295,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Buscar dados relacionados
-      const vehicle = await storage.getVehicle(checklist.vehicleId, req.user.userId);
+      const vehicle = await storage.getVehicle(checklist.vehicleId, req.user.companyId);
 
       let responsibleName = "Desconhecido";
       if (checklist.technicianId) {
-        const tech = await storage.getTechnician(checklist.technicianId, req.user.userId);
+        const tech = await storage.getTechnician(checklist.technicianId, req.user.companyId);
         if (tech) responsibleName = tech.name;
       } else if (checklist.teamMemberId) {
         const [teamMember] = await db.select().from(teamMembers).where(eq(teamMembers.id, checklist.teamMemberId)).limit(1);
         if (teamMember) {
-          const tech = await storage.getTechnician(teamMember.technicianId, req.user.userId);
+          const tech = await storage.getTechnician(teamMember.technicianId, req.user.companyId);
           if (tech) responsibleName = tech.name;
         }
       }
@@ -5318,10 +5344,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Endpoint para registrar localização em tempo real
   app.post("/api/tracking/location", authenticateToken, async (req: any, res) => {
     try {
+      const companyId = requireCompanyId(req, res);
+      if (!companyId) return;
+
       const locationData = req.body;
       const tracking = await storage.createTrackingLocation({
         ...locationData,
-        userId: req.user.userId
+        userId: req.user.userId,
+        companyId,
       });
       res.json(tracking);
     } catch (error: any) {
@@ -5333,8 +5363,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Endpoint para recuperar o rastro de uma rota
   app.get("/api/tracking/route/:routeId", authenticateToken, async (req: any, res) => {
     try {
+      const companyId = requireCompanyId(req, res);
+      if (!companyId) return;
+
       const { routeId } = req.params;
-      const trackingPoints = await storage.getRouteTrackingLocations(routeId);
+      const trackingPoints = await storage.getRouteTrackingLocations(routeId, companyId);
       res.json(trackingPoints);
     } catch (error: any) {
       console.error("Error fetching route tracking:", error);

@@ -17,6 +17,9 @@ import { eq, and, sql, gte, lte, or, isNull, desc, ne } from "drizzle-orm";
 
 export function registerDashboardRoutes(app: Express, authenticateToken: any) {
 
+    // Helper multi-tenant: filtra estritamente por companyId (obrigatório)
+    const ownerFilter = (req: any, table: any) => eq(table.companyId, req.user.companyId);
+
     // ==================== ROTAS EM ANDAMENTO ====================
 
     // GET /api/dashboard/routes-in-progress - Rotas que estão em andamento agora
@@ -30,7 +33,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .from(routes)
                 .where(
                     and(
-                        eq(routes.userId, req.user.userId),
+                        ownerFilter(req, routes),
                         eq(routes.status, "confirmado"),
                         sql`${routes.routeStartedAt} IS NOT NULL`,
                         sql`${routes.routeFinishedAt} IS NULL`
@@ -140,7 +143,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .from(appointments)
                 .where(
                     and(
-                        eq(appointments.userId, req.user.userId),
+                        ownerFilter(req, appointments),
                         gte(appointments.scheduledDate, today),
                         lte(appointments.scheduledDate, tomorrow),
                         or(
@@ -175,7 +178,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                     .from(routes)
                     .where(
                         and(
-                            eq(routes.userId, req.user.userId),
+                            ownerFilter(req, routes),
                             eq(routes.status, "confirmado"),
                             gte(routes.date, today),
                             lte(routes.date, tomorrow),
@@ -202,7 +205,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .from(appointments)
                 .where(
                     and(
-                        eq(appointments.userId, req.user.userId),
+                        ownerFilter(req, appointments),
                         sql`${appointments.executionStatus} LIKE 'nao_realizado%'`,
                         or(
                             eq(appointments.status, "scheduled"),
@@ -238,7 +241,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .innerJoin(vehicles, eq(vehicleDocuments.vehicleId, vehicles.id))
                 .where(
                     and(
-                        eq(vehicles.userId, req.user.userId),
+                        ownerFilter(req, vehicles),
                         lte(vehicleDocuments.expirationDate, sql`NOW() + INTERVAL '30 days'`)
                     )
                 );
@@ -297,7 +300,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .from(appointments)
                 .where(
                     and(
-                        eq(appointments.userId, req.user.userId),
+                        ownerFilter(req, appointments),
                         gte(appointments.scheduledDate, periodStart),
                         lte(appointments.scheduledDate, periodEnd),
                         eq(appointments.executionStatus, "concluido"),
@@ -310,7 +313,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
             const servicesList = await db
                 .select({ id: services.id, duration: services.duration, name: services.name })
                 .from(services)
-                .where(eq(services.userId, req.user.userId));
+                .where(ownerFilter(req, services));
 
             const servicesMap = new Map(servicesList.map(s => [s.id, s]));
 
@@ -410,7 +413,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .from(appointments)
                 .where(
                     and(
-                        eq(appointments.userId, req.user.userId),
+                        ownerFilter(req, appointments),
                         gte(appointments.scheduledDate, periodStart),
                         lte(appointments.scheduledDate, periodEnd),
                         sql`${appointments.executionStatus} IS NOT NULL`
@@ -451,7 +454,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .from(appointments)
                 .where(
                     and(
-                        eq(appointments.userId, req.user.userId),
+                        ownerFilter(req, appointments),
                         gte(appointments.scheduledDate, periodStart),
                         lte(appointments.scheduledDate, periodEnd)
                     )
@@ -465,7 +468,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .from(appointments)
                 .where(
                     and(
-                        eq(appointments.userId, req.user.userId),
+                        ownerFilter(req, appointments),
                         gte(appointments.scheduledDate, periodStart),
                         lte(appointments.scheduledDate, periodEnd)
                     )
@@ -528,7 +531,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
 
             // Base condition
             let baseCondition = and(
-                eq(appointments.userId, req.user.userId),
+                ownerFilter(req, appointments),
                 gte(appointments.scheduledDate, periodStart),
                 lte(appointments.scheduledDate, periodEnd)
             );
@@ -577,7 +580,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
             const servicesList = await db
                 .select({ id: services.id, price: services.price })
                 .from(services)
-                .where(eq(services.userId, req.user.userId));
+                .where(ownerFilter(req, services));
 
             const pricesMap = new Map(servicesList.map(s => [s.id, parseFloat(s.price || "0")]));
 
@@ -646,7 +649,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
 
             // Base condition
             let baseCondition = and(
-                eq(appointments.userId, req.user.userId),
+                ownerFilter(req, appointments),
                 gte(appointments.scheduledDate, periodStart),
                 lte(appointments.scheduledDate, periodEnd)
             );
@@ -674,7 +677,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
             const servicesList = await db
                 .select({ id: services.id, price: services.price })
                 .from(services)
-                .where(eq(services.userId, req.user.userId));
+                .where(ownerFilter(req, services));
 
             const pricesMap = new Map(servicesList.map(s => [s.id, parseFloat(s.price || "0")]));
 
@@ -760,7 +763,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
 
             // Base condition - pendências de execução OU pagamento
             let baseCondition = and(
-                eq(appointments.userId, req.user.userId),
+                ownerFilter(req, appointments),
                 gte(appointments.scheduledDate, periodStart),
                 lte(appointments.scheduledDate, periodEnd),
                 or(
@@ -791,7 +794,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
 
             // 💡 Também buscar pendências JÁ RESOLVIDAS do período (histórico)
             let resolvedCondition = and(
-                eq(appointments.userId, req.user.userId),
+                ownerFilter(req, appointments),
                 gte(appointments.scheduledDate, periodStart),
                 lte(appointments.scheduledDate, periodEnd)
             );
@@ -937,7 +940,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .from(routes)
                 .where(
                     and(
-                        eq(routes.userId, req.user.userId),
+                        ownerFilter(req, routes),
                         eq(routes.status, "confirmado"),
                         sql`${routes.routeStartedAt} IS NOT NULL`,
                         sql`${routes.routeFinishedAt} IS NULL`
@@ -980,11 +983,11 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                         ? (nameParts[0][0] + nameParts[1][0]).toUpperCase()
                         : name.substring(0, 2).toUpperCase();
 
-                    // Buscar última localização desta rota
+                    // Buscar última localização desta rota (filtro multi-tenant)
                     const [lastLocation] = await db
                         .select()
                         .from(trackingLocations)
-                        .where(eq(trackingLocations.routeId, route.id))
+                        .where(and(eq(trackingLocations.companyId, req.user.companyId), eq(trackingLocations.routeId, route.id)))
                         .orderBy(desc(trackingLocations.timestamp))
                         .limit(1);
 
@@ -1049,7 +1052,6 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
             tomorrow.setDate(tomorrow.getDate() + 1);
 
             const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
-            const userId = req.user.userId;
 
             // Buscar agendamentos de hoje (campos leves)
             const todayList = await db
@@ -1074,7 +1076,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .from(appointments)
                 .leftJoin(clients, eq(appointments.clientId, clients.id))
                 .where(and(
-                    eq(appointments.userId, userId),
+                    ownerFilter(req, appointments),
                     gte(appointments.scheduledDate, today),
                     lte(appointments.scheduledDate, tomorrow)
                 ))
@@ -1110,14 +1112,12 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
             const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
             const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59);
 
-            const userId = req.user.userId;
-
             // 1. Contagem de hoje
             const [todayCount] = await db
                 .select({ count: sql<number>`count(*)::int` })
                 .from(appointments)
                 .where(and(
-                    eq(appointments.userId, userId),
+                    ownerFilter(req, appointments),
                     gte(appointments.scheduledDate, today),
                     lte(appointments.scheduledDate, tomorrow)
                 ));
@@ -1127,7 +1127,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .select({ count: sql<number>`count(*)::int` })
                 .from(appointments)
                 .where(and(
-                    eq(appointments.userId, userId),
+                    ownerFilter(req, appointments),
                     gte(appointments.scheduledDate, yesterday),
                     lte(appointments.scheduledDate, today)
                 ));
@@ -1140,7 +1140,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 })
                 .from(appointments)
                 .where(and(
-                    eq(appointments.userId, userId),
+                    ownerFilter(req, appointments),
                     gte(appointments.scheduledDate, startOfMonth),
                     lte(appointments.scheduledDate, today)
                 ));
@@ -1153,7 +1153,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 })
                 .from(appointments)
                 .where(and(
-                    eq(appointments.userId, userId),
+                    ownerFilter(req, appointments),
                     gte(appointments.scheduledDate, startOfLastMonth),
                     lte(appointments.scheduledDate, endOfLastMonth)
                 ));
@@ -1174,7 +1174,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .from(appointments)
                 .innerJoin(services, eq(appointments.serviceId, services.id))
                 .where(and(
-                    eq(appointments.userId, userId),
+                    ownerFilter(req, appointments),
                     gte(appointments.scheduledDate, startOfMonth),
                     lte(appointments.scheduledDate, today),
                     or(
@@ -1191,7 +1191,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 .from(appointments)
                 .innerJoin(services, eq(appointments.serviceId, services.id))
                 .where(and(
-                    eq(appointments.userId, userId),
+                    ownerFilter(req, appointments),
                     gte(appointments.scheduledDate, startOfLastMonth),
                     lte(appointments.scheduledDate, endOfLastMonth),
                     or(
@@ -1207,7 +1207,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                 })
                 .from(appointments)
                 .where(and(
-                    eq(appointments.userId, userId),
+                    ownerFilter(req, appointments),
                     gte(appointments.scheduledDate, startOfMonth),
                     eq(appointments.executionStatus, 'concluido'),
                     sql`${appointments.executionStartedAt} IS NOT NULL`,

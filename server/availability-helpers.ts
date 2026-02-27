@@ -18,8 +18,11 @@ export async function updateDailyAvailability(
   userId: number,
   date: Date,
   responsibleType: 'technician' | 'team',
-  responsibleId: number
+  responsibleId: number,
+  companyId: number
 ) {
+  // Helper multi-tenant: filtra estritamente por companyId
+  const ownerEq = (table: any) => eq(table.companyId, companyId);
 
 
   // Normalizar data para início do dia para comparação consistente
@@ -32,7 +35,7 @@ export async function updateDailyAvailability(
   // Verificar se existe restrição de data para este responsável neste dia
   const restriction = await db.query.dateRestrictions.findFirst({
     where: and(
-      eq(dateRestrictions.userId, userId),
+      ownerEq(dateRestrictions),
       eq(dateRestrictions.responsibleType, responsibleType),
       eq(dateRestrictions.responsibleId, responsibleId),
       sql`${dateRestrictions.date} >= ${startOfDay.toISOString()}`,
@@ -45,7 +48,7 @@ export async function updateDailyAvailability(
 
     const existingAvailability = await db.query.dailyAvailability.findFirst({
       where: and(
-        eq(dailyAvailability.userId, userId),
+        ownerEq(dailyAvailability),
         eq(dailyAvailability.date, startOfDay),
         eq(dailyAvailability.responsibleType, responsibleType),
         eq(dailyAvailability.responsibleId, responsibleId)
@@ -54,6 +57,7 @@ export async function updateDailyAvailability(
 
     const availabilityData = {
       userId,
+      companyId,
       date: startOfDay,
       responsibleType,
       responsibleId,
@@ -90,7 +94,7 @@ export async function updateDailyAvailability(
     const technician = await db.query.technicians.findFirst({
       where: and(
         eq(technicians.id, responsibleId),
-        eq(technicians.userId, userId)
+        ownerEq(technicians)
       ),
     });
 
@@ -107,7 +111,7 @@ export async function updateDailyAvailability(
     const team = await db.query.teams.findFirst({
       where: and(
         eq(teams.id, responsibleId),
-        eq(teams.userId, userId)
+        ownerEq(teams)
       ),
     });
 
@@ -132,6 +136,7 @@ export async function updateDailyAvailability(
     // Dia de folga - disponibilidade zero
     const availabilityData = {
       userId,
+      companyId,
       date,
       responsibleType,
       responsibleId,
@@ -145,7 +150,7 @@ export async function updateDailyAvailability(
 
     const existingAvailability = await db.query.dailyAvailability.findFirst({
       where: and(
-        eq(dailyAvailability.userId, userId),
+        ownerEq(dailyAvailability),
         eq(dailyAvailability.date, date),
         eq(dailyAvailability.responsibleType, responsibleType),
         eq(dailyAvailability.responsibleId, responsibleId)
@@ -178,7 +183,7 @@ export async function updateDailyAvailability(
   // 1. Agendamentos diretos do responsável
   const dayAppointments = await db.query.appointments.findMany({
     where: and(
-      eq(appointments.userId, userId),
+      ownerEq(appointments),
       responsibleType === 'technician'
         ? eq(appointments.technicianId, responsibleId)
         : eq(appointments.teamId, responsibleId),
@@ -218,7 +223,7 @@ export async function updateDailyAvailability(
 
         const teamAppts = await db.query.appointments.findMany({
           where: and(
-            eq(appointments.userId, userId),
+            ownerEq(appointments),
             eq(appointments.teamId, tm.teamId),
             sql`${appointments.scheduledDate} >= ${startOfDay.toISOString()}`,
             sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`,
@@ -245,7 +250,7 @@ export async function updateDailyAvailability(
 
         const memberAppts = await db.query.appointments.findMany({
           where: and(
-            eq(appointments.userId, userId),
+            ownerEq(appointments),
             eq(appointments.technicianId, member.technicianId),
             sql`${appointments.scheduledDate} >= ${startOfDay.toISOString()}`,
             sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`,
@@ -295,7 +300,7 @@ export async function updateDailyAvailability(
   // Inserir ou atualizar disponibilidade
   const existingAvailability = await db.query.dailyAvailability.findFirst({
     where: and(
-      eq(dailyAvailability.userId, userId),
+      ownerEq(dailyAvailability),
       eq(dailyAvailability.date, date),
       eq(dailyAvailability.responsibleType, responsibleType),
       eq(dailyAvailability.responsibleId, responsibleId)
@@ -304,6 +309,7 @@ export async function updateDailyAvailability(
 
   const availabilityData = {
     userId,
+    companyId,
     date,
     responsibleType,
     responsibleId,
@@ -336,6 +342,7 @@ export async function validateDateRestriction(
   date: Date,
   technicianId: number | null,
   teamId: number | null,
+  companyId: number,
 ): Promise<{ valid: boolean; message?: string }> {
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
@@ -343,11 +350,13 @@ export async function validateDateRestriction(
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
 
+  const drOwnerFilter = eq(dateRestrictions.companyId, companyId);
+
   // Técnico individual
   if (technicianId) {
     const restriction = await db.query.dateRestrictions.findFirst({
       where: and(
-        eq(dateRestrictions.userId, userId),
+        drOwnerFilter,
         eq(dateRestrictions.responsibleType, 'technician'),
         eq(dateRestrictions.responsibleId, technicianId),
         sql`${dateRestrictions.date} >= ${startOfDay.toISOString()}`,
@@ -356,8 +365,9 @@ export async function validateDateRestriction(
     });
 
     if (restriction) {
+      const techFilter = eq(technicians.companyId, companyId);
       const tech = await db.query.technicians.findFirst({
-        where: and(eq(technicians.id, technicianId), eq(technicians.userId, userId)),
+        where: and(eq(technicians.id, technicianId), techFilter),
       });
 
       const displayDate = startOfDay.toLocaleDateString('pt-BR');
@@ -372,7 +382,7 @@ export async function validateDateRestriction(
   if (teamId) {
     const restriction = await db.query.dateRestrictions.findFirst({
       where: and(
-        eq(dateRestrictions.userId, userId),
+        drOwnerFilter,
         eq(dateRestrictions.responsibleType, 'team'),
         eq(dateRestrictions.responsibleId, teamId),
         sql`${dateRestrictions.date} >= ${startOfDay.toISOString()}`,
@@ -381,8 +391,9 @@ export async function validateDateRestriction(
     });
 
     if (restriction) {
+      const teamFilter = eq(teams.companyId, companyId);
       const team = await db.query.teams.findFirst({
-        where: and(eq(teams.id, teamId), eq(teams.userId, userId)),
+        where: and(eq(teams.id, teamId), teamFilter),
       });
 
       const displayDate = startOfDay.toLocaleDateString('pt-BR');
@@ -406,7 +417,8 @@ export async function validateTechnicianTeamConflict(
   date: Date,
   technicianId: number | null,
   teamId: number | null,
-  excludeAppointmentId?: number
+  excludeAppointmentId?: number,
+  companyId?: number,
 ): Promise<{ valid: boolean; message?: string }> {
   console.log(`🔍 [VALIDATION] Validando conflito técnico/equipe para ${date.toISOString()}`);
 
@@ -415,6 +427,8 @@ export async function validateTechnicianTeamConflict(
 
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
+
+  const ownerFilter = (table: any) => eq(table.companyId, companyId);
 
   // Caso 1: Criando agendamento para TÉCNICO individual
   if (technicianId && !teamId) {
@@ -433,7 +447,7 @@ export async function validateTechnicianTeamConflict(
       for (const tm of technicianTeams) {
         // Primeiro, verificar se a equipe trabalha neste dia da semana
         const team = await db.query.teams.findFirst({
-          where: and(eq(teams.id, tm.teamId), eq(teams.userId, userId)),
+          where: and(eq(teams.id, tm.teamId), ownerFilter(teams)),
         });
 
         if (!team) continue;
@@ -447,7 +461,7 @@ export async function validateTechnicianTeamConflict(
 
         const teamAppointments = await db.query.appointments.findMany({
           where: and(
-            eq(appointments.userId, userId),
+            ownerFilter(appointments),
             eq(appointments.teamId, tm.teamId),
             sql`${appointments.scheduledDate} >= ${startOfDay.toISOString()}`,
             sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`,
@@ -476,7 +490,7 @@ export async function validateTechnicianTeamConflict(
     for (const tm of teamTechnicians) {
       const techAppointments = await db.query.appointments.findMany({
         where: and(
-          eq(appointments.userId, userId),
+          ownerFilter(appointments),
           eq(appointments.technicianId, tm.technicianId),
           sql`${appointments.scheduledDate} >= ${startOfDay.toISOString()}`,
           sql`${appointments.scheduledDate} <= ${endOfDay.toISOString()}`,
@@ -507,13 +521,14 @@ export async function validateTechnicianTeamConflict(
  */
 export async function updateAvailabilityForAppointment(
   userId: number,
-  appointment: Appointment
+  appointment: Appointment,
+  companyId: number
 ) {
   const date = new Date(appointment.scheduledDate);
 
   // Atualizar disponibilidade do técnico
   if (appointment.technicianId) {
-    await updateDailyAvailability(userId, date, 'technician', appointment.technicianId);
+    await updateDailyAvailability(userId, date, 'technician', appointment.technicianId, companyId);
 
     // Se o técnico faz parte de equipes, atualizar disponibilidade delas também
     const technicianTeams = await db.query.teamMembers.findMany({
@@ -521,13 +536,13 @@ export async function updateAvailabilityForAppointment(
     });
 
     for (const tm of technicianTeams) {
-      await updateDailyAvailability(userId, date, 'team', tm.teamId);
+      await updateDailyAvailability(userId, date, 'team', tm.teamId, companyId);
     }
   }
 
   // Atualizar disponibilidade da equipe
   if (appointment.teamId) {
-    await updateDailyAvailability(userId, date, 'team', appointment.teamId);
+    await updateDailyAvailability(userId, date, 'team', appointment.teamId, companyId);
 
     // Atualizar disponibilidade de todos os técnicos da equipe
     const teamTechs = await db.query.teamMembers.findMany({
@@ -535,7 +550,7 @@ export async function updateAvailabilityForAppointment(
     });
 
     for (const tm of teamTechs) {
-      await updateDailyAvailability(userId, date, 'technician', tm.technicianId);
+      await updateDailyAvailability(userId, date, 'technician', tm.technicianId, companyId);
     }
   }
 }
