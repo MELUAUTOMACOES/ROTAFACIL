@@ -45,6 +45,7 @@ import { trackCompanyAudit, getAuditDescription } from "./audit.helpers";
 import { isAccessAllowed, getAccessDeniedMessage } from "./access-schedule-validator";
 import { requireLgpdAccepted } from "./middleware/lgpd.middleware";
 import { LGPD_VERSION } from "@shared/constants";
+import { formatDateForSQLComparison, nowInSaoPaulo } from "./timezone-helper";
 import {
   haversineDistance as osrmHaversineDistance,
   calculateOSRMDistance,
@@ -398,7 +399,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const companyId = requireCompanyId(req, res);
       if (!companyId) return;
 
-      const dateParam = req.query.date ? new Date(req.query.date) : new Date();
+      // 🌎 Usar horário de São Paulo (UTC-3) para comparação de data
+      const dateParam = req.query.date ? new Date(req.query.date) : nowInSaoPaulo();
       let route;
 
       // Se passar routeId (admin selecionando rota específica)
@@ -527,8 +529,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const dateParam = req.query.date ? new Date(req.query.date) : new Date();
-      console.log(`🔍 [PROVIDER] Buscando rotas ativas para data: ${dateParam.toISOString()} (User: ${req.user.userId}, Role: ${req.user.role})`);
+      // 🌎 Usar horário de São Paulo (UTC-3) para comparação de data
+      const dateParam = req.query.date ? new Date(req.query.date) : nowInSaoPaulo();
+      const dateStrSP = formatDateForSQLComparison(dateParam);
+      console.log(`🔍 [PROVIDER] Buscando rotas ativas para data: ${dateStrSP} (São Paulo) - UTC: ${dateParam.toISOString()}`);
 
       // Buscar todas as rotas do dia que estão confirmadas ou finalizadas (não mostra rascunhos)
       const activeRoutesWithId = await db
@@ -542,7 +546,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .from(routes)
         .where(and(
-          sql`DATE(${routes.date}) = DATE(${format(dateParam, "yyyy-MM-dd")})`,
+          sql`DATE(${routes.date} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo') = ${dateStrSP}`,
           or(
             eq(routes.status, 'confirmado'),
             eq(routes.status, 'finalizado')

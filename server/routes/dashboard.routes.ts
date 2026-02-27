@@ -14,6 +14,7 @@ import {
     pendingResolutions // 📊 Adicionar para buscar histórico de pendências
 } from "@shared/schema";
 import { eq, and, sql, gte, lte, or, isNull, desc, ne } from "drizzle-orm";
+import { formatDateForSQLComparison, nowInSaoPaulo } from "../timezone-helper";
 
 export function registerDashboardRoutes(app: Express, authenticateToken: any) {
 
@@ -118,7 +119,9 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
         try {
             console.log("📊 [DASHBOARD] Buscando alertas críticos");
 
-            const today = new Date();
+            // 🌎 Usar horário de São Paulo (UTC-3) para comparação de data
+            const now = nowInSaoPaulo();
+            const today = new Date(now);
             today.setHours(0, 0, 0, 0);
             const tomorrow = new Date(today);
             tomorrow.setDate(tomorrow.getDate() + 1);
@@ -168,11 +171,12 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
             }
 
             // 2. Rotas confirmadas que deveriam ter iniciado (hoje, confirmadas, sem routeStartedAt)
-            const now = new Date();
             const startOfWorkday = new Date(today);
             startOfWorkday.setHours(8, 0, 0, 0); // Assumindo início às 8h
 
             if (now > startOfWorkday) {
+                // 🌎 Comparar data considerando timezone de São Paulo
+                const todayStrSP = formatDateForSQLComparison(today);
                 const lateRoutes = await db
                     .select()
                     .from(routes)
@@ -180,8 +184,7 @@ export function registerDashboardRoutes(app: Express, authenticateToken: any) {
                         and(
                             ownerFilter(req, routes),
                             eq(routes.status, "confirmado"),
-                            gte(routes.date, today),
-                            lte(routes.date, tomorrow),
+                            sql`DATE(${routes.date} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo') = ${todayStrSP}`,
                             isNull(routes.routeStartedAt)
                         )
                     );

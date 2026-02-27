@@ -39,6 +39,7 @@ import { db } from "./db";
 import { eq, and, or, ilike, sql, inArray, isNotNull, ne, isNull, gte, lte, desc } from "drizzle-orm";
 import { format } from "date-fns";
 import bcrypt from "bcryptjs";
+import { formatDateForSQLComparison } from "./timezone-helper";
 
 export interface IStorage {
   // Users
@@ -1117,11 +1118,8 @@ export class DatabaseStorage implements IStorage {
     // OU onde o usuário faz parte da equipe responsável (team)
     // 🔒 FILTRO MULTI-TENANT OBRIGATÓRIO
 
-    // Normalizar data para início e fim do dia
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    // 🌎 Usar horário de São Paulo (UTC-3) para comparação de data
+    const dateStrSP = formatDateForSQLComparison(date);
 
     // Buscar técnico associado ao usuário (filtrado por companyId)
     const [tech] = await db.select().from(technicians).where(and(eq(technicians.userId, userId), eq(technicians.companyId, companyId)));
@@ -1139,8 +1137,8 @@ export class DatabaseStorage implements IStorage {
       and(
         // 🔒 Filtro multi-tenant obrigatório
         eq(routes.companyId, companyId),
-        // Comparar Apenas a DATA (ignorando hora/timezone)
-        sql`DATE(${routes.date}) = DATE(${format(date, "yyyy-MM-dd")})`,
+        // 🌎 Comparar data considerando timezone de São Paulo (UTC-3)
+        sql`DATE(${routes.date} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo') = ${dateStrSP}`,
 
         // Status confirmado, em andamento ou in_progress (legado)
         or(eq(routes.status, 'confirmado'), eq(routes.status, 'em_andamento'), eq(routes.status, 'in_progress')),

@@ -1170,6 +1170,12 @@ export function registerRoutesAPI(app: Express) {
           const lat = app.clientLat != null ? Number(app.clientLat) : undefined;
           const lng = app.clientLng != null ? Number(app.clientLng) : undefined;
 
+          console.log(`📋 [AGENDAMENTO ${app.id}] Dados iniciais:`);
+          console.log(`   Cliente: ${app.clientName} (ID: ${app.clientId})`);
+          console.log(`   Endereço Agendamento: ${aptAddress}`);
+          console.log(`   Endereço Cliente: ${clientAddress}`);
+          console.log(`   Coordenadas do BANCO (clientLat/Lng): ${lat ? `${lat}, ${lng}` : 'NÃO TEM'}`);
+
           return {
             ...app,
             address: aptAddress, // endereço do agendamento (prioritário p/ roteirizar)
@@ -1184,14 +1190,20 @@ export function registerRoutesAPI(app: Express) {
           const app = appointmentData[i];
 
           if (Number.isFinite(app.lat) && Number.isFinite(app.lng)) {
+            console.log(`✅ [AGENDAMENTO ${app.id}] JÁ TEM COORDENADAS DO BANCO: ${app.lat}, ${app.lng}`);
             continue; // já tem lat/lng do cliente
           }
 
+          console.log(`🔍 [AGENDAMENTO ${app.id}] SEM coordenadas, iniciando geocodificação...`);
+
           // 1) tentar geocodificar o ENDEREÇO DO AGENDAMENTO (prioritário para roteirização)
           try {
+            console.log(`🌐 [TENTATIVA 1] Geocodificando ENDEREÇO DO AGENDAMENTO:`);
+            console.log(`   Endereço enviado ao Nominatim: "${app.address}"`);
             const geo = await geocodeEnderecoServer(app.address);
             app.lat = Number(geo.lat);
             app.lng = Number(geo.lon);
+            console.log(`✅ [TENTATIVA 1 OK] Coordenadas obtidas: ${app.lat}, ${app.lng}`);
 
             // Se o endereço do agendamento “bate” com o endereço do cliente, persistimos no cliente (cura legado)
             if (
@@ -1226,17 +1238,19 @@ export function registerRoutesAPI(app: Express) {
             continue;
           } catch (e1: any) {
             console.warn(
-              `❌ Geocodificação (agendamento) falhou para ${app.id}:`,
-              e1.message,
+              `❌ [TENTATIVA 1 FALHOU] Agendamento ${app.id}: ${e1.message}`,
             );
           }
 
           // 2) fallback: tentar geocodificar o ENDEREÇO DO CLIENTE (se existir)
           if (app.clientAddress) {
             try {
+              console.log(`🌐 [TENTATIVA 2] Geocodificando ENDEREÇO DO CLIENTE:`);
+              console.log(`   Endereço enviado ao Nominatim: "${app.clientAddress}"`);
               const geo2 = await geocodeEnderecoServer(app.clientAddress);
               app.lat = Number(geo2.lat);
               app.lng = Number(geo2.lon);
+              console.log(`✅ [TENTATIVA 2 OK] Coordenadas obtidas: ${app.lat}, ${app.lng}`);
 
               // Como é o endereço do cliente, podemos persistir
               if (app.clientId) {
@@ -1268,8 +1282,7 @@ export function registerRoutesAPI(app: Express) {
               continue;
             } catch (e2: any) {
               console.warn(
-                `❌ Geocodificação (cliente) falhou para ${app.id}:`,
-                e2.message,
+                `❌ [TENTATIVA 2 FALHOU] Agendamento ${app.id}: ${e2.message}`,
               );
             }
           }
@@ -1278,10 +1291,12 @@ export function registerRoutesAPI(app: Express) {
           const cepToTry = formatCep(app.aptCep || app.clientCep);
           if (cepToTry) {
             try {
-              console.log(`📮 Tentando geocodificar apenas com CEP: ${cepToTry}`);
+              console.log(`🌐 [TENTATIVA 3] Geocodificando apenas com CEP:`);
+              console.log(`   CEP enviado ao Nominatim: "${cepToTry}"`);
               const geo3 = await geocodeEnderecoServer(`CEP ${cepToTry}, Brasil`);
               app.lat = Number(geo3.lat);
               app.lng = Number(geo3.lon);
+              console.log(`✅ [TENTATIVA 3 OK] Coordenadas obtidas: ${app.lat}, ${app.lng}`);
 
               // Se conseguiu via CEP e é o CEP do cliente, podemos salvar
               if (app.clientId && app.clientCep === cepToTry) {
@@ -1345,6 +1360,17 @@ export function registerRoutesAPI(app: Express) {
               "Há clientes sem lat/lng. Ajuste o endereço e tente novamente.",
           });
         }
+
+        // Log FINAL com todas as coordenadas que serão usadas
+        console.log("====================================");
+        console.log("📍 COORDENADAS FINAIS PARA OTIMIZAÇÃO:");
+        console.log("====================================");
+        appointmentData.forEach((app) => {
+          console.log(`Agendamento ${app.id} (Cliente: ${app.clientName}):`);
+          console.log(`  Endereço: ${app.address}`);
+          console.log(`  Coordenadas: LAT=${app.lat}, LNG=${app.lng}`);
+        });
+        console.log("====================================");
 
         // Alimenta a coordinates em formato OSRM
         for (const app of appointmentData) {
