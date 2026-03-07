@@ -8,9 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Calendar } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { Search, Calendar, ChevronDown, ChevronUp, Clock3, MapPin, UserRound, Users, ArrowRight } from "lucide-react";
 import { getAuthHeaders } from "@/lib/auth";
 import { buildApiUrl } from "@/lib/api-config";
 import { normalizeItems } from "@/lib/normalize";
@@ -32,21 +30,21 @@ const findDateSchema = z.object({
   serviceId: z.number({ required_error: "Selecione um serviço" }),
   technicianId: z.number().optional(),
   teamId: z.number().optional(),
-  startDate: z.string().optional(), // Data inicial da busca
+  startDate: z.string().optional(),
 });
 
 type FindDateFormData = z.infer<typeof findDateSchema>;
 
 interface AvailableDate {
   date: string;
-  responsibleType: 'technician' | 'team';
+  responsibleType: "technician" | "team";
   responsibleId: number;
   responsibleName: string;
   availableMinutes: number;
   totalMinutes: number;
   usedMinutes: number;
   distance: number;
-  distanceType: 'between_points' | 'from_base';
+  distanceType: "between_points" | "from_base";
 }
 
 export default function FindDate() {
@@ -55,47 +53,44 @@ export default function FindDate() {
   const [searchResults, setSearchResults] = useState<AvailableDate[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isFetchingCep, setIsFetchingCep] = useState(false);
+  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
 
-  // Buscar serviços
   const { data: servicesData, isLoading: isLoadingServices, error: errorServices } = useQuery({
     queryKey: ["/api/services"],
     queryFn: async () => {
-      const response = await fetch(buildApiUrl("/api/services?page=1&pageSize=50"), { headers: getAuthHeaders() });
+      const response = await fetch(buildApiUrl("/api/services?page=1&pageSize=50"), {
+        headers: getAuthHeaders(),
+      });
       return response.json();
     },
   });
   const services = normalizeItems<Service>(servicesData);
 
-  // Buscar técnicos
   const { data: techniciansData, isLoading: isLoadingTechnicians, error: errorTechnicians } = useQuery({
     queryKey: ["/api/technicians"],
     queryFn: async () => {
-      const response = await fetch(buildApiUrl("/api/technicians?page=1&pageSize=50"), { headers: getAuthHeaders() });
+      const response = await fetch(buildApiUrl("/api/technicians?page=1&pageSize=50"), {
+        headers: getAuthHeaders(),
+      });
       return response.json();
     },
   });
   const technicians = normalizeItems<Technician>(techniciansData);
 
-  // Buscar equipes
   const { data: teamsData, isLoading: isLoadingTeams, error: errorTeams } = useQuery({
     queryKey: ["/api/teams"],
     queryFn: async () => {
-      const response = await fetch(buildApiUrl("/api/teams?page=1&pageSize=50"), { headers: getAuthHeaders() });
+      const response = await fetch(buildApiUrl("/api/teams?page=1&pageSize=50"), {
+        headers: getAuthHeaders(),
+      });
       return response.json();
     },
   });
   const teams = normalizeItems<Team>(teamsData);
 
-  // Buscar regras de negócio
-  const { data: businessRules } = useQuery<BusinessRules>({
+  useQuery<BusinessRules>({
     queryKey: ["/api/business-rules"],
   });
-
-  // Debug detalhado
-  console.log("🔍 [FIND-DATE] Status das queries:");
-  console.log("  - Serviços:", { count: services.length, loading: isLoadingServices, error: errorServices?.message });
-  console.log("  - Técnicos:", { count: technicians.length, loading: isLoadingTechnicians, error: errorTechnicians?.message });
-  console.log("  - Equipes:", { count: teams.length, loading: isLoadingTeams, error: errorTeams?.message });
 
   const form = useForm<FindDateFormData>({
     resolver: zodResolver(findDateSchema),
@@ -109,20 +104,16 @@ export default function FindDate() {
       numero: "",
       technicianId: undefined,
       teamId: undefined,
-      startDate: new Date().toISOString().split('T')[0], // Data de hoje por padrão
+      startDate: new Date().toISOString().split("T")[0],
     },
   });
 
-  // Função para formatar CEP automaticamente
   const formatCep = (value: string) => {
     const digits = value.replace(/\D/g, "");
-    if (digits.length <= 5) {
-      return digits;
-    }
+    if (digits.length <= 5) return digits;
     return digits.replace(/(\d{5})(\d{1,3})/, "$1-$2");
   };
 
-  // Buscar endereço quando CEP for preenchido
   const handleCepBlur = async () => {
     const cep = form.watch("cep");
     if (!cep || cep.replace(/\D/g, "").length !== 8) return;
@@ -159,26 +150,22 @@ export default function FindDate() {
     form.setValue("numero", numbersOnly);
   };
 
-  // Função para lidar com seleção de cliente
   const handleClientSelect = (client: Client | null) => {
-    console.log("Cliente selecionado:", client);
     form.setValue("clientId", client?.id);
 
     if (client) {
-      // Preencher automaticamente todos os dados de endereço
-      console.log("Preenchendo endereço completo do cliente:", client);
       form.setValue("cep", client.cep);
       form.setValue("numero", client.numero);
       form.setValue("logradouro", client.logradouro);
       form.setValue("bairro", client.bairro);
       form.setValue("cidade", client.cidade);
 
-      // Buscar o estado (UF) pelo CEP, pois a tabela clients não possui esse campo
-      buscarEnderecoPorCep(client.cep).then(data => {
-        if (data.uf) form.setValue("estado", data.uf);
-      }).catch(err => console.error("Erro ao buscar UF do cliente:", err));
+      buscarEnderecoPorCep(client.cep)
+        .then((data) => {
+          if (data.uf) form.setValue("estado", data.uf);
+        })
+        .catch((err) => console.error("Erro ao buscar UF do cliente:", err));
     } else {
-      // Limpar campos quando nenhum cliente selecionado
       form.setValue("cep", "");
       form.setValue("numero", "");
       form.setValue("logradouro", "");
@@ -188,13 +175,10 @@ export default function FindDate() {
     }
   };
 
-  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
-
-  // Função para buscar datas com streaming (Server-Sent Events)
   const searchDatesWithStreaming = async (data: FindDateFormData) => {
     setIsSearching(true);
-    setIsFiltersCollapsed(true); // Minimizar filtros ao iniciar busca
-    setSearchResults([]); // Limpar resultados anteriores
+    setIsFiltersCollapsed(true);
+    setSearchResults([]);
 
     const token = localStorage.getItem("token");
     const headers: Record<string, string> = {
@@ -244,8 +228,6 @@ export default function FindDate() {
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n\n");
-
-        // Manter a última linha incompleta no buffer
         buffer = lines.pop() || "";
 
         for (const line of lines) {
@@ -255,14 +237,11 @@ export default function FindDate() {
               const event = JSON.parse(jsonStr);
 
               if (event.done) {
-                console.log("✅ Busca concluída!");
                 setIsSearching(false);
               } else if (event.error) {
-                console.error("❌ Erro:", event.error);
+                console.error("Erro:", event.error);
                 setIsSearching(false);
               } else {
-                // Adicionar novo candidato aos resultados
-                console.log("📥 Novo candidato recebido:", event);
                 setSearchResults((prev) => [...prev, event]);
               }
             } catch (e) {
@@ -272,7 +251,7 @@ export default function FindDate() {
         }
       }
     } catch (error: any) {
-      console.error("❌ Erro ao buscar datas:", error);
+      console.error("Erro ao buscar datas:", error);
       setIsSearching(false);
     }
   };
@@ -286,79 +265,95 @@ export default function FindDate() {
   };
 
   const handleSchedule = (result: AvailableDate, formData: FindDateFormData) => {
-    console.log("🔄 [DEBUG] handleSchedule - result:", result);
-    console.log("🔄 [DEBUG] handleSchedule - formData:", formData);
-
-    // Navegar para a tela de agendamentos com dados pré-preenchidos
     const params = new URLSearchParams({
       date: result.date,
       cep: formData.cep,
       numero: formData.numero,
       serviceId: formData.serviceId.toString(),
-      preselected: "true"
+      preselected: "true",
     });
 
-    // Adicionar clientId se selecionado
     if (formData.clientId) {
       params.append("clientId", formData.clientId.toString());
     }
 
-    // Adicionar technicianId ou teamId dependendo do tipo
-    if (result.responsibleType === 'technician') {
+    if (result.responsibleType === "technician") {
       params.append("technicianId", result.responsibleId.toString());
-      console.log("🔄 [DEBUG] Adicionando technicianId:", result.responsibleId);
-    } else if (result.responsibleType === 'team') {
+    } else if (result.responsibleType === "team") {
       params.append("teamId", result.responsibleId.toString());
-      console.log("🔄 [DEBUG] Adicionando teamId:", result.responsibleId);
     }
 
-    console.log("🔄 [DEBUG] Parâmetros finais:", params.toString());
     setLocation(`/appointments?${params.toString()}`);
   };
 
   const formatDate = (dateString: string) => {
-    // Forçar interpretação como UTC para evitar problemas de timezone
-    const [year, month, day] = dateString.split('-').map(Number);
+    const [year, month, day] = dateString.split("-").map(Number);
     const date = new Date(year, month - 1, day);
-    return date.toLocaleDateString('pt-BR', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+    return date.toLocaleDateString("pt-BR", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   };
 
+  const fieldClass =
+    "h-11 rounded-xl border-border bg-background shadow-sm transition-all focus-visible:ring-1 focus-visible:ring-[#DAA520] focus-visible:border-[#DAA520]";
+  const readonlyFieldClass =
+    "h-11 rounded-xl border-border bg-muted/40 text-muted-foreground shadow-sm";
+
   return (
-    <div className="container mx-auto p-6 space-y-8">
-      <Card>
-        <CardHeader className="cursor-pointer" onClick={() => setIsFiltersCollapsed(!isFiltersCollapsed)}>
-          <div className="flex items-center justify-between">
+    <div className="container mx-auto p-4 md:p-6 space-y-6">
+      <Card className="rounded-3xl border shadow-sm bg-card overflow-hidden">
+        <CardHeader
+          className="cursor-pointer border-b bg-muted/30"
+          onClick={() => setIsFiltersCollapsed(!isFiltersCollapsed)}
+        >
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <CardTitle>Buscar datas disponíveis</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-xl md:text-2xl">Buscar datas disponíveis</CardTitle>
+              <CardDescription className="mt-1">
                 {isFiltersCollapsed
                   ? "Clique para expandir os filtros"
-                  : "Preencha os dados abaixo para encontrar as melhores opções de agendamento"}
+                  : "Preencha os dados para encontrar as melhores opções de agendamento"}
               </CardDescription>
             </div>
-            <Button variant="ghost" size="sm">
-              {isFiltersCollapsed ? "Expandir" : "Minimizar"}
+
+            <Button variant="outline" size="sm" className="rounded-xl shadow-sm">
+              {isFiltersCollapsed ? (
+                <>
+                  Expandir
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                </>
+              ) : (
+                <>
+                  Minimizar
+                  <ChevronUp className="ml-2 h-4 w-4" />
+                </>
+              )}
             </Button>
           </div>
         </CardHeader>
 
         {isFiltersCollapsed && isSearching && (
-          <CardContent>
-            <div className="flex items-center justify-center py-8 space-x-3">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-burnt-yellow"></div>
-              <p className="text-lg text-gray-600">Aguarde, buscando as melhores datas...</p>
+          <CardContent className="py-10">
+            <div className="flex flex-col items-center justify-center gap-4 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#DAA520]/10 text-[#DAA520] shadow-sm">
+                <Search className="h-6 w-6 animate-spin" />
+              </div>
+              <div>
+                <p className="text-base font-semibold">Buscando as melhores datas...</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Aguarde enquanto analisamos agenda, localização e disponibilidade.
+                </p>
+              </div>
             </div>
           </CardContent>
         )}
 
         {!isFiltersCollapsed && (
-          <CardContent>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <CardContent className="p-5 md:p-6">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="cliente">Cliente (opcional)</Label>
                 <ClientSearch
@@ -369,314 +364,367 @@ export default function FindDate() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="cep">CEP</Label>
-                  <Input
-                    id="cep"
-                    placeholder="00000-000"
-                    value={form.watch("cep")}
-                    onChange={handleCepChange}
-                    onBlur={handleCepBlur}
-                    maxLength={9}
-                    disabled={!!form.watch("clientId") || isFetchingCep}
-                    className={form.formState.errors.cep ? "border-red-500" : ""}
-                  />
-                  {isFetchingCep && <p className="text-sm text-gray-500">Buscando CEP...</p>}
-                  {form.formState.errors.cep && (
-                    <p className="text-sm text-red-500">{form.formState.errors.cep.message}</p>
-                  )}
+              <div className="rounded-2xl border bg-muted/20 p-4 md:p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <MapPin className="h-4 w-4 text-[#DAA520]" />
+                  <h3 className="text-sm font-semibold">Endereço do atendimento</h3>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="logradouro">Logradouro</Label>
-                  <Input
-                    id="logradouro"
-                    placeholder="Rua, Avenida..."
-                    value={form.watch("logradouro")}
-                    disabled
-                    className="bg-gray-50"
-                  />
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="cep">CEP</Label>
+                    <Input
+                      id="cep"
+                      placeholder="00000-000"
+                      value={form.watch("cep")}
+                      onChange={handleCepChange}
+                      onBlur={handleCepBlur}
+                      maxLength={9}
+                      disabled={!!form.watch("clientId") || isFetchingCep}
+                      className={`${fieldClass} ${form.formState.errors.cep ? "border-red-500" : ""}`}
+                    />
+                    {isFetchingCep && <p className="text-xs text-muted-foreground">Buscando CEP...</p>}
+                    {form.formState.errors.cep && (
+                      <p className="text-xs text-red-500">{form.formState.errors.cep.message}</p>
+                    )}
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="numero">Número</Label>
-                  <Input
-                    id="numero"
-                    placeholder="123"
-                    value={form.watch("numero")}
-                    onChange={handleNumeroChange}
-                    disabled={!!form.watch("clientId")}
-                    className={form.formState.errors.numero ? "border-red-500" : ""}
-                  />
-                  {form.formState.errors.numero && (
-                    <p className="text-sm text-red-500">{form.formState.errors.numero.message}</p>
-                  )}
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="logradouro">Logradouro</Label>
+                    <Input
+                      id="logradouro"
+                      placeholder="Rua, Avenida..."
+                      value={form.watch("logradouro")}
+                      disabled
+                      className={readonlyFieldClass}
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="bairro">Bairro</Label>
-                  <Input
-                    id="bairro"
-                    placeholder="Bairro"
-                    value={form.watch("bairro")}
-                    disabled
-                    className="bg-gray-50"
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="numero">Número</Label>
+                    <Input
+                      id="numero"
+                      placeholder="123"
+                      value={form.watch("numero")}
+                      onChange={handleNumeroChange}
+                      disabled={!!form.watch("clientId")}
+                      className={`${fieldClass} ${form.formState.errors.numero ? "border-red-500" : ""}`}
+                    />
+                    {form.formState.errors.numero && (
+                      <p className="text-xs text-red-500">{form.formState.errors.numero.message}</p>
+                    )}
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="cidade">Cidade</Label>
-                  <Input
-                    id="cidade"
-                    placeholder="Cidade"
-                    value={form.watch("cidade")}
-                    disabled
-                    className="bg-gray-50"
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bairro">Bairro</Label>
+                    <Input
+                      id="bairro"
+                      placeholder="Bairro"
+                      value={form.watch("bairro")}
+                      disabled
+                      className={readonlyFieldClass}
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="estado">Estado</Label>
-                  <Input
-                    id="estado"
-                    placeholder="UF"
-                    value={form.watch("estado")}
-                    disabled
-                    className="bg-gray-50"
-                    maxLength={2}
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="cidade">Cidade</Label>
+                    <Input
+                      id="cidade"
+                      placeholder="Cidade"
+                      value={form.watch("cidade")}
+                      disabled
+                      className={readonlyFieldClass}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="estado">Estado</Label>
+                    <Input
+                      id="estado"
+                      placeholder="UF"
+                      value={form.watch("estado")}
+                      disabled
+                      maxLength={2}
+                      className={readonlyFieldClass}
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-2xl border bg-muted/20 p-4 md:p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Calendar className="h-4 w-4 text-[#DAA520]" />
+                  <h3 className="text-sm font-semibold">Configurações da busca</h3>
+                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="service">Serviço</Label>
-                  <Select
-                    value={form.watch("serviceId")?.toString() || ""}
-                    onValueChange={(value) => form.setValue("serviceId", parseInt(value))}
-                    disabled={isLoadingServices}
-                  >
-                    <SelectTrigger className={form.formState.errors.serviceId ? "border-red-500" : ""}>
-                      <SelectValue placeholder={
-                        isLoadingServices ? "Carregando serviços..." :
-                          errorServices ? "Erro ao carregar serviços" :
-                            "Selecione um serviço"
-                      } />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {isLoadingServices ? (
-                        <SelectItem value="loading" disabled>
-                          Carregando...
-                        </SelectItem>
-                      ) : errorServices ? (
-                        <SelectItem value="error" disabled>
-                          Erro: {errorServices.message}
-                        </SelectItem>
-                      ) : services.length === 0 ? (
-                        <SelectItem value="0" disabled>
-                          Nenhum serviço cadastrado
-                        </SelectItem>
-                      ) : (
-                        services.map((service) => (
-                          <SelectItem key={service.id} value={service.id.toString()}>
-                            {service.name}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="service">Serviço</Label>
+                    <Select
+                      value={form.watch("serviceId")?.toString() || ""}
+                      onValueChange={(value) => form.setValue("serviceId", parseInt(value))}
+                      disabled={isLoadingServices}
+                    >
+                      <SelectTrigger className={`${fieldClass} ${form.formState.errors.serviceId ? "border-red-500" : ""}`}>
+                        <SelectValue
+                          placeholder={
+                            isLoadingServices
+                              ? "Carregando serviços..."
+                              : errorServices
+                                ? "Erro ao carregar serviços"
+                                : "Selecione um serviço"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {isLoadingServices ? (
+                          <SelectItem value="loading" disabled>
+                            Carregando...
                           </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {form.formState.errors.serviceId && (
-                    <p className="text-sm text-red-500">{form.formState.errors.serviceId.message}</p>
-                  )}
-                  {errorServices && (
-                    <p className="text-sm text-red-500">Erro ao carregar serviços. Verifique sua conexão.</p>
-                  )}
-                </div>
+                        ) : errorServices ? (
+                          <SelectItem value="error" disabled>
+                            Erro: {errorServices.message}
+                          </SelectItem>
+                        ) : services.length === 0 ? (
+                          <SelectItem value="0" disabled>
+                            Nenhum serviço cadastrado
+                          </SelectItem>
+                        ) : (
+                          services.map((service) => (
+                            <SelectItem key={service.id} value={service.id.toString()}>
+                              {service.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {form.formState.errors.serviceId && (
+                      <p className="text-xs text-red-500">{form.formState.errors.serviceId.message}</p>
+                    )}
+                    {errorServices && (
+                      <p className="text-xs text-red-500">Erro ao carregar serviços.</p>
+                    )}
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="startDate">Data inicial da busca</Label>
-                  <Input
-                    id="startDate"
-                    type="date"
-                    value={form.watch("startDate")}
-                    onChange={(e) => form.setValue("startDate", e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                    className=""
-                  />
-                  <p className="text-xs text-gray-500">Buscar datas a partir de</p>
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="startDate">Data inicial da busca</Label>
+                    <Input
+                      id="startDate"
+                      type="date"
+                      value={form.watch("startDate")}
+                      onChange={(e) => form.setValue("startDate", e.target.value)}
+                      min={new Date().toISOString().split("T")[0]}
+                      className={fieldClass}
+                    />
+                    <p className="text-xs text-muted-foreground">Buscar datas a partir de</p>
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="technician">Técnico/Equipe (opcional)</Label>
-                  <Select
-                    value={
-                      form.watch("technicianId") ? `tech-${form.watch("technicianId")}` :
-                        form.watch("teamId") ? `team-${form.watch("teamId")}` : ""
-                    }
-                    onValueChange={(value) => {
-                      console.log("🔄 [DEBUG] FindDate - Seleção alterada para:", value);
-
-                      if (value === "0" || value === "") {
-                        // Limpar seleções
-                        form.setValue("technicianId", undefined);
-                        form.setValue("teamId", undefined);
-                        console.log("🔄 [DEBUG] FindDate - Limpando seleções");
-                      } else if (value.startsWith('tech-')) {
-                        // É um técnico
-                        const technicianId = parseInt(value.split('-')[1]);
-                        console.log("🔄 [DEBUG] FindDate - Técnico selecionado ID:", technicianId);
-                        form.setValue("technicianId", technicianId);
-                        form.setValue("teamId", undefined);
-                      } else if (value.startsWith('team-')) {
-                        // É uma equipe
-                        const teamId = parseInt(value.split('-')[1]);
-                        console.log("🔄 [DEBUG] FindDate - Equipe selecionada ID:", teamId);
-                        form.setValue("teamId", teamId);
-                        form.setValue("technicianId", undefined);
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="technician">Técnico/Equipe (opcional)</Label>
+                    <Select
+                      value={
+                        form.watch("technicianId")
+                          ? `tech-${form.watch("technicianId")}`
+                          : form.watch("teamId")
+                            ? `team-${form.watch("teamId")}`
+                            : ""
                       }
-                    }}
-                    disabled={isLoadingTechnicians || isLoadingTeams}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={
-                        (isLoadingTechnicians || isLoadingTeams) ? "Carregando..." :
-                          (errorTechnicians || errorTeams) ? "Erro ao carregar" :
-                            "Qualquer técnico/equipe"
-                      } />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(isLoadingTechnicians || isLoadingTeams) ? (
-                        <SelectItem value="loading" disabled>
-                          Carregando...
-                        </SelectItem>
-                      ) : (errorTechnicians || errorTeams) ? (
-                        <SelectItem value="error" disabled>
-                          Erro ao carregar dados
-                        </SelectItem>
-                      ) : (
-                        <>
-                          <SelectItem value="0">Qualquer técnico/equipe</SelectItem>
-                          {technicians.map((technician) => (
-                            <SelectItem key={`tech-${technician.id}`} value={`tech-${technician.id}`}>
-                              👤 {technician.name}
-                            </SelectItem>
-                          ))}
-                          {teams.map((team) => (
-                            <SelectItem key={`team-${team.id}`} value={`team-${team.id}`}>
-                              👥 {team.name}
-                            </SelectItem>
-                          ))}
-                          {technicians.length === 0 && teams.length === 0 && (
-                            <SelectItem value="none" disabled>
-                              Nenhum técnico ou equipe cadastrado
-                            </SelectItem>
-                          )}
-                        </>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {(errorTechnicians || errorTeams) && (
-                    <p className="text-sm text-red-500">Erro ao carregar técnicos/equipes.</p>
-                  )}
+                      onValueChange={(value) => {
+                        if (value === "0" || value === "") {
+                          form.setValue("technicianId", undefined);
+                          form.setValue("teamId", undefined);
+                        } else if (value.startsWith("tech-")) {
+                          const technicianId = parseInt(value.split("-")[1]);
+                          form.setValue("technicianId", technicianId);
+                          form.setValue("teamId", undefined);
+                        } else if (value.startsWith("team-")) {
+                          const teamId = parseInt(value.split("-")[1]);
+                          form.setValue("teamId", teamId);
+                          form.setValue("technicianId", undefined);
+                        }
+                      }}
+                      disabled={isLoadingTechnicians || isLoadingTeams}
+                    >
+                      <SelectTrigger className={fieldClass}>
+                        <SelectValue
+                          placeholder={
+                            isLoadingTechnicians || isLoadingTeams
+                              ? "Carregando..."
+                              : errorTechnicians || errorTeams
+                                ? "Erro ao carregar"
+                                : "Qualquer técnico/equipe"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {isLoadingTechnicians || isLoadingTeams ? (
+                          <SelectItem value="loading" disabled>
+                            Carregando...
+                          </SelectItem>
+                        ) : errorTechnicians || errorTeams ? (
+                          <SelectItem value="error" disabled>
+                            Erro ao carregar dados
+                          </SelectItem>
+                        ) : (
+                          <>
+                            <SelectItem value="0">Qualquer técnico/equipe</SelectItem>
+                            {technicians.map((technician) => (
+                              <SelectItem key={`tech-${technician.id}`} value={`tech-${technician.id}`}>
+                                👤 {technician.name}
+                              </SelectItem>
+                            ))}
+                            {teams.map((team) => (
+                              <SelectItem key={`team-${team.id}`} value={`team-${team.id}`}>
+                                👥 {team.name}
+                              </SelectItem>
+                            ))}
+                            {technicians.length === 0 && teams.length === 0 && (
+                              <SelectItem value="none" disabled>
+                                Nenhum técnico ou equipe cadastrado
+                              </SelectItem>
+                            )}
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {(errorTechnicians || errorTeams) && (
+                      <p className="text-xs text-red-500">Erro ao carregar técnicos/equipes.</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <Button
-                type="submit"
-                className="w-full bg-burnt-yellow hover:bg-burnt-yellow/90 transition-all duration-300"
-                disabled={isSearching}
-              >
-                {isSearching ? (
-                  <>
-                    <span className="animate-pulse">Procurando datas...</span>
-                    <Search className="ml-2 h-4 w-4 animate-spin" />
-                  </>
-                ) : (
-                  <>
-                    Buscar datas
-                    <Search className="ml-2 h-4 w-4" />
-                  </>
-                )}
-              </Button>
+              <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between border-t pt-4">
+                <p className="text-sm text-muted-foreground">
+                  O sistema vai analisar agenda, rota e disponibilidade para sugerir os melhores encaixes.
+                </p>
+
+                <Button
+                  type="submit"
+                  className="rounded-xl bg-[#DAA520] hover:bg-[#B8860B] text-black shadow-sm"
+                  disabled={isSearching}
+                >
+                  {isSearching ? (
+                    <>
+                      Procurando datas...
+                      <Search className="ml-2 h-4 w-4 animate-spin" />
+                    </>
+                  ) : (
+                    <>
+                      Buscar datas
+                      <Search className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+              </div>
             </form>
           </CardContent>
         )}
       </Card>
 
       {searchResults.length > 0 && (
-        <Card className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <CardHeader>
-            <CardTitle>Datas disponíveis</CardTitle>
-            <CardDescription>
-              {searchResults.length} opções encontradas, ordenadas da data mais próxima para a mais distante
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Responsável</TableHead>
-                    <TableHead>Tempo Disponível</TableHead>
-                    <TableHead>Distância</TableHead>
-                    <TableHead>Ação</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {searchResults.map((result, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-medium">
-                        {formatDate(result.date)}
-                      </TableCell>
-                      <TableCell>
-                        {result.responsibleType === 'technician' ? '👤 ' : '👥 '}
-                        {result.responsibleName}
-                      </TableCell>
-                      <TableCell>
-                        {Math.floor(result.availableMinutes / 60)}h {result.availableMinutes % 60}min disponíveis
-                      </TableCell>
-                      <TableCell>
-                        {result.distance.toFixed(1)} km
-                        {result.distanceType === 'from_base' ? ' (da base)' : ' (entre pontos)'}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          onClick={() => handleSchedule(result, form.getValues())}
-                          className="bg-burnt-yellow hover:bg-burnt-yellow/90"
-                        >
-                          <Calendar className="mr-2 h-4 w-4" />
-                          Agendar nessa data
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl md:text-2xl font-bold">Datas disponíveis</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              {searchResults.length} opção(ões) encontrada(s), ordenadas da data mais próxima para a mais distante
+            </p>
+          </div>
+
+          <div className="grid gap-4">
+            {searchResults.map((result, index) => (
+              <Card
+                key={index}
+                className="rounded-3xl border shadow-sm bg-card overflow-hidden transition-all hover:shadow-md"
+              >
+                <CardContent className="p-5 md:p-6">
+                  <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr_auto] lg:items-center">
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="inline-flex items-center gap-2 rounded-full bg-[#DAA520]/10 px-3 py-1 text-xs font-medium text-[#B8860B] dark:text-[#DAA520]">
+                          <Calendar className="h-3.5 w-3.5" />
+                          Opção encontrada
+                        </div>
+
+                        <div className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
+                          <Clock3 className="h-3.5 w-3.5" />
+                          {Math.floor(result.availableMinutes / 60)}h {result.availableMinutes % 60}min disponíveis
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="text-lg font-semibold">
+                          {formatDate(result.date)}
+                        </h3>
+                        <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                          {result.responsibleType === "technician" ? (
+                            <UserRound className="h-4 w-4" />
+                          ) : (
+                            <Users className="h-4 w-4" />
+                          )}
+                          <span>
+                            Responsável: <span className="font-medium text-foreground">{result.responsibleName}</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                      <div className="rounded-2xl border bg-muted/20 p-4 shadow-sm">
+                        <p className="text-[11px] text-muted-foreground">Distância</p>
+                        <p className="mt-1 text-base font-semibold">
+                          {result.distance.toFixed(1)} km
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {result.distanceType === "from_base" ? "Da base" : "Entre pontos"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border bg-muted/20 p-4 shadow-sm">
+                        <p className="text-[11px] text-muted-foreground">Disponibilidade</p>
+                        <p className="mt-1 text-base font-semibold">
+                          {Math.floor(result.availableMinutes / 60)}h {result.availableMinutes % 60}min
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Tempo livre identificado
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex lg:justify-end">
+                      <Button
+                        size="sm"
+                        onClick={() => handleSchedule(result, form.getValues())}
+                        className="rounded-xl bg-[#DAA520] hover:bg-[#B8860B] text-black shadow-sm"
+                      >
+                        Agendar nesta data
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       )}
 
       {searchResults.length === 0 && searchDatesMutation.isSuccess && !isSearching && (
-        <Card className="animate-in fade-in duration-300">
-          <CardContent className="text-center py-8">
-            <p className="text-gray-500">
-              Nenhuma data disponível foi encontrada para os critérios informados.
-            </p>
-            <p className="text-sm text-gray-400 mt-2">
-              Tente expandir a área de busca ou selecionar outro serviço.
-            </p>
-            <Button
-              variant="link"
-              onClick={() => setIsFiltersCollapsed(false)}
-              className="mt-4"
-            >
-              Modificar filtros
-            </Button>
+        <Card className="rounded-3xl border shadow-sm bg-card">
+          <CardContent className="text-center py-10">
+            <div className="mx-auto max-w-md">
+              <h3 className="text-lg font-semibold">Nenhuma data disponível encontrada</h3>
+              <p className="text-sm text-muted-foreground mt-2 leading-6">
+                Tente ampliar a busca, selecionar outro serviço ou modificar os filtros para encontrar mais opções.
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => setIsFiltersCollapsed(false)}
+                className="mt-5 rounded-xl shadow-sm"
+              >
+                Modificar filtros
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}

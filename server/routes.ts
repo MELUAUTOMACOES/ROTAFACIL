@@ -44,6 +44,7 @@ import { registerAuditRoutes } from "./routes/audit.routes";
 import { registerDashboardRoutes } from "./routes/dashboard.routes";
 import { registerAdsMetricsRoutes } from "./routes/ads-metrics.routes";
 import { registerSuperadminRoutes } from "./routes/superadmin.routes";
+import { registerLeadsRoutes } from "./routes/leads.routes";
 import { trackCompanyAudit, getAuditDescription } from "./audit.helpers";
 import { isAccessAllowed, getAccessDeniedMessage } from "./access-schedule-validator";
 import { requireLgpdAccepted } from "./middleware/lgpd.middleware";
@@ -1944,7 +1945,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const clientData = clients[i];
         try {
           console.log(`📝 Criando cliente: ${clientData.name}`);
-          
+
           // 🔧 Normalizar e validar CEP antes de salvar
           if (clientData.cep) {
             const cepNormalizado = formatCep(clientData.cep);
@@ -1964,7 +1965,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!clientData.numero || clientData.numero.trim() === '') camposVazios.push('numero');
           if (!clientData.bairro || clientData.bairro.trim() === '') camposVazios.push('bairro');
           if (!clientData.cidade || clientData.cidade.trim() === '') camposVazios.push('cidade');
-          
+
           if (camposVazios.length > 0) {
             console.warn(`  ⚠️ Cliente com campos vazios: ${camposVazios.join(', ')}`);
           }
@@ -2054,7 +2055,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const search = req.query.search as string;
       const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
 
-      const result = await storage.getServicesPaged(req.user.companyId, page, pageSize, search, isActive);
+      const result = await storage.getServicesPaged(req.user.companyId, page, pageSize, search);
       logEgressSize(req, result);
       res.json(result);
     } catch (error: any) {
@@ -2123,7 +2124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const teamId = req.query.teamId ? parseInt(req.query.teamId as string) : undefined;
       const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
 
-      const result = await storage.getTechniciansPaged(req.user.companyId, page, pageSize, search, teamId, isActive);
+      const result = await storage.getTechniciansPaged(req.user.companyId, page, pageSize, search, isActive);
       logEgressSize(req, result);
       res.json(result);
     } catch (error: any) {
@@ -2314,38 +2315,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const responsibleId = req.query.responsibleId ? parseInt(req.query.responsibleId as string) : undefined;
 
       const result = await storage.getVehiclesPaged(req.user.companyId, page, pageSize, search, responsibleType, responsibleId);
-      
+
       // 🆕 Enriquecer com autorizações (técnicos e equipes autorizadas)
       const vehiclesWithAssignments = await Promise.all(
         result.items.map(async (vehicle: any) => {
           const assignments = await storage.getVehicleAssignments(vehicle.id, req.user.companyId);
-          
+
           // Separar técnicos e equipes
           const authorizedTechnicianIds = assignments
-            .filter(a => a.technicianId)
-            .map(a => a.technicianId);
+            .filter(a => a.technicianId !== null)
+            .map(a => a.technicianId as number);
+
           const authorizedTeamIds = assignments
-            .filter(a => a.teamId)
-            .map(a => a.teamId);
-          
+            .filter(a => a.teamId !== null)
+            .map(a => a.teamId as number);
+
           // Buscar nomes para exibição
           const technicianNames: string[] = [];
           const teamNames: string[] = [];
-          
+
           if (authorizedTechnicianIds.length > 0) {
             const techs = await db.select({ id: technicians.id, name: technicians.name })
               .from(technicians)
               .where(and(inArray(technicians.id, authorizedTechnicianIds), eq(technicians.companyId, req.user.companyId)));
             technicianNames.push(...techs.map(t => t.name));
           }
-          
+
           if (authorizedTeamIds.length > 0) {
             const teamsData = await db.select({ id: teams.id, name: teams.name })
               .from(teams)
               .where(and(inArray(teams.id, authorizedTeamIds), eq(teams.companyId, req.user.companyId)));
             teamNames.push(...teamsData.map(t => t.name));
           }
-          
+
           return {
             ...vehicle,
             authorizedTechnicianIds,
@@ -2355,12 +2357,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         })
       );
-      
+
       const enrichedResult = {
         ...result,
         items: vehiclesWithAssignments
       };
-      
+
       logEgressSize(req, enrichedResult);
       res.json(enrichedResult);
     } catch (error: any) {
@@ -2396,14 +2398,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { authorizedTechnicianIds, authorizedTeamIds, ...vehicleData } = req.body;
       const parsedVehicleData = insertVehicleSchema.parse(vehicleData);
       const vehicle = await storage.createVehicle(parsedVehicleData, req.user.userId, req.user.companyId);
-      
+
       console.log(`✅ [VEHICLES] Veículo criado: ${vehicle.plate} (ID: ${vehicle.id})`);
-      
+
       // 🆕 Sincronizar autorizações de uso
       if (authorizedTechnicianIds || authorizedTeamIds) {
         const techIds = Array.isArray(authorizedTechnicianIds) ? authorizedTechnicianIds : [];
         const teamIds = Array.isArray(authorizedTeamIds) ? authorizedTeamIds : [];
-        
+
         await storage.syncVehicleAssignments(
           vehicle.id,
           techIds,
@@ -2411,10 +2413,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           req.user.userId,
           req.user.companyId
         );
-        
+
         console.log(`✅ [VEHICLES] Autorizações sincronizadas: ${techIds.length} técnicos, ${teamIds.length} equipes`);
       }
-      
+
       trackFeatureUsage(req.user.userId, "vehicles", "create", req.user.companyId, { id: vehicle.id });
       trackCompanyAudit({
         userId: req.user.userId,
@@ -2440,14 +2442,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { authorizedTechnicianIds, authorizedTeamIds, ...vehicleData } = req.body;
       const parsedVehicleData = insertVehicleSchema.parse(vehicleData) as Partial<InsertVehicle>;
       const vehicle = await storage.updateVehicle(id, parsedVehicleData, req.user.companyId);
-      
+
       console.log(`✅ [VEHICLES] Veículo atualizado: ${vehicle.plate} (ID: ${vehicle.id})`);
-      
+
       // 🆕 Sincronizar autorizações de uso
       if (authorizedTechnicianIds !== undefined || authorizedTeamIds !== undefined) {
         const techIds = Array.isArray(authorizedTechnicianIds) ? authorizedTechnicianIds : [];
         const teamIds = Array.isArray(authorizedTeamIds) ? authorizedTeamIds : [];
-        
+
         await storage.syncVehicleAssignments(
           vehicle.id,
           techIds,
@@ -2455,10 +2457,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           req.user.userId,
           req.user.companyId
         );
-        
+
         console.log(`✅ [VEHICLES] Autorizações sincronizadas: ${techIds.length} técnicos, ${teamIds.length} equipes`);
       }
-      
+
       trackCompanyAudit({
         userId: req.user.userId,
         companyId: req.user.companyId,
@@ -2504,13 +2506,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
       }
-      
+
       console.log(`🔍 [VEHICLES] Buscando veículos disponíveis para userId: ${req.user.userId}`);
-      
+
       const availableVehicles = await storage.getVehiclesAvailableForUser(req.user.userId, req.user.companyId);
-      
+
       console.log(`✅ [VEHICLES] ${availableVehicles.length} veículo(s) disponível(is)`);
-      
+
       res.json(availableVehicles);
     } catch (error: any) {
       console.error("❌ [VEHICLES] Erro ao buscar veículos disponíveis:", error);
@@ -4811,7 +4813,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Checklists routes
   app.get("/api/checklists", authenticateToken, async (req: any, res) => {
     try {
-      const checklists = await storage.getChecklists(req.user.companyId);  
+      const checklists = await storage.getChecklists(req.user.companyId);
       res.json(checklists);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -5560,13 +5562,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerAuditRoutes(app, authenticateToken);
 
   // Registrar rotas do dashboard (métricas e KPIs)
+  const { registerDashboardRoutes } = await import("./routes/dashboard.routes");
   registerDashboardRoutes(app, authenticateToken);
 
   // Registrar rotas de métricas de ADS/Marketing
+  const { registerAdsMetricsRoutes } = await import("./routes/ads-metrics.routes");
   registerAdsMetricsRoutes(app, authenticateToken);
 
   // 🔐 Registrar rotas de SuperAdmin (métricas por empresa)
+  const { registerSuperadminRoutes } = await import("./routes/superadmin.routes");
   registerSuperadminRoutes(app, authenticateToken);
+
+  // Registrar rotas de Leads
+  const { registerLeadsRoutes } = await import("./routes/leads.routes");
+  registerLeadsRoutes(app, authenticateToken);
 
   const httpServer = createServer(app);
 

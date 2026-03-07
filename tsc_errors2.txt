@@ -1,0 +1,11 @@
+﻿server/routes.ts(2058,97): error TS2554: Expected 3-4 arguments, but got 5.
+server/routes.ts(2127,108): error TS2554: Expected 3-5 arguments, but got 6.
+server/storage.ts(685,9): error TS2416: Property 'getTechniciansPaged' in type 'DatabaseStorage' is not assignable to the same property in base type 'IStorage'.
+  Type '(companyId: number, page: number, pageSize: number, search?: string | undefined, isActive?: boolean | undefined) => Promise<{ items: { id: number; name: string; email: string | null; phone: string; ... 26 more ...; createdAt: Date; }[]; pagination: { ...; }; }>' is not assignable to type '(companyId: number, page: number, pageSize: number, search?: string | undefined, teamId?: number | undefined, isActive?: boolean | undefined) => Promise<{ items: { id: number; name: string; ... 28 more ...; photoUrl: string | null; }[]; pagination: { ...; }; }>'.
+    Types of parameters 'isActive' and 'teamId' are incompatible.
+      Type 'number | undefined' is not assignable to type 'boolean | undefined'.
+        Type 'number' is not assignable to type 'boolean | undefined'.
+server/storage.ts(1105,12): error TS2345: Argument of type '{ cep?: string | undefined; logradouro?: string | undefined; numero?: string | undefined; serviceId?: number | undefined; scheduledDate?: Date | undefined; paymentType?: "no_ato" | "antecipado" | undefined; ... 24 more ...; additionalValue?: string | ... 2 more ... | undefined; }' is not assignable to parameter of type '{ cep?: string | SQL<unknown> | PgColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}> | undefined; logradouro?: string | SQL<unknown> | PgColumn<...> | undefined; ... 31 more ...; additionalValue?: string | ... 3 more ... | undefined; }'.
+  Types of property 'additionalValue' are incompatible.
+    Type 'string | number | null | undefined' is not assignable to type 'string | SQL<unknown> | PgColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}> | null | undefined'.
+      Type 'number' is not assignable to type 'string | SQL<unknown> | PgColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}> | null | undefined'.

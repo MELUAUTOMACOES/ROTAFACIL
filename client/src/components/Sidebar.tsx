@@ -196,6 +196,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
       permission: 'superadmin',
       items: [
         { name: "Empresas", href: "/superadmin/empresas", icon: Building2 },
+        { name: "Leads", href: "/superadmin/leads", icon: Users },
         { name: "ADS", href: "/ads", icon: TrendingUp },
         { name: "Métricas", href: "/admin/metrics", icon: BarChart3 },
       ]
@@ -236,22 +237,28 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
         </div>
 
         {/* Header */}
-        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} h-16 bg-black px-4 transition-all duration-300 flex-shrink-0`}>
+        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} h-20 px-6 border-b border-border/40 transition-all duration-300 flex-shrink-0`}>
           <Link href="/dashboard">
-            <div className="flex items-center space-x-2 cursor-pointer hover:opacity-80 transition-opacity">
-              <img src={logoImg} alt="RotaFácil Logo" className="h-8 w-8" />
+            <div className="flex items-center space-x-3 cursor-pointer group">
+              <div className="bg-amber-500/10 dark:bg-amber-500/20 p-1.5 rounded-xl border border-amber-500/20 group-hover:bg-amber-500/20 dark:group-hover:bg-amber-500/30 transition-colors">
+                <img src={logoImg} alt="RotaFácil Logo" className="h-10 w-10 object-contain" />
+              </div>
               {!isCollapsed && (
-                <h1 className="text-xl font-bold text-white whitespace-nowrap overflow-hidden">
-                  Rota<span className="text-burnt-yellow">Fácil</span>
-                  <span className="text-gray-400 font-normal ml-1">Frotas</span>
-                </h1>
+                <div className="flex flex-col justify-center">
+                  <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-zinc-100 flex items-center leading-none">
+                    Rota<span className="text-burnt-yellow">Fácil</span>
+                  </h1>
+                  <span className="text-[10px] font-semibold tracking-widest uppercase text-gray-500 dark:text-zinc-400 mt-1">
+                    Frotas
+                  </span>
+                </div>
               )}
             </div>
           </Link>
           <Button
             variant="ghost"
             size="sm"
-            className="lg:hidden text-white hover:bg-gray-800"
+            className="lg:hidden text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-gray-100 dark:hover:bg-zinc-800"
             onClick={onClose}
           >
             <X className="h-5 w-5" />

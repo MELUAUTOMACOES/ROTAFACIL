@@ -2443,7 +2443,7 @@ export default function Appointments() {
       }
 
       {/* New Compact Filter Bar */}
-      <div className="bg-white dark:bg-zinc-900 border-b dark:border-zinc-800 sticky top-0 z-10 px-6 py-3 shadow-sm space-y-3">
+      <div className="bg-white/95 backdrop-blur-md dark:bg-zinc-900/95 border border-border/60 dark:border-zinc-800 sticky top-4 z-10 p-4 shadow-sm rounded-xl space-y-3 mb-6 transition-all">
         {/* Filter Row */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[200px] max-w-xs">

@@ -68,7 +68,7 @@ export function FuelFilters({
     const totalFilters = vehicles.length + FUEL_TYPES.length;
 
     return (
-        <div className="bg-gray-50 border border-gray-200 dark:bg-zinc-800 dark:border-zinc-700 rounded-lg p-3">
+        <div className="bg-muted/20 border border-border/60 rounded-xl p-4 md:p-5 shadow-sm">
             <div className="flex items-center gap-3 flex-wrap">
                 {/* Filter Icon & Counter */}
                 <div className="flex items-center gap-2">

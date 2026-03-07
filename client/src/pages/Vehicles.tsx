@@ -228,7 +228,7 @@ export default function Vehicles() {
         <TabsContent value="veiculos" className="mt-4 space-y-4">
 
           {/* Filtros de Veículos */}
-          <Card className="p-4 bg-white">
+          <Card className="p-4 md:p-5 bg-muted/20 border-border/60 shadow-sm">
             <div className="flex flex-col md:flex-row gap-4">
               <div className="relative flex-1">
                 <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -536,7 +536,7 @@ function MaintenanceTab({
   return (
     <div className="space-y-4">
       {/* Barra de Filtros */}
-      <Card className="p-3">
+      <Card className="p-4 md:p-5 bg-muted/20 border-border/60 shadow-sm">
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-32">
             <Label htmlFor="filter-id" className="text-xs">Buscar por ID</Label>

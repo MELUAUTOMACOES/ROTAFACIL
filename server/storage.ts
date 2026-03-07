@@ -24,6 +24,7 @@ import {
   type AppointmentHistory, type InsertAppointmentHistory,
   type FuelRecord, type InsertFuelRecord,
   type AnalyticsEvent, type InsertAnalyticsEvent,
+  type Lead, type InsertLead,
   users, clients, services, technicians, vehicles, vehicleAssignments, appointments, appointmentHistory, checklists, businessRules, teams, teamMembers, accessSchedules,
   companies, memberships, invitations,
   dateRestrictions,
@@ -34,7 +35,8 @@ import {
   featureUsage,
   trackingLocations,
   fuelRecords,
-  analyticsEvents
+  analyticsEvents,
+  leads
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, ilike, sql, inArray, isNotNull, ne, isNull, gte, lte, desc } from "drizzle-orm";
@@ -74,7 +76,7 @@ export interface IStorage {
 
   // Services
   getServices(companyId: number): Promise<Service[]>;
-  getServicesPaged(companyId: number, page: number, pageSize: number, search?: string, isActive?: boolean): Promise<{ items: Service[], pagination: { page: number, pageSize: number, total: number, totalPages: number } }>;
+  getServicesPaged(companyId: number, page: number, pageSize: number, search?: string): Promise<{ items: Service[], pagination: { page: number, pageSize: number, total: number, totalPages: number } }>;
   getService(id: number, companyId: number): Promise<Service | undefined>;
   createService(service: InsertService, userId: number, companyId: number): Promise<Service>;
   updateService(id: number, service: Partial<InsertService>, companyId: number): Promise<Service>;
@@ -82,7 +84,7 @@ export interface IStorage {
 
   // Technicians
   getTechnicians(companyId: number): Promise<Technician[]>;
-  getTechniciansPaged(companyId: number, page: number, pageSize: number, search?: string, teamId?: number, isActive?: boolean): Promise<{ items: Technician[], pagination: { page: number, pageSize: number, total: number, totalPages: number } }>;
+  getTechniciansPaged(companyId: number, page: number, pageSize: number, search?: string, isActive?: boolean): Promise<{ items: Technician[], pagination: { page: number, pageSize: number, total: number, totalPages: number } }>;
   getTechnician(id: number, companyId: number): Promise<Technician | undefined>;
   createTechnician(technician: InsertTechnician, userId: number, companyId: number): Promise<Technician>;
   updateTechnician(id: number, technician: Partial<InsertTechnician>, companyId: number): Promise<Technician>;
@@ -242,6 +244,10 @@ export interface IStorage {
 
   // Analytics Events (Traffic Metrics - Landing Page)
   createAnalyticsEvent(data: InsertAnalyticsEvent): Promise<AnalyticsEvent>;
+
+  // Leads
+  createLead(data: InsertLead): Promise<Lead>;
+  getLeads(): Promise<Lead[]>;
 
   // 🔐 LGPD - Aceite de termos
   acceptLgpd(userId: number, version: string): Promise<void>;
@@ -603,7 +609,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(services).where(this.byCompany(services, companyId));
   }
 
-  async getServicesPaged(companyId: number, page: number, pageSize: number, search?: string, isActive?: boolean) {
+  async getServicesPaged(companyId: number, page: number, pageSize: number, search?: string) {
     const conditions = [this.byCompany(services, companyId)];
 
     if (search) {
@@ -613,9 +619,6 @@ export class DatabaseStorage implements IStorage {
           ilike(services.description, `%${search}%`)
         )!
       );
-    }
-    if (isActive !== undefined) {
-      conditions.push(eq(services.isActive, isActive));
     }
 
     const whereClause = and(...conditions);
@@ -679,7 +682,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(technicians).where(this.byCompany(technicians, companyId));
   }
 
-  async getTechniciansPaged(companyId: number, page: number, pageSize: number, search?: string, teamId?: number, isActive?: boolean) {
+  async getTechniciansPaged(companyId: number, page: number, pageSize: number, search?: string, isActive?: boolean) {
     const conditions = [this.byCompany(technicians, companyId)];
 
     if (search) {
@@ -690,10 +693,10 @@ export class DatabaseStorage implements IStorage {
         )!
       );
     }
-    if (teamId !== undefined) {
-      conditions.push(eq(technicians.teamId, teamId));
-    }
-    if (isActive !== undefined) {
+
+    // @ts-ignore - Some versions might have isActive
+    if (isActive !== undefined && 'isActive' in technicians) {
+      // @ts-ignore
       conditions.push(eq(technicians.isActive, isActive));
     }
 
@@ -959,7 +962,7 @@ export class DatabaseStorage implements IStorage {
         companyId,
         isActive: true
       }));
-      
+
       await db.insert(vehicleAssignments).values(technicianAssignments as any);
     }
 
@@ -973,7 +976,7 @@ export class DatabaseStorage implements IStorage {
         companyId,
         isActive: true
       }));
-      
+
       await db.insert(vehicleAssignments).values(teamAssignments as any);
     }
   }
@@ -1065,7 +1068,12 @@ export class DatabaseStorage implements IStorage {
   async createAppointment(insertAppointment: InsertAppointment, userId: number, companyId: number): Promise<Appointment> {
     const [appointment] = await db
       .insert(appointments)
-      .values({ ...insertAppointment, userId, companyId })
+      .values({
+        ...insertAppointment,
+        userId,
+        companyId,
+        additionalValue: insertAppointment.additionalValue?.toString()
+      })
       .returning();
     return appointment;
   }
@@ -1088,9 +1096,13 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
+    if (processedData.additionalValue !== undefined) {
+      processedData.additionalValue = processedData.additionalValue?.toString() as any;
+    }
+
     const [appointment] = await db
       .update(appointments)
-      .set(processedData)
+      .set(processedData as any)
       .where(and(eq(appointments.id, id), this.byCompany(appointments, companyId)))
       .returning();
 
@@ -2206,6 +2218,16 @@ export class DatabaseStorage implements IStorage {
       .values(data)
       .returning();
     return event;
+  }
+
+  // Leads
+  async createLead(data: InsertLead): Promise<Lead> {
+    const [lead] = await db.insert(leads).values(data).returning();
+    return lead;
+  }
+
+  async getLeads(): Promise<Lead[]> {
+    return await db.select().from(leads).orderBy(desc(leads.createdAt));
   }
 
   // ==================== LGPD ====================

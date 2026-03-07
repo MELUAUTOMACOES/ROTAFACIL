@@ -1404,3 +1404,27 @@ export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
 export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
 export type AdsWhatsappSettings = typeof adsWhatsappSettings.$inferSelect;
 export type InsertAdsWhatsappSettings = z.infer<typeof insertAdsWhatsappSettingsSchema>;
+
+// Leads table - Captação de leads via landing page
+export const leads = pgTable("leads", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  companyName: text("company_name").notNull(),
+  phone: text("phone").notNull(),
+  email: text("email").notNull(),
+  industry: text("industry").notNull(),
+  otherIndustry: text("other_industry"),
+  employeeCount: integer("employee_count").notNull(),
+  technicianCount: integer("technician_count").notNull(),
+  vehicleCount: integer("vehicle_count").notNull(),
+  deliveriesPerDay: integer("deliveries_per_day").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertLeadSchema = createInsertSchema(leads).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type Lead = typeof leads.$inferSelect;
+export type InsertLead = z.infer<typeof insertLeadSchema>;

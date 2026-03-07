@@ -460,7 +460,7 @@ export default function Clients() {
       </div>
 
       {/* Search Filter */}
-      <Card className="p-4 bg-white">
+      <Card className="p-4 md:p-5 bg-muted/20 border-border/60 shadow-sm">
         <div className="relative">
           <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input

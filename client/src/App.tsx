@@ -31,9 +31,11 @@ import AdminMetrics from "./pages/AdminMetrics";
 import AdminAudit from "./pages/AdminAudit";
 import Ads from "./pages/Ads";
 import CompaniesOverview from "./pages/superadmin/CompaniesOverview";
+import LeadsOverview from "./pages/superadmin/Leads";
 import LgpdAccept from "./pages/LgpdAccept";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import CookiePolicy from "./pages/CookiePolicy";
+import AgendarDemonstracao from "./pages/AgendarDemonstracao";
 import Layout from "./components/Layout";
 import NotFound from "@/pages/not-found";
 
@@ -54,6 +56,7 @@ function AppRoutes() {
       <Switch>
         <Route path="/login" component={Login} />
         <Route path="/signup-company" component={SignupCompany} />
+        <Route path="/agendar-demonstracao" component={AgendarDemonstracao} />
         <Route path="/convite/:token" component={AcceptInvite} />
         <Route path="/verify-email" component={VerifyEmail} />
         <Route path="/set-password" component={SetPassword} />
@@ -110,6 +113,7 @@ function AppRoutes() {
             <Route path="/admin/audit" component={AdminAudit} />
             <Route path="/ads" component={Ads} />
             <Route path="/superadmin/empresas" component={CompaniesOverview} />
+            <Route path="/superadmin/leads" component={LeadsOverview} />
 
             <Route path="/change-password" component={() => <ChangePassword isRequired={false} />} />
             <Route component={NotFound} />
