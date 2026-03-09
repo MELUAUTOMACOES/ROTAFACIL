@@ -2,6 +2,7 @@ import { type Express } from "express";
 import { storage } from "../storage";
 import { insertLeadSchema } from "@shared/schema";
 import { Resend } from "resend";
+import { sendLeadWhatsappNotification } from "../integrations/evolution";
 
 export function registerLeadsRoutes(app: Express, authenticateToken: any) {
     // Public endpoint - Captura de Leads
@@ -42,6 +43,14 @@ export function registerLeadsRoutes(app: Express, authenticateToken: any) {
             } catch (emailError) {
                 console.error('❌ [LEADS] Erro ao enviar notificação de lead por e-mail:', emailError);
                 // Continue anyway, lead was saved
+            }
+
+            // Integrar o disparo de WhatsApp complementar
+            try {
+                await sendLeadWhatsappNotification(lead);
+            } catch (whatsError) {
+                console.error("❌ [LEADS] Erro isolado no bloco de fetch do WhatsApp:", whatsError);
+                // Continue anyway, lead was saved and email already tried
             }
 
             res.status(201).json(lead);
