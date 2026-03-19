@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "./lib/auth.tsx";
 import { ThemeProvider } from "./lib/theme";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import Inicio from "./pages/Inicio";
 import Dashboard from "./pages/Dashboard";
 import Appointments from "./pages/Appointments";
 import FindDate from "./pages/FindDate";
@@ -18,6 +19,7 @@ import PrestadoresPage from "@/pages/PrestadoresPage";
 import Services from "./pages/Services";
 import BusinessRules from "./pages/BusinessRules";
 import RoutesHistoryPage from "./pages/routes-history/RoutesHistoryPage";
+import { canAccess, getHomeForRole } from "./lib/permissions";
 import UserManagement from "./pages/UserManagement";
 import VerifyEmail from "./pages/VerifyEmail";
 import SetPassword from "./pages/SetPassword";
@@ -88,36 +90,39 @@ function AppRoutes() {
       <Route path="/admin/metrics" component={AdminMetrics} />
       <Route>
         <Layout>
-          <Switch>
-            <Route path="/" component={Dashboard} />
-            <Route path="/dashboard" component={Dashboard} />
-            <Route path="/appointments" component={Appointments} />
-            <Route path="/find-date" component={FindDate} />
-            {/* Legacy builder routes → redirect to Appointments */}
-            <Route path="/routes" component={() => <Redirect to="/appointments" />} />
-            <Route path="/roteirizacao" component={() => <Redirect to="/appointments" />} />
-            <Route path="/routes/builder" component={() => <Redirect to="/appointments" />} />
-            <Route path="/routes/optimize" component={() => <Redirect to="/appointments" />} />
-            {/* Keep Routes History intact */}
-            <Route path="/routes-history/:routeId" component={RoutesHistoryPage} />
-            <Route path="/routes-history" component={RoutesHistoryPage} />
-            <Route path="/clients" component={Clients} />
-            <Route path="/technicians" component={Technicians} />
-            <Route path="/vehicles" component={Vehicles} />
-            <Route path="/prestadores" component={PrestadoresPage} />
-            <Route path="/services" component={Services} />
-            <Route path="/business-rules" component={BusinessRules} />
-            <Route path="/users" component={UserManagement} />
-            <Route path="/company/users" component={CompanyUsers} />
-            <Route path="/convite/:token" component={AcceptInvite} />
-            <Route path="/admin/audit" component={AdminAudit} />
-            <Route path="/ads" component={Ads} />
-            <Route path="/superadmin/empresas" component={CompaniesOverview} />
-            <Route path="/superadmin/leads" component={LeadsOverview} />
+          <RoleGuard>
+            <Switch>
+              <Route path="/inicio" component={Inicio} />
+              <Route path="/" component={Inicio} />
+              <Route path="/dashboard" component={Dashboard} />
+              <Route path="/appointments" component={Appointments} />
+              <Route path="/find-date" component={FindDate} />
+              {/* Legacy builder routes → redirect to Appointments */}
+              <Route path="/routes" component={() => <Redirect to="/appointments" />} />
+              <Route path="/roteirizacao" component={() => <Redirect to="/appointments" />} />
+              <Route path="/routes/builder" component={() => <Redirect to="/appointments" />} />
+              <Route path="/routes/optimize" component={() => <Redirect to="/appointments" />} />
+              {/* Keep Routes History intact */}
+              <Route path="/routes-history/:routeId" component={RoutesHistoryPage} />
+              <Route path="/routes-history" component={RoutesHistoryPage} />
+              <Route path="/clients" component={Clients} />
+              <Route path="/technicians" component={Technicians} />
+              <Route path="/vehicles" component={Vehicles} />
+              <Route path="/prestadores" component={PrestadoresPage} />
+              <Route path="/services" component={Services} />
+              <Route path="/business-rules" component={BusinessRules} />
+              <Route path="/users" component={UserManagement} />
+              <Route path="/company/users" component={CompanyUsers} />
+              <Route path="/convite/:token" component={AcceptInvite} />
+              <Route path="/admin/audit" component={AdminAudit} />
+              <Route path="/ads" component={Ads} />
+              <Route path="/superadmin/empresas" component={CompaniesOverview} />
+              <Route path="/superadmin/leads" component={LeadsOverview} />
 
-            <Route path="/change-password" component={() => <ChangePassword isRequired={false} />} />
-            <Route component={NotFound} />
-          </Switch>
+              <Route path="/change-password" component={() => <ChangePassword isRequired={false} />} />
+              <Route component={NotFound} />
+            </Switch>
+          </RoleGuard>
         </Layout>
       </Route>
     </Switch>
@@ -130,6 +135,27 @@ function Redirect({ to }: { to: string }) {
     setLocation(to);
   }, [to, setLocation]);
   return null;
+}
+
+/**
+ * RoleGuard — proteção de rota por perfil (front-end, Opção 1).
+ * Se o usuário não pode acessar a rota atual, redireciona para seu /inicio.
+ * ⚠️ Proteção visual apenas — backend ainda não valida roles por endpoint.
+ */
+function RoleGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (user && !canAccess(user.role, location)) {
+      setLocation(getHomeForRole(user.role));
+    }
+  }, [user, location, setLocation]);
+
+  // Enquanto redireciona, não renderiza nada para evitar flash da tela bloqueada
+  if (user && !canAccess(user.role, location)) return null;
+
+  return <>{children}</>;
 }
 
 function App() {

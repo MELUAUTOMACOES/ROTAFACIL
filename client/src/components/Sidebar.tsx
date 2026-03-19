@@ -45,7 +45,8 @@ import {
   Building2,
   ChevronsUpDown,
   Check,
-  Loader2
+  Loader2,
+  Home
 } from "lucide-react";
 import {
   Tooltip,
@@ -74,7 +75,7 @@ type NavGroup = {
   icon: any; // Icon for the group
   items?: NavItem[]; // If it has subitems
   href?: string; // If it's a direct link (like Dashboard)
-  permission?: 'all' | 'admin' | 'superadmin';
+  permission?: 'all' | 'admin' | 'superadmin' | 'prestador';
 };
 
 export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCollapse }: SidebarProps) {
@@ -150,8 +151,25 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
   // Permissions logic
   const isSuperAdmin = user?.isSuperAdmin || user?.email === 'lucaspmastaler@gmail.com';
   const isAdmin = user?.role === 'admin' || isSuperAdmin;
+  const isPrestador = user?.role === 'prestador';
 
   const navigationGroups: NavGroup[] = [
+    // 🔒 Grupo exclusivo para Prestador
+    {
+      title: "Meu Espaço",
+      icon: Home,
+      permission: 'prestador',
+      items: [
+        { name: "Início", href: "/inicio", icon: Home },
+        { name: "Prestadores", href: "/prestadores", icon: Truck },
+      ]
+    },
+    {
+      title: "Início",
+      href: "/inicio",
+      icon: Home,
+      permission: 'all'
+    },
     {
       title: "Dashboard",
       href: "/dashboard",
@@ -204,6 +222,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
   ];
 
   const visibleGroups = navigationGroups.filter(group => {
+    // Prestador vê APENAS grupos com permission 'prestador'
+    if (isPrestador) return group.permission === 'prestador';
+    // Grupos exclusivos de prestador são invisíveis para outros perfis
+    if (group.permission === 'prestador') return false;
     if (group.permission === 'superadmin') return isSuperAdmin;
     if (group.permission === 'admin') return isAdmin;
     return true;
