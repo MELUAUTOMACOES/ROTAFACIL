@@ -84,7 +84,7 @@ export default function Login() {
         return;
       }
 
-      setLocation("/dashboard");
+      setLocation("/inicio");
     } catch (err: any) {
       setError(err.message || "Erro ao processar sua solicitação");
     } finally {
@@ -97,7 +97,7 @@ export default function Login() {
     try {
       await selectCompany(companySelectionData.selectionToken, companyId);
       setCompanySelectionData(null);
-      setLocation("/dashboard");
+      setLocation("/inicio");
     } catch (err: any) {
       setError(err.message || "Erro ao selecionar empresa");
       setCompanySelectionData(null);

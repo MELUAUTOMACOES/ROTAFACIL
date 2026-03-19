@@ -139,6 +139,9 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
     const data = await response.json();
     localStorage.setItem("token", data.token);
     setUser(data.user);
+    // Re-carregar dados completos para popular userCompanies imediatamente
+    // (sem isso, o seletor de empresa só aparece após um page refresh)
+    await checkAuth();
   };
 
   // 🏢 MULTI-TENANT: Trocar de empresa após já estar logado

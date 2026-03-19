@@ -3,7 +3,7 @@ import { storage } from "../storage";
 import { insertAccessScheduleSchema } from "@shared/schema";
 import { isAccessAllowed, getMinutesUntilEndOfShift, getAccessDeniedMessage } from "../access-schedule-validator";
 
-// Middleware para verificar se é admin
+// Middleware para verificar se é admin com companyId válido
 function requireAdmin(req: any, res: any, next: any) {
   if (!req.user) {
     return res.status(403).json({ message: 'Acesso negado. Você precisa estar autenticado.' });
@@ -16,9 +16,17 @@ function requireAdmin(req: any, res: any, next: any) {
       requiredRole: 'admin'
     });
   }
+
+  // 🔑 Garante que o companyId está presente — OBRIGATÓRIO para isolamento multi-tenant
+  if (!req.user.companyId) {
+    return res.status(403).json({
+      message: 'Acesso negado. Empresa não identificada no token.',
+    });
+  }
   
   next();
 }
+
 
 export function registerAccessSchedulesRoutes(app: Express, authenticateToken: any) {
   

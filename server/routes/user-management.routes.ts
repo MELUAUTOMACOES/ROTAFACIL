@@ -2,6 +2,7 @@ import type { Express } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
 import { sendVerificationEmail, sendTestEmail, sendPasswordResetEmail } from "../email";
+import { sendInvitationEmail } from "../email-invitation";
 import { 
   createUserByAdminSchema, 
   updateUserByAdminSchema,
@@ -83,8 +84,9 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
       const existingUser = await storage.getUserByEmail(userData.email);
       
       if (existingUser) {
-        // 🏢 MULTI-TENANT: Usuário já existe — verificar se já tem membership nesta empresa
+        // 🏢 MULTI-TENANT: Usuário já existe — verificar isolamento por empresa
         if (adminCompanyId) {
+          // 1. Já é membro desta empresa?
           const existingMembership = await storage.getMembership(existingUser.id, adminCompanyId);
           if (existingMembership) {
             return res.status(400).json({ 
@@ -92,20 +94,59 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
             });
           }
           
-          // Usuário existe mas NÃO está nesta empresa → criar membership
-          await storage.createMembership({
-            userId: existingUser.id,
+          // 2. Usuário existe em OUTRA empresa — NÃO criar membership diretamente.
+          // ✅ Fluxo correto: criar convite pendente e enviar e-mail para aceite.
+          //    Membership só é criada após o usuário aceitar o convite.
+          
+          // Verificar se já existe convite pendente para este e-mail nesta empresa
+          const existingInvitations = await storage.getInvitationsByCompanyId(adminCompanyId);
+          const pendingInvite = existingInvitations.find(
+            inv => inv.email === existingUser.email && inv.status === 'pending'
+          );
+          if (pendingInvite) {
+            return res.status(400).json({
+              message: "Já existe um convite pendente para este e-mail nesta empresa. Aguarde o usuário aceitar.",
+            });
+          }
+          
+          // Mapear role do formulário para role de membership
+          const inviteRole = userData.role === 'admin' ? 'ADMIN'
+            : userData.role === 'operador' ? 'OPERADOR'
+            : 'ADMINISTRATIVO';
+          
+          // Criar convite com token único
+          const inviteToken = crypto.randomBytes(32).toString('hex');
+          const expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + 7); // Válido por 7 dias
+          
+          await storage.createInvitation({
             companyId: adminCompanyId,
-            role: userData.role === 'admin' ? 'ADMIN' : userData.role === 'operador' ? 'OPERADOR' : 'ADMINISTRATIVO',
+            email: existingUser.email,
+            role: inviteRole,
+            token: inviteToken,
+            status: 'pending',
+            expiresAt,
+            invitedBy: req.user.userId,
           });
           
-          console.log(`🏢 [USER MANAGEMENT] Usuário ${existingUser.email} adicionado à empresa ${adminCompanyId} via membership`);
+          // Enviar e-mail de convite para o usuário
+          const company = await storage.getCompanyById(adminCompanyId);
+          const emailResult = await sendInvitationEmail(
+            existingUser.email,
+            company?.name || 'sua empresa',
+            inviteRole,
+            inviteToken
+          );
           
-          const { password, emailVerificationToken, ...sanitizedUser } = existingUser;
+          if (!emailResult.success) {
+            console.warn(`⚠️ [USER MANAGEMENT] Convite criado mas e-mail não foi enviado: ${emailResult.error}`);
+          }
+          
+          console.log(`📧 [USER MANAGEMENT] Convite enviado para ${existingUser.email} → empresa ${adminCompanyId}. Aguardando aceite.`);
+          
           return res.json({ 
-            user: sanitizedUser,
-            message: 'Usuário já existente foi adicionado à sua empresa com sucesso.',
-            addedToCompany: true,
+            message: 'Este e-mail já possui conta na plataforma. Um convite foi enviado para que o usuário aceite o vínculo com sua empresa.',
+            inviteSent: true,
           });
         }
         

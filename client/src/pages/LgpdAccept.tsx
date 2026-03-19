@@ -57,7 +57,7 @@ export default function LgpdAccept() {
             });
 
             // Forçar refresh para atualizar os dados do usuário
-            window.location.href = "/dashboard";
+            window.location.href = "/inicio";
         } catch (error: any) {
             console.error("❌ [LGPD] Erro ao aceitar termos:", error);
             toast({

@@ -125,7 +125,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
   };
 
   const isActive = (href: string) => {
-    if (href === "/dashboard" && (location === "/" || location === "/dashboard")) {
+    if (href === "/inicio" && (location === "/" || location === "/inicio")) {
       return true;
     }
     return location === href;
@@ -260,7 +260,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
 
         {/* Header */}
         <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} h-20 px-6 border-b border-border/40 transition-all duration-300 flex-shrink-0`}>
-          <Link href="/dashboard">
+          <Link href="/inicio">
             <div className="flex items-center space-x-3 cursor-pointer group">
               <div className="bg-amber-500/10 dark:bg-amber-500/20 p-1.5 rounded-xl border border-amber-500/20 group-hover:bg-amber-500/20 dark:group-hover:bg-amber-500/30 transition-colors">
                 <img src={logoImg} alt="RotaFácil Logo" className="h-10 w-10 object-contain" />
