@@ -1860,6 +1860,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/clients/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const clientId = parseInt(req.params.id);
+      if (isNaN(clientId)) {
+        return res.status(400).json({ message: "ID de cliente inválido" });
+      }
+      const client = await storage.getClient(clientId, req.user.companyId);
+      if (!client) {
+        return res.status(404).json({ message: "Cliente não encontrado" });
+      }
+      res.json(client);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/clients/validate-cpf", authenticateToken, async (req: any, res) => {
     try {
       const cpf = req.query.cpf as string;

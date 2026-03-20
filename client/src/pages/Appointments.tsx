@@ -392,7 +392,7 @@ export default function Appointments() {
   const { data: clientsData } = useQuery({
     queryKey: ["/api/clients"],
     queryFn: async () => {
-      const response = await fetch(buildApiUrl("/api/clients?limit=50"), {
+      const response = await fetch(buildApiUrl("/api/clients"), {
         headers: getAuthHeaders(),
       });
       return response.json();

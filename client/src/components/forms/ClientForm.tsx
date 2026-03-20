@@ -58,23 +58,49 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
   });
 
   // AGORA SIM, useStates:
-  const [logradouro, setLogradouro] = useState(form.getValues("logradouro") || "");
-  const [bairro, setBairro] = useState("");
-  const [cidade, setCidade] = useState("");
+  const [logradouro, setLogradouro] = useState(client?.logradouro || "");
+  const [bairro, setBairro] = useState(client?.bairro || "");
+  const [cidade, setCidade] = useState(client?.cidade || "");
   const [estado, setEstado] = useState("");
 
   // ADICIONE ESTE USEEFFECT 👇
   useEffect(() => {
     if (client) {
+      form.reset({
+        name: client.name,
+        email: client.email || "",
+        phone1: client.phone1 || "",
+        phone2: client.phone2 || "",
+        cpf: client.cpf || "",
+        cep: client.cep,
+        logradouro: client.logradouro,
+        numero: client.numero,
+        complemento: client.complemento || "",
+        observacoes: client.observacoes || "",
+      });
+      setCpfInput(client.cpf || "");
       setBairro(client.bairro || "");
       setCidade(client.cidade || "");
       setLogradouro(client.logradouro || "");
     } else {
+      form.reset({
+        name: "",
+        email: "",
+        phone1: "",
+        phone2: "",
+        cpf: "",
+        cep: "",
+        logradouro: "",
+        numero: "",
+        complemento: "",
+        observacoes: "",
+      });
+      setCpfInput("");
       setBairro("");
       setCidade("");
       setLogradouro("");
     }
-  }, [client]);
+  }, [client, form]);
 
   // Monitorar mudanças no CEP para busca automática
   const watchedCep = form.watch("cep");

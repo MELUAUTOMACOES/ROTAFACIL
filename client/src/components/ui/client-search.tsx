@@ -63,9 +63,29 @@ export function ClientSearch({ value, onValueChange, onSelect, placeholder = "Pe
     },
   });
 
+  // Buscar o cliente específico pelo ID (caso não esteja no limit=50)
+  const { data: specificClient } = useQuery<Client | null>({
+    queryKey: ['/api/clients', value],
+    queryFn: async () => {
+      if (!value) return null;
+      console.log("Busca cliente específico por ID:", value);
+      const response = await fetch(buildApiUrl(`/api/clients/${value}`), {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      if (!response.ok) return null;
+      return await response.json();
+    },
+    enabled: !!value && allClients.length > 0 && !allClients.some(c => c.id === value),
+  });
+
   useEffect(() => {
-    if (value && allClients.length > 0) {
-      const client = allClients.find((c) => c.id === value);
+    if (value) {
+      let client = allClients.find((c) => c.id === value);
+      if (!client && specificClient?.id === value) {
+        client = specificClient;
+      }
       if (client) {
         setSelectedClient(client);
         setSearchQuery(client.name);
@@ -75,7 +95,7 @@ export function ClientSearch({ value, onValueChange, onSelect, placeholder = "Pe
       setSelectedClient(null);
       setSearchQuery("");
     }
-  }, [value, allClients]);
+  }, [value, allClients, specificClient]);
 
   // Mostrar resultados quando houver busca e o input estiver focado
   useEffect(() => {
