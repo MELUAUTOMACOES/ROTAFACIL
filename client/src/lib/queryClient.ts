@@ -4,7 +4,18 @@ import { buildApiUrl } from "./api-config";
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let errorMessage = `${res.status}: ${text}`;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.message) {
+        errorMessage = parsed.message;
+      } else if (parsed.error) {
+        errorMessage = parsed.error;
+      }
+    } catch (e) {
+      // Not JSON, keep default format
+    }
+    throw new Error(errorMessage);
   }
 }
 

@@ -64,7 +64,7 @@ import { companies } from "@shared/schema";
 // 🛡️ Rate Limiting para Login (previne brute force)
 const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 5, // Máximo 5 tentativas por janela
+  max: 10, // Máximo 10 tentativas por janela
   message: { message: "Muitas tentativas de login. Tente novamente em 15 minutos." },
   standardHeaders: true,
   legacyHeaders: false,
