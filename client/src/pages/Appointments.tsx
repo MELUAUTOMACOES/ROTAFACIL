@@ -389,7 +389,7 @@ export default function Appointments() {
     setCurrentPage(1);
   }, [serverAssignedType, serverAssignedId]);
 
-  const { data: clientsData } = useQuery({
+  const { data: clientsData, isLoading: clientsLoading } = useQuery({
     queryKey: ["/api/clients"],
     queryFn: async () => {
       const response = await fetch(buildApiUrl("/api/clients"), {
