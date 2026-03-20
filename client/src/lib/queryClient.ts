@@ -5,6 +5,7 @@ async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
     let errorMessage = `${res.status}: ${text}`;
+    let code = undefined;
     try {
       const parsed = JSON.parse(text);
       if (parsed.message) {
@@ -12,9 +13,16 @@ async function throwIfResNotOk(res: Response) {
       } else if (parsed.error) {
         errorMessage = parsed.error;
       }
+      code = parsed.code;
     } catch (e) {
       // Not JSON, keep default format
     }
+    
+    if (res.status === 401) {
+       const event = new CustomEvent("unauthorized", { detail: { message: errorMessage, code } });
+       window.dispatchEvent(event);
+    }
+    
     throw new Error(errorMessage);
   }
 }

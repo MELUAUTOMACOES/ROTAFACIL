@@ -1961,7 +1961,9 @@ export default function RoutesHistoryPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="flex-1 w-full flex flex-col bg-white dark:bg-zinc-950 overflow-hidden min-h-[calc(100vh-4rem)]">
+      {!selectedRoute ? (
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
 
       {/* CTA Fixo - Criar Rota a partir de Agendamentos */}
       <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-zinc-800 dark:to-zinc-900 border-blue-200 dark:border-zinc-700">
@@ -2368,35 +2370,31 @@ export default function RoutesHistoryPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Modal central (layout split — infos à esq., mapa à dir.) */}
-      <Dialog
-        open={!!selectedRoute}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedRoute(null);
-            // Voltar para /routes-history quando fechar o modal
-            setLocation('/routes-history');
-          }
-        }}
-      >
-        <DialogContent
-          className="
-            w-[85vw] h-[80vh] max-w-[1400px] max-h-[90vh]
-            p-0 overflow-hidden
-          "
-        >
+      </div>
+      ) : (
+      <div className="h-full w-full flex flex-col items-center p-0 lg:p-4 bg-slate-50 dark:bg-zinc-950 overflow-hidden">
+        <div className="w-full max-w-[1600px] h-full flex flex-col bg-white dark:bg-zinc-900 rounded-lg shadow-xl border overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           <div className="flex flex-col h-full min-h-0">
             {/* Cabeçalho */}
-            <div className="px-4 py-2 border-b">
-              <DialogHeader className="p-0 space-y-0">
-                <DialogTitle className="text-sm sm:text-base font-semibold leading-tight">
-                  Detalhes da Rota
-                </DialogTitle>
-                <DialogDescription className="text-[11px] sm:text-xs text-gray-500 leading-snug">
+            <div className="px-4 py-3 sm:px-6 sm:py-4 border-b flex items-center bg-white dark:bg-zinc-900 shadow-sm z-10 shrink-0">
+              <Button
+                variant="outline"
+                className="mr-3 sm:mr-4 shrink-0"
+                onClick={() => {
+                  setSelectedRoute(null);
+                  setLocation('/routes-history');
+                }}
+              >
+                 <ChevronLeft className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">Voltar</span>
+              </Button>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base sm:text-lg font-bold truncate">
+                  Detalhes da Rota {routeDetail?.route?.title ? `- ${routeDetail.route.title}` : ''}
+                </h2>
+                <p className="text-xs text-gray-500 truncate">
                   Informações completas sobre a rota selecionada
-                </DialogDescription>
-              </DialogHeader>
+                </p>
+              </div>
             </div>
 
             {/* Corpo: grid responsivo com scroll interno */}
@@ -2898,8 +2896,9 @@ export default function RoutesHistoryPage() {
               </div>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+        </div>
+      )}
 
       {/* Modal de confirmação para remoção de paradas */}
       <Dialog open={removeOpen} onOpenChange={setRemoveOpen}>

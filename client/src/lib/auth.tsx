@@ -3,6 +3,7 @@ import { apiRequest } from "./queryClient";
 import { buildApiUrl } from "./api-config";
 import type { User } from "../../../shared/schema";
 import type { CompanyOption } from "@/components/CompanySelector";
+import { toast } from "@/hooks/use-toast";
 
 // Tipo estendido com campos multi-tenant retornados pelo backend (não estão na tabela users)
 export interface AuthUser extends User {
@@ -52,6 +53,24 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
 
   useEffect(() => {
     checkAuth();
+
+    const handleUnauthorized = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.code === "SYSTEM_UPDATED") {
+        toast({
+          title: "Sistema Atualizado",
+          description: detail.message || "Sua sessão expirou devido a uma atualização do sistema. Faça login novamente.",
+          variant: "destructive",
+        });
+      }
+      setTimeout(() => {
+        logout();
+        window.location.href = '/login';
+      }, 500);
+    };
+
+    window.addEventListener("unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("unauthorized", handleUnauthorized);
   }, []);
 
   const checkAuth = async () => {

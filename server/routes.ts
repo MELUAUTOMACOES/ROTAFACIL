@@ -110,6 +110,9 @@ function getOsrmUrl() {
   return null;
 }
 
+// 🔐 CONFIGURAÇÃO: Versão do Sistema (Usado para forçar logout global)
+const getSystemVersion = () => process.env.SYSTEM_VERSION || "1.0.0";
+
 // Auth middleware
 function authenticateToken(req: any, res: any, next: any) {
   // 🚨 DEV MODE BYPASS: ⚠️ PERIGO! Permite acesso sem autenticação durante desenvolvimento
@@ -173,6 +176,15 @@ function authenticateToken(req: any, res: any, next: any) {
             message: 'Token expired due to password change. Please login again.'
           });
         }
+      }
+
+      // Verificar se a versão do sistema mudou
+      if (decoded.sysVer && decoded.sysVer !== getSystemVersion()) {
+        console.log(`⚠️ [AUTH] Token inválido: versão do sistema atualizada (${decoded.sysVer} -> ${getSystemVersion()})`);
+        return res.status(401).json({ 
+          message: 'O sistema foi atualizado. Faça login novamente para continuar.',
+          code: 'SYSTEM_UPDATED'
+        });
       }
 
       // Decodificar o token e adicionar ao req.user
@@ -1316,7 +1328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const user = await storage.createUser(userData);
-      const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '24h' });
+      const token = jwt.sign({ userId: user.id, email: user.email, sysVer: getSystemVersion() }, JWT_SECRET, { expiresIn: '24h' });
 
       res.json({
         user: {
@@ -1447,6 +1459,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             userId: user.id,
             email: user.email,
             purpose: 'company_selection',
+            sysVer: getSystemVersion()
           }, JWT_SECRET, { expiresIn: '5m' }),
         });
       }
@@ -1606,6 +1619,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: user.role,
         companyId: companyId,
         companyRole: membership.role,
+        sysVer: getSystemVersion()
       }, JWT_SECRET, { expiresIn: '24h' });
 
       // 🔐 Registrar login no log de auditoria
@@ -1687,6 +1701,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: user.role,
         companyId: companyId,
         companyRole: membership.role,
+        sysVer: getSystemVersion()
       }, JWT_SECRET, { expiresIn: '24h' });
 
       // 🔐 Auditoria

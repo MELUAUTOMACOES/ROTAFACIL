@@ -481,12 +481,14 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
       await storage.updateInvitationStatus(invitation.id, 'accepted');
 
       // Gerar token JWT
+      const getSystemVersion = () => process.env.SYSTEM_VERSION || "1.0.0";
       const jwtToken = jwt.sign(
         {
           userId: user.id,
           email: user.email,
           companyId: invitation.companyId,
           companyRole: invitation.role,
+          sysVer: getSystemVersion()
         },
         JWT_SECRET,
         { expiresIn: '7d' }
