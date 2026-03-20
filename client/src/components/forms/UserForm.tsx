@@ -243,7 +243,7 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
           </Label>
           <Select
             value={role}
-            onValueChange={(value) => setValue("role", value as "admin" | "user" | "operador" | "prestador")}
+            onValueChange={(value) => setValue("role", value as "admin" | "user" | "operador" | "prestador" | "tecnico")}
             disabled={isSubmitting}
           >
             <SelectTrigger id="role">
@@ -251,7 +251,6 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="tecnico">Técnico</SelectItem>
-              <SelectItem value="prestador">Prestador (Legado)</SelectItem>
               <SelectItem value="operador">Operador</SelectItem>
               <SelectItem value="admin">Administrador</SelectItem>
             </SelectContent>

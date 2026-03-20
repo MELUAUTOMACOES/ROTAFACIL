@@ -205,49 +205,6 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          
-          {/* Seleção de Usuário Vinculado */}
-          <FormField
-            control={form.control}
-            name="linkedUserId"
-            render={({ field }) => (
-              <FormItem className="mb-4 p-4 border rounded-md bg-gray-50 dark:bg-zinc-800">
-                <FormLabel>Vincular a Usuário do Sistema *</FormLabel>
-                <Select
-                  onValueChange={(value) => {
-                    const id = parseInt(value);
-                    field.onChange(id);
-                    // Preencher dados baseados no usuário selecionado
-                    const selectedUser = users.find((u: User) => u.id === id);
-                    if (selectedUser) {
-                      form.setValue("name", selectedUser.name);
-                      form.setValue("email", selectedUser.email || "");
-                      if (selectedUser.phone) form.setValue("phone", selectedUser.phone);
-                    }
-                  }}
-                  value={field.value ? String(field.value) : undefined}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um usuário para vincular sua conta a este técnico" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Usuários da Empresa</SelectLabel>
-                      {users.map((user: User) => (
-                        <SelectItem key={user.id} value={String(user.id)}>
-                          {user.name} ({user.email}) - {user.role?.toUpperCase()}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-                <p className="text-xs text-gray-500 mt-1">Este técnico representará o usuário selecionado. Ele só verá as rotas/agendamentos atribuídos a ele.</p>
-              </FormItem>
-            )}
-          />
 
           {/* Upload de Foto do Técnico */}
           <div className="flex items-center gap-4">
@@ -318,6 +275,58 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
             </div>
           </div>
 
+          {/* Seleção de Usuário Vinculado */}
+          <FormField
+            control={form.control}
+            name="linkedUserId"
+            render={({ field }) => (
+              <FormItem className="mb-4 p-4 border border-amber-200 dark:border-amber-900 rounded-md bg-amber-50/50 dark:bg-amber-900/10">
+                <FormLabel className="text-amber-800 dark:text-amber-500 font-semibold">Vincular a Usuário do Sistema *</FormLabel>
+                <Select
+                  onValueChange={(value) => {
+                    const id = parseInt(value);
+                    field.onChange(id);
+                    // Preencher dados baseados no usuário selecionado
+                    const selectedUser = users.find((u: User) => u.id === id);
+                    if (selectedUser) {
+                      form.setValue("name", selectedUser.name);
+                      form.setValue("email", selectedUser.email || "");
+                      if (selectedUser.phone) form.setValue("phone", selectedUser.phone);
+                      if (selectedUser.cep) form.setValue("cep", selectedUser.cep);
+                      if (selectedUser.logradouro) form.setValue("logradouro", selectedUser.logradouro);
+                      if (selectedUser.numero) form.setValue("numero", selectedUser.numero);
+                      if (selectedUser.complemento) form.setValue("complemento", selectedUser.complemento);
+                      if (selectedUser.bairro) form.setValue("bairro", selectedUser.bairro);
+                      if (selectedUser.cidade) form.setValue("cidade", selectedUser.cidade);
+                      if (selectedUser.estado) form.setValue("estado", selectedUser.estado);
+                    }
+                  }}
+                  value={field.value ? String(field.value) : undefined}
+                >
+                  <FormControl>
+                    <SelectTrigger className="border-amber-300 dark:border-amber-700 bg-white dark:bg-zinc-800">
+                      <SelectValue placeholder="Selecione um usuário para vincular sua conta a este técnico" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Usuários da Empresa</SelectLabel>
+                      {users.map((user: User) => (
+                        <SelectItem key={user.id} value={String(user.id)}>
+                          {user.name} ({user.email}) - {user.role?.toUpperCase()}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+                <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-1">
+                  Os dados pessoais abaixo serão preenchidos automaticamente e não podem ser editados aqui.
+                </p>
+              </FormItem>
+            )}
+          />
+
           <div className="grid gap-4 md:grid-cols-2">
             <FormField
               control={form.control}
@@ -326,7 +335,12 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                 <FormItem>
                   <FormLabel>Nome *</FormLabel>
                   <FormControl>
-                    <Input placeholder="Nome completo do técnico" {...field} />
+                    <Input 
+                      placeholder="Nome completo do técnico" 
+                      {...field} 
+                      readOnly
+                      className="bg-gray-100 dark:bg-zinc-800 text-gray-500 cursor-not-allowed border-dashed"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -385,19 +399,8 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                       placeholder="email@exemplo.com"
                       {...field}
                       value={field.value || ""}
-                      onChange={(e) => {
-                        // Validação de email: deve conter @ para ser válido
-                        const value = e.target.value;
-                        field.onChange(value);
-                        if (value && !value.includes('@')) {
-                          form.setError('email', {
-                            type: 'manual',
-                            message: 'Email deve conter o caractere @'
-                          });
-                        } else {
-                          form.clearErrors('email');
-                        }
-                      }}
+                      readOnly
+                      className="bg-gray-100 dark:bg-zinc-800 text-gray-500 cursor-not-allowed border-dashed"
                     />
                   </FormControl>
                   <FormMessage />
@@ -418,20 +421,8 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                     <Input
                       placeholder="(11) 99999-9999"
                       {...field}
-                      onChange={(e) => {
-                        // Formatação automática do telefone: aceitar apenas números e formatar
-                        let value = e.target.value.replace(/\D/g, '');
-                        if (value.length <= 10) {
-                          // Formato: (XX)XXXX-XXXX
-                          if (value.length > 2) value = `(${value.slice(0, 2)}) ${value.slice(2)}`;
-                          if (value.length > 9) value = value.slice(0, 9) + '-' + value.slice(9);
-                        } else {
-                          // Formato: (XX)XXXXX-XXXX
-                          if (value.length > 2) value = `(${value.slice(0, 2)}) ${value.slice(2)}`;
-                          if (value.length > 10) value = value.slice(0, 10) + '-' + value.slice(10, 14);
-                        }
-                        field.onChange(value);
-                      }}
+                      readOnly
+                      className="bg-gray-100 dark:bg-zinc-800 text-gray-500 cursor-not-allowed border-dashed"
                     />
                   </FormControl>
                   <FormMessage />
@@ -458,37 +449,8 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                         placeholder="00000-000"
                         maxLength={9}
                         {...field}
-                        onChange={async (e) => {
-                          let value = e.target.value.replace(/\D/g, '');
-                          if (value.length > 5) {
-                            value = value.slice(0, 5) + '-' + value.slice(5, 8);
-                          }
-                          field.onChange(value);
-
-                          // Busca automática de endereço quando CEP tem 8 dígitos
-                          if (value.replace(/\D/g, '').length === 8) {
-                            try {
-                              const endereco = await buscarEnderecoPorCep(value);
-
-                              // Preenche os campos automaticamente
-                              form.setValue("logradouro", endereco.logradouro || "");
-                              form.setValue("bairro", endereco.bairro || "");
-                              form.setValue("cidade", endereco.localidade || "");
-                              form.setValue("estado", endereco.uf || "");
-
-                            } catch (err) {
-                              toast({
-                                title: "CEP não encontrado",
-                                description: "Preencha o endereço manualmente.",
-                                variant: "destructive",
-                              });
-                              form.setValue("logradouro", "");
-                              form.setValue("bairro", "");
-                              form.setValue("cidade", "");
-                              form.setValue("estado", "");
-                            }
-                          }
-                        }}
+                        readOnly
+                        className="bg-gray-100 dark:bg-zinc-800 text-gray-500 cursor-not-allowed border-dashed"
                       />
                     </FormControl>
                     <FormMessage />
@@ -506,10 +468,8 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                       <Input
                         placeholder="123"
                         {...field}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/\D/g, '');
-                          field.onChange(value);
-                        }}
+                        readOnly
+                        className="bg-gray-100 dark:bg-zinc-800 text-gray-500 cursor-not-allowed border-dashed"
                       />
                     </FormControl>
                     <FormMessage />
@@ -524,7 +484,12 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                   <FormItem>
                     <FormLabel>Logradouro *</FormLabel>
                     <FormControl>
-                      <Input placeholder="Rua das Flores" {...field} />
+                      <Input 
+                        placeholder="Rua das Flores" 
+                        {...field} 
+                        readOnly 
+                        className="bg-gray-100 dark:bg-zinc-800 text-gray-500 cursor-not-allowed border-dashed" 
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -538,7 +503,13 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                   <FormItem>
                     <FormLabel>Complemento</FormLabel>
                     <FormControl>
-                      <Input placeholder="Apto 123" {...field} value={field.value || ""} />
+                      <Input 
+                        placeholder="Apto 123" 
+                        {...field} 
+                        value={field.value || ""} 
+                        readOnly 
+                        className="bg-gray-100 dark:bg-zinc-800 text-gray-500 cursor-not-allowed border-dashed" 
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -552,7 +523,12 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                   <FormItem>
                     <FormLabel>Bairro *</FormLabel>
                     <FormControl>
-                      <Input placeholder="Centro" {...field} />
+                      <Input 
+                        placeholder="Centro" 
+                        {...field} 
+                        readOnly 
+                        className="bg-gray-100 dark:bg-zinc-800 text-gray-500 cursor-not-allowed border-dashed" 
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -566,7 +542,12 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                   <FormItem>
                     <FormLabel>Cidade *</FormLabel>
                     <FormControl>
-                      <Input placeholder="São Paulo" {...field} />
+                      <Input 
+                        placeholder="São Paulo" 
+                        {...field} 
+                        readOnly 
+                        className="bg-gray-100 dark:bg-zinc-800 text-gray-500 cursor-not-allowed border-dashed" 
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -580,7 +561,13 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
                   <FormItem>
                     <FormLabel>Estado (UF) *</FormLabel>
                     <FormControl>
-                      <Input placeholder="SP" maxLength={2} {...field} />
+                      <Input 
+                        placeholder="SP" 
+                        maxLength={2} 
+                        {...field} 
+                        readOnly 
+                        className="bg-gray-100 dark:bg-zinc-800 text-gray-500 cursor-not-allowed border-dashed" 
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
