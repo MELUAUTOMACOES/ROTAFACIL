@@ -55,7 +55,7 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
       ? {
         name: user.name,
         username: user.username,
-        role: user.role as "admin" | "user" | "operador" | "prestador",
+        role: user.role as "admin" | "user" | "operador" | "prestador" | "tecnico",
         phone: user.phone || "",
         cep: user.cep || "",
         logradouro: user.logradouro || "",
@@ -250,7 +250,8 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
               <SelectValue placeholder="Selecione o perfil" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="prestador">Prestador</SelectItem>
+              <SelectItem value="tecnico">Técnico</SelectItem>
+              <SelectItem value="prestador">Prestador (Legado)</SelectItem>
               <SelectItem value="operador">Operador</SelectItem>
               <SelectItem value="admin">Administrador</SelectItem>
             </SelectContent>

@@ -1,8 +1,8 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { extendedInsertTechnicianSchema, type InsertTechnician, type Technician, type Service } from "@shared/schema";
+import { extendedInsertTechnicianSchema, type InsertTechnician, type Technician, type Service, type User } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserCog, Mail, Phone, Wrench, MapPin, FileText, Clock as ClockIcon, Camera, X } from "lucide-react";
 import { useState, useRef } from "react";
 
@@ -36,9 +37,14 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(technician?.photoUrl || null);
 
+  const { data: users = [] } = useQuery<User[]>({ 
+    queryKey: ["/api/users"] 
+  });
+
   const form = useForm<InsertTechnician>({
     resolver: zodResolver(extendedInsertTechnicianSchema),
     defaultValues: technician ? {
+      linkedUserId: technician.linkedUserId || undefined,
       name: technician.name,
       email: technician.email || "",
       phone: technician.phone,
@@ -69,6 +75,7 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
       isActive: technician.isActive,
       photoUrl: technician.photoUrl || "",
     } : {
+      linkedUserId: undefined,
       name: "",
       email: "",
       phone: "",
@@ -198,6 +205,50 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          
+          {/* Seleção de Usuário Vinculado */}
+          <FormField
+            control={form.control}
+            name="linkedUserId"
+            render={({ field }) => (
+              <FormItem className="mb-4 p-4 border rounded-md bg-gray-50 dark:bg-zinc-800">
+                <FormLabel>Vincular a Usuário do Sistema *</FormLabel>
+                <Select
+                  onValueChange={(value) => {
+                    const id = parseInt(value);
+                    field.onChange(id);
+                    // Preencher dados baseados no usuário selecionado
+                    const selectedUser = users.find((u: User) => u.id === id);
+                    if (selectedUser) {
+                      form.setValue("name", selectedUser.name);
+                      form.setValue("email", selectedUser.email || "");
+                      if (selectedUser.phone) form.setValue("phone", selectedUser.phone);
+                    }
+                  }}
+                  value={field.value ? String(field.value) : undefined}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um usuário para vincular sua conta a este técnico" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Usuários da Empresa</SelectLabel>
+                      {users.map((user: User) => (
+                        <SelectItem key={user.id} value={String(user.id)}>
+                          {user.name} ({user.email}) - {user.role?.toUpperCase()}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+                <p className="text-xs text-gray-500 mt-1">Este técnico representará o usuário selecionado. Ele só verá as rotas/agendamentos atribuídos a ele.</p>
+              </FormItem>
+            )}
+          />
+
           {/* Upload de Foto do Técnico */}
           <div className="flex items-center gap-4">
             <div className="relative">

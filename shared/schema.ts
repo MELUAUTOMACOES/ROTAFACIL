@@ -170,7 +170,8 @@ export const technicians = pgTable("technicians", {
   isActive: boolean("is_active").default(true).notNull(),
   // Foto do técnico para exibição no mapa e identificação visual
   photoUrl: text("photo_url"), // URL ou Base64 da foto do técnico
-  userId: integer("user_id").notNull().references(() => users.id),
+  userId: integer("user_id").notNull().references(() => users.id), // Criador do registro original
+  linkedUserId: integer("linked_user_id").references(() => users.id), // CONTA REAL DE LOGIN DESSE TÉCNICO
   companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -744,7 +745,7 @@ export const createUserByAdminSchema = z.object({
   name: z.string().min(3, "Nome deve ter no mínimo 3 caracteres"),
   email: z.string().email("Email inválido"),
   username: z.string().min(3, "Username deve ter no mínimo 3 caracteres"),
-  role: z.enum(["admin", "user", "operador", "prestador"]),
+  role: z.enum(["admin", "user", "operador", "prestador", "tecnico"]),
   phone: z.string().optional(),
   cep: z.string().optional(),
   logradouro: z.string().optional(),
@@ -759,7 +760,7 @@ export const createUserByAdminSchema = z.object({
 export const updateUserByAdminSchema = z.object({
   name: z.string().min(3).optional(),
   username: z.string().min(3).optional(),
-  role: z.enum(["admin", "user", "operador"]).optional(),
+  role: z.enum(["admin", "user", "operador", "prestador", "tecnico"]).optional(),
   phone: z.string().optional(),
   cep: z.string().optional(),
   logradouro: z.string().optional(),

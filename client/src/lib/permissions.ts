@@ -14,6 +14,7 @@
  */
 const ROLE_ALLOWED_PATHS: Record<string, string[]> = {
     prestador: ['/inicio', '/prestadores'],
+    tecnico: ['/inicio', '/prestadores'],
 };
 
 /**
@@ -40,6 +41,6 @@ export function canAccess(role: string | undefined, path: string): boolean {
  * - demais   → /inicio (home interna padrão)
  */
 export function getHomeForRole(role: string | undefined): string {
-    if (role === 'prestador') return '/prestadores';
+    if (role === 'prestador' || role === 'tecnico') return '/prestadores';
     return '/inicio';
 }

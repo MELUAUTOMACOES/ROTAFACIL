@@ -1294,7 +1294,19 @@ export class DatabaseStorage implements IStorage {
     const dateStrSP = formatDateForSQLComparison(date);
 
     // Buscar técnico associado ao usuário (filtrado por companyId)
-    const [tech] = await db.select().from(technicians).where(and(eq(technicians.userId, userId), eq(technicians.companyId, companyId)));
+    // FALLBACK: Tenta linkedUserId (conta real logada) OU userId (criador/comportamento legado)
+    const [tech] = await db
+      .select()
+      .from(technicians)
+      .where(
+        and(
+          or(
+            eq(technicians.linkedUserId, userId),
+            eq(technicians.userId, userId)
+          ),
+          eq(technicians.companyId, companyId)
+        )
+      );
 
     // Buscar equipes que o usuário faz parte (filtrado por companyId via teamMembers)
     const userTeams = await db

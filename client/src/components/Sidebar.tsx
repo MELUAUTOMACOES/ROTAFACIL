@@ -151,7 +151,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
   // Permissions logic
   const isSuperAdmin = user?.isSuperAdmin || user?.email === 'lucaspmastaler@gmail.com';
   const isAdmin = user?.role === 'admin' || isSuperAdmin;
-  const isPrestador = user?.role === 'prestador';
+  const isPrestador = user?.role === 'prestador' || user?.role === 'tecnico';
 
   const navigationGroups: NavGroup[] = [
     // 🔒 Grupo exclusivo para Prestador
