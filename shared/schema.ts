@@ -744,7 +744,7 @@ export const createUserByAdminSchema = z.object({
   name: z.string().min(3, "Nome deve ter no mínimo 3 caracteres"),
   email: z.string().email("Email inválido"),
   username: z.string().min(3, "Username deve ter no mínimo 3 caracteres"),
-  role: z.enum(["admin", "user", "operador"]),
+  role: z.enum(["admin", "user", "operador", "prestador"]),
   phone: z.string().optional(),
   cep: z.string().optional(),
   logradouro: z.string().optional(),

@@ -112,6 +112,7 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
           // Mapear role do formulário para role de membership
           const inviteRole = userData.role === 'admin' ? 'ADMIN'
             : userData.role === 'operador' ? 'OPERADOR'
+            : userData.role === 'prestador' ? 'OPERADOR'
             : 'ADMINISTRATIVO';
           
           // Criar convite com token único
@@ -164,7 +165,7 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
         await storage.createMembership({
           userId: user.id,
           companyId: adminCompanyId,
-          role: userData.role === 'admin' ? 'ADMIN' : userData.role === 'operador' ? 'OPERADOR' : 'ADMINISTRATIVO',
+          role: userData.role === 'admin' ? 'ADMIN' : userData.role === 'operador' ? 'OPERADOR' : userData.role === 'prestador' ? 'OPERADOR' : 'ADMINISTRATIVO',
         });
         console.log(`🏢 [USER MANAGEMENT] Membership criada para user ${user.id} na empresa ${adminCompanyId}`);
       }
