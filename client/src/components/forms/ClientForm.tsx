@@ -106,6 +106,11 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
   const watchedCep = form.watch("cep");
   useEffect(() => {
     const cleanCep = watchedCep?.replace(/\D/g, '') || "";
+    const originalCep = client?.cep?.replace(/\D/g, '') || "";
+    
+    // Se for o mesmo CEP que já veio do backend (edição), não busca novamente e preserva os dados
+    if (client && cleanCep === originalCep) return;
+
     if (cleanCep.length === 8) {
       const fetchAddress = async () => {
         try {
@@ -126,13 +131,12 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
           form.setFocus("numero");
 
         } catch (error) {
-          // Silent fail or minimal toast if user just finished typing
           console.warn("CEP lookup failed", error);
         }
       };
       fetchAddress();
     }
-  }, [watchedCep, form]);
+  }, [watchedCep, form, client]);
 
   // Query para validação de CPF
   const { data: cpfValidation, refetch: validateCpf } = useQuery({

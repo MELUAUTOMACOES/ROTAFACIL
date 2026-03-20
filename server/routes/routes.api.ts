@@ -2760,6 +2760,38 @@ export function registerRoutesAPI(app: Express) {
               console.log(`✅ [CONFIRM] Agendamentos atualizados para status 'confirmed'`);
             }
           }
+        } else if (status === 'draft' || status === 'cancelado') {
+          console.log(`🔄 [REVERT] Rota indo para ${status}. Verificando agendamentos para reverter.`);
+          
+          const stopsThisRoute = await db
+            .select({ appointmentNumericId: stopsTbl.appointmentNumericId })
+            .from(stopsTbl)
+            .where(eq(stopsTbl.routeId, routeId));
+
+          const apptIds = stopsThisRoute
+            .map(s => s.appointmentNumericId)
+            .filter((id): id is number => id !== null && id !== undefined);
+
+          if (apptIds.length > 0) {
+            const appointmentsForRevert = await db
+              .select({ id: appointments.id, status: appointments.status })
+              .from(appointments)
+              .where(inArray(appointments.id, apptIds));
+
+            // Só revertemos agendamentos que estão de fato confirmados (evita mexer em 'completed' ou 'cancelled' ou se já era 'scheduled')
+            const idsToRevert = appointmentsForRevert
+              .filter(a => a.status === 'confirmed')
+              .map(a => a.id);
+
+            if (idsToRevert.length > 0) {
+              console.log(`🔄 [REVERT] Atualizando ${idsToRevert.length} agendamentos de volta para 'scheduled'`);
+              await db
+                .update(appointments)
+                .set({ status: 'scheduled' })
+                .where(inArray(appointments.id, idsToRevert));
+              console.log(`✅ [REVERT] Agendamentos revertidos com sucesso`);
+            }
+          }
         }
 
 

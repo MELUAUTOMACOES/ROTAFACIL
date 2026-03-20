@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { AppointmentExecutionModal } from "@/components/provider/AppointmentExecutionModal";
@@ -684,10 +685,24 @@ export default function PrestadoresPage() {
                 <TabsContent value="routes" className="mt-0">
                     {/* Map Actions */}
                     <div className="p-4 grid grid-cols-3 gap-2">
-                        <Button variant="outline" className="w-full text-xs" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${stops[0]?.lat},${stops[0]?.lng}`, '_blank')}>
-                            <MapIcon className="w-4 h-4 mr-1" />
-                            Mapa
-                        </Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="w-full text-xs">
+                                    <MapIcon className="w-4 h-4 mr-1" />
+                                    Mapa
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-48">
+                                <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${stops[0]?.lat},${stops[0]?.lng}`, '_blank')} className="cursor-pointer">
+                                    <MapIcon className="w-4 h-4 mr-2" />
+                                    Google Maps
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => window.open(stops[0]?.lat && stops[0]?.lng ? `https://waze.com/ul?ll=${stops[0]?.lat},${stops[0]?.lng}&navigate=yes` : `https://waze.com/ul?q=${encodeURIComponent(stops[0]?.address || stops[0]?.appointment?.address || '')}&navigate=yes`, '_blank')} className="cursor-pointer">
+                                    <Navigation className="w-4 h-4 mr-2" />
+                                    Waze
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                         <Button variant="outline" className="w-full text-xs" onClick={() => setShowQRModal(true)}>
                             <QrCode className="w-4 h-4 mr-1" />
                             QR Code
@@ -765,16 +780,28 @@ export default function PrestadoresPage() {
 
                                                 {/* Botões WhatsApp */}
                                                 <div className="flex gap-2 ml-2" onClick={(e) => e.stopPropagation()}>
-                                                    {/* Botão Google Maps */}
-                                                    <a
-                                                        href={`https://www.google.com/maps/dir/?api=1&destination=${stop.lat && stop.lng ? `${stop.lat},${stop.lng}` : encodeURIComponent(stop.address || stop.appointment?.address || '')}`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="p-2 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition-colors shadow-sm"
-                                                        title="Abrir no Google Maps"
-                                                    >
-                                                        <MapIcon size={18} />
-                                                    </a>
+                                                    {/* Botão de Mapa com opção Maps/Waze */}
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <button
+                                                                type="button"
+                                                                className="p-2 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition-colors shadow-sm focus:outline-none"
+                                                                title="Abrir Mapa"
+                                                            >
+                                                                <MapIcon size={18} />
+                                                            </button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end" className="w-48">
+                                                            <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${stop.lat && stop.lng ? `${stop.lat},${stop.lng}` : encodeURIComponent(stop.address || stop.appointment?.address || '')}`, '_blank')} className="cursor-pointer">
+                                                                <MapIcon className="w-4 h-4 mr-2" />
+                                                                Google Maps
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => window.open(stop.lat && stop.lng ? `https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes` : `https://waze.com/ul?q=${encodeURIComponent(stop.address || stop.appointment?.address || '')}&navigate=yes`, '_blank')} className="cursor-pointer">
+                                                                <Navigation className="w-4 h-4 mr-2" />
+                                                                Waze
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
 
                                                     {stop.appointment?.phone1 && generateWhatsAppLink(stop.appointment.phone1, stop.appointment) && (
                                                         <a
