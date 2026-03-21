@@ -48,6 +48,7 @@ import { registerLeadsRoutes } from "./routes/leads.routes";
 import { trackCompanyAudit, getAuditDescription } from "./audit.helpers";
 import { isAccessAllowed, getAccessDeniedMessage } from "./access-schedule-validator";
 import { requireLgpdAccepted } from "./middleware/lgpd.middleware";
+import { requireRole } from "./middleware/role.middleware";
 import { LGPD_VERSION } from "@shared/constants";
 import { formatDateForSQLComparison, nowInSaoPaulo } from "./timezone-helper";
 import {
