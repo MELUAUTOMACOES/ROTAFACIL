@@ -950,7 +950,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== FUEL RECORDS (ABASTECIMENTO) ====================
 
   // Listar registros de abastecimento (com filtros opcionais)
-  app.get("/api/fuel-records", authenticateToken, async (req: any, res) => {
+  app.get("/api/fuel-records", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const { vehicleId, startDate, endDate } = req.query;
 
@@ -976,7 +976,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Criar registro de abastecimento
-  app.post("/api/fuel-records", authenticateToken, async (req: any, res) => {
+  app.post("/api/fuel-records", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const { vehicleId, fuelType, liters, pricePerLiter, totalCost, odometerKm, notes, fuelDate, occurrenceId } = req.body;
 
@@ -1005,7 +1005,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Estatísticas de consumo por veículo
-  app.get("/api/fuel-records/vehicle/:id/stats", authenticateToken, async (req: any, res) => {
+  app.get("/api/fuel-records/vehicle/:id/stats", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const vehicleId = parseInt(req.params.id);
       const stats = await storage.getVehicleFuelStats(vehicleId, req.user.companyId);
@@ -1017,7 +1017,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dashboard: Fleet fuel statistics (with optional filters)
-  app.get("/api/dashboard/fuel-stats", authenticateToken, async (req: any, res) => {
+  app.get("/api/dashboard/fuel-stats", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const { vehicleIds, fuelTypes, startDate, endDate } = req.query;
 
@@ -1825,7 +1825,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Clients routes
-  app.get("/api/clients", authenticateToken, async (req: any, res) => {
+  app.get("/api/clients", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       // Se não houver parâmetros de paginação, retorna todos os clientes (compatibilidade)
       if (!req.query.page && !req.query.limit) {
@@ -1857,7 +1857,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/clients/search", authenticateToken, async (req: any, res) => {
+  app.get("/api/clients/search", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const { q } = req.query;
       const page = parseInt(req.query.page as string) || 1;
@@ -1875,7 +1875,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/clients/:id", authenticateToken, async (req: any, res) => {
+  app.get("/api/clients/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const clientId = parseInt(req.params.id);
       if (isNaN(clientId)) {
@@ -1891,7 +1891,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/clients/validate-cpf", authenticateToken, async (req: any, res) => {
+  app.get("/api/clients/validate-cpf", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const cpf = req.query.cpf as string;
       console.log("Validação de CPF:", cpf);
@@ -1918,7 +1918,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/clients", authenticateToken, async (req: any, res) => {
+  app.post("/api/clients", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const clientData = insertClientSchema.parse(req.body);
       const client = await storage.createClient(clientData, req.user.userId, req.user.companyId);
@@ -1937,7 +1937,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/clients/:id", authenticateToken, async (req: any, res) => {
+  app.put("/api/clients/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       console.log("📝 [PUT /clients] payload recebido:", req.body); // <- vê se lat/lng estão vindo
@@ -1961,7 +1961,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
 
-  app.post("/api/clients/import", authenticateToken, async (req: any, res) => {
+  app.post("/api/clients/import", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const { clients } = req.body;
       if (!Array.isArray(clients)) {
@@ -2057,7 +2057,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/clients/:id", authenticateToken, async (req: any, res) => {
+  app.delete("/api/clients/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const success = await storage.deleteClient(id, req.user.companyId);
@@ -2079,7 +2079,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Services routes
-  app.get("/api/services", authenticateToken, async (req: any, res) => {
+  app.get("/api/services", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const page = Math.max(1, parseInt(req.query.page as string) || 1);
       const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string) || 25));
@@ -2095,7 +2095,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/services", authenticateToken, async (req: any, res) => {
+  app.post("/api/services", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const serviceData = insertServiceSchema.parse(req.body);
       const service = await storage.createService(serviceData, req.user.userId, req.user.companyId); // userId kept for INSERT
@@ -2114,7 +2114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/services/:id", authenticateToken, async (req: any, res) => {
+  app.put("/api/services/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const serviceData = insertServiceSchema.partial().parse(req.body);
@@ -2125,7 +2125,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/services/:id", authenticateToken, async (req: any, res) => {
+  app.delete("/api/services/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const success = await storage.deleteService(id, req.user.companyId);
@@ -2147,7 +2147,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Technicians routes
-  app.get("/api/technicians", authenticateToken, async (req: any, res) => {
+  app.get("/api/technicians", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const page = Math.max(1, parseInt(req.query.page as string) || 1);
       const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string) || 25));
@@ -2164,7 +2164,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/technicians", authenticateToken, async (req: any, res) => {
+  app.post("/api/technicians", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     console.log("==== LOG INÍCIO: POST /api/technicians ====");
     console.log("Dados recebidos:");
     console.log(JSON.stringify(req.body, null, 2));
@@ -2194,7 +2194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/technicians/:id", authenticateToken, async (req: any, res) => {
+  app.put("/api/technicians/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const technicianData = insertTechnicianSchema.partial().parse(req.body);
@@ -2205,7 +2205,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/technicians/:id", authenticateToken, async (req: any, res) => {
+  app.delete("/api/technicians/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const success = await storage.deleteTechnician(id, req.user.companyId);
@@ -2334,7 +2334,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== VEHICLES ROUTES ====================
 
-  app.get("/api/vehicles", authenticateToken, async (req: any, res) => {
+  app.get("/api/vehicles", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2402,7 +2402,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/vehicles/:id", authenticateToken, async (req: any, res) => {
+  app.get("/api/vehicles/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2421,7 +2421,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/vehicles", authenticateToken, async (req: any, res) => {
+  app.post("/api/vehicles", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2464,7 +2464,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/vehicles/:id", authenticateToken, async (req: any, res) => {
+  app.put("/api/vehicles/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2507,7 +2507,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/vehicles/:id", authenticateToken, async (req: any, res) => {
+  app.delete("/api/vehicles/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2532,7 +2532,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // 🆕 Endpoint para prestadores: lista veículos que ele pode usar
-  app.get("/api/vehicles/available-for-me", authenticateToken, async (req: any, res) => {
+  app.get("/api/vehicles/available-for-me", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2554,7 +2554,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== VEHICLE DOCUMENTS ROUTES ====================
 
   // Lista documentos de um veículo
-  app.get("/api/vehicles/:vehicleId/documents", authenticateToken, async (req: any, res) => {
+  app.get("/api/vehicles/:vehicleId/documents", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const vehicleId = parseInt(req.params.vehicleId);
       const documents = await storage.getVehicleDocuments(vehicleId, req.user.companyId);
@@ -2565,7 +2565,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Criar documento
-  app.post("/api/vehicles/:vehicleId/documents", authenticateToken, async (req: any, res) => {
+  app.post("/api/vehicles/:vehicleId/documents", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const vehicleId = parseInt(req.params.vehicleId);
 
@@ -2590,7 +2590,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Excluir documento
-  app.delete("/api/vehicles/:vehicleId/documents/:id", authenticateToken, async (req: any, res) => {
+  app.delete("/api/vehicles/:vehicleId/documents/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const success = await storage.deleteVehicleDocument(id, req.user.companyId);
@@ -2606,7 +2606,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== VEHICLE MAINTENANCES ROUTES ====================
 
   // Lista manutenções de um veículo
-  app.get("/api/vehicles/:vehicleId/maintenances", authenticateToken, async (req: any, res) => {
+  app.get("/api/vehicles/:vehicleId/maintenances", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const vehicleId = parseInt(req.params.vehicleId);
       const maintenances = await storage.getVehicleMaintenances(vehicleId, req.user.companyId);
@@ -2635,7 +2635,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Criar manutenção
-  app.post("/api/vehicles/:vehicleId/maintenances", authenticateToken, async (req: any, res) => {
+  app.post("/api/vehicles/:vehicleId/maintenances", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const vehicleId = parseInt(req.params.vehicleId);
 
@@ -2804,7 +2804,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Appointments routes
-  app.get("/api/appointments", authenticateToken, async (req: any, res) => {
+  app.get("/api/appointments", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const startTime = Date.now();
 
@@ -3050,7 +3050,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/appointments/date/:date", authenticateToken, async (req: any, res) => {
+  app.get("/api/appointments/date/:date", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const date = req.params.date;
       const appointments = await storage.getAppointmentsByDate(date, req.user.companyId);
@@ -3060,7 +3060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/appointments", authenticateToken, async (req: any, res) => {
+  app.post("/api/appointments", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const appointmentData = extendedInsertAppointmentSchema.parse(req.body);
 
@@ -3127,7 +3127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/appointments/import", authenticateToken, async (req: any, res) => {
+  app.post("/api/appointments/import", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const { appointments } = req.body;
       if (!Array.isArray(appointments)) {
@@ -3296,7 +3296,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/appointments/:id - Obter detalhes de um agendamento específico
-  app.get("/api/appointments/:id", authenticateToken, async (req: any, res) => {
+  app.get("/api/appointments/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       // Validate that id is numeric to avoid conflict with other routes
       if (isNaN(Number(req.params.id))) {
@@ -3318,7 +3318,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/appointments/:id/history - Obter histórico de um agendamento
-  app.get("/api/appointments/:id/history", authenticateToken, async (req: any, res) => {
+  app.get("/api/appointments/:id/history", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
@@ -4019,7 +4019,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/appointments/:id", authenticateToken, async (req: any, res) => {
+  app.put("/api/appointments/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const appointmentData = req.body;
@@ -4151,7 +4151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/appointments/:id", authenticateToken, async (req: any, res) => {
+  app.patch("/api/appointments/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     console.log(`==== LOG INÍCIO: PATCH /api/appointments/${req.params.id} ====`);
     console.log("Dados recebidos:");
     console.log(JSON.stringify(req.body, null, 2));
@@ -4315,7 +4315,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/appointments/:id", authenticateToken, async (req: any, res) => {
+  app.delete("/api/appointments/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     console.log(`==== LOG INÍCIO: DELETE /api/appointments/${req.params.id} ====`);
 
     try {
@@ -4354,7 +4354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Geocodificar e salvar coordenadas de appointments que não têm lat/lng
   // Body: { appointmentIds: number[] }
   // Retorno: { updatedIds: number[], failed: Array<{id:number, error:string}> }
-  app.post("/api/appointments/geocode-missing", authenticateToken, async (req: any, res) => {
+  app.post("/api/appointments/geocode-missing", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const ids = (req.body?.appointmentIds ?? []).filter((x: any) => Number.isFinite(x));
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -4684,7 +4684,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/appointments/:id/history - Buscar histórico de um agendamento
-  app.get("/api/appointments/:id/history", authenticateToken, async (req: any, res) => {
+  app.get("/api/appointments/:id/history", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const appointmentId = parseInt(req.params.id);
 
@@ -4886,7 +4886,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Business Rules routes
-  app.get("/api/business-rules", authenticateToken, async (req: any, res) => {
+  app.get("/api/business-rules", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const businessRules = await storage.getBusinessRules(req.user.companyId);
       res.json(businessRules || {});
@@ -4895,7 +4895,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/business-rules", authenticateToken, async (req: any, res) => {
+  app.post("/api/business-rules", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const businessRulesData = insertBusinessRulesSchema.parse(req.body);
       const businessRules = await storage.createBusinessRules(businessRulesData, req.user.userId, req.user.companyId);
@@ -4905,7 +4905,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/business-rules/:id", authenticateToken, async (req: any, res) => {
+  app.patch("/api/business-rules/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const businessRulesData = insertBusinessRulesSchema.partial().parse(req.body);
