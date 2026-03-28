@@ -798,7 +798,9 @@ export default function Appointments() {
   };
 
   // Nova função para visualizar rota SEM otimizar (na ordem dos agendamentos selecionados)
-  const handleViewRoute = async () => {
+  const handleViewRoute = async (overrideEndAtStart?: boolean) => {
+    const currentEndAtStart = overrideEndAtStart !== undefined ? overrideEndAtStart : endAtStart;
+    
     if (selectedAppointmentIds.length < 1) {
       toast({
         title: "Selecione ao menos 1 agendamento.",
@@ -863,7 +865,7 @@ export default function Appointments() {
         },
         body: JSON.stringify({
           appointmentIds: selectedAppointmentIds,
-          endAtStart,
+          endAtStart: currentEndAtStart,
           title: `Rota ${new Date().toLocaleDateString()}`,
           preview: true,
           skipOptimization: true, // NÃO otimizar, manter ordem
@@ -948,7 +950,9 @@ export default function Appointments() {
     }
   };
 
-  const handleOptimizeRoute = async () => {
+  const handleOptimizeRoute = async (overrideEndAtStart?: boolean) => {
+    const currentEndAtStart = overrideEndAtStart !== undefined ? overrideEndAtStart : endAtStart;
+
     if (selectedAppointmentIds.length < 2) {
       toast({
         title: "Selecione ao menos 2 agendamentos.",
@@ -995,7 +999,7 @@ export default function Appointments() {
 
       console.log("🗺️ [ROUTE] Otimizando rotas com configuração:", {
         appointmentIds: selectedAppointmentIds,
-        endAtStart: endAtStart,
+        endAtStart: currentEndAtStart,
       });
 
       // 1) Pré-geocodificar (não-bloqueante): apenas chama a API e ignora avisos
@@ -1027,7 +1031,7 @@ export default function Appointments() {
           },
           body: JSON.stringify({
             appointmentIds: selectedAppointmentIds, // números
-            endAtStart,
+            endAtStart: currentEndAtStart,
             title: `Rota ${new Date().toLocaleDateString()}`,
             preview: true,
           }),
@@ -1186,7 +1190,7 @@ export default function Appointments() {
   };
 
 
-  const handleSaveRoute = async () => {
+  const handleSaveRoute = async (status?: "draft" | "confirmado") => {
     if (!optimizedRoute?.route || optimizedRoute.route.id) {
       toast({
         title: "Erro",
@@ -1215,6 +1219,7 @@ export default function Appointments() {
           preview: false,
           // Se não foi otimizado, mantém a ordem original (não otimiza)
           skipOptimization: !isRouteOptimized,
+          status,
         }),
       });
 
@@ -3350,11 +3355,39 @@ export default function Appointments() {
 
                       {/* Action Buttons */}
                       <div className="space-y-3">
+                        {/* Switch de Terminar no Início dentro do Drawer (Acima de todos) */}
+                        {!optimizedRoute.route?.id && !savedInfo && (
+                          <div className="flex items-center justify-between p-3 mb-4 bg-gray-50 border border-gray-200 rounded-lg dark:bg-zinc-800 dark:border-zinc-700">
+                            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer dark:text-zinc-300">
+                              <input
+                                type="checkbox"
+                                checked={endAtStart}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setEndAtStart(checked);
+                                  if (isRouteOptimized) {
+                                    handleOptimizeRoute(checked);
+                                  } else {
+                                    handleViewRoute(checked);
+                                  }
+                                }}
+                                className="w-4 h-4 text-burnt-yellow rounded border-gray-300 focus:ring-burnt-yellow"
+                              />
+                              Terminar no início
+                            </label>
+                            {endAtStart && (
+                               <span className="px-2 py-1 text-xs font-semibold text-emerald-800 bg-emerald-100 border border-emerald-300 rounded-full dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
+                                ATIVO
+                              </span>
+                            )}
+                          </div>
+                        )}
+
                         {/* Botão de otimizar (aparece apenas se ainda não foi otimizado E há mais de 1 agendamento) */}
                         {!optimizedRoute.route?.id && !savedInfo && !isRouteOptimized && selectedAppointmentIds.length > 1 && (
                           <Button
                             className="w-full bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
-                            onClick={handleOptimizeRoute}
+                            onClick={() => handleOptimizeRoute()}
                             disabled={isOptimizing}
                           >
                             {isOptimizing ? "Otimizando..." : "Otimizar Rota"}
@@ -3365,48 +3398,61 @@ export default function Appointments() {
                         {!optimizedRoute.route?.id && !savedInfo && (
                           <Button
                             className="w-full bg-green-600 hover:bg-green-700 text-white"
-                            onClick={handleSaveRoute}
+                            onClick={() => handleSaveRoute("draft")}
                             disabled={isOptimizing}
                           >
-                            Salvar Rota {!isRouteOptimized && "(na ordem atual)"}
+                            Salvar Rascunho de Rota
                           </Button>
                         )}
 
-                        {/* Botões padrão */}
-                        <Button
-                          className="w-full bg-black hover:bg-gray-800 text-white"
-                          onClick={() => openInGoogleMaps(routeWaypoints, endAtStart)}
-                          disabled={!routeWaypoints || routeWaypoints.length < 2}
-                        >
-                          Iniciar Navegação
-                        </Button>
-                        <Button variant="outline" className="w-full">
-                          Exportar Rota
-                        </Button>
+                        {/* Botão "Confirmar Rota" (Sem opção de Iniciar Navegação em nenhum cenário) */}
+                        {!optimizedRoute.route?.id && !savedInfo && (
+                          <Button
+                            className="w-full bg-black hover:bg-gray-800 text-white"
+                            onClick={async () => {
+                              await handleSaveRoute("confirmado");
+                            }}
+                            disabled={!routeWaypoints || routeWaypoints.length < 2 || isOptimizing}
+                          >
+                            Confirmar Rota
+                          </Button>
+                        )}
 
-                        {/* Aviso de rota salva + botão Ver no Histórico */}
+                        {/* Aviso de rota salva + botão Ver no Histórico + Ir para Prestadores */}
                         {savedInfo && (
-                          <div className="mt-3 flex items-center justify-between gap-2">
-                            <div className="text-sm">
-                              <span className="font-medium">
-                                Rota salva com sucesso
-                              </span>
-                              <span className="ml-1">
-                                ID #{savedInfo.displayNumber}
-                              </span>
+                          <div className="mt-3 flex flex-col gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                            <div className="text-sm text-green-800 font-medium text-center">
+                              {optimizedRoute?.route?.status === "confirmado" ? (
+                                `Rota Confirmada com sucesso, romaneio já confirmado, ID #${savedInfo.displayNumber}`
+                              ) : (
+                                `Rota salva com sucesso ID #${savedInfo.displayNumber}`
+                              )}
                             </div>
-                            <button
-                              type="button"
-                              className="px-3 py-2 rounded-xl bg-[#DAA520] text-black hover:bg-[#B8860B] transition"
-                              onClick={() =>
-                                window.open(
-                                  `/routes-history?open=${savedInfo.id}&id=${savedInfo.displayNumber}`,
-                                  "_blank",
-                                )
-                              }
-                            >
-                              Ver no Histórico
-                            </button>
+                            <div className="flex gap-2 w-full">
+                              <button
+                                type="button"
+                                className="flex-1 px-3 py-2 text-sm font-medium whitespace-nowrap rounded-lg bg-[#DAA520] text-black hover:bg-[#B8860B] transition"
+                                onClick={() =>
+                                  window.open(
+                                    `/routes-history?open=${savedInfo.id}&id=${savedInfo.displayNumber}`,
+                                    "_blank",
+                                  )
+                                }
+                              >
+                                Ver no Histórico
+                              </button>
+                              {optimizedRoute?.route?.status === "confirmado" && (
+                                <button
+                                  type="button"
+                                  className="flex-1 px-3 py-2 text-sm font-medium whitespace-nowrap rounded-lg bg-black text-white hover:bg-gray-800 transition"
+                                  onClick={() => {
+                                    window.location.href = "/prestadores";
+                                  }}
+                                >
+                                  Ir para Prestadores
+                                </button>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -3437,7 +3483,7 @@ export default function Appointments() {
 
             {/* Botão principal de visualizar rota */}
             <Button
-              onClick={handleViewRoute}
+              onClick={() => handleViewRoute()}
               className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white shadow-lg hover:shadow-xl transition-all"
               size="lg"
             >

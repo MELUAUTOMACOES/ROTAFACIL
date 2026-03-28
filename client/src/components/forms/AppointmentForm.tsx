@@ -117,7 +117,7 @@ export default function AppointmentForm({
       complemento: appointment.complemento || "",
       bairro: appointment.bairro || "Não informado",
       cidade: appointment.cidade || "Não informado",
-      paymentType: (appointment.paymentType || "no_ato") as "no_ato" | "antecipado",
+      paymentType: (appointment.paymentType || "antecipado") as "no_ato" | "antecipado",
       additionalValue: appointment.additionalValue || "",
     } : prefilledData ? {
       clientId: prefilledData.clientId ? parseInt(prefilledData.clientId) : 0,
@@ -139,7 +139,7 @@ export default function AppointmentForm({
         (clients.find(c => c.id === parseInt(prefilledData.clientId!))?.bairro || "Não informado") : "Não informado",
       cidade: prefilledData.clientId ?
         (clients.find(c => c.id === parseInt(prefilledData.clientId!))?.cidade || "Não informado") : "Não informado",
-      paymentType: "no_ato",
+      paymentType: "antecipado",
       additionalValue: "",
     } : {
       clientId: 0,
@@ -157,7 +157,7 @@ export default function AppointmentForm({
       complemento: "",
       bairro: "Não informado",
       cidade: "Não informado",
-      paymentType: "no_ato",
+      paymentType: "antecipado",
       additionalValue: "",
     },
   });
@@ -344,6 +344,29 @@ export default function AppointmentForm({
       return;
     }
 
+    // --- Validação de data retroativa (apenas para NOVOS agendamentos) ---
+    if (!appointment) {
+      const now = new Date();
+      // Converte a data atual para o fuso brasileiro para pegar o "dia de hoje" no Brasil independentemente de onde o servidor esteja
+      const brTimeStr = now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" });
+      const brTime = new Date(brTimeStr);
+      const todayDay = new Date(brTime.getFullYear(), brTime.getMonth(), brTime.getDate());
+      
+      const scheduledBRTimeStr = processedDate.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" });
+      const scheduledBRTime = new Date(scheduledBRTimeStr);
+      const scheduledDay = new Date(scheduledBRTime.getFullYear(), scheduledBRTime.getMonth(), scheduledBRTime.getDate());
+
+      if (scheduledDay.getTime() < todayDay.getTime()) {
+        toast({
+          title: "Erro de Validação",
+          description: "Não é permitido criar um agendamento com data retroativa. Selecione a data de hoje ou uma data futura.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    // ----------------------------------------------------------------------
+
     const formData = {
       ...data,
       scheduledDate: processedDate,
@@ -478,7 +501,23 @@ export default function AppointmentForm({
     return clients.find(c => c.id === selectedClient);
   };
 
-
+  // Obter data mínima (hoje no fuso do Brasil) para bloquear dias anteriores no calendário (apenas novos agendamentos)
+  const todayMinString = useMemo(() => {
+    if (appointment) return undefined;
+    
+    const now = new Date();
+    const brTimeStr = now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" });
+    const brTime = new Date(brTimeStr);
+    
+    const year = brTime.getFullYear();
+    const month = String(brTime.getMonth() + 1).padStart(2, '0');
+    const day = String(brTime.getDate()).padStart(2, '0');
+    
+    return {
+      dateOnly: `${year}-${month}-${day}`,
+      dateTime: `${year}-${month}-${day}T00:00`
+    };
+  }, [appointment]);
 
   return (
     <div className="space-y-6">
@@ -713,6 +752,7 @@ export default function AppointmentForm({
                         }
                       }}
                       disabled={!!prefilledData?.date || isReadOnly}
+                      min={!appointment ? (isAllDay ? todayMinString?.dateOnly : todayMinString?.dateTime) : undefined}
                     />
                   </FormControl>
                   {prefilledData?.date && (
@@ -1044,7 +1084,7 @@ export default function AppointmentForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipo de Pagamento *</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || "no_ato"} disabled={isReadOnly}>
+                    <Select onValueChange={field.onChange} value={field.value || "antecipado"} disabled={isReadOnly}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione" />
@@ -1080,16 +1120,21 @@ export default function AppointmentForm({
                         placeholder="0,00"
                         {...field}
                         value={formatCurrencyBRL(field.value)}
-                        className="bg-white"
+                        className={isReadOnly || form.watch("paymentType") === "antecipado" ? "bg-gray-50 cursor-not-allowed" : "bg-white"}
                         onChange={(e) => {
                           // Pegar apenas os números
                           const rawValue = e.target.value.replace(/\D/g, '');
                           field.onChange(rawValue);
                         }}
-                        disabled={isReadOnly}
+                        disabled={isReadOnly || form.watch("paymentType") === "antecipado"}
                       />
                     </FormControl>
-                    <p className="text-xs text-gray-500">Valor extra além do serviço</p>
+                    <p className="text-xs text-gray-500">
+                      {form.watch("paymentType") === "antecipado"
+                        ? "Valor adicional não aplicável em pagamento antecipado"
+                        : "Valor extra além do serviço"
+                      }
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}

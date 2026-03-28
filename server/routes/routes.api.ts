@@ -232,6 +232,7 @@ const optimizeRouteSchema = z.object({
   title: z.string().optional(),
   preview: z.boolean().optional(),
   skipOptimization: z.boolean().optional(),
+  status: z.enum(["draft", "confirmado", "finalizado", "cancelado"]).optional(),
 });
 
 // Schema para atualização de status
@@ -380,9 +381,10 @@ function formatCep(cep: string | null | undefined): string | null {
 
 async function geocodeEnderecoServer(
   endereco: string,
-): Promise<{ lat: number; lon: number }> {
+): Promise<{ lat: number; lon: number; addressDetails?: any; displayName?: string }> {
+  // Use addressdetails=1 para garantir retorno de informações estruturadas (cidade, estado, país)
   const makeUrl = (q: string) =>
-    `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&addressdetails=0&extratags=0&q=${encodeURIComponent(q)}`;
+    `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&addressdetails=1&extratags=0&q=${encodeURIComponent(q)}`;
 
   const headers = {
     "User-Agent": "RotaFacil/1.0 (contato@rotafacil.com)", // personalize com seu email/domínio
@@ -415,8 +417,16 @@ async function geocodeEnderecoServer(
     if (!Number.isFinite(lat) || !Number.isFinite(lon))
       throw new Error("Coordenadas inválidas");
 
+    const addressDetails = data[0].address || {};
+    const displayName = data[0].display_name;
+
     // padroniza para 6 casas (coerente com o que salvamos no DB)
-    return { lat: Number(lat.toFixed(6)), lon: Number(lon.toFixed(6)) };
+    return { 
+      lat: Number(lat.toFixed(6)), 
+      lon: Number(lon.toFixed(6)),
+      addressDetails,
+      displayName
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -604,7 +614,15 @@ export function registerRoutesAPI(app: Express) {
         startLngLat,
         ...stopCoords.map((c) => [Number(c.lng.toFixed(6)), Number(c.lat.toFixed(6))] as [number, number]),
       ];
-      const coordStr = osrmCoords.map((c) => `${c[0]},${c[1]}`).join(";");
+      // Regex replace para duplo ponto ou virgula, garantindo padrao "lng,lat" do OSRM
+      const coordStr = osrmCoords.map((c) => {
+         const lng = Number(c[0]);
+         const lat = Number(c[1]);
+         if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+           throw new Error(`Coordenadas inválidas detectadas no /table: lng=${c[0]}, lat=${c[1]}`);
+         }
+         return `${lng.toFixed(6)},${lat.toFixed(6)}`;
+      }).join(";");
       const tableUrl = `${OSRM_URL}/table/v1/driving/${coordStr}?annotations=duration,distance`;
       console.log("🧮 [/api/routes/:id/optimize] Chamando OSRM table:", tableUrl);
       const tableResp = await fetch(tableUrl);
@@ -793,7 +811,7 @@ export function registerRoutesAPI(app: Express) {
             });
         }
 
-        const { appointmentIds, endAtStart, vehicleId, title, preview, skipOptimization } =
+        const { appointmentIds, endAtStart, vehicleId, title, preview, skipOptimization, status } =
           validation.data;
         const appointmentIdsNorm = appointmentIds.map((id: any) => Number(id));
 
@@ -1204,6 +1222,7 @@ export function registerRoutesAPI(app: Express) {
             app.lat = Number(geo.lat);
             app.lng = Number(geo.lon);
             console.log(`✅ [TENTATIVA 1 OK] Coordenadas obtidas: ${app.lat}, ${app.lng}`);
+            console.log(`   Display Name Nominatim: ${geo.displayName || 'N/A'}`);
 
             // Se o endereço do agendamento “bate” com o endereço do cliente, persistimos no cliente (cura legado)
             if (
@@ -1251,6 +1270,7 @@ export function registerRoutesAPI(app: Express) {
               app.lat = Number(geo2.lat);
               app.lng = Number(geo2.lon);
               console.log(`✅ [TENTATIVA 2 OK] Coordenadas obtidas: ${app.lat}, ${app.lng}`);
+              console.log(`   Display Name Nominatim: ${geo2.displayName || 'N/A'}`);
 
               // Como é o endereço do cliente, podemos persistir
               if (app.clientId) {
@@ -1294,9 +1314,44 @@ export function registerRoutesAPI(app: Express) {
               console.log(`🌐 [TENTATIVA 3] Geocodificando apenas com CEP:`);
               console.log(`   CEP enviado ao Nominatim: "${cepToTry}"`);
               const geo3 = await geocodeEnderecoServer(`CEP ${cepToTry}, Brasil`);
+              
+              // === Nova regra: Validação contextual do fallback de CEP ===
+              const normalizeTexto = (t: string | null | undefined) => 
+                (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+              const expCidade = normalizeTexto(app.aptCidade || app.clientCidade);
+              const expBairro = normalizeTexto(app.aptBairro || app.clientBairro);
+              
+              const addrInfo = geo3.addressDetails || {};
+              const retCountryCode = normalizeTexto(addrInfo.country_code); 
+              const retCity = normalizeTexto(addrInfo.city || addrInfo.town || addrInfo.municipality || addrInfo.village);
+              const retState = normalizeTexto(addrInfo.state);
+              const retSuburb = normalizeTexto(addrInfo.suburb || addrInfo.neighbourhood || addrInfo.district);
+
+              console.log(`   [RETORNO CEP] País: ${addrInfo.country_code || 'N/A'}, Estado: ${addrInfo.state || 'N/A'}, Cidade: ${retCity || 'N/A'}, Bairro: ${retSuburb || 'N/A'}`);
+              console.log(`   [ESPERADO CEP] Cidade: ${expCidade || 'N/A'}, Bairro: ${expBairro || 'N/A'}`);
+
+              let blockReason = "";
+              if (retCountryCode && retCountryCode !== "br") {
+                blockReason = "País diferente do Brasil";
+              } else if (retCity && expCidade && !retCity.includes(expCidade) && !expCidade.includes(retCity)) {
+                blockReason = `Cidade incompatível (retornou ${retCity}, esperava ${expCidade})`;
+              } else if (retSuburb && expBairro) {
+                // Tolerante com o bairro para ser só um reforço
+                if (!retSuburb.includes(expBairro) && !expBairro.includes(retSuburb)) {
+                   console.log(`   ⚠️ Bairro diferente (${retSuburb} vs ${expBairro}), mas tolerado pela validação secundária.`);
+                }
+              }
+
+              if (blockReason) {
+                 console.warn(`❌ CEP Result Rejeitado preventivamente. Motivo: ${blockReason}`);
+                 throw new Error(`Validação de contexto do CEP falhou: ${blockReason}`);
+              }
+              console.log(`✅ [VALIDAÇÃO CEP OK] Contexto geográfico coincidiu ou aderente, aceitando.`);
+              
               app.lat = Number(geo3.lat);
               app.lng = Number(geo3.lon);
-              console.log(`✅ [TENTATIVA 3 OK] Coordenadas obtidas: ${app.lat}, ${app.lng}`);
+              console.log(`✅ [TENTATIVA 3 OK] Coordenadas obtidas e aceitas: ${app.lat}, ${app.lng}`);
 
               // Se conseguiu via CEP e é o CEP do cliente, podemos salvar
               if (app.clientId && app.clientCep === cepToTry) {
@@ -1425,7 +1480,17 @@ export function registerRoutesAPI(app: Express) {
         try {
           const OSRM_URL_ROUTE = getOsrmUrl()?.replace(/\/$/, "") || null;
           if (OSRM_URL_ROUTE) {
-            const coordStr = routeCoordinates.map((c) => c.join(",")).join(";");
+            // Formatação segura de coordenadas para envio ao OSRM 
+            const coordStr = routeCoordinates.map((c) => {
+              const lng = Number(c[0]);
+              const lat = Number(c[1]);
+              if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+                throw new Error(`Coordenadas inválidas detectadas ao montar URL do OSRM: lng=${c[0]}, lat=${c[1]}`);
+              }
+              // Transforma em string com '.' explícito garantido para evitar localidade injetando ',' ou ".."   
+              return `${lng.toFixed(6)},${lat.toFixed(6)}`;
+            }).join(";");
+            
             const osrmUrl = `${OSRM_URL_ROUTE}/route/v1/driving/${coordStr}?overview=full&geometries=geojson`;
             console.log("🗺️ Chamando OSRM route:", osrmUrl);
 
@@ -1474,7 +1539,7 @@ export function registerRoutesAPI(app: Express) {
           distanceTotal: Math.round(totalDistance),
           durationTotal: Math.round(totalDuration),
           stopsCount: selectedAppointments.length,
-          status: "draft" as const,
+          status: (status || "draft") as "draft" | "confirmado" | "finalizado" | "cancelado",
           polylineGeoJson,
         };
 

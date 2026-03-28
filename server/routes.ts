@@ -499,6 +499,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      let startAddressStr: string | null = null;
+      try {
+        const { businessRules } = await import("shared/schema");
+        const [config] = await db.select().from(businessRules).where(eq(businessRules.companyId, companyId));
+        if (config && config.enderecoEmpresaLogradouro) {
+          startAddressStr = `${config.enderecoEmpresaLogradouro}, ${config.enderecoEmpresaNumero}, ${config.enderecoEmpresaBairro}, ${config.enderecoEmpresaCidade} - ${config.enderecoEmpresaEstado}, ${config.enderecoEmpresaCep}`;
+        }
+  
+        if (route.responsibleType === 'technician') {
+          const tech = await storage.getTechnician(Number(route.responsibleId), companyId);
+          if (tech && tech.enderecoInicioLogradouro) {
+               startAddressStr = `${tech.enderecoInicioLogradouro}, ${tech.enderecoInicioNumero}, ${tech.enderecoInicioBairro}, ${tech.enderecoInicioCidade} - ${tech.enderecoInicioEstado}, ${tech.enderecoInicioCep}`;
+          }
+        } else if (route.responsibleType === 'team') {
+          const team = await storage.getTeam(Number(route.responsibleId), companyId);
+          if (team && team.enderecoInicioLogradouro) {
+               startAddressStr = `${team.enderecoInicioLogradouro}, ${team.enderecoInicioNumero}, ${team.enderecoInicioBairro}, ${team.enderecoInicioCidade} - ${team.enderecoInicioEstado}, ${team.enderecoInicioCep}`;
+          }
+        }
+      } catch (err) {
+        console.warn("Aviso: Falha ao buscar endereço de início", err);
+      }
+
       // Combinar dados: RouteStop + Appointment + Client + Service
       const stopsWithDetails = await Promise.all(allRouteStops.map(async (stop) => {
         const apt = appointmentsList.find(a => a.id === stop.appointmentNumericId);
@@ -524,6 +547,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         route,
+        startAddress: startAddressStr,
         stops: stopsWithDetails,
         summary: {
           totalStops: route.stopsCount,
@@ -599,7 +623,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/provider/appointments/:id", authenticateToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { status, feedback, photos, signature, executionStatus, executionNotes, executionStartedAt, executionFinishedAt, executionStartLocation, executionEndLocation, paymentStatus, paymentNotes, paymentConfirmedAt } = req.body;
+      const { status, feedback, photos, signature, executionStatus, executionNotes, executionStartedAt, executionFinishedAt, executionStartLocation, executionEndLocation, paymentStatus, paymentAmountPaid, paymentNotes, paymentConfirmedAt } = req.body;
 
       // 🔒 Validar se a rota pai já está finalizada (apenas finalizado/cancelado bloqueiam)
       const appointmentStops = await db.select().from(routeStops).where(eq(routeStops.appointmentNumericId, id));
@@ -633,6 +657,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         executionStartLocation,
         executionEndLocation,
         paymentStatus,       // 💵 Status de pagamento
+        paymentAmountPaid,   // 💵 Valor pago (parcial)
         paymentNotes,        // 💵 Motivo se não pagou
         paymentConfirmedAt   // 💵 Quando foi confirmado
       }, req.user.userId);
@@ -4502,6 +4527,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             status: 'rescheduled', // 🔧 CORREÇÃO: Usar 'rescheduled' para rastreabilidade
             executionStatus: null, // Limpa o status de execução anterior
             rescheduleCount: (appointment.rescheduleCount || 0) + 1, // Incrementa contador de reagendamentos
+            notes: resolutionNotes
+              ? (appointment.notes ? `${appointment.notes}\n[Reagendamento]: ${resolutionNotes}` : `[Reagendamento]: ${resolutionNotes}`)
+              : appointment.notes, // Preserva ou adiciona a nova nota
             ...(newTechnicianId !== undefined && { technicianId: newTechnicianId || null }),
             ...(newTeamId !== undefined && { teamId: newTeamId || null }),
           })

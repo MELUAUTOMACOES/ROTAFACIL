@@ -239,7 +239,8 @@ export const appointments = pgTable("appointments", {
   cidade: text("cidade").notNull().default("Não informado"),
   // Campos de pagamento
   paymentType: text("payment_type").notNull().default("no_ato"), // 'antecipado' | 'no_ato'
-  paymentStatus: text("payment_status"), // 'pago' | 'nao_pago' | null (preenchido pelo prestador)
+  paymentStatus: text("payment_status"), // 'pago' | 'nao_pago' | 'pago_parcial' | null (preenchido pelo prestador)
+  paymentAmountPaid: decimal("payment_amount_paid", { precision: 10, scale: 2 }), // Valor pago quando pago parcial
   paymentNotes: text("payment_notes"), // Motivo se cliente não pagou
   paymentConfirmedAt: timestamp("payment_confirmed_at"), // Quando foi confirmado o pagamento
   additionalValue: decimal("additional_value", { precision: 10, scale: 2 }), // Valor adicional além do serviço

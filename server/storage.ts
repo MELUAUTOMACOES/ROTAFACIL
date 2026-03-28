@@ -1370,7 +1370,8 @@ export class DatabaseStorage implements IStorage {
       executionFinishedAt?: string | null;
       executionStartLocation?: any;
       executionEndLocation?: any;
-      paymentStatus?: string | null;       // 💵 'pago' | 'nao_pago'
+      paymentStatus?: string | null;       // 💵 'pago' | 'nao_pago' | 'pago_parcial'
+      paymentAmountPaid?: string | null;   // 💵 Valor pago quando parcial
       paymentNotes?: string | null;        // 💵 Motivo se não pagou
       paymentConfirmedAt?: string | null;  // 💵 Quando foi confirmado
     },
@@ -1463,8 +1464,8 @@ export class DatabaseStorage implements IStorage {
           and(
             or(isNull(appointments.executionStatus), ne(appointments.executionStatus, 'concluido'))
           ),
-          // OU com pagamento pendente (paymentStatus = 'nao_pago')
-          eq(appointments.paymentStatus, 'nao_pago')
+          // OU com pagamento pendente ou parcial (paymentStatus IN ('nao_pago', 'pago_parcial'))
+          inArray(appointments.paymentStatus, ['nao_pago', 'pago_parcial'])
         )
       ));
 
@@ -1499,7 +1500,7 @@ export class DatabaseStorage implements IStorage {
 
       // Determinar tipo de pendência
       const isPendingExecution = !apt.executionStatus || apt.executionStatus !== 'concluido';
-      const isPendingPayment = apt.paymentStatus === 'nao_pago';
+      const isPendingPayment = apt.paymentStatus === 'nao_pago' || apt.paymentStatus === 'pago_parcial';
 
       // Se tem ambas pendências, priorizar execução
       const pendingType = isPendingExecution ? 'execution' : (isPendingPayment ? 'payment' : 'execution');

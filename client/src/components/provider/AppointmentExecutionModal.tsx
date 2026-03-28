@@ -31,6 +31,7 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
     // 💵 Estados de pagamento
     const [paymentStatus, setPaymentStatus] = useState<string>(appointment?.paymentStatus || '');
     const [paymentNotes, setPaymentNotes] = useState<string>(appointment?.paymentNotes || '');
+    const [paymentAmountPaid, setPaymentAmountPaid] = useState<string>(appointment?.paymentAmountPaid?.toString() || '');
 
     // Calcular valor total (serviço + adicional)
     const servicePrice = Number(appointment?.servicePrice || 0);
@@ -72,6 +73,14 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
     useEffect(() => {
         if (!isStarted || !executionStartedAt) return;
 
+        // Se já foi finalizado, calcula o tempo estático e não inicia o intervalo
+        if (appointment?.executionFinishedAt) {
+             const start = new Date(executionStartedAt).getTime();
+             const end = new Date(appointment.executionFinishedAt).getTime();
+             setElapsedSeconds(Math.max(0, Math.floor((end - start) / 1000)));
+             return; // Importante para não ficar rodando
+        }
+
         const startTime = new Date(executionStartedAt).getTime();
 
         const updateTimer = () => {
@@ -84,7 +93,7 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
         const interval = setInterval(updateTimer, 1000);
 
         return () => clearInterval(interval);
-    }, [isStarted, executionStartedAt]);
+    }, [isStarted, executionStartedAt, appointment?.executionFinishedAt]);
 
     // Formatar tempo como MM:SS ou HH:MM:SS
     const formatTime = (seconds: number) => {
@@ -171,6 +180,12 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
                 return;
             }
 
+            // Se pagou parcial, valor é obrigatório
+            if (paymentStatus === 'pago_parcial' && (!paymentAmountPaid || isNaN(Number(paymentAmountPaid)) || Number(paymentAmountPaid) <= 0)) {
+                toast({ title: "Valor obrigatório", description: "Informe o valor correto do pagamento parcial.", variant: "destructive" });
+                return;
+            }
+
             setIsSaving(true);
 
             // Mapeia status de execução para status administrativo (simplificado)
@@ -187,6 +202,7 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
                 photos,
                 // Campos de pagamento
                 paymentStatus: paymentStatus || null,
+                paymentAmountPaid: paymentStatus === 'pago_parcial' ? paymentAmountPaid : null,
                 paymentNotes: paymentNotes || null,
                 paymentConfirmedAt: paymentStatus ? new Date().toISOString() : null,
                 // Registrar tempos de execução para métricas do dashboard
@@ -421,6 +437,16 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
                                                 <XCircle className="w-5 h-5 mr-2" />
                                                 <span className="font-medium">Não pagou</span>
                                             </button>
+                                            <button
+                                                onClick={() => { setPaymentStatus('pago_parcial'); setPaymentNotes(''); }}
+                                                className={`flex items-center justify-center p-3 rounded-lg border-2 transition-all ${paymentStatus === 'pago_parcial'
+                                                    ? 'border-yellow-500 bg-yellow-50 text-yellow-700 ring-1 ring-yellow-500'
+                                                    : 'border-gray-200 hover:border-gray-300 text-gray-600 bg-white'
+                                                    }`}
+                                            >
+                                                <DollarSign className="w-5 h-5 mr-2" />
+                                                <span className="font-medium">Pagou parcial</span>
+                                            </button>
                                         </div>
                                     </div>
 
@@ -436,6 +462,25 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
                                                 value={paymentNotes}
                                                 onChange={(e) => setPaymentNotes(e.target.value)}
                                                 className="min-h-[80px] border-red-200 focus:border-red-400"
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* Campo numérico se pagou parcial */}
+                                    {paymentStatus === 'pago_parcial' && (
+                                        <div className="space-y-2">
+                                            <Label className="flex justify-between">
+                                                <span>Valor Pago (R$)</span>
+                                                <span className="text-yellow-600 text-xs font-bold uppercase tracking-wide">Obrigatório</span>
+                                            </Label>
+                                            <Input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                placeholder="Ex: 50.00"
+                                                value={paymentAmountPaid}
+                                                onChange={(e) => setPaymentAmountPaid(e.target.value)}
+                                                className="border-yellow-300 focus:border-yellow-500"
                                             />
                                         </div>
                                     )}

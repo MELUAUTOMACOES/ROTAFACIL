@@ -101,12 +101,23 @@ export default function PrestadoresPage() {
         }
     });
 
+    // Ordenar prestadores: Ativo (confirmado) primeiro, depois Finalizado, depois outros
+    const sortedProviders = React.useMemo(() => {
+        if (!activeProviders) return [];
+        return [...activeProviders].sort((a: any, b: any) => {
+            const priority: Record<string, number> = { 'confirmado': 1, 'finalizado': 2 };
+            const pA = priority[a.status] || 99;
+            const pB = priority[b.status] || 99;
+            return pA - pB;
+        });
+    }, [activeProviders]);
+
     // Se for admin e tiver prestadores, seleciona o primeiro automaticamente se nenhum selecionado
     React.useEffect(() => {
-        if (user?.role === 'admin' && activeProviders?.length > 0 && !selectedRouteId) {
-            setSelectedRouteId(activeProviders[0].id);
+        if (user?.role === 'admin' && sortedProviders?.length > 0 && !selectedRouteId) {
+            setSelectedRouteId(sortedProviders[0].id);
         }
-    }, [activeProviders, user?.role, selectedRouteId]);
+    }, [sortedProviders, user?.role, selectedRouteId]);
 
     // Buscar rota ativa do dia (ou a selecionada pelo admin)
     const { data: routeData, isLoading } = useQuery({
@@ -539,6 +550,20 @@ export default function PrestadoresPage() {
             });
             return;
         }
+
+        const total = stops.length;
+        const completedCount = stops.filter((s: any) => s.appointment?.executionStatus === 'concluido').length;
+
+        if (total > 0) {
+            if (completedCount === total) {
+                setFinalizeStatus('finalizado');
+            } else if (completedCount === 0) {
+                setFinalizeStatus('cancelado');
+            } else {
+                setFinalizeStatus('incompleto');
+            }
+        }
+
         setShowFinalizeModal(true);
     };
 
@@ -557,7 +582,7 @@ export default function PrestadoresPage() {
                                 <SelectValue placeholder="Selecione um prestador..." />
                             </SelectTrigger>
                             <SelectContent>
-                                {activeProviders?.map((p: any) => (
+                                {sortedProviders?.map((p: any) => (
                                     <SelectItem key={p.id} value={p.id} className="flex items-center justify-between">
                                         <span className="flex items-center gap-2">
                                             {p.responsibleName} - {p.title}
@@ -612,7 +637,7 @@ export default function PrestadoresPage() {
                                     <SelectValue placeholder="Trocar prestador..." />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {activeProviders?.map((p: any) => (
+                                    {sortedProviders?.map((p: any) => (
                                         <SelectItem key={p.id} value={p.id} className="flex items-center">
                                             <span className="flex items-center gap-2">
                                                 {p.responsibleName} - {p.title}
@@ -843,6 +868,40 @@ export default function PrestadoresPage() {
                             );
                         })}
                     </div>
+
+                    {/* Botão de retorno ao inicio */}
+                    {routeData?.startAddress && stops.length > 0 && !isRouteFinalized && route.routeStartedAt && (
+                        <div className="px-4 mt-4 mb-2">
+                            <Card className="overflow-hidden border-dashed border-2 border-gray-300 bg-gray-50 dark:bg-zinc-800 dark:border-zinc-700">
+                                <div className="p-3 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-zinc-700 flex items-center justify-center">
+                                            <Home className="w-5 h-5 text-gray-500 dark:text-gray-300" />
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-700 dark:text-zinc-200 text-sm">Voltar para Endereço Inicial</p>
+                                            <p className="text-xs text-gray-500 dark:text-zinc-400 line-clamp-1">{routeData.startAddress}</p>
+                                        </div>
+                                    </div>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <button className="p-2 ml-2 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition-colors shadow-sm focus:outline-none shrink-0" title="Abrir Mapa para o Início">
+                                                <MapIcon size={18} />
+                                            </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="w-48">
+                                            <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(routeData.startAddress)}`, '_blank')} className="cursor-pointer">
+                                                <MapIcon className="w-4 h-4 mr-2" /> Google Maps
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => window.open(`https://waze.com/ul?q=${encodeURIComponent(routeData.startAddress)}&navigate=yes`, '_blank')} className="cursor-pointer">
+                                                <Navigation className="w-4 h-4 mr-2" /> Waze
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            </Card>
+                        </div>
+                    )}
 
                     {/* Footer for Start/End Route */}
                     <div className="fixed bottom-0 left-0 right-0 p-4 bg-white dark:bg-zinc-900 border-t dark:border-zinc-800 shadow-lg z-20">

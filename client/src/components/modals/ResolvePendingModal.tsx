@@ -30,8 +30,13 @@ interface PendingAppointment {
     clientPhone?: string;
     serviceName?: string;
     servicePrice?: number | null; // 💰 Preço do serviço
+    additionalValue?: string | number | null; // 💰 Valor adicional
+    paymentAmountPaid?: string | number | null; // 💰 Valor parcial já pago
     originalDate?: string | Date; // Can be string from API or Date object
+    scheduledDate?: string | Date; 
+    routeDate?: string | Date;
     providerName?: string;
+    responsibleName?: string; 
     executionNotes?: string;
     paymentNotes?: string; // 💰 Notas de pagamento
     clientId?: number;
@@ -191,6 +196,10 @@ export function ResolvePendingModal({
             if (!newDate) {
                 missingFields.push('Nova Data');
             }
+            // 📝 Observações agora são obrigatórias para reagendamento
+            if (!resolutionNotes || resolutionNotes.trim() === '') {
+                missingFields.push('Observações');
+            }
             // Se motivo foi endereço incorreto, endereço deve ter sido corrigido
             if (pendingReason === 'nao_realizado_endereco_incorreto' && !addressCorrected) {
                 return '❌ É obrigatório corrigir o endereço antes de reagendar quando o motivo é "Endereço incorreto"';
@@ -290,18 +299,18 @@ export function ResolvePendingModal({
                             </div>
                             <div>
                                 <span className="font-semibold">Data do Serviço:</span>{' '}
-                                {appointment.originalDate
-                                    ? format(new Date(appointment.originalDate), "dd/MM/yyyy", { locale: ptBR })
+                                {appointment.scheduledDate || appointment.originalDate || appointment.routeDate
+                                    ? format(new Date((appointment.scheduledDate || appointment.originalDate || appointment.routeDate) as any), "dd/MM/yyyy", { locale: ptBR })
                                     : 'N/A'}
                             </div>
                             <div>
                                 <span className="font-semibold">Horário previsto:</span>{' '}
-                                {appointment.originalDate
-                                    ? format(new Date(appointment.originalDate), "HH:mm", { locale: ptBR })
+                                {appointment.scheduledDate || appointment.originalDate
+                                    ? format(new Date((appointment.scheduledDate || appointment.originalDate) as any), "HH:mm", { locale: ptBR })
                                     : 'N/A'}
                             </div>
                             <div>
-                                <span className="font-semibold">Prestador:</span> {appointment.providerName || 'N/A'}
+                                <span className="font-semibold">Equipe/Técnico:</span> {appointment.responsibleName || appointment.providerName || 'N/A'}
                             </div>
                             <div className="col-span-2">
                                 <span className="font-semibold">⚠️ Motivo:</span> {pendingReasonLabels[pendingReason] || pendingReason}
@@ -414,6 +423,22 @@ export function ResolvePendingModal({
                                     <Input id="newTime" type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)} />
                                 </div>
                             </div>
+                            <div>
+                                <Label htmlFor="rescheduleResolutionNotes" className="text-red-600">
+                                    Observações do Reagendamento *
+                                </Label>
+                                <Textarea
+                                    id="rescheduleResolutionNotes"
+                                    value={resolutionNotes}
+                                    onChange={(e) => setResolutionNotes(e.target.value)}
+                                    rows={3}
+                                    className={!resolutionNotes && validationError ? 'border-red-500 ring-red-500' : ''}
+                                    placeholder="Ex: Cliente só pode na parte da tarde, pediu nova peça, etc."
+                                />
+                                {!resolutionNotes && validationError && (
+                                    <p className="text-sm text-red-600 mt-1">Este campo é obrigatório</p>
+                                )}
+                            </div>
                         </div>
                     )}
 
@@ -465,13 +490,39 @@ export function ResolvePendingModal({
                         <div className="space-y-3 p-4 border rounded-lg bg-green-50 dark:bg-green-950">
                             <h3 className="font-semibold">💰 Confirmação de Pagamento</h3>
 
-                            {/* Mostrar valor do serviço */}
+                            {/* Mostrar valores financeiros */}
                             {appointment.servicePrice !== null && appointment.servicePrice !== undefined && (
-                                <div className="p-3 bg-white dark:bg-zinc-900 border rounded-lg">
-                                    <Label className="text-sm text-muted-foreground">Valor do Serviço</Label>
-                                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                                        R$ {Number(appointment.servicePrice).toFixed(2).replace('.', ',')}
-                                    </p>
+                                <div className="p-3 bg-white dark:bg-zinc-900 border rounded-lg space-y-2">
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-muted-foreground">Valor do Serviço:</span>
+                                        <span>R$ {Number(appointment.servicePrice).toFixed(2).replace('.', ',')}</span>
+                                    </div>
+                                    
+                                    {Number(appointment.additionalValue) > 0 && (
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-muted-foreground">Valor Adicional:</span>
+                                            <span>+ R$ {Number(appointment.additionalValue).toFixed(2).replace('.', ',')}</span>
+                                        </div>
+                                    )}
+
+                                    <div className="flex justify-between items-center font-bold">
+                                        <span>Total Cobrado:</span>
+                                        <span>R$ {(Number(appointment.servicePrice) + Number(appointment.additionalValue || 0)).toFixed(2).replace('.', ',')}</span>
+                                    </div>
+
+                                    {Number(appointment.paymentAmountPaid) > 0 && (
+                                        <>
+                                            <div className="border-t my-2 border-zinc-100 dark:border-zinc-800"></div>
+                                            <div className="flex justify-between items-center text-sm text-green-600 dark:text-green-400">
+                                                <span>Valor Parcial Pago no Ato:</span>
+                                                <span className="font-bold">- R$ {Number(appointment.paymentAmountPaid).toFixed(2).replace('.', ',')}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-red-600 dark:text-red-400 font-bold mt-1 text-lg">
+                                                <span>Falta Receber:</span>
+                                                <span>R$ {Math.max(0, (Number(appointment.servicePrice) + Number(appointment.additionalValue || 0)) - Number(appointment.paymentAmountPaid)).toFixed(2).replace('.', ',')}</span>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             )}
 

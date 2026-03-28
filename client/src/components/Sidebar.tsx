@@ -183,7 +183,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
       items: [
         { name: "Agendamentos", href: "/appointments", icon: Calendar },
         { name: "Encontre uma data", href: "/find-date", icon: Search },
-        { name: "Romaneios – Execução & Histórico", href: "/routes-history", icon: History },
+        { name: "Histórico de Rotas - Romaneios", href: "/routes-history", icon: History },
         { name: "Prestadores", href: "/prestadores", icon: Truck },
       ]
     },
