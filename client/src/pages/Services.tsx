@@ -18,6 +18,7 @@ export default function Services() {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [appliedSearchTerm, setAppliedSearchTerm] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -34,9 +35,14 @@ export default function Services() {
   });
 
   const { data: servicesData, isLoading } = useQuery({
-    queryKey: ["/api/services"],
+    queryKey: ["/api/services", appliedSearchTerm],
     queryFn: async () => {
-      const response = await fetch(buildApiUrl("/api/services?page=1&pageSize=50"), {
+      let url = "/api/services?page=1&pageSize=50";
+      if (appliedSearchTerm) {
+        url += `&search=${encodeURIComponent(appliedSearchTerm)}`;
+      }
+      
+      const response = await fetch(buildApiUrl(url), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error("Erro ao carregar serviços");
@@ -47,15 +53,7 @@ export default function Services() {
   });
   const services = normalizeItems<Service>(servicesData);
 
-  // Filtragem de serviços
-  const filteredServices = services.filter((service: Service) => {
-    if (!searchTerm) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      service.name.toLowerCase().includes(searchLower) ||
-      service.description?.toLowerCase().includes(searchLower)
-    );
-  });
+
 
   const deleteServiceMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -143,20 +141,33 @@ export default function Services() {
 
       {/* Search Filter */}
       <Card className="p-4 md:p-5 bg-muted/20 border-border/60 shadow-sm">
-        <div className="relative">
-          <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar por nome ou descrição..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar serviços no banco de dados..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setAppliedSearchTerm(searchTerm);
+                }
+              }}
+            />
+          </div>
+          <Button 
+            className="w-full sm:w-auto bg-zinc-800 hover:bg-zinc-900 text-white"
+            onClick={() => setAppliedSearchTerm(searchTerm)}
+          >
+            Filtrar Base
+          </Button>
         </div>
       </Card>
 
       {/* Services List */}
-      {filteredServices.length === 0 ? (
+      {services.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <ClipboardList className="h-12 w-12 text-gray-400 mb-4" />
@@ -184,7 +195,7 @@ export default function Services() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredServices.map((service: Service) => (
+          {services.map((service: Service) => (
             <Card key={service.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="border-b border-gray-100">
                 <div className="flex items-center justify-between">

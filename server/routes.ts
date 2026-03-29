@@ -1861,7 +1861,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/clients", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       // Se não houver parâmetros de paginação, retorna todos os clientes (compatibilidade)
-      if (!req.query.page && !req.query.limit) {
+      if (!req.query.page && !req.query.limit && !req.query.search) {
         const result = await storage.getAllClients(req.user.companyId);
         logEgressSize(req, result); // 📊 Instrumentação
         return res.json(result);
@@ -1869,7 +1869,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
-      const result = await storage.getClients(req.user.companyId, page, limit);
+      const search = req.query.search as string;
+
+      let result;
+      if (search && search.trim() !== '') {
+        result = await storage.searchClients(search.trim(), req.user.companyId, page, limit);
+      } else {
+        result = await storage.getClients(req.user.companyId, page, limit);
+      }
 
       // 🔄 Transformar {data, total} em {items, pagination} para compatibilidade com frontend
       const totalPages = Math.ceil(result.total / limit);

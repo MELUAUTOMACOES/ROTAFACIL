@@ -31,6 +31,7 @@ export default function Vehicles() {
 
   // Estados de filtro
   const [vehicleSearch, setVehicleSearch] = useState("");
+  const [appliedVehicleSearch, setAppliedVehicleSearch] = useState("");
   const [vehicleResponsibility, setVehicleResponsibility] = useState<"all" | "assigned" | "unassigned">("all");
 
   const { toast } = useToast();
@@ -38,9 +39,14 @@ export default function Vehicles() {
 
   // Ler hash e query params da URL
   const { data: vehiclesData, isLoading } = useQuery({
-    queryKey: ["/api/vehicles"],
+    queryKey: ["/api/vehicles", appliedVehicleSearch],
     queryFn: async () => {
-      const response = await fetch(buildApiUrl("/api/vehicles?page=1&pageSize=50"), {
+      let url = "/api/vehicles?page=1&pageSize=50";
+      if (appliedVehicleSearch) {
+        url += `&search=${encodeURIComponent(appliedVehicleSearch)}`;
+      }
+      
+      const response = await fetch(buildApiUrl(url), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error("Erro ao carregar veículos");
@@ -120,14 +126,7 @@ export default function Vehicles() {
 
   // Filtragem de veículos
   const filteredVehicles = vehicles.filter((vehicle: Vehicle) => {
-    // Filtro de texto (Placa, Marca, Modelo)
-    const searchLower = vehicleSearch.toLowerCase();
-    const matchesSearch =
-      !vehicleSearch ||
-      vehicle.plate.toLowerCase().includes(searchLower) ||
-      vehicle.brand.toLowerCase().includes(searchLower) ||
-      vehicle.model.toLowerCase().includes(searchLower);
-
+    // Busca de texto agora é server-side, então só filtramos responsabilidade
     // Filtro de responsabilidade
     const hasAssignment = vehicle.technicianId || vehicle.teamId;
     const matchesResponsibility =
@@ -135,7 +134,7 @@ export default function Vehicles() {
       (vehicleResponsibility === "assigned" && hasAssignment) ||
       (vehicleResponsibility === "unassigned" && !hasAssignment);
 
-    return matchesSearch && matchesResponsibility;
+    return matchesResponsibility;
   }).sort((a: Vehicle, b: Vehicle) => a.id - b.id);
 
   const deleteVehicleMutation = useMutation({
@@ -230,15 +229,28 @@ export default function Vehicles() {
           {/* Filtros de Veículos */}
           <Card className="p-4 md:p-5 bg-muted/20 border-border/60 shadow-sm">
             <div className="flex flex-col md:flex-row gap-4">
-              <div className="relative flex-1">
-                <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar por placa, marca ou modelo..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
-                  value={vehicleSearch}
-                  onChange={(e) => setVehicleSearch(e.target.value)}
-                />
+              <div className="flex flex-col sm:flex-row gap-3 flex-1">
+                <div className="relative flex-1">
+                  <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar veículos no banco de dados (placa, marca ou modelo)..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
+                    value={vehicleSearch}
+                    onChange={(e) => setVehicleSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setAppliedVehicleSearch(vehicleSearch);
+                      }
+                    }}
+                  />
+                </div>
+                <Button 
+                  className="w-full sm:w-auto bg-zinc-800 hover:bg-zinc-900 text-white"
+                  onClick={() => setAppliedVehicleSearch(vehicleSearch)}
+                >
+                  Filtrar Base
+                </Button>
               </div>
               <div className="w-full md:w-48">
                 <select

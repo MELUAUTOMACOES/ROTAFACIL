@@ -11,7 +11,7 @@ const pageNames: Record<string, string> = {
   "/": "Dashboard",
   "/dashboard": "Dashboard",
   "/appointments": "Agendamentos",
-  "/routes-history": "Romaneios - Histórico de Rotas",
+  "/routes-history": "Histórico de Rotas - Romaneios",
   "/clients": "Clientes",
   "/technicians": "Técnicos",
   "/vehicles": "Veículos",

@@ -24,6 +24,7 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
     const [executionNotes, setExecutionNotes] = useState(appointment?.executionNotes || ''); // notas do prestador
     const [showSignaturePad, setShowSignaturePad] = useState(false);
     const [signature, setSignature] = useState<string | null>(appointment?.signature || null);
+    const [missingSignatureError, setMissingSignatureError] = useState<string | null>(null);
     const [photos, setPhotos] = useState<string[]>(appointment?.photos || []);
     const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -151,6 +152,8 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
 
     const handleSave = async () => {
         try {
+            setMissingSignatureError(null);
+
             if (!executionStatus) {
                 toast({ title: "Status obrigatório", description: "Selecione o resultado da visita.", variant: "destructive" });
                 return;
@@ -164,7 +167,7 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
 
             // Se for concluído, assinatura é obrigatória
             if (executionStatus === 'concluido' && !signature) {
-                toast({ title: "Assinatura obrigatória", description: "Colete a assinatura do cliente para concluir.", variant: "destructive" });
+                setMissingSignatureError("Colete a assinatura do cliente para concluir.");
                 return;
             }
 
@@ -230,6 +233,7 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
 
     const handleSignatureSave = (sigData: string) => {
         setSignature(sigData);
+        setMissingSignatureError(null);
         setShowSignaturePad(false);
     };
 
@@ -527,6 +531,18 @@ export function AppointmentExecutionModal({ isOpen, onClose, appointment, onSave
                                     </Button>
                                 )}
                             </div>
+
+                            {missingSignatureError && (
+                                <div className="w-full text-left bg-red-50 border border-red-200 rounded-md p-3">
+                                    <div className="flex items-start gap-2">
+                                        <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-semibold text-red-800">Assinatura obrigatória</p>
+                                            <p className="text-sm text-red-700">{missingSignatureError}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <DialogFooter className="gap-2 sm:gap-0 sticky bottom-0 bg-white pt-2 border-t mt-4">

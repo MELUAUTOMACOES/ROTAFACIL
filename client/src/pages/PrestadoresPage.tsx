@@ -625,6 +625,11 @@ export default function PrestadoresPage() {
     const pendingAppointments = stops?.filter((s: any) => !s.appointment?.executionStatus)?.length || 0;
     const canCloseRoute = pendingAppointments === 0 && !isRouteFinalized;
 
+    // 🗺 Preferências de Mapas 
+    const mapPref = (businessRules as any)?.providerMapPreference || ["waze", "google_maps"];
+    const showGoogleMaps = mapPref.includes("google_maps");
+    const showWaze = mapPref.includes("waze");
+
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 pb-20">
             {/* Header */}
@@ -718,14 +723,18 @@ export default function PrestadoresPage() {
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" className="w-48">
-                                <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${stops[0]?.lat},${stops[0]?.lng}`, '_blank')} className="cursor-pointer">
-                                    <MapIcon className="w-4 h-4 mr-2" />
-                                    Google Maps
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => window.open(stops[0]?.lat && stops[0]?.lng ? `https://waze.com/ul?ll=${stops[0]?.lat},${stops[0]?.lng}&navigate=yes` : `https://waze.com/ul?q=${encodeURIComponent(stops[0]?.address || stops[0]?.appointment?.address || '')}&navigate=yes`, '_blank')} className="cursor-pointer">
-                                    <Navigation className="w-4 h-4 mr-2" />
-                                    Waze
-                                </DropdownMenuItem>
+                                {showGoogleMaps && (
+                                    <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${stops[0]?.lat},${stops[0]?.lng}`, '_blank')} className="cursor-pointer">
+                                        <MapIcon className="w-4 h-4 mr-2" />
+                                        Google Maps
+                                    </DropdownMenuItem>
+                                )}
+                                {showWaze && (
+                                    <DropdownMenuItem onClick={() => window.open(stops[0]?.lat && stops[0]?.lng ? `https://waze.com/ul?ll=${stops[0]?.lat},${stops[0]?.lng}&navigate=yes` : `https://waze.com/ul?q=${encodeURIComponent(stops[0]?.address || stops[0]?.appointment?.address || '')}&navigate=yes`, '_blank')} className="cursor-pointer">
+                                        <Navigation className="w-4 h-4 mr-2" />
+                                        Waze
+                                    </DropdownMenuItem>
+                                )}
                             </DropdownMenuContent>
                         </DropdownMenu>
                         <Button variant="outline" className="w-full text-xs" onClick={() => setShowQRModal(true)}>
@@ -817,14 +826,18 @@ export default function PrestadoresPage() {
                                                             </button>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end" className="w-48">
-                                                            <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${stop.lat && stop.lng ? `${stop.lat},${stop.lng}` : encodeURIComponent(stop.address || stop.appointment?.address || '')}`, '_blank')} className="cursor-pointer">
-                                                                <MapIcon className="w-4 h-4 mr-2" />
-                                                                Google Maps
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => window.open(stop.lat && stop.lng ? `https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes` : `https://waze.com/ul?q=${encodeURIComponent(stop.address || stop.appointment?.address || '')}&navigate=yes`, '_blank')} className="cursor-pointer">
-                                                                <Navigation className="w-4 h-4 mr-2" />
-                                                                Waze
-                                                            </DropdownMenuItem>
+                                                            {showGoogleMaps && (
+                                                                <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${stop.lat && stop.lng ? `${stop.lat},${stop.lng}` : encodeURIComponent(stop.address || stop.appointment?.address || '')}`, '_blank')} className="cursor-pointer">
+                                                                    <MapIcon className="w-4 h-4 mr-2" />
+                                                                    Google Maps
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                            {showWaze && (
+                                                                <DropdownMenuItem onClick={() => window.open(stop.lat && stop.lng ? `https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes` : `https://waze.com/ul?q=${encodeURIComponent(stop.address || stop.appointment?.address || '')}&navigate=yes`, '_blank')} className="cursor-pointer">
+                                                                    <Navigation className="w-4 h-4 mr-2" />
+                                                                    Waze
+                                                                </DropdownMenuItem>
+                                                            )}
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
 
@@ -890,12 +903,16 @@ export default function PrestadoresPage() {
                                             </button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end" className="w-48">
-                                            <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(routeData.startAddress)}`, '_blank')} className="cursor-pointer">
-                                                <MapIcon className="w-4 h-4 mr-2" /> Google Maps
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => window.open(`https://waze.com/ul?q=${encodeURIComponent(routeData.startAddress)}&navigate=yes`, '_blank')} className="cursor-pointer">
-                                                <Navigation className="w-4 h-4 mr-2" /> Waze
-                                            </DropdownMenuItem>
+                                            {showGoogleMaps && (
+                                                <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(routeData.startAddress)}`, '_blank')} className="cursor-pointer">
+                                                    <MapIcon className="w-4 h-4 mr-2" /> Google Maps
+                                                </DropdownMenuItem>
+                                            )}
+                                            {showWaze && (
+                                                <DropdownMenuItem onClick={() => window.open(`https://waze.com/ul?q=${encodeURIComponent(routeData.startAddress)}&navigate=yes`, '_blank')} className="cursor-pointer">
+                                                    <Navigation className="w-4 h-4 mr-2" /> Waze
+                                                </DropdownMenuItem>
+                                            )}
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </div>

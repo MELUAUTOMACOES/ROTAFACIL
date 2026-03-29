@@ -45,7 +45,6 @@ const ITEM_STATUS_LABELS: Record<string, string> = {
     ok: "OK",
     attention: "Atenção",
     critical: "Crítico",
-    not_checked: "Não Verificado",
 };
 
 export default function VehicleChecklistAuditTab() {

@@ -345,6 +345,8 @@ export const businessRules = pgTable("business_rules", {
   // Mensagens WhatsApp
   whatsappMessageTemplate: text("whatsapp_message_template").default("Olá, {nome_cliente}! Sou da {nome_empresa}, estou a caminho para realizar o serviço {nome_servico}. Previsão de chegada: {horario_estimado}."),
   whatsappAppointmentMessageTemplate: text("whatsapp_appointment_message_template").default("Olá, {nome_cliente}! Confirmamos seu agendamento de {nome_servico} para {data_agendamento}. Endereço: {endereco}."),
+  // Aplicativos de Mapa para Prestadores
+  providerMapPreference: text("provider_map_preference").array().default(['waze', 'google_maps']),
   userId: integer("user_id").notNull().references(() => users.id),
   companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -654,7 +656,7 @@ export const insertVehicleChecklistItemSchema = createInsertSchema(vehicleCheckl
   checklistId: true, // checklistId é preenchido após criar o checklist principal
 }).extend({
   category: z.enum(["fluids", "tires", "lights", "panel", "safety", "mandatory_items", "fuel"]),
-  status: z.enum(["ok", "attention", "critical", "not_checked"]),
+  status: z.enum(["ok", "attention", "critical"]),
 });
 
 // Vehicle Checklist Audits schemas
@@ -762,6 +764,8 @@ export const insertBusinessRulesSchema = createInsertSchema(businessRules).omit(
   // Mensagens WhatsApp
   whatsappMessageTemplate: z.string().optional(),
   whatsappAppointmentMessageTemplate: z.string().optional(),
+  // Preferência de provedor de mapas
+  providerMapPreference: z.array(z.string()).optional(),
 });
 
 // Login schema

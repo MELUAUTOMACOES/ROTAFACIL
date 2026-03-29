@@ -13,6 +13,7 @@ import { insertBusinessRulesSchema, type BusinessRules, type InsertBusinessRules
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
+import { Checkbox } from "@/components/ui/checkbox";
 import { buscarEnderecoPorCep } from "@/lib/cep";
 
 export default function BusinessRulesPage() {
@@ -67,6 +68,8 @@ export default function BusinessRulesPage() {
       // Mensagens WhatsApp
       whatsappMessageTemplate: "Olá, {nome_cliente}! Sou da {nome_empresa}, estou a caminho para realizar o serviço {nome_servico}. Previsão de chegada: {horario_estimado}.",
       whatsappAppointmentMessageTemplate: "Olá, {nome_cliente}! Confirmamos seu agendamento de {nome_servico} para {data_agendamento}. Endereço: {endereco}.",
+      // Aplicativos de mapa do prestador
+      providerMapPreference: ["waze", "google_maps"],
     },
   });
 
@@ -142,6 +145,8 @@ export default function BusinessRulesPage() {
         // Mensagens WhatsApp
         whatsappMessageTemplate: (businessRules as any).whatsappMessageTemplate || "Olá, {nome_cliente}! Sou da {nome_empresa}, estou a caminho para realizar o serviço {nome_servico}. Previsão de chegada: {horario_estimado}.",
         whatsappAppointmentMessageTemplate: (businessRules as any).whatsappAppointmentMessageTemplate || "Olá, {nome_cliente}! Confirmamos seu agendamento de {nome_servico} para {data_agendamento}. Endereço: {endereco}.",
+        // Aplicativos de mapa do prestador
+        providerMapPreference: (businessRules as any).providerMapPreference || ["waze", "google_maps"],
       });
     }
   }, [businessRules, form]);
@@ -388,6 +393,73 @@ export default function BusinessRulesPage() {
                             Reservado para cálculo de buffer no deslocamento (em desenvolvimento).
                           </FormDescription>
                           <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="providerMapPreference"
+                      render={() => (
+                        <FormItem className="col-span-2 space-y-3 p-4 border rounded-md">
+                          <div>
+                            <FormLabel className="text-base">Aplicativos de Mapa para Prestadores</FormLabel>
+                            <FormDescription>
+                              Selecione quais aplicativos estarão disponíveis para o prestador navegar até o cliente. Padrão: Ambos.
+                            </FormDescription>
+                          </div>
+                          <div className="flex gap-4">
+                            <FormField
+                              control={form.control}
+                              name="providerMapPreference"
+                              render={({ field }) => {
+                                const isWazeChecked = field.value?.includes("waze") ?? true;
+                                return (
+                                  <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                                    <FormControl>
+                                      <Checkbox
+                                        checked={isWazeChecked}
+                                        onCheckedChange={(checked) => {
+                                          const prev = field.value || ["waze", "google_maps"];
+                                          if (checked) {
+                                            field.onChange(Array.from(new Set([...prev, "waze"])));
+                                          } else {
+                                            field.onChange(prev.filter((c) => c !== "waze"));
+                                          }
+                                        }}
+                                      />
+                                    </FormControl>
+                                    <FormLabel className="font-normal cursor-pointer">Waze</FormLabel>
+                                  </FormItem>
+                                );
+                              }}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="providerMapPreference"
+                              render={({ field }) => {
+                                const isGoogleChecked = field.value?.includes("google_maps") ?? true;
+                                return (
+                                  <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                                    <FormControl>
+                                      <Checkbox
+                                        checked={isGoogleChecked}
+                                        onCheckedChange={(checked) => {
+                                          const prev = field.value || ["waze", "google_maps"];
+                                          if (checked) {
+                                            field.onChange(Array.from(new Set([...prev, "google_maps"])));
+                                          } else {
+                                            field.onChange(prev.filter((c) => c !== "google_maps"));
+                                          }
+                                        }}
+                                      />
+                                    </FormControl>
+                                    <FormLabel className="font-normal cursor-pointer">Google Maps</FormLabel>
+                                  </FormItem>
+                                );
+                              }}
+                            />
+                          </div>
                         </FormItem>
                       )}
                     />

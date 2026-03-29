@@ -24,8 +24,10 @@ export default function Technicians() {
 
   // Estados de filtro
   const [technicianSearch, setTechnicianSearch] = useState("");
+  const [appliedTechnicianSearch, setAppliedTechnicianSearch] = useState("");
   const [technicianStatus, setTechnicianStatus] = useState<"all" | "active" | "inactive">("all");
   const [teamSearch, setTeamSearch] = useState("");
+  const [appliedTeamSearch, setAppliedTeamSearch] = useState("");
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -49,9 +51,14 @@ export default function Technicians() {
 
   // Queries para técnicos
   const { data: techniciansData, isLoading: techniciansLoading } = useQuery({
-    queryKey: ["/api/technicians"],
+    queryKey: ["/api/technicians", appliedTechnicianSearch, technicianStatus],
     queryFn: async () => {
-      const response = await fetch(buildApiUrl("/api/technicians?page=1&pageSize=50"), {
+      let url = "/api/technicians?page=1&pageSize=50";
+      if (appliedTechnicianSearch) url += `&search=${encodeURIComponent(appliedTechnicianSearch)}`;
+      if (technicianStatus === "active") url += `&isActive=true`;
+      if (technicianStatus === "inactive") url += `&isActive=false`;
+      
+      const response = await fetch(buildApiUrl(url), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
@@ -64,30 +71,16 @@ export default function Technicians() {
   });
   const technicians = normalizeItems<Technician>(techniciansData);
 
-  // Filtragem de técnicos
-  const filteredTechnicians = technicians.filter((tech: Technician) => {
-    // Filtro de texto
-    const searchLower = technicianSearch.toLowerCase();
-    const matchesSearch =
-      !technicianSearch ||
-      tech.name.toLowerCase().includes(searchLower) ||
-      tech.email?.toLowerCase().includes(searchLower) ||
-      tech.phone.includes(searchLower);
 
-    // Filtro de status
-    const matchesStatus =
-      technicianStatus === "all" ||
-      (technicianStatus === "active" && tech.isActive) ||
-      (technicianStatus === "inactive" && !tech.isActive);
-
-    return matchesSearch && matchesStatus;
-  });
 
   // Queries para equipes
   const { data: teamsData, isLoading: teamsLoading } = useQuery({
-    queryKey: ["/api/teams"],
+    queryKey: ["/api/teams", appliedTeamSearch],
     queryFn: async () => {
-      const response = await fetch(buildApiUrl("/api/teams?page=1&pageSize=50"), {
+      let url = "/api/teams?page=1&pageSize=50";
+      if (appliedTeamSearch) url += `&search=${encodeURIComponent(appliedTeamSearch)}`;
+      
+      const response = await fetch(buildApiUrl(url), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
@@ -100,11 +93,7 @@ export default function Technicians() {
   });
   const teams = normalizeItems<Team>(teamsData);
 
-  // Filtragem de equipes
-  const filteredTeams = teams.filter((team: Team) => {
-    if (!teamSearch) return true;
-    return team.name.toLowerCase().includes(teamSearch.toLowerCase());
-  });
+
 
   // Query para serviços (necessário para formulários)
   const { data: servicesData, isLoading: servicesLoading } = useQuery({
@@ -335,15 +324,28 @@ export default function Technicians() {
           {/* Filtros de Técnicos */}
           <Card className="p-4 md:p-5 bg-muted/20 border-border/60 shadow-sm">
             <div className="flex flex-col md:flex-row gap-4">
-              <div className="relative flex-1">
-                <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar por nome, email ou telefone..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
-                  value={technicianSearch}
-                  onChange={(e) => setTechnicianSearch(e.target.value)}
-                />
+              <div className="flex flex-col sm:flex-row gap-3 flex-1">
+                <div className="relative flex-1">
+                  <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar técnicos no banco de dados (por nome)..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
+                    value={technicianSearch}
+                    onChange={(e) => setTechnicianSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setAppliedTechnicianSearch(technicianSearch);
+                      }
+                    }}
+                  />
+                </div>
+                <Button 
+                  className="w-full sm:w-auto bg-zinc-800 hover:bg-zinc-900 text-white"
+                  onClick={() => setAppliedTechnicianSearch(technicianSearch)}
+                >
+                  Filtrar Base
+                </Button>
               </div>
               <div className="w-full md:w-48">
                 <select
@@ -360,7 +362,7 @@ export default function Technicians() {
           </Card>
 
           {/* Lista de Técnicos */}
-          {filteredTechnicians.length === 0 ? (
+          {technicians.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <UserCog className="h-12 w-12 text-gray-400 mb-4" />
@@ -385,7 +387,7 @@ export default function Technicians() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredTechnicians.map((technician: Technician) => (
+              {technicians.map((technician: Technician) => (
                 <Card key={technician.id} className="hover:shadow-md transition-shadow">
                   <CardHeader className="border-b border-gray-100">
                     <div className="flex items-center justify-between">
@@ -503,20 +505,33 @@ export default function Technicians() {
 
           {/* Filtro de Equipes */}
           <Card className="p-4 md:p-5 bg-muted/20 border-border/60 shadow-sm">
-            <div className="relative">
-              <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar equipe por nome..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
-                value={teamSearch}
-                onChange={(e) => setTeamSearch(e.target.value)}
-              />
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar equipe no banco de dados (por nome)..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
+                  value={teamSearch}
+                  onChange={(e) => setTeamSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setAppliedTeamSearch(teamSearch);
+                    }
+                  }}
+                />
+              </div>
+              <Button 
+                className="w-full sm:w-auto bg-zinc-800 hover:bg-zinc-900 text-white"
+                onClick={() => setAppliedTeamSearch(teamSearch)}
+              >
+                Filtrar Base
+              </Button>
             </div>
           </Card>
 
           {/* Lista de Equipes */}
-          {filteredTeams.length === 0 ? (
+          {teams.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Users className="h-12 w-12 text-gray-400 mb-4" />
@@ -541,7 +556,7 @@ export default function Technicians() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {filteredTeams.map((team: Team) => (
+              {teams.map((team: Team) => (
                 <Card key={team.id} className="hover:shadow-md transition-shadow">
                   <CardHeader className="border-b border-gray-100">
                     <div className="flex items-center justify-between">

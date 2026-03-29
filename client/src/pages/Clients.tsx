@@ -28,6 +28,7 @@ export default function Clients() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [appliedSearchTerm, setAppliedSearchTerm] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 25;
   const { toast } = useToast();
@@ -45,11 +46,15 @@ export default function Clients() {
     ]
   });
 
-  // ✅ Paginação server-side
+  // ✅ Paginação server-side integrada com busca
   const { data: clientsResponse, isLoading } = useQuery<ClientsResponse>({
-    queryKey: ["/api/clients", page, pageSize],
+    queryKey: ["/api/clients", page, pageSize, appliedSearchTerm],
     queryFn: async () => {
-      const response = await fetch(buildApiUrl(`/api/clients?page=${page}&limit=${pageSize}`), {
+      let url = `/api/clients?page=${page}&limit=${pageSize}`;
+      if (appliedSearchTerm) {
+        url += `&search=${encodeURIComponent(appliedSearchTerm)}`;
+      }
+      const response = await fetch(buildApiUrl(url), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) throw new Error("Erro ao carregar clientes");
@@ -59,19 +64,6 @@ export default function Clients() {
 
   const clients = clientsResponse?.items || [];
   const pagination = clientsResponse?.pagination || { page: 1, pageSize: 25, total: 0, totalPages: 0 };
-
-  // Filtragem client-side (para busca rápida na página atual)
-  const filteredClients = clients.filter((client: Client) => {
-    if (!searchTerm) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      client.name.toLowerCase().includes(searchLower) ||
-      client.email?.toLowerCase().includes(searchLower) ||
-      client.cpf.includes(searchLower) ||
-      client.phone1?.includes(searchLower) ||
-      client.cidade.toLowerCase().includes(searchLower)
-    );
-  });
 
   const deleteClientMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -461,21 +453,38 @@ export default function Clients() {
 
       {/* Search Filter */}
       <Card className="p-4 md:p-5 bg-muted/20 border-border/60 shadow-sm">
-        <div className="relative">
-          <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar por nome, email, CPF, telefone ou cidade..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <SelectIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar clientes em toda a base de dados (Nome ou CPF)..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-burnt-yellow focus:border-transparent"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setAppliedSearchTerm(searchTerm);
+                  setPage(1);
+                }
+              }}
+            />
+          </div>
+          <Button 
+            className="w-full sm:w-auto bg-zinc-800 hover:bg-zinc-900 text-white"
+            onClick={() => {
+              setAppliedSearchTerm(searchTerm);
+              setPage(1);
+            }}
+          >
+            Filtrar Base
+          </Button>
         </div>
       </Card>
 
       {/* Clients List */}
       {
-        filteredClients.length === 0 ? (
+        clients.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Users className="h-12 w-12 text-gray-400 mb-4" />
@@ -503,7 +512,7 @@ export default function Clients() {
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredClients.map((client: Client) => (
+            {clients.map((client: Client) => (
               <Card key={client.id} className="hover:shadow-md transition-shadow">
                 <CardHeader className="border-b border-gray-100">
                   <div className="flex items-center justify-between">

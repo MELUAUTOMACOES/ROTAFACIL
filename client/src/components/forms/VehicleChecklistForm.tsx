@@ -36,7 +36,6 @@ const ITEM_STATUS_OPTIONS = [
     { value: "ok", label: "OK" },
     { value: "attention", label: "Atenção" },
     { value: "critical", label: "Crítico" },
-    { value: "not_checked", label: "Não Verificado" },
 ];
 
 // Schema de validação para o formulário
@@ -69,42 +68,42 @@ export default function VehicleChecklistForm({ open, onClose }: VehicleChecklist
 
     // Estados para cada categoria de items
     const [fluidItems, setFluidItems] = useState<Record<string, { status: string; observation?: string }>>({
-        oil: { status: "ok" },
-        water: { status: "ok" },
-        windshield_washer: { status: "ok" },
+        oil: { status: "" },
+        water: { status: "" },
+        windshield_washer: { status: "" },
     });
 
     const [tireItems, setTireItems] = useState<Record<string, { status: string; observation?: string }>>({
-        front_tires: { status: "ok" },
-        rear_tires: { status: "ok" },
-        tire_pressure: { status: "ok" },
-        spare_tire: { status: "ok" },
+        front_tires: { status: "" },
+        rear_tires: { status: "" },
+        tire_pressure: { status: "" },
+        spare_tire: { status: "" },
     });
 
     const [lightItems, setLightItems] = useState<Record<string, { status: string; observation?: string }>>({
-        headlights_low: { status: "ok" },
-        headlights_high: { status: "ok" },
-        turn_signals: { status: "ok" },
-        brake_lights: { status: "ok" },
-        reverse_lights: { status: "ok" },
+        headlights_low: { status: "" },
+        headlights_high: { status: "" },
+        turn_signals: { status: "" },
+        brake_lights: { status: "" },
+        reverse_lights: { status: "" },
     });
 
     const [panelItems, setPanelItems] = useState<Record<string, { status: string; observation?: string }>>({
-        warning_lights: { status: "ok" },
+        warning_lights: { status: "" },
     });
 
     const [safetyItems, setSafetyItems] = useState<Record<string, { status: string; observation?: string }>>({
-        brakes: { status: "ok" },
-        steering_suspension: { status: "ok" },
-        seat_belts: { status: "ok" },
-        mirrors: { status: "ok" },
+        brakes: { status: "" },
+        steering_suspension: { status: "" },
+        seat_belts: { status: "" },
+        mirrors: { status: "" },
     });
 
     const [mandatoryItems, setMandatoryItems] = useState<Record<string, { status: string; observation?: string }>>({
-        triangle: { status: "ok" },
-        jack: { status: "ok" },
-        wheel_wrench: { status: "ok" },
-        fire_extinguisher: { status: "ok" },
+        triangle: { status: "" },
+        jack: { status: "" },
+        wheel_wrench: { status: "" },
+        fire_extinguisher: { status: "" },
     });
 
     const [fuelLevel, setFuelLevel] = useState<string>("2/4");
@@ -196,6 +195,10 @@ export default function VehicleChecklistForm({ open, onClose }: VehicleChecklist
     };
 
     const onSubmit = (data: ChecklistFormData) => {
+        const now = new Date();
+        const checkDate = now.toISOString().split("T")[0];
+        const checkTime = now.toTimeString().slice(0, 5);
+
         // Compilar todos os items
         const items = [
             ...Object.entries(fluidItems).map(([name, item]) => ({
@@ -242,8 +245,20 @@ export default function VehicleChecklistForm({ open, onClose }: VehicleChecklist
             },
         ];
 
+        const hasUnfilledItems = items.some((item) => item.category !== "fuel" && (!item.status || item.status.trim().length === 0));
+        if (hasUnfilledItems) {
+            toast({
+                title: "Checklist incompleto",
+                description: "Preencha todos os itens de verificação antes de salvar.",
+                variant: "destructive",
+            });
+            return;
+        }
+
         const payload = {
             ...data,
+            checkDate,
+            checkTime,
             photos,
             items,
         };
@@ -289,7 +304,7 @@ export default function VehicleChecklistForm({ open, onClose }: VehicleChecklist
                 onValueChange={(value) => updateItemStatus(category, itemName, value, currentObservation)}
             >
                 <SelectTrigger className="h-9">
-                    <SelectValue />
+                    <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
                     {ITEM_STATUS_OPTIONS.map((option) => (
@@ -299,7 +314,7 @@ export default function VehicleChecklistForm({ open, onClose }: VehicleChecklist
                     ))}
                 </SelectContent>
             </Select>
-            {currentStatus !== "ok" && currentStatus !== "not_checked" && (
+            {!!currentStatus && currentStatus !== "ok" && (
                 <Input
                     placeholder="Observação (opcional)"
                     value={currentObservation || ""}
@@ -330,6 +345,7 @@ export default function VehicleChecklistForm({ open, onClose }: VehicleChecklist
                             <Input
                                 {...form.register("checkDate")}
                                 type="date"
+                                disabled={true}
                                 className="mt-1"
                             />
                         </div>
@@ -338,6 +354,7 @@ export default function VehicleChecklistForm({ open, onClose }: VehicleChecklist
                             <Input
                                 {...form.register("checkTime")}
                                 type="time"
+                                disabled={true}
                                 className="mt-1"
                             />
                         </div>
