@@ -1084,7 +1084,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ error: 'Coordenadas inválidas' });
     }
 
-    const coordStr = coords.map((c: number[]) => c.join(',')).join(';');
+    const coordStr = coords.map((c: number[]) => {
+      const lng = Number(c[0]);
+      const lat = Number(c[1]);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+        throw new Error(`Coordenada inválida na matrix: lng=${c[0]}, lat=${c[1]}`);
+      }
+      return `${lng.toFixed(6)},${lat.toFixed(6)}`; 
+    }).join(';');
     const OSRM_URL = getOsrmUrl()?.replace(/\/$/, '') || null;
     console.log("🌐 OSRM_URL configurado:", OSRM_URL);
 

@@ -18,11 +18,13 @@ import {
   businessRules,
   routeAudits,
   users,
+  geocodingCache,
 } from "@shared/schema";
 import { eq, and, gte, lte, like, or, desc, inArray, sql, asc, ne } from "drizzle-orm";
 import { trackFeatureUsage } from "./metrics.routes";
 import { logEgressSize } from "../utils/egressLogger";
 import { authenticateToken } from "../middleware/auth.middleware";
+import { normalizeAddressForCache, generateAddressHash } from "../utils/geocodeCache";
 
 // Extend Request type for authenticated user
 interface AuthenticatedRequest extends Request {
@@ -37,7 +39,7 @@ function getOsrmUrl() {
   // 1. Prioridade: Variável de ambiente (Ideal para Deploy/Render)
   if (process.env.OSRM_URL) {
     console.log("Variável de ambiente OSRM_URL encontrada:", process.env.OSRM_URL);
-    return process.env.OSRM_URL;
+    return process.env.OSRM_URL.trim();
   }
 
   // 2. Fallback: Arquivo txt em vários locais possíveis
@@ -132,10 +134,30 @@ async function resolveStartForRoute(
     const cep = checa(addr.cep);
     const estado = checa(addr.estado);
 
-    const full = [logradouro, numero, complemento, bairro, cidade, cep, estado, "Brasil"].filter(Boolean).join(", ");
+    const tentList: string[] = [];
+
+    // [MELHORIA PARTE 2] Tratamento Inteligente para Rodovias
+    if (logradouro && /(rodovia|br[\-\s]?\d+)/i.test(logradouro)) {
+       const match = logradouro.match(/br[\s\-]?(\d+)/i);
+       const brCode = match ? `BR-${match[1]}` : logradouro;
+       
+       console.log(`🛣️ [RODOVIA DETECTADA] Logradouro original: ${logradouro}`);
+       // Rodovias costumam falhar se o Bairro e CEP são genéricos. O mapa aceita melhor BR-XXX, Cidade
+       const rodoviaSimples = [brCode, cidade, estado, "Brasil"].filter(Boolean).join(", ");
+       const rodoviaComNumero = [brCode, numero, cidade, estado, "Brasil"].filter(Boolean).join(", ");
+       
+       tentList.push(rodoviaSimples, rodoviaComNumero);
+       console.log(`   -> Variação extra 1: ${rodoviaSimples}`);
+       console.log(`   -> Variação extra 2: ${rodoviaComNumero}`);
+    }
+
+    // Complemento removido da primeira tentativa para melhorar acerto no Nominatim
+    const full = [logradouro, numero, bairro, cidade, cep, estado, "Brasil"].filter(Boolean).join(", ");
     const semNumero = [logradouro, bairro, cidade, cep, estado, "Brasil"].filter(Boolean).join(", ");
     const soCepCidade = [cep, cidade, estado, "Brasil"].filter(Boolean).join(", ");
-    return [full, semNumero, soCepCidade].filter((s) => s && s.length >= 8) as string[];
+    
+    tentList.push(full, semNumero, soCepCidade);
+    return Array.from(new Set(tentList.filter((s) => s && s.length >= 8))); // remove duplicates
   };
 
   let tentativas: string[] = [];
@@ -198,12 +220,82 @@ async function resolveStartForRoute(
     }
   }
 
+  // Salva rastreio das strings testadas para criar "alias negativo" de cache e apontar todas pro que der certo
+  const failedEnds: string[] = [];
+
   // geocodifica na ordem, com fallback Curitiba
   for (const end of tentativas) {
+    if (!end || end.trim() === "") continue;
+    
+    const norm = normalizeAddressForCache(end);
+    const hash = generateAddressHash(norm);
+
     try {
+      // 1. Tentar Resgatar do Cache
+      const cached = await db.select().from(geocodingCache).where(eq(geocodingCache.addressHash, hash)).limit(1);
+      if (cached.length > 0 && (cached[0].confidenceLevel === "high" || cached[0].confidenceLevel === "medium")) {
+        console.log(`✅ [START_CACHE_HIT] Origem resgatada do cache: ${end} (Source: ${cached[0].source})`);
+        return { lat: cached[0].lat, lng: cached[0].lng, address: end };
+      }
+    } catch(e) {
+      console.warn("⚠️ [START_CACHE_WARN] Erro ao ler cache de start location:", e);
+    }
+
+    try {
+      console.log(`🌐 [START_GEOCODE] Buscando na API o ponto inicial: ${end}`);
       const r = await geocodeEnderecoServer(end);
-      return { lat: Number(r.lat), lng: Number(r.lon), address: end };
-    } catch { /* tenta próximo */ }
+      
+      const resLat = Number(r.lat);
+      const resLng = Number(r.lon);
+
+      // 2. Salvar o endereço que teve Sucesso
+      const toSave = [{
+          addressHash: hash,
+          normalizedAddress: norm,
+          postalCode: null, street: null, number: null, neighborhood: null,
+          city: r.addressDetails?.city || r.addressDetails?.town || null,
+          state: r.addressDetails?.state || null,
+          country: r.addressDetails?.country_code || null,
+          lat: resLat, 
+          lng: resLng,
+          source: "nominatim_full_address_start",
+          confidenceLevel: "high",
+          confidenceReason: "start_location_match",
+          rawProviderDisplayName: r.displayName || null,
+          providerPayloadSummary: null,
+      }];
+
+      // 3. E salvar um "Alias" para todos que falharam na mesma tentativa para não repeti-los na próxima Otimização
+      for (const failedEnd of failedEnds) {
+          const fnorm = normalizeAddressForCache(failedEnd);
+          toSave.push({
+             addressHash: generateAddressHash(fnorm),
+             normalizedAddress: fnorm,
+             postalCode: null, street: null, number: null, neighborhood: null,
+             city: r.addressDetails?.city || r.addressDetails?.town || null,
+             state: r.addressDetails?.state || null,
+             country: r.addressDetails?.country_code || null,
+             lat: resLat, 
+             lng: resLng,
+             source: "start_location_fallback_alias",
+             confidenceLevel: "medium",
+             confidenceReason: "alias_from_successful_fallback",
+             rawProviderDisplayName: r.displayName || null,
+             providerPayloadSummary: null,
+          });
+      }
+
+      for (const item of toSave) {
+          try {
+             await db.insert(geocodingCache).values(item).onConflictDoNothing();
+          } catch(e) {}
+      }
+      
+      console.log(`✅ [START_CACHE_SAVE] Cache atualizado com sucesso (Inclui aliases de tentativas falhas)`);
+      return { lat: resLat, lng: resLng, address: end };
+    } catch {
+      failedEnds.push(end); // Falhou, adiciona a lista para virar Alias negativo depois
+    }
   }
 
   return { lat: -25.4284, lng: -49.2654, address: "Curitiba - PR, Brasil" };
@@ -326,7 +418,16 @@ async function getOSRMMatrix(
     throw new Error("OSRM URL não configurado");
   }
 
-  const coordStr = coordinates.map((c) => c.join(",")).join(";");
+  // Montagem blindada para evitar logs ou envios de `-49..293`
+  const coordStr = coordinates.map((c) => {
+    const lng = Number(c[0]);
+    const lat = Number(c[1]);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+      throw new Error(`Coordenada inválida na Matriz OSRM: lng=${c[0]}, lat=${c[1]}`);
+    }
+    return `${lng.toFixed(6)},${lat.toFixed(6)}`;
+  }).join(";");
+
   const osrmUrl = `${OSRM_URL}/table/v1/driving/${coordStr}?annotations=duration,distance`;
 
   console.log("🌐 Chamando OSRM matrix:", osrmUrl);
@@ -351,7 +452,16 @@ async function getOSRMRoute(coordinates: [number, number][]): Promise<any> {
     throw new Error("OSRM URL não configurado");
   }
 
-  const coordStr = coordinates.map((c) => c.join(",")).join(";");
+  // Montagem blindada
+  const coordStr = coordinates.map((c) => {
+    const lng = Number(c[0]);
+    const lat = Number(c[1]);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+      throw new Error(`Coordenada inválida na Polyline OSRM: lng=${c[0]}, lat=${c[1]}`);
+    }
+    return `${lng.toFixed(6)},${lat.toFixed(6)}`;
+  }).join(";");
+  
   const osrmUrl = `${OSRM_URL}/route/v1/driving/${coordStr}?overview=full&geometries=geojson`;
 
   console.log("🗺️ Chamando OSRM route:", osrmUrl);
@@ -427,6 +537,10 @@ async function geocodeEnderecoServer(
       addressDetails,
       displayName
     };
+  } catch (err: any) {
+    const errInfo = err.cause ? `(Causa: ${err.cause.message || err.cause.code || "desconhecida"})` : '';
+    const name = err.name && err.name !== "Error" ? `[${err.name}]` : '';
+    throw new Error(`${name} ${err.message} ${errInfo}`.trim());
   } finally {
     clearTimeout(timer);
   }
@@ -729,7 +843,14 @@ export function registerRoutesAPI(app: Express) {
         ? [startLngLat, ...orderedStopLngLat, startLngLat]
         : [startLngLat, ...orderedStopLngLat];
 
-      const routeCoordsStr = lineCoords.map(p => `${p[0]},${p[1]}`).join(";");
+      const routeCoordsStr = lineCoords.map(p => {
+        const lng = Number(p[0]);
+        const lat = Number(p[1]);
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+          throw new Error(`Coordenadas inválidas na polyline reotimização: lng=${p[0]}, lat=${p[1]}`);
+        }
+        return `${lng.toFixed(6)},${lat.toFixed(6)}`;
+      }).join(";");
       const routeUrl = `${OSRM_URL}/route/v1/driving/${routeCoordsStr}?overview=full&geometries=geojson`;
       const routeResp = await fetch(routeUrl);
 
@@ -957,10 +1078,26 @@ export function registerRoutesAPI(app: Express) {
           const cepNormalizado = formatCep(addr.cep); // Normaliza CEP para formato com traço
           const estado = checa(addr.estado);
 
+          const tentList: string[] = [];
+
+          // [MELHORIA PARTE 2] Tratamento Inteligente para Rodovias
+          if (logradouro && /(rodovia|br[\-\s]?\d+)/i.test(logradouro)) {
+             const match = logradouro.match(/br[\s\-]?(\d+)/i);
+             const brCode = match ? `BR-${match[1]}` : logradouro;
+             
+             console.log(`🛣️ [RODOVIA DETECTADA] Logradouro original: ${logradouro}`);
+             const rodoviaSimples = [brCode, cidade, estado, "Brasil"].filter(Boolean).join(", ");
+             const rodoviaComNumero = [brCode, numero, cidade, estado, "Brasil"].filter(Boolean).join(", ");
+             
+             tentList.push(rodoviaSimples, rodoviaComNumero);
+             console.log(`   -> Variação extra 1: ${rodoviaSimples}`);
+             console.log(`   -> Variação extra 2: ${rodoviaComNumero}`);
+          }
+
+          // Complemento removido para focar Nominatim apenas no local macro
           const full = [
             logradouro,
             numero,
-            complemento,
             bairro,
             cidade,
             cepNormalizado,
@@ -978,9 +1115,8 @@ export function registerRoutesAPI(app: Express) {
             .filter(Boolean)
             .join(", ");
 
-          return [full, semNumero, soCepCidade].filter(
-            (s) => s && s.length >= 8,
-          ) as string[];
+          tentList.push(full, semNumero, soCepCidade);
+          return Array.from(new Set(tentList.filter((s) => s && s.length >= 8))); // remove duplicates
         };
 
         let responsibleName = "Prestador";
@@ -1074,17 +1210,81 @@ export function registerRoutesAPI(app: Express) {
             console.log("🏢 Tentativas (empresa):", tentativas);
           }
 
-          // 2.3 Geocodifica na ordem
+          // 2.3 Geocodifica na ordem (com Cache integrado e Aliases)
           let sucesso: { lat: number; lon: number } | null = null;
+          const failedEndsGlobal: string[] = [];
+
           for (let i = 0; i < tentativas.length; i++) {
             const end = tentativas[i];
+            if (!end || end.trim() === "") continue;
+
+            const norm = normalizeAddressForCache(end);
+            const hash = generateAddressHash(norm);
+
             try {
+              const cached = await db.select().from(geocodingCache).where(eq(geocodingCache.addressHash, hash)).limit(1);
+              if (cached.length > 0 && (cached[0].confidenceLevel === "high" || cached[0].confidenceLevel === "medium")) {
+                console.log(`✅ [START_CACHE_HIT] Origem resgatada do cache: ${end} (Source: ${cached[0].source})`);
+                sucesso = { lat: cached[0].lat, lon: cached[0].lng }; // ⚠️ campo do banco é 'lng', mapeado como 'lon' para compatibilidade
+                startAddress = end;
+                break;
+              }
+            } catch(e) {}
+
+            try {
+              console.log(`🌐 [START_GEOCODE] Buscando na API o ponto inicial: ${end}`);
               const r = await geocodeEnderecoServer(end);
               sucesso = r;
               startAddress = end;
               console.log(`✅ Início geocodificado:`, r, "para:", end);
+              
+              const resLat = Number(r.lat);
+              const resLng = Number(r.lon);
+
+              const toSave = [{
+                  addressHash: hash,
+                  normalizedAddress: norm,
+                  postalCode: null, street: null, number: null, neighborhood: null,
+                  city: r.addressDetails?.city || r.addressDetails?.town || null,
+                  state: r.addressDetails?.state || null,
+                  country: r.addressDetails?.country_code || null,
+                  lat: resLat, 
+                  lng: resLng,
+                  source: "nominatim_full_address_start",
+                  confidenceLevel: "high",
+                  confidenceReason: "start_location_match",
+                  rawProviderDisplayName: r.displayName || null,
+                  providerPayloadSummary: null,
+              }];
+
+              for (const failedEnd of failedEndsGlobal) {
+                  const fnorm = normalizeAddressForCache(failedEnd);
+                  toSave.push({
+                     addressHash: generateAddressHash(fnorm),
+                     normalizedAddress: fnorm,
+                     postalCode: null, street: null, number: null, neighborhood: null,
+                     city: r.addressDetails?.city || r.addressDetails?.town || null,
+                     state: r.addressDetails?.state || null,
+                     country: r.addressDetails?.country_code || null,
+                     lat: resLat, 
+                     lng: resLng,
+                     source: "start_location_fallback_alias",
+                     confidenceLevel: "medium",
+                     confidenceReason: "alias_from_successful_fallback",
+                     rawProviderDisplayName: r.displayName || null,
+                     providerPayloadSummary: null,
+                  });
+              }
+
+              for (const item of toSave) {
+                  try {
+                     await db.insert(geocodingCache).values(item).onConflictDoNothing();
+                  } catch(e) {}
+              }
+              console.log(`✅ [START_CACHE_SAVE] Cache atualizado com sucesso e aliases para Start`);
               break;
             } catch (e: any) {
+              failedEndsGlobal.push(end);
               console.log(
                 `❌ Falha geocodificando tentativa ${i + 1}:`,
                 end,
@@ -1096,9 +1296,12 @@ export function registerRoutesAPI(app: Express) {
 
           if (sucesso) {
             // OSRM = [lng, lat] — arredondado a 6 casas
+            // Number() explícito: garante número mesmo se Drizzle retornar string em algum edge case
+            const sLng = Number(sucesso.lon);
+            const sLat = Number(sucesso.lat);
             startCoordinates = [
-              Number(sucesso.lon.toFixed(6)),
-              Number(sucesso.lat.toFixed(6)),
+              Number.isFinite(sLng) ? Number(sLng.toFixed(6)) : -49.2654,
+              Number.isFinite(sLat) ? Number(sLat.toFixed(6)) : -25.4284,
             ];
           } else {
             console.warn(
@@ -1208,117 +1411,410 @@ export function registerRoutesAPI(app: Express) {
           const app = appointmentData[i];
 
           if (Number.isFinite(app.lat) && Number.isFinite(app.lng)) {
-            console.log(`✅ [AGENDAMENTO ${app.id}] JÁ TEM COORDENADAS DO BANCO: ${app.lat}, ${app.lng}`);
-            continue; // já tem lat/lng do cliente
+            // Cheap geofencing para evitar reaproveitar lixo antigo no BD (como ES -20,-40 em endereços PR)
+            const st = ((app as any).aptEstado || (app as any).clientEstado || "").toUpperCase();
+            const ct = (app.aptCidade || app.clientCidade || "").toUpperCase();
+            const isSuspiciousBox = (st === "PR" || ct === "CURITIBA") && 
+                                   (app.lat! > -22 || app.lat! < -27 || app.lng! > -47 || app.lng! < -55);
+                                   
+            if (isSuspiciousBox) {
+              console.warn(`⚠️ [AGENDAMENTO ${app.id}] Coordenada do banco (${app.lat}, ${app.lng}) IGNORADA pois é flagrantemente fora do PR/Sul. Recalculando...`);
+              app.lat = undefined;
+              app.lng = undefined;
+            } else {
+              console.log(`✅ [AGENDAMENTO ${app.id}] JÁ TEM COORDENADAS DO BANCO: ${app.lat}, ${app.lng}`);
+              continue; // já tem lat/lng do cliente
+            }
           }
 
-          console.log(`🔍 [AGENDAMENTO ${app.id}] SEM coordenadas, iniciando geocodificação...`);
+          console.log(`🔍 [AGENDAMENTO ${app.id}] SEM coordenadas válidas, iniciando geocodificação...`);
 
-          // 1) tentar geocodificar o ENDEREÇO DO AGENDAMENTO (prioritário para roteirização)
+          // ================= CACHE NORMALIZATION & HASH =================
+          const cepToTry = formatCep(app.aptCep || app.clientCep); // declarado aqui para uso no cache CEP puro também
+          const addressToSearch = app.address || app.clientAddress || (cepToTry ? `CEP ${cepToTry}, Brasil` : "");
+          const normalizedStr = normalizeAddressForCache(addressToSearch);
+          const addrHash = generateAddressHash(normalizedStr);
+
+          // 1) VERIFICAR CACHE COMPARTILHADO
+          try {
+            const cachedArray = await db
+              .select()
+              .from(geocodingCache)
+              .where(eq(geocodingCache.addressHash, addrHash))
+              .limit(1);
+
+            if (cachedArray.length > 0) {
+              const cached = cachedArray[0];
+              // Reutiliza direto se a confiança for media ou alta.
+              if (cached.confidenceLevel === "high" || cached.confidenceLevel === "medium") {
+                 app.lat = cached.lat;
+                 app.lng = cached.lng;
+                 console.log(`✅ [CACHE HIT] Agendamento ${app.id} resgatado do cache. Fonte: ${cached.source} (${cached.confidenceLevel})`);
+                 continue; // prula requisição Nominatim
+              } else {
+                 console.log(`ℹ️ [CACHE BYPASS] Agendamento ${app.id} tem cache, mas a confiança é LOW. Tentando revalidar...`);
+              }
+            }
+          } catch(e: any) {
+            console.warn(`⚠️ Falha ao buscar cache de geocodificação: ${e.message}`);
+          }
+
+          // 2) TENTATIVA A: Endereço do Agendamento (Completo)
           try {
             console.log(`🌐 [TENTATIVA 1] Geocodificando ENDEREÇO DO AGENDAMENTO:`);
-            console.log(`   Endereço enviado ao Nominatim: "${app.address}"`);
+            console.log(`   Endereço: "${app.address}"`);
             const geo = await geocodeEnderecoServer(app.address);
             app.lat = Number(geo.lat);
             app.lng = Number(geo.lon);
-            console.log(`✅ [TENTATIVA 1 OK] Coordenadas obtidas: ${app.lat}, ${app.lng}`);
-            console.log(`   Display Name Nominatim: ${geo.displayName || 'N/A'}`);
+            console.log(`✅ [TENTATIVA 1 OK] Coordenadas: ${app.lat}, ${app.lng}`);
 
-            // Se o endereço do agendamento “bate” com o endereço do cliente, persistimos no cliente (cura legado)
-            if (
-              app.clientId &&
-              app.clientAddress &&
-              norm(app.clientAddress) === norm(app.address)
-            ) {
+            // Salvar no Cache de Confiança HIGH (match direto por endereço completo)
+            try {
+              await db.insert(geocodingCache).values({
+                addressHash: addrHash,
+                normalizedAddress: normalizedStr,
+                postalCode: null,
+                street: null,
+                number: null,
+                neighborhood: null,
+                city: geo.addressDetails?.city || geo.addressDetails?.town || null,
+                state: geo.addressDetails?.state || null,
+                country: geo.addressDetails?.country_code || null,
+                lat: app.lat,
+                lng: app.lng,
+                source: "nominatim_full_address",
+                confidenceLevel: "high",
+                confidenceReason: "full_address_match",
+                rawProviderDisplayName: geo.displayName || null,
+                providerPayloadSummary: null,
+              }).onConflictDoNothing(); // se já existe hash (ex do low confidence de antes), não sobrescreve pra já
+            } catch(e){}
+
+            // Salvar no Cliente se bater com Cliente original (legado script)
+            if (app.clientId && app.clientAddress && norm(app.clientAddress) === norm(app.address)) {
               try {
-                const updatePayload1: Partial<typeof clients.$inferInsert> = {};
-                if (Number.isFinite(app.lat)) updatePayload1.lat = to6(app.lat as number);
-                if (Number.isFinite(app.lng)) updatePayload1.lng = to6(app.lng as number);
-
-                if (Object.keys(updatePayload1).length > 0) {
-                  await db
-                    .update(clients)
-                    .set(updatePayload1)
-                    .where(eq(clients.id, app.clientId));
-                  console.log(`💾 Coordenadas salvas no cliente ${app.clientId}`);
-                } else {
-                  console.log(`ℹ️ Sem payload para atualizar cliente ${app.clientId} (lat/lng ausentes)`);
-                }
-              } catch (e: any) {
-                console.warn(
-                  `⚠️ Falha ao persistir lat/lng do cliente ${app.clientId}:`,
-                  e.message,
-                );
-              }
+                await db.update(clients).set({ lat: to6(app.lat), lng: to6(app.lng) }).where(eq(clients.id, app.clientId));
+              } catch (e: any) {}
             }
 
-            // Respeitar Nominatim (1 req/s)
             await sleep(1100);
             continue;
           } catch (e1: any) {
-            console.warn(
-              `❌ [TENTATIVA 1 FALHOU] Agendamento ${app.id}: ${e1.message}`,
-            );
+            console.warn(`❌ [TENTATIVA 1 FALHOU] Agendamento ${app.id}: ${e1.message}`);
           }
 
-          // 2) fallback: tentar geocodificar o ENDEREÇO DO CLIENTE (se existir)
-          if (app.clientAddress) {
+          // 3) TENTATIVA B: Endereço do Cliente
+          if (app.clientAddress && norm(app.clientAddress) !== norm(app.address)) {
             try {
               console.log(`🌐 [TENTATIVA 2] Geocodificando ENDEREÇO DO CLIENTE:`);
-              console.log(`   Endereço enviado ao Nominatim: "${app.clientAddress}"`);
+              console.log(`   Endereço: "${app.clientAddress}"`);
               const geo2 = await geocodeEnderecoServer(app.clientAddress);
               app.lat = Number(geo2.lat);
               app.lng = Number(geo2.lon);
-              console.log(`✅ [TENTATIVA 2 OK] Coordenadas obtidas: ${app.lat}, ${app.lng}`);
-              console.log(`   Display Name Nominatim: ${geo2.displayName || 'N/A'}`);
+              console.log(`✅ [TENTATIVA 2 OK] Coordenadas: ${app.lat}, ${app.lng}`);
 
-              // Como é o endereço do cliente, podemos persistir
+              // Cache
+              try {
+                const normClient = normalizeAddressForCache(app.clientAddress);
+                await db.insert(geocodingCache).values({
+                  addressHash: generateAddressHash(normClient),
+                  normalizedAddress: normClient,
+                  postalCode: null,
+                  street: null,
+                  number: null,
+                  neighborhood: null,
+                  city: geo2.addressDetails?.city || geo2.addressDetails?.town || null,
+                  state: geo2.addressDetails?.state || null,
+                  country: geo2.addressDetails?.country_code || null,
+                  lat: app.lat, 
+                  lng: app.lng,
+                  source: "nominatim_full_address_client",
+                  confidenceLevel: "high",
+                  confidenceReason: "client_address_match",
+                  rawProviderDisplayName: geo2.displayName || null,
+                  providerPayloadSummary: null,
+                }).onConflictDoNothing();
+              } catch(e){}
+
               if (app.clientId) {
                 try {
-                  const updatePayload2: Partial<typeof clients.$inferInsert> = {};
-                  if (Number.isFinite(app.lat)) updatePayload2.lat = to6(app.lat as number);
-                  if (Number.isFinite(app.lng)) updatePayload2.lng = to6(app.lng as number);
-
-                  if (Object.keys(updatePayload2).length > 0) {
-                    await db
-                      .update(clients)
-                      .set(updatePayload2)
-                      .where(eq(clients.id, app.clientId));
-                    console.log(
-                      `💾 Coordenadas salvas no cliente ${app.clientId} (via endereço do cliente)`,
-                    );
-                  } else {
-                    console.log(`ℹ️ Sem payload para atualizar cliente ${app.clientId} (lat/lng ausentes)`);
-                  }
-                } catch (e: any) {
-                  console.warn(
-                    `⚠️ Falha ao persistir lat/lng do cliente ${app.clientId}:`,
-                    e.message,
-                  );
-                }
+                  await db.update(clients).set({ lat: to6(app.lat), lng: to6(app.lng) }).where(eq(clients.id, app.clientId));
+                } catch(e){}
               }
 
               await sleep(1100);
               continue;
             } catch (e2: any) {
-              console.warn(
-                `❌ [TENTATIVA 2 FALHOU] Agendamento ${app.id}: ${e2.message}`,
-              );
+              console.warn(`❌ [TENTATIVA 2 FALHOU] Agendamento ${app.id}: ${e2.message}`);
             }
           }
 
-          // 3) último fallback: tentar apenas com CEP (agendamento ou cliente)
-          const cepToTry = formatCep(app.aptCep || app.clientCep);
+          // 3.5) TENTATIVA INTERMEDIÁRIA: RODOVIAS (exclusiva para agendamentos)
+          const checkRod = app.aptLogradouro || app.clientLogradouro || "";
+          if (checkRod && /(rodovia|br[\-\s]?\d+)/i.test(checkRod)) {
+             try {
+                 console.log(`🛣️ [RODOVIA DETECTADA NO AGENDAMENTO ${app.id}] Logradouro: ${checkRod}`);
+                 const match = checkRod.match(/br[\s\-]?(\d+)/i);
+                 const brCode = match ? `BR-${match[1]}` : checkRod;
+                 
+                 const numStr = app.aptNumero || app.clientNumero || "";
+                 const cid = app.aptCidade || app.clientCidade || "";
+                 const est = ((app as any).aptEstado || (app as any).clientEstado || "");
+                 
+                 const rodoviaSimples = [brCode, cid, est, "Brasil"].filter(Boolean).join(", ");
+                 const rodoviaComNumero = [brCode, numStr, cid, est, "Brasil"].filter(Boolean).join(", ");
+                 
+                 let geoRod = null;
+                 
+                 console.log(`   [RODOVIA TENTATIVA 1] ${rodoviaSimples}`);
+                 try { 
+                   geoRod = await geocodeEnderecoServer(rodoviaSimples); 
+                 } catch(e) { }
+                 
+                 if (!geoRod && numStr) {
+                     console.log(`   [RODOVIA TENTATIVA 2] ${rodoviaComNumero}`);
+                     try { geoRod = await geocodeEnderecoServer(rodoviaComNumero); } catch(e){}
+                 }
+                 
+                 if (geoRod) {
+                     app.lat = Number(geoRod.lat);
+                     app.lng = Number(geoRod.lon);
+                     console.log(`✅ [RODOVIA DETECTADA OK] Coordenadas: ${app.lat}, ${app.lng}`);
+                     
+                     try {
+                         await db.insert(geocodingCache).values({
+                             addressHash: addrHash, // atrela ao hash original do bloco para que não precise recalcular "Rodovia Br..." futuramente
+                             normalizedAddress: normalizedStr,
+                             postalCode: null, street: null, number: null, neighborhood: null,
+                             city: geoRod.addressDetails?.city || geoRod.addressDetails?.town || null,
+                             state: geoRod.addressDetails?.state || null,
+                             country: geoRod.addressDetails?.country_code || null,
+                             lat: app.lat, lng: app.lng,
+                             source: "nominatim_rodovia_fallback",
+                             confidenceLevel: "medium", // Alias indireto derivado de tentativa resumida
+                             confidenceReason: "alias_from_rodovia_fallback",
+                             rawProviderDisplayName: geoRod.displayName || null,
+                             providerPayloadSummary: null,
+                         }).onConflictDoNothing();
+                     } catch(e) {}
+                     
+                     if (app.clientId) {
+                       try { await db.update(clients).set({ lat: to6(app.lat), lng: to6(app.lng) }).where(eq(clients.id, app.clientId)); } catch(e){}
+                     }
+
+                     await sleep(1100);
+                     continue;
+                 } else {
+                     console.log(`❌ [RODOVIA TENTATIVAS FALHARAM] Continuando fluxo normal...`);
+                 }
+             } catch(e) {}
+          } else if (checkRod) {
+             // 3.6) TENTATIVA INTERMEDIÁRIA: URBANO ENXUTO (exclusiva para agendamentos comuns)
+             // Se não for rodovia, tenta variações limpas sem CEP e sem complemento antes de apelar pro ViaCEP
+             try {
+                console.log(`🏙️ [URBANO DETECTADO NO AGENDAMENTO ${app.id}] Iniciando variações enxutas...`);
+                const numStr = app.aptNumero || app.clientNumero || "";
+                const bai = app.aptBairro || app.clientBairro || "";
+                const cid = app.aptCidade || app.clientCidade || "";
+                const est = ((app as any).aptEstado || (app as any).clientEstado || "");
+                
+                const varsUrb = [
+                  [checkRod, numStr, bai, cid, est, "Brasil"].filter(Boolean).join(", "),
+                  [checkRod, bai, cid, est, "Brasil"].filter(Boolean).join(", "),
+                  [checkRod, numStr, cid, est, "Brasil"].filter(Boolean).join(", "),
+                  [checkRod, cid, est, "Brasil"].filter(Boolean).join(", ")
+                ];
+                
+                // Remove duplicates
+                const uniqueVarsUrb = Array.from(new Set(varsUrb));
+                let geoUrb = null;
+                
+                for (let v = 0; v < uniqueVarsUrb.length; v++) {
+                    const tentativaAtual = uniqueVarsUrb[v];
+                    console.log(`   [URBANO TENTATIVA ${v+1}] ${tentativaAtual}`);
+                    try { 
+                        geoUrb = await geocodeEnderecoServer(tentativaAtual); 
+                        if (geoUrb) break;
+                    } catch(e) {}
+                }
+                
+                if (geoUrb) {
+                     app.lat = Number(geoUrb.lat);
+                     app.lng = Number(geoUrb.lon);
+                     console.log(`✅ [URBANO OK] Coordenadas: ${app.lat}, ${app.lng}`);
+                     
+                     try {
+                         await db.insert(geocodingCache).values({
+                             addressHash: addrHash, // atrela ao hash original do agendamento
+                             normalizedAddress: normalizedStr,
+                             postalCode: null, street: null, number: null, neighborhood: null,
+                             city: geoUrb.addressDetails?.city || geoUrb.addressDetails?.town || null,
+                             state: geoUrb.addressDetails?.state || null,
+                             country: geoUrb.addressDetails?.country_code || null,
+                             lat: app.lat, lng: app.lng,
+                             source: "nominatim_urbano_fallback",
+                             confidenceLevel: "medium", // Alias indireto derivado de tentativa resumida
+                             confidenceReason: "alias_from_urbano_fallback",
+                             rawProviderDisplayName: geoUrb.displayName || null,
+                             providerPayloadSummary: null,
+                         }).onConflictDoNothing();
+                     } catch(e) {}
+                     
+                     if (app.clientId) {
+                       try { await db.update(clients).set({ lat: to6(app.lat), lng: to6(app.lng) }).where(eq(clients.id, app.clientId)); } catch(e){}
+                     }
+
+                     await sleep(1100);
+                     continue;
+                 } else {
+                     console.log(`❌ [URBANO FALHOU] Tentando normalização nominal do logradouro...`);
+                     
+                     // 3.7) NORMALIZAÇÃO NOMINAL DO LOGRADOURO
+                     // Aplica substituições leves no nome da rua antes de desistir para o ViaCEP
+                     try {
+                         const normLogr = (s: string) => s
+                           .replace(/\bDoutor\b/gi, 'Dr')
+                           .replace(/\bDoutora\b/gi, 'Dra')
+                           .replace(/\bSanto\b/gi, 'St')
+                           .replace(/\bSanta\b/gi, 'Sta')
+                           .replace(/\bProfessor\b/gi, 'Prof')
+                           .replace(/\bProfessora\b/gi, 'Profa')
+                           .replace(/\bPresidente\b/gi, 'Pres')
+                           .replace(/\bEngenheiro\b/gi, 'Eng')
+                           .replace(/\bDeputado\b/gi, 'Dep')
+                           .replace(/\bGeneral\b/gi, 'Gen')
+                           .replace(/\bCoronel\b/gi, 'Cel')
+                           .replace(/-([A-Za-z])/g, '$1'); // remove hífens internos: Arco-Verde -> ArcVerde
+
+                         const logradouroNorm = normLogr(checkRod);
+                         
+                         // Só entra se a normalização produziu algo diferente
+                         if (logradouroNorm !== checkRod) {
+                             const numStr2 = app.aptNumero || app.clientNumero || "";
+                             const cid2 = app.aptCidade || app.clientCidade || "";
+                             const est2 = ((app as any).aptEstado || (app as any).clientEstado || "");
+                             
+                             // Remove prefixo de tipo logradouro (Rua, Avenida, etc.) para variante sem tipo
+                             const semTipo = logradouroNorm.replace(/^(Rua|Av|Avenida|Estrada|Travessa|Alameda|Largo|Praça|Viela)\s+/i, '').trim();
+                             
+                             const varsNorm: string[] = [
+                               [logradouroNorm, numStr2, cid2, est2, "Brasil"].filter(Boolean).join(", "),
+                               [logradouroNorm, cid2, est2, "Brasil"].filter(Boolean).join(", "),
+                             ];
+                             if (semTipo !== logradouroNorm) {
+                               varsNorm.push([semTipo, numStr2, cid2, est2, "Brasil"].filter(Boolean).join(", "));
+                             }
+                             
+                             let geoNorm = null;
+                             for (let vn = 0; vn < varsNorm.length; vn++) {
+                                 const tentNorm = varsNorm[vn];
+                                 console.log(`   [LOGRADOURO NORMALIZADO TENTATIVA ${vn+1}] ${tentNorm}`);
+                                 try {
+                                     geoNorm = await geocodeEnderecoServer(tentNorm);
+                                     if (geoNorm) break;
+                                 } catch(e) {}
+                             }
+                             
+                             if (geoNorm) {
+                                 app.lat = Number(geoNorm.lat);
+                                 app.lng = Number(geoNorm.lon);
+                                 console.log(`✅ [LOGRADOURO NORMALIZADO OK] Coordenadas: ${app.lat}, ${app.lng}`);
+                                 
+                                 try {
+                                     await db.insert(geocodingCache).values({
+                                         addressHash: addrHash,
+                                         normalizedAddress: normalizedStr,
+                                         postalCode: null, street: null, number: null, neighborhood: null,
+                                         city: geoNorm.addressDetails?.city || geoNorm.addressDetails?.town || null,
+                                         state: geoNorm.addressDetails?.state || null,
+                                         country: geoNorm.addressDetails?.country_code || null,
+                                         lat: app.lat, lng: app.lng,
+                                         source: "nominatim_logradouro_norm_fallback",
+                                         confidenceLevel: "medium",
+                                         confidenceReason: "alias_from_logradouro_normalization",
+                                         rawProviderDisplayName: geoNorm.displayName || null,
+                                         providerPayloadSummary: null,
+                                     }).onConflictDoNothing();
+                                 } catch(e) {}
+                                 
+                                 if (app.clientId) {
+                                     try { await db.update(clients).set({ lat: to6(app.lat), lng: to6(app.lng) }).where(eq(clients.id, app.clientId)); } catch(e) {}
+                                 }
+                                 
+                                 await sleep(1100);
+                                 continue;
+                             } else {
+                                 console.log(`❌ [LOGRADOURO NORMALIZADO FALHOU] Seguindo para ViaCEP...`);
+                             }
+                         } else {
+                             console.log(`ℹ️ [LOGRADOURO NORMALIZADO] Sem diferença após normalização, pulando...`);
+                         }
+                     } catch(e) {}
+                 }
+             } catch(e) {}
+          }
+
+          // 4) TENTATIVA C: Intermedíario Reconstrução com ViaCEP
+          const cepOnlyNum = (app.aptCep || app.clientCep || "").replace(/\D/g, "");
+          if (cepOnlyNum && cepOnlyNum.length === 8) {
+             try {
+               console.log(`🌐 [TENTATIVA 3 - VIA CEP] Tentando reconstruir endereço corrompido...`);
+               const viacepRes = await fetch(`https://viacep.com.br/ws/${cepOnlyNum}/json/`);
+               const viacepData = await viacepRes.json();
+               
+               if (!viacepData.erro && viacepData.logradouro) {
+                  const numStr = app.aptNumero || app.clientNumero || "";
+                  const rebuiltAddr = [viacepData.logradouro, numStr, viacepData.bairro, viacepData.localidade, viacepData.uf, viacepData.cep, "Brasil"].filter(Boolean).join(", ");
+                  console.log(`   [VIA CEP] Endereço Reconstruído: "${rebuiltAddr}"`);
+                  
+                  // Geocodifica endereço limpo
+                  const geoV = await geocodeEnderecoServer(rebuiltAddr);
+                  app.lat = Number(geoV.lat);
+                  app.lng = Number(geoV.lon);
+                  console.log(`✅ [TENTATIVA 3 OK] Nominatim Rebuild obteve Coordenadas: ${app.lat}, ${app.lng}`);
+
+                  // Cache da reconstrução (Medium/High depending on accuracy)
+                  try {
+                    const normRc = normalizeAddressForCache(rebuiltAddr);
+                    await db.insert(geocodingCache).values({
+                      addressHash: generateAddressHash(normRc),
+                      normalizedAddress: normRc,
+                      postalCode: formatCep(viacepData.cep) || null,
+                      street: viacepData.logradouro || null,
+                      number: numStr || null,
+                      neighborhood: viacepData.bairro || null,
+                      city: viacepData.localidade || null,
+                      state: viacepData.uf || null,
+                      country: "br",
+                      lat: app.lat, 
+                      lng: app.lng,
+                      source: "nominatim_rebuilt_from_viacep",
+                      confidenceLevel: "medium", // Resultado de aproximação válido e aceitável para roteirização
+                      confidenceReason: "rebuilt_from_via_cep_postal",
+                      rawProviderDisplayName: geoV.displayName || null,
+                      providerPayloadSummary: null,
+                    }).onConflictDoNothing();
+                  } catch(e){}
+                  
+                  await sleep(1100);
+                  continue;
+               } else {
+                  console.log(`   ⚠️ [VIA CEP] Retornou vazio ou apenas cidade (CEP genérico), não é o suficiente para reconstruir logradouro.`);
+               }
+             } catch(eC: any) {
+               console.warn(`❌ [TENTATIVA 3 FALHOU] Erro na ponte ViaCEP: ${eC.message}`);
+             }
+          }
+
+          // 5) ÚLTIMO FALLBACK: APENAS COM CEP PURO RIGOROSO
+          // cepToTry já foi declarado acima no início do bloco de geocodificação
           if (cepToTry) {
             try {
-              console.log(`🌐 [TENTATIVA 3] Geocodificando apenas com CEP:`);
-              console.log(`   CEP enviado ao Nominatim: "${cepToTry}"`);
+              console.log(`🌐 [TENTATIVA ULTIMA] Geocodificando apenas com CEP puro diretamente no Nominatim...`);
               const geo3 = await geocodeEnderecoServer(`CEP ${cepToTry}, Brasil`);
               
               // === Nova regra: Validação contextual do fallback de CEP ===
-              const normalizeTexto = (t: string | null | undefined) => 
-                (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-
+              const normalizeTexto = (t: string | null | undefined) => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
               const expCidade = normalizeTexto(app.aptCidade || app.clientCidade);
               const expBairro = normalizeTexto(app.aptBairro || app.clientBairro);
               
@@ -1328,66 +1824,67 @@ export function registerRoutesAPI(app: Express) {
               const retState = normalizeTexto(addrInfo.state);
               const retSuburb = normalizeTexto(addrInfo.suburb || addrInfo.neighbourhood || addrInfo.district);
 
-              console.log(`   [RETORNO CEP] País: ${addrInfo.country_code || 'N/A'}, Estado: ${addrInfo.state || 'N/A'}, Cidade: ${retCity || 'N/A'}, Bairro: ${retSuburb || 'N/A'}`);
-              console.log(`   [ESPERADO CEP] Cidade: ${expCidade || 'N/A'}, Bairro: ${expBairro || 'N/A'}`);
-
               let blockReason = "";
+              let finalConfidenceReason = "only_postal_code_validated";
+
+              // Validação Base (Bloqueante)
               if (retCountryCode && retCountryCode !== "br") {
                 blockReason = "País diferente do Brasil";
               } else if (retCity && expCidade && !retCity.includes(expCidade) && !expCidade.includes(retCity)) {
                 blockReason = `Cidade incompatível (retornou ${retCity}, esperava ${expCidade})`;
-              } else if (retSuburb && expBairro) {
-                // Tolerante com o bairro para ser só um reforço
-                if (!retSuburb.includes(expBairro) && !expBairro.includes(retSuburb)) {
-                   console.log(`   ⚠️ Bairro diferente (${retSuburb} vs ${expBairro}), mas tolerado pela validação secundária.`);
-                }
+              }
+
+              // Validação Secundária: Bairro (Não bloqueante, apenas reforço de confiança e log)
+              if (!blockReason && retSuburb && expBairro) {
+                 if (retSuburb.includes(expBairro) || expBairro.includes(retSuburb)) {
+                    console.log(`   ✅ [Reforço] Bairro coincidiu (${retSuburb}). Resultado fortalecido.`);
+                    finalConfidenceReason = "postal_code_with_neighborhood_match";
+                 } else {
+                    console.log(`   ⚠️ [Tolerado] Bairro diferente (Retornou ${retSuburb}, esperado ${expBairro}). Assumindo pelo match de Cidade/País.`);
+                    finalConfidenceReason = "postal_code_city_match_neighborhood_diff";
+                 }
               }
 
               if (blockReason) {
                  console.warn(`❌ CEP Result Rejeitado preventivamente. Motivo: ${blockReason}`);
                  throw new Error(`Validação de contexto do CEP falhou: ${blockReason}`);
               }
-              console.log(`✅ [VALIDAÇÃO CEP OK] Contexto geográfico coincidiu ou aderente, aceitando.`);
               
               app.lat = Number(geo3.lat);
               app.lng = Number(geo3.lon);
-              console.log(`✅ [TENTATIVA 3 OK] Coordenadas obtidas e aceitas: ${app.lat}, ${app.lng}`);
+              console.log(`✅ [TENTATIVA ULTIMA OK] Coordenadas obtidas e aceitas rigorosamente: ${app.lat}, ${app.lng}`);
 
-              // Se conseguiu via CEP e é o CEP do cliente, podemos salvar
-              if (app.clientId && app.clientCep === cepToTry) {
-                try {
-                  const updatePayload3: Partial<typeof clients.$inferInsert> = {};
-                  if (Number.isFinite(app.lat)) updatePayload3.lat = to6(app.lat as number);
-                  if (Number.isFinite(app.lng)) updatePayload3.lng = to6(app.lng as number);
-
-                  if (Object.keys(updatePayload3).length > 0) {
-                    await db
-                      .update(clients)
-                      .set(updatePayload3)
-                      .where(eq(clients.id, app.clientId));
-                    console.log(
-                      `💾 Coordenadas salvas no cliente ${app.clientId} (via CEP)`,
-                    );
-                  }
-                } catch (e: any) {
-                  console.warn(
-                    `⚠️ Falha ao persistir lat/lng do cliente ${app.clientId}:`,
-                    e.message,
-                  );
-                }
-              }
+              // Salva no cache com Confiança LOW (pois CEP centraliza no meio e não na residência)
+              try {
+                const normCepOnly = normalizeAddressForCache(`CEP ${cepToTry}, Brasil`);
+                await db.insert(geocodingCache).values({
+                  addressHash: generateAddressHash(normCepOnly),
+                  normalizedAddress: normCepOnly,
+                  postalCode: formatCep(cepToTry) || null,
+                  street: null,
+                  number: null,
+                  neighborhood: retSuburb || null,
+                  city: addrInfo.city || addrInfo.town || null,
+                  state: addrInfo.state || null,
+                  country: "br",
+                  lat: app.lat, 
+                  lng: app.lng,
+                  source: "nominatim_postal_code_only",
+                  confidenceLevel: "low",
+                  confidenceReason: finalConfidenceReason,
+                  rawProviderDisplayName: geo3.displayName || null,
+                  providerPayloadSummary: null,
+                }).onConflictDoNothing();
+              } catch(e){}
 
               await sleep(1100);
               continue;
             } catch (e3: any) {
-              console.warn(
-                `❌ Geocodificação (CEP) falhou para ${app.id}:`,
-                e3.message,
-              );
+              console.warn(`❌ Geocodificação cega via (CEP puro) falhou para ${app.id}:`, e3.message);
             }
           }
 
-          // 4) se nada funcionou, aborta com erro claro
+          // 6) se nada funcionou, aborta com erro claro
           console.log(
             "❌ Agendamento sem coordenadas após fallbacks:",
             app.id,
@@ -1491,7 +1988,11 @@ export function registerRoutesAPI(app: Express) {
               return `${lng.toFixed(6)},${lat.toFixed(6)}`;
             }).join(";");
             
-            const osrmUrl = `${OSRM_URL_ROUTE}/route/v1/driving/${coordStr}?overview=full&geometries=geojson`;
+            // PROVA E CORREÇÃO: Remove qualquer traço duplicado que possa ter surgido na coordStr
+            const cleanCoordStr = coordStr.trim().replace(/^--+/, "-");
+            
+            // Montagem usando concatenação explícita para evitar qualquer phantom dash em template literals
+            const osrmUrl = OSRM_URL_ROUTE + "/route/v1/driving/" + cleanCoordStr + "?overview=full&geometries=geojson";
             console.log("🗺️ Chamando OSRM route:", osrmUrl);
 
             const response = await fetch(osrmUrl);
@@ -2556,7 +3057,14 @@ export function registerRoutesAPI(app: Express) {
           startLngLat,  // ← Ponto inicial (empresa/equipe/técnico)
           ...orderedStops.map(s => [Number(s.lng), Number(s.lat)] as [number, number])
         ];
-        const coordStr = allCoords.map(c => c.join(",")).join(";");
+        const coordStr = allCoords.map(c => {
+          const lng = Number(c[0]);
+          const lat = Number(c[1]);
+          if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+            throw new Error(`Coordenadas inválidas no REORDER: lng=${c[0]}, lat=${c[1]}`);
+          }
+          return `${lng.toFixed(6)},${lat.toFixed(6)}`;
+        }).join(";");
 
         console.log(`🗺️ [REORDER] Recalculando rota com ${allCoords.length} pontos (1 início + ${orderedStops.length} paradas)`);
         console.log(`📄 [REORDER] Coordenadas para OSRM:`, allCoords);

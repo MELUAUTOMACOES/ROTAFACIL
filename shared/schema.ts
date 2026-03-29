@@ -518,6 +518,29 @@ export const dateRestrictions = pgTable("date_restrictions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Geocoding Cache table - Tabela de cache compartilhado inter-empresas para evitar hits repetidos
+export const geocodingCache = pgTable("geocoding_cache", {
+  id: serial("id").primaryKey(),
+  addressHash: text("address_hash").notNull().unique(), // sha256 do endereço normalizado
+  normalizedAddress: text("normalized_address").notNull(), // Endereço de busca normalizado
+  postalCode: text("postal_code"),
+  street: text("street"),
+  number: text("number"),
+  neighborhood: text("neighborhood"),
+  city: text("city"),
+  state: text("state"),
+  country: text("country").notNull().default("Brasil"),
+  lat: doublePrecision("lat").notNull(),
+  lng: doublePrecision("lng").notNull(),
+  source: text("source").notNull(), // nominatim_full_address, nominatim_rebuilt_from_viacep, viacep, nominatim_postal_code_only
+  confidenceLevel: text("confidence_level").notNull(), // high, medium, low
+  confidenceReason: text("confidence_reason"), // city_state_country_match, only_postal_code, etc
+  rawProviderDisplayName: text("raw_provider_display_name"), // Display name devolvido pela API de map
+  providerPayloadSummary: jsonb("provider_payload_summary"), // JSON basico pra debug do provedor
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Relations
 export const routeStopsRelations = relations(routeStops, ({ one }) => ({
   route: one(routes, { fields: [routeStops.routeId], references: [routes.id] }),
@@ -685,6 +708,12 @@ export const insertDateRestrictionSchema = createInsertSchema(dateRestrictions).
   id: true,
   userId: true,
   createdAt: true,
+});
+
+export const insertGeocodingCacheSchema = createInsertSchema(geocodingCache).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 export const insertFuelRecordSchema = createInsertSchema(fuelRecords).omit({
