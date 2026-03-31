@@ -13,8 +13,8 @@
  * Roles não listados aqui (admin, user, operador) têm acesso total.
  */
 const ROLE_ALLOWED_PATHS: Record<string, string[]> = {
-    prestador: ['/inicio', '/prestadores'],
-    tecnico: ['/inicio', '/prestadores'],
+    prestador: ['/inicio', '/prestadores', '/convite'],
+    tecnico: ['/inicio', '/prestadores', '/convite'],
 };
 
 /**
