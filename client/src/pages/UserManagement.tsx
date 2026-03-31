@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { buildApiUrl } from "@/lib/api-config";
+import { normalizeItems } from "@/lib/normalize";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,7 +45,7 @@ export default function UserManagement() {
   });
 
   // Query para buscar usuários
-  const { data: users = [], isLoading } = useQuery({
+  const { data: usersData, isLoading } = useQuery({
     queryKey: ["/api/users"],
     queryFn: async () => {
       const response = await fetch(buildApiUrl("/api/users"), {
@@ -53,10 +54,10 @@ export default function UserManagement() {
       if (!response.ok) {
         throw new Error('Erro ao carregar usuários');
       }
-      const data = await response.json();
-      return Array.isArray(data) ? data : [];
+      return await response.json();
     },
   });
+  const users = normalizeItems<User>(usersData);
 
   // Mutation para deletar usuário
   const deleteMutation = useMutation({

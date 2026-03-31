@@ -600,10 +600,9 @@ export const insertVehicleSchema = createInsertSchema(vehicles).omit({
   ).default("gasolina"),
   fuelConsumption: z.string().or(z.number()).optional().nullable(),
   tankCapacity: z.number().min(1).max(500).optional().nullable(),
-}).refine(
-  (d) => (d.technicianId ? !d.teamId : !!d.teamId),
-  { message: "Selecione Técnico OU Equipe (apenas um)", path: ["technicianId"] }
-);
+  // ✅ Removida validação .refine() de technicianId/teamId obrigatórios
+  // Agora usamos vehicleAssignments (authorizedTechnicianIds/authorizedTeamIds)
+});
 
 export const insertVehicleAssignmentSchema = createInsertSchema(vehicleAssignments).omit({
   id: true,

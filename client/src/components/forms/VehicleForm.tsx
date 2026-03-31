@@ -137,10 +137,6 @@ export default function VehicleForm({
   // Calcular valores iniciais uma vez na montagem
   const initialValues = getInitialValues(vehicle);
 
-  const [assignmentType, setAssignmentType] = useState<"technician" | "team">(
-    initialValues.assignmentType
-  );
-
   // 🆕 Estados para autorizações (múltiplos técnicos/equipes)
   const vehicleWithAssignments = vehicle as VehicleWithAssignments | null | undefined;
   const [authorizedTechnicianIds, setAuthorizedTechnicianIds] = useState<number[]>(
@@ -160,8 +156,8 @@ export default function VehicleForm({
       fuelType: initialValues.fuelType,
       fuelConsumption: initialValues.fuelConsumption,
       tankCapacity: initialValues.tankCapacity,
-      technicianId: initialValues.technicianId,
-      teamId: initialValues.teamId,
+      technicianId: undefined,
+      teamId: undefined,
     },
   });
 
@@ -176,9 +172,8 @@ export default function VehicleForm({
       return response.json();
     },
     onSuccess: (createdVehicle: Vehicle) => {
-      queryClient.setQueryData<Vehicle[]>(["/api/vehicles"], (old) =>
-        old ? [...old, createdVehicle] : [createdVehicle],
-      );
+      // Removido setQueryData otimista que causava bug "old.map is not a function"
+      // quando cache estava em formato paginado {items: [], pagination: {}}
       queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
       toast({
         title: "Sucesso",
@@ -210,11 +205,8 @@ export default function VehicleForm({
       return response.json();
     },
     onSuccess: (updatedVehicle: Vehicle) => {
-      queryClient.setQueryData<Vehicle[]>(["/api/vehicles"], (old) =>
-        old
-          ? old.map((v) => (v.id === updatedVehicle.id ? updatedVehicle : v))
-          : old,
-      );
+      // Removido setQueryData otimista que causava bug "old.map is not a function"
+      // quando cache estava em formato paginado {items: [], pagination: {}}
       queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
       toast({
         title: "Sucesso",
@@ -282,9 +274,6 @@ export default function VehicleForm({
   );
 
   function renderVehicleForm() {
-    // Capturar valores atuais para usar no filtro
-    const currentTechnicianId = form.watch("technicianId");
-
     return (
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div>
@@ -531,145 +520,6 @@ export default function VehicleForm({
           )}
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <Label className="text-base font-medium">
-              Responsável pelo Veículo * (compatibilidade)
-            </Label>
-            <p className="text-sm text-gray-600">
-              Selecione um técnico individual ou uma equipe (campo mantido por compatibilidade)
-            </p>
-          </div>
-
-          <RadioGroup
-            value={assignmentType}
-            onValueChange={(value: "technician" | "team") => {
-              setAssignmentType(value);
-              // Limpar campos opostos quando trocar tipo
-              if (value === "technician") {
-                form.setValue("teamId", undefined, { shouldValidate: false });
-              } else {
-                form.setValue("technicianId", undefined, { shouldValidate: false });
-              }
-            }}
-            className="flex gap-6"
-          >
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="technician" id="technician" />
-              <Label
-                htmlFor="technician"
-                className="flex items-center cursor-pointer"
-              >
-                <User className="h-4 w-4 mr-2" />
-                Técnico Individual
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="team" id="team" />
-              <Label
-                htmlFor="team"
-                className="flex items-center cursor-pointer"
-              >
-                <Users className="h-4 w-4 mr-2" />
-                Equipe
-              </Label>
-            </div>
-          </RadioGroup>
-
-          {assignmentType === "technician" ? (
-            <div>
-              <Label htmlFor="technicianId">Técnico Responsável *</Label>
-              <Select
-                value={form.watch("technicianId")?.toString() || ""}
-                onValueChange={(value) =>
-                  form.setValue(
-                    "technicianId",
-                    value ? parseInt(value) : undefined,
-                    { shouldValidate: true }
-                  )
-                }
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Selecione um técnico" />
-                </SelectTrigger>
-                <SelectContent>
-                  {technicians
-                    .filter((t) => {
-                      // SEMPRE mostrar o técnico atualmente selecionado no formulário
-                      if (currentTechnicianId && Number(currentTechnicianId) === t.id) return true;
-
-                      // Filtrar técnicos ativos
-                      if (!t.isActive) return false;
-
-                      // Se estiver editando, permitir o técnico original do veículo
-                      if (vehicle?.technicianId === t.id) return true;
-
-                      // Filtrar técnicos já vinculados a outros veículos
-                      const isLinked = vehicles.some(
-                        (v) => v.technicianId === t.id && v.id !== vehicle?.id
-                      );
-                      return !isLinked;
-                    })
-                    .map((technician) => (
-                      <SelectItem
-                        key={technician.id}
-                        value={technician.id.toString()}
-                      >
-                        {technician.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              {form.formState.errors.technicianId && (
-                <p className="text-sm text-red-600 mt-1">
-                  {form.formState.errors.technicianId.message}
-                </p>
-              )}
-            </div>
-          ) : (
-            <div>
-              <Label htmlFor="teamId">Equipe Responsável *</Label>
-              <Select
-                value={form.watch("teamId")?.toString() || ""}
-                onValueChange={(value) =>
-                  form.setValue("teamId", value ? parseInt(value) : undefined, { shouldValidate: true })
-                }
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Selecione uma equipe" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teams
-                    .filter((team) => {
-                      // Se estiver editando, permitir a equipe atual
-                      if (vehicle?.teamId === team.id) return true;
-
-                      // Filtrar equipes já vinculadas a outros veículos
-                      const isLinked = vehicles.some(
-                        (v) => v.teamId === team.id && v.id !== vehicle?.id
-                      );
-                      return !isLinked;
-                    })
-                    .map((team) => (
-                      <SelectItem key={team.id} value={team.id.toString()}>
-                        {team.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              {(form.formState.errors.teamId || form.formState.errors.technicianId) && (
-                <p className="text-sm text-red-600 mt-1">
-                  {(form.formState.errors.teamId || form.formState.errors.technicianId)?.message}
-                </p>
-              )}
-              {assignmentType === "team" && form.watch("teamId") && (
-                <p className="text-xs text-blue-600 mt-1">
-                  ℹ️ Todos os técnicos desta equipe terão acesso a este veículo
-                </p>
-              )}
-            </div>
-          )}
-        </div>
 
         <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
           <Button type="button" variant="outline" onClick={onClose}>

@@ -80,13 +80,14 @@ export default function Dashboard() {
   const [selectedFuelTypes, setSelectedFuelTypes] = useState<string[]>(["gasolina", "etanol", "diesel_s500", "diesel_s10", "eletrico"]);
 
   // Fetch vehicles for initializing filter state
-  const { data: vehiclesData = [] } = useQuery<Vehicle[]>({
+  const { data: vehiclesDataRaw } = useQuery({
     queryKey: ["/api/vehicles"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/vehicles");
       return res.json();
     },
   });
+  const vehiclesData = normalizeItems<Vehicle>(vehiclesDataRaw);
 
   // Initialize selectedVehicles with all vehicles when data loads
   if (vehiclesData.length > 0 && selectedVehicles.length === 0) {

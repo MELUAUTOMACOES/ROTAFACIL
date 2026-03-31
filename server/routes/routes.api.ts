@@ -19,6 +19,7 @@ import {
   routeAudits,
   users,
   geocodingCache,
+  services,
 } from "@shared/schema";
 import { eq, and, gte, lte, like, or, desc, inArray, sql, asc, ne } from "drizzle-orm";
 import { trackFeatureUsage } from "./metrics.routes";
@@ -2306,12 +2307,73 @@ export function registerRoutesAPI(app: Express) {
         .offset(offset);
 
       // 3) Mapear resultado com responsibleName
-      const items = routeList.map((r) => ({
+      const rawItems = routeList.map((r) => ({
         ...r,
         responsibleName: r.technicianName || r.teamName || null,
         technicianName: undefined,
         teamName: undefined,
       }));
+
+      // 4) Enriquecer com tempos estimado e real (batch queries por performance)
+      let items = rawItems;
+      if (rawItems.length > 0) {
+        const routeIds = rawItems.map((r) => r.id);
+
+        // 4a) Buscar paradas + serviços para calcular estimatedServiceMinutes
+        const stopsWithServices = await db
+          .select({
+            routeId: stopsTbl.routeId,
+            serviceDuration: services.duration, // minutos
+          })
+          .from(stopsTbl)
+          .innerJoin(appointments, eq(stopsTbl.appointmentNumericId, appointments.id))
+          .innerJoin(services, eq(appointments.serviceId, services.id))
+          .where(inArray(stopsTbl.routeId, routeIds));
+
+        // Somar duração dos serviços por routeId
+        const estimatedMap = new Map<string, number>();
+        for (const row of stopsWithServices) {
+          const prev = estimatedMap.get(row.routeId) ?? 0;
+          estimatedMap.set(row.routeId, prev + (row.serviceDuration ?? 0));
+        }
+
+        // 4b) Buscar agendamentos para calcular realExecutionMinutes
+        const stopsWithExec = await db
+          .select({
+            routeId: stopsTbl.routeId,
+            executionStartedAt: appointments.executionStartedAt,
+            executionFinishedAt: appointments.executionFinishedAt,
+          })
+          .from(stopsTbl)
+          .innerJoin(appointments, eq(stopsTbl.appointmentNumericId, appointments.id))
+          .where(
+            and(
+              inArray(stopsTbl.routeId, routeIds),
+              sql`${appointments.executionStartedAt} IS NOT NULL`,
+              sql`${appointments.executionFinishedAt} IS NOT NULL`
+            )
+          );
+
+        // Somar tempo real de execução por routeId (em minutos)
+        const realMap = new Map<string, number>();
+        for (const row of stopsWithExec) {
+          if (row.executionStartedAt && row.executionFinishedAt) {
+            const diffMs = new Date(row.executionFinishedAt).getTime() - new Date(row.executionStartedAt).getTime();
+            if (diffMs > 0) {
+              const diffMin = Math.round(diffMs / 60000);
+              const prev = realMap.get(row.routeId) ?? 0;
+              realMap.set(row.routeId, prev + diffMin);
+            }
+          }
+        }
+
+        // Montar items enriquecidos
+        items = rawItems.map((r) => ({
+          ...r,
+          estimatedServiceMinutes: estimatedMap.get(r.id) ?? null,
+          realExecutionMinutes: realMap.size > 0 ? (realMap.get(r.id) ?? null) : null,
+        }));
+      }
 
       const result = {
         items,

@@ -60,6 +60,7 @@ export default function PrestadoresPage() {
     // 🚗 Estados para seleção de veículo ao iniciar romaneio
     const [showVehicleSelectionModal, setShowVehicleSelectionModal] = useState(false);
     const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
+    const [isStartingRoute, setIsStartingRoute] = useState(false); // Loading local para GPS + mutation
 
     // Buscar veículos para select de abastecimento
     const { data: vehiclesData } = useQuery({
@@ -72,13 +73,16 @@ export default function PrestadoresPage() {
     const vehicles = normalizeItems(vehiclesData);
 
     // 🚗 Buscar veículos disponíveis para o prestador (somente se for prestador/driver)
-    const { data: availableVehiclesData } = useQuery({
+    const isVehicleQueryEnabled = user?.role === 'prestador' || user?.role === 'tecnico' || user?.role === 'admin';
+    
+    const { data: availableVehiclesData, isLoading: isLoadingVehicles, error: vehiclesError } = useQuery({
         queryKey: ['/api/vehicles/available-for-me'],
         queryFn: async () => {
             const res = await apiRequest("GET", "/api/vehicles/available-for-me");
             return res.json();
         },
-        enabled: user?.role === 'provider' || user?.role === 'driver'
+        enabled: isVehicleQueryEnabled,
+        staleTime: 2 * 60_000,
     });
     const availableVehicles = normalizeItems(availableVehiclesData);
 
@@ -398,54 +402,60 @@ export default function PrestadoresPage() {
 
     const handleStartRoute = async () => {
         if (routeData?.route?.id) {
-            // Se houver veículos disponíveis, mostrar modal de seleção
-            if (availableVehicles && availableVehicles.length > 0) {
-                setShowVehicleSelectionModal(true);
+            // ✅ Veículo é OBRIGATÓRIO - validar se há veículos disponíveis
+            if (!availableVehicles || availableVehicles.length === 0) {
+                toast({
+                    title: "Nenhum veículo autorizado",
+                    description: "Você precisa ter pelo menos 1 veículo autorizado para iniciar uma rota. Contate o administrador.",
+                    variant: "destructive",
+                });
                 return;
             }
             
-            // Se não houver veículos, iniciar diretamente
-            let locationData = null;
-            try {
-                const position = await tracker.getCurrentLocation();
-                locationData = {
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude,
-                    timestamp: new Date(position.timestamp).toISOString(),
-                    accuracy: position.coords.accuracy,
-                };
-            } catch (e) {
-                console.warn("Não foi possível obter localização ao iniciar rota", e);
-            }
-            await startRouteMutation.mutateAsync({
-                id: routeData.route.id,
-                startLocationData: locationData,
-                vehicleId: undefined
-            });
+            // Mostrar modal de seleção (obrigatório)
+            setShowVehicleSelectionModal(true);
         }
     };
 
     const handleConfirmVehicleAndStart = async () => {
         if (routeData?.route?.id) {
-            let locationData = null;
-            try {
-                const position = await tracker.getCurrentLocation();
-                locationData = {
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude,
-                    timestamp: new Date(position.timestamp).toISOString(),
-                    accuracy: position.coords.accuracy,
-                };
-            } catch (e) {
-                console.warn("Não foi possível obter localização ao iniciar rota", e);
+            // ✅ Validar que um veículo foi selecionado (obrigatório)
+            if (!selectedVehicleId) {
+                toast({
+                    title: "Veículo obrigatório",
+                    description: "Selecione um veículo antes de iniciar a rota.",
+                    variant: "destructive",
+                });
+                return;
             }
-            await startRouteMutation.mutateAsync({
-                id: routeData.route.id,
-                startLocationData: locationData,
-                vehicleId: selectedVehicleId || undefined
-            });
-            setShowVehicleSelectionModal(false);
-            setSelectedVehicleId(null);
+
+            try {
+                setIsStartingRoute(true); // 🔄 Ativa loading ANTES de pegar GPS
+                
+                let locationData = null;
+                try {
+                    const position = await tracker.getCurrentLocation();
+                    locationData = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude,
+                        timestamp: new Date(position.timestamp).toISOString(),
+                        accuracy: position.coords.accuracy,
+                    };
+                } catch (e) {
+                    console.warn("Não foi possível obter localização ao iniciar rota", e);
+                }
+                
+                await startRouteMutation.mutateAsync({
+                    id: routeData.route.id,
+                    startLocationData: locationData,
+                    vehicleId: selectedVehicleId
+                });
+                
+                setShowVehicleSelectionModal(false);
+                setSelectedVehicleId(null);
+            } finally {
+                setIsStartingRoute(false); // ✅ Desativa loading ao final
+            }
         }
     };
 
@@ -924,17 +934,22 @@ export default function PrestadoresPage() {
                     <div className="fixed bottom-0 left-0 right-0 p-4 bg-white dark:bg-zinc-900 border-t dark:border-zinc-800 shadow-lg z-20">
                         {(!route.routeStartedAt) ? (
                             // Rota não iniciada - mostrar botão Iniciar
-                            <Button
-                                className="w-full bg-[#DAA520] hover:bg-[#B8860B] text-white h-12 text-lg"
-                                onClick={handleStartRoute}
+                            <Button 
+                                onClick={handleStartRoute} 
+                                className="w-full" 
                                 disabled={startRouteMutation.isPending}
                             >
                                 {startRouteMutation.isPending ? (
-                                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                                    <>
+                                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                                        Iniciando rota...
+                                    </>
                                 ) : (
-                                    <PlayCircle className="w-5 h-5 mr-2" />
+                                    <>
+                                        <PlayCircle className="w-5 h-5 mr-2" />
+                                        Iniciar Rota
+                                    </>
                                 )}
-                                {startRouteMutation.isPending ? 'Iniciando...' : 'Iniciar Rota'}
                             </Button>
                         ) : (
                             // Rota iniciada - mostrar botão Fechar Romaneio
@@ -1349,24 +1364,17 @@ export default function PrestadoresPage() {
 
                         {availableVehicles && availableVehicles.length > 0 ? (
                             <div className="space-y-2">
-                                <Label>Veículo *</Label>
+                                <Label>Veículo * (obrigatório)</Label>
                                 <Select
-                                    value={selectedVehicleId?.toString() || "none"}
+                                    value={selectedVehicleId?.toString() || ""}
                                     onValueChange={(value) => {
-                                        if (value === "none") {
-                                            setSelectedVehicleId(null);
-                                        } else {
-                                            setSelectedVehicleId(parseInt(value));
-                                        }
+                                        setSelectedVehicleId(parseInt(value));
                                     }}
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger className={!selectedVehicleId ? "border-red-300" : ""}>
                                         <SelectValue placeholder="Selecione um veículo" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="none">
-                                            Sem veículo hoje
-                                        </SelectItem>
                                         {availableVehicles.map((vehicle: any) => (
                                             <SelectItem key={vehicle.id} value={vehicle.id.toString()}>
                                                 {vehicle.plate} - {vehicle.brand} {vehicle.model}
@@ -1375,13 +1383,13 @@ export default function PrestadoresPage() {
                                     </SelectContent>
                                 </Select>
                                 <p className="text-xs text-gray-500">
-                                    ℹ️ Esta informação será registrada no histórico do romaneio
+                                    ℹ️ Obrigatório: selecione o veículo que você está utilizando
                                 </p>
                             </div>
                         ) : (
-                            <div className="p-4 bg-gray-50 rounded-md">
-                                <p className="text-sm text-gray-600">
-                                    Nenhum veículo disponível para você. Contate o administrador.
+                            <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+                                <p className="text-sm text-red-800">
+                                    <strong>⚠️ Erro:</strong> Nenhum veículo disponível para você. Contate o administrador para autorizar pelo menos 1 veículo.
                                 </p>
                             </div>
                         )}
@@ -1399,13 +1407,13 @@ export default function PrestadoresPage() {
                         </Button>
                         <Button
                             onClick={handleConfirmVehicleAndStart}
-                            disabled={startRouteMutation.isPending}
+                            disabled={isStartingRoute || !selectedVehicleId}
                             className="bg-[#DAA520] hover:bg-[#B8860B] text-white"
                         >
-                            {startRouteMutation.isPending ? (
+                            {isStartingRoute ? (
                                 <>
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                                    Iniciando...
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Iniciando rota...
                                 </>
                             ) : (
                                 'Iniciar Rota'

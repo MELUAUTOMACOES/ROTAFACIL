@@ -672,13 +672,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 2.5 Iniciar rota (registrar routeStartedAt)
   app.patch("/api/routes/:id/start", authenticateToken, async (req: any, res) => {
     try {
+      const startTime = Date.now();
       const { id } = req.params; // UUID
       const { startLocationData, vehicleId } = req.body; // { lat, lng, address, timestamp }, vehicleId (opcional)
 
+      console.log(`⏱️ [START-ROUTE] Iniciando processo para rota ${id}`);
+      
       // Verificar se rota existe
+      let stepStart = Date.now();
       const existingRoute = await db.query.routes.findFirst({
         where: eq(routes.id, id)
       });
+      console.log(`⏱️ [START-ROUTE] Etapa 1 (buscar rota): ${Date.now() - stepStart}ms`);
 
       if (!existingRoute) {
         return res.status(404).json({ message: "Rota não encontrada" });
@@ -691,6 +696,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // 🚗 Validar veículo se fornecido
       if (vehicleId) {
+        stepStart = Date.now();
         const vehicleIdNum = parseInt(vehicleId);
         if (!isNaN(vehicleIdNum)) {
           // Verificar se o veículo existe e pertence à empresa
@@ -698,25 +704,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!vehicle) {
             return res.status(404).json({ message: "Veículo não encontrado" });
           }
+          console.log(`⏱️ [START-ROUTE] Etapa 2 (validar veículo): ${Date.now() - stepStart}ms`);
           console.log(`🚗 [PROVIDER] Rota ${id} será iniciada com veículo: ${vehicle.plate}`);
         }
       }
 
       // ⏱️ Registrar timestamp de início + veículo usado
+      stepStart = Date.now();
       const [route] = await db.update(routes)
         .set({
-          routeStartedAt: new Date(),
+          routeStartedAt: nowInSaoPaulo(),
           startLocationData: startLocationData || null,
           vehicleId: vehicleId ? parseInt(vehicleId) : null,
-          updatedAt: new Date()
+          updatedAt: nowInSaoPaulo()
         })
         .where(eq(routes.id, id))
         .returning();
+      console.log(`⏱️ [START-ROUTE] Etapa 3 (atualizar rota): ${Date.now() - stepStart}ms`);
 
       // 🔄 Atualizar status dos agendamentos para 'in_progress'
       // Buscar todos os appointments desta rota que estão com status 'scheduled' ou 'rescheduled'
+      stepStart = Date.now();
       const stops = await db.select().from(routeStops).where(eq(routeStops.routeId, id));
-
+      console.log(`⏱️ [START-ROUTE] Etapa 4 (buscar paradas): ${Date.now() - stepStart}ms`);
       console.log(`🔍 [START-ROUTE] Rota ${id} tem ${stops.length} paradas.`);
 
       const appointmentIds = stops
@@ -727,13 +737,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (appointmentIds.length > 0) {
         // Log para ver status atuais antes de tentar update
+        stepStart = Date.now();
         const currentStatuses = await db
           .select({ id: appointments.id, status: appointments.status })
           .from(appointments)
           .where(inArray(appointments.id, appointmentIds));
-
+        console.log(`⏱️ [START-ROUTE] Etapa 5 (buscar status agendamentos): ${Date.now() - stepStart}ms`);
         console.log(`🔍 [START-ROUTE] Status atuais dos agendamentos:`, currentStatuses);
 
+        stepStart = Date.now();
         const result = await db.update(appointments)
           .set({
             status: 'in_progress',
@@ -748,6 +760,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             )
           ))
           .returning();
+        console.log(`⏱️ [START-ROUTE] Etapa 6 (atualizar status agendamentos): ${Date.now() - stepStart}ms`);
 
         console.log(`🔄 [ROTA] ${result.length} agendamentos foram EFETIVAMENTE atualizados para 'in_progress' na rota ${id}`);
         console.log(`   IDs atualizados:`, result.map(a => a.id));
@@ -755,7 +768,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`⚠️ [START-ROUTE] Nenhum ID numérico de agendamento encontrado nas paradas da rota.`);
       }
 
+      const totalTime = Date.now() - startTime;
       console.log(`✅ [PROVIDER] Rota ${id} iniciada às ${route.routeStartedAt}`);
+      console.log(`⏱️ [START-ROUTE] TEMPO TOTAL: ${totalTime}ms`);
       res.json(route);
     } catch (error: any) {
       console.error("❌ [PROVIDER] Erro ao iniciar rota:", error);
@@ -800,8 +815,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // ⏱️ Salvar timestamp de finalização e local
       const updateData: any = {
         status,
-        routeFinishedAt: new Date(),
-        updatedAt: new Date()
+        routeFinishedAt: nowInSaoPaulo(),
+        updatedAt: nowInSaoPaulo()
       };
 
       if (routeEndLocation && ['last_client', 'company_home'].includes(routeEndLocation)) {
@@ -851,7 +866,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         routeId: id,
         userId: req.user.userId,
         type,
-        startedAt: new Date(),
+        startedAt: nowInSaoPaulo(),
         notes: notes || null,
         approximateTime: approximateTime || null,
         durationMinutes: durationMinutes || null
@@ -946,7 +961,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = parseInt(req.params.id);
 
       const [occurrence] = await db.update(routeOccurrences)
-        .set({ finishedAt: new Date() })
+        .set({ finishedAt: nowInSaoPaulo() })
         .where(eq(routeOccurrences.id, id))
         .returning();
 
@@ -1018,7 +1033,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalCost,
         odometerKm: odometerKm || null,
         notes: notes || null,
-        fuelDate: fuelDate ? new Date(fuelDate) : new Date(),
+        fuelDate: fuelDate ? new Date(fuelDate) : nowInSaoPaulo(),
         occurrenceId: occurrenceId || null,
       }, req.user.userId, req.user.companyId);
 
@@ -2442,6 +2457,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 🆕 IMPORTANTE: Esta rota DEVE vir ANTES de /api/vehicles/:id
+  // Caso contrário, Express interpreta "available-for-me" como um :id
+  app.get("/api/vehicles/available-for-me", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+    try {
+      if (!req.user?.companyId) {
+        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
+      }
+
+      const availableVehicles = await storage.getVehiclesAvailableForUser(req.user.userId, req.user.companyId);
+      res.json(availableVehicles);
+    } catch (error: any) {
+      console.error(`❌ [VEHICLES] Erro ao buscar veículos disponíveis:`, error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/vehicles/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
@@ -2567,26 +2598,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       res.json({ message: "Veículo excluído com sucesso" });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  // 🆕 Endpoint para prestadores: lista veículos que ele pode usar
-  app.get("/api/vehicles/available-for-me", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
-    try {
-      if (!req.user?.companyId) {
-        return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
-      }
-
-      console.log(`🔍 [VEHICLES] Buscando veículos disponíveis para userId: ${req.user.userId}`);
-
-      const availableVehicles = await storage.getVehiclesAvailableForUser(req.user.userId, req.user.companyId);
-
-      console.log(`✅ [VEHICLES] ${availableVehicles.length} veículo(s) disponível(is)`);
-
-      res.json(availableVehicles);
-    } catch (error: any) {
-      console.error("❌ [VEHICLES] Erro ao buscar veículos disponíveis:", error);
       res.status(500).json({ message: error.message });
     }
   });
@@ -4631,14 +4642,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await db.update(appointments)
           .set({
             paymentStatus: 'pago',
-            paymentConfirmedAt: new Date(),
+            paymentConfirmedAt: nowInSaoPaulo(),
             // Manter executionStatus como 'concluido' - não alterar
           })
           .where(eq(appointments.id, appointmentId));
 
         newData = {
           paymentStatus: 'pago',
-          paymentConfirmedAt: new Date(),
+          paymentConfirmedAt: nowInSaoPaulo(),
         };
         changeType = 'payment_confirmed';
         reason = resolutionNotes || 'Pagamento confirmado pelo gestor';
@@ -5272,7 +5283,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Atualiza contador de paradas (mantém o que já existia + novas)
       await db
         .update(routes)
-        .set({ stopsCount: (routeRow.stopsCount || 0) + inserted.length, updatedAt: new Date() })
+        .set({ stopsCount: (routeRow.stopsCount || 0) + inserted.length, updatedAt: nowInSaoPaulo() })
         .where(eq(routes.id, routeId));
 
       // Payload enriquecido para a UI

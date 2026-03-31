@@ -98,6 +98,8 @@ interface Route {
   displayNumber: number;
   createdAt: string;
   updatedAt: string;
+  estimatedServiceMinutes?: number | null; // 🕒 Soma dos duration dos serviços (minutos)
+  realExecutionMinutes?: number | null;    // ⏱️ Soma da execução real (minutos)
 }
 
 // Interface para resposta paginada
@@ -226,7 +228,23 @@ const fmtDate = (v?: string | number | Date | null) => {
 
 
 const fmtKm = (m?: number) => (m && m > 0 ? `${(m / 1000).toFixed(1)} km` : "—");
-const fmtMin = (s?: number) => (s && s > 0 ? `${Math.round(s / 60)} min` : "—");
+
+const fmtMinOrHHMM = (minutes?: number | null) => {
+  if (!minutes || minutes <= 0) return "—";
+  // Mínimo de 1 minuto
+  const min = Math.max(1, Math.round(minutes));
+  if (min < 60) return `${min} min`;
+
+  const hh = Math.floor(min / 60);
+  const mm = min % 60;
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}h`;
+};
+
+const fmtFromSeconds = (s?: number | null) => {
+  if (!s || s <= 0) return "—";
+  const minutes = Math.round(s / 60);
+  return fmtMinOrHHMM(minutes);
+};
 
 // mostra só a data em pt-BR (com correção de timezone)
 const fmtDateList = (input: string | Date) => {
@@ -1646,7 +1664,7 @@ export default function RoutesHistoryPage() {
       pdf.setTextColor(...secondaryColor);
       pdf.text('Duração:', rightCol, yPosition);
       pdf.setTextColor(...textColor);
-      pdf.text(fmtMin(routeDetail.route?.durationTotal), rightCol + 20, yPosition);
+      pdf.text(fmtFromSeconds(routeDetail.route?.durationTotal), rightCol + 20, yPosition);
       yPosition += 6;
 
       pdf.setTextColor(...primaryColor);
@@ -2142,43 +2160,64 @@ export default function RoutesHistoryPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>ID</TableHead>
-                        <TableHead>Rota Criada dia</TableHead>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Veículo</TableHead>
-                        <TableHead>Técnico/Equipe</TableHead>
-                        <TableHead>Distância</TableHead>
-                        <TableHead>Duração</TableHead>
-                        <TableHead>Paradas</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Ações</TableHead>
+                        <TableHead className="text-center">ID</TableHead>
+                        <TableHead className="text-center">Rota Criada dia</TableHead>
+                        <TableHead className="text-center">Data</TableHead>
+                        <TableHead className="text-center">Veículo</TableHead>
+                        <TableHead className="text-center">Técnico/Equipe</TableHead>
+                        <TableHead className="text-center">Distância</TableHead>
+                        <TableHead className="text-center">Tempo de deslocamento previsto</TableHead>
+                        <TableHead className="text-center">Tempo total estimado</TableHead>
+                        <TableHead className="text-center">Tempo total real</TableHead>
+                        <TableHead className="text-center">Paradas</TableHead>
+                        <TableHead className="text-center">Status</TableHead>
+                        <TableHead className="text-center">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {routesData.map((route) => {
-                        // 👇 fallback: se a rota não tiver vehicleId, tenta pelo responsável
-                        const fallbackVehicleId =
-                          route.vehicleId ??
-                          (route.responsibleType === "team"
-                            ? vehicles.find((v: any) => v.teamId === Number(route.responsibleId))?.id
-                            : vehicles.find((v: any) => v.technicianId === Number(route.responsibleId))?.id);
-
                         return (
                           <TableRow key={route.id} data-testid={`row-route-${route.id}`}>
-                            <TableCell className="font-medium">#{route.displayNumber}</TableCell>
-                            <TableCell className="font-medium">{route.title}</TableCell>
-                            <TableCell>{fmtDateList(route.date)}</TableCell>
+                            <TableCell className="font-medium text-center">#{route.displayNumber}</TableCell>
+                            <TableCell className="font-medium text-center">{route.title}</TableCell>
+                            <TableCell className="text-center">{fmtDateList(route.date)}</TableCell>
 
-                            {/* Veículo (agora correto) */}
-                            <TableCell>
-                              {formatVehicle(getVehicleById(fallbackVehicleId))}
+                            <TableCell className="text-center">
+                              {getRouteVehicleName(route)}
                             </TableCell>
 
-                            <TableCell>{getResponsibleName(route)}</TableCell>
-                            <TableCell className="text-blue-600">{fmtKm(route.distanceTotal)}</TableCell>
-                            <TableCell className="text-green-600">{fmtMin(route.durationTotal)}</TableCell>
-                            <TableCell>{route.stopsCount}</TableCell>
-                            <TableCell>
+                            <TableCell className="text-center">{getResponsibleName(route)}</TableCell>
+                            <TableCell className="text-blue-600 text-center">{fmtKm(route.distanceTotal)}</TableCell>
+                            <TableCell className="text-green-600 text-center">{fmtFromSeconds(route.durationTotal)}</TableCell>
+                            {/* Tempo total estimado = deslocamento (s→min) + serviços (min) */}
+                            {(() => {
+                              const deslocMin = route.durationTotal ? Math.round(route.durationTotal / 60) : 0;
+                              const servicMin = route.estimatedServiceMinutes ?? 0;
+                              const totalEstimado = deslocMin + servicMin;
+                              return (
+                                <TableCell className="text-purple-600 text-center">
+                                  {fmtMinOrHHMM(totalEstimado)}
+                                </TableCell>
+                              );
+                            })()}
+                            {/* Tempo total real com cor condicional */}
+                            {(() => {
+                              const deslocMin = route.durationTotal ? Math.round(route.durationTotal / 60) : 0;
+                              const servicMin = route.estimatedServiceMinutes ?? 0;
+                              const totalEstimado = deslocMin + servicMin;
+                              const realMin = route.realExecutionMinutes;
+                              if (realMin == null) {
+                                return <TableCell className="text-gray-400 text-center">—</TableCell>;
+                              }
+                              const isOver = totalEstimado > 0 && realMin > totalEstimado;
+                              return (
+                                <TableCell className={`${isOver ? 'text-red-600' : 'text-green-600'} font-semibold text-center`}>
+                                  {fmtMinOrHHMM(realMin)}
+                                </TableCell>
+                              );
+                            })()}
+                            <TableCell className="text-center">{route.stopsCount}</TableCell>
+                            <TableCell className="text-center">
                               <Select
                                 value={route.status}
                                 onValueChange={(newStatus) => {
@@ -2523,14 +2562,14 @@ export default function RoutesHistoryPage() {
                       <Clock className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-green-600 mx-auto mb-0.5" />
                       <div className="text-[10px] sm:text-[11px] text-gray-500">Duração</div>
                       <div className="font-semibold text-green-600 text-xs sm:text-sm">
-                        {fmtMin(routeDetail.route?.durationTotal)}
+                        {fmtFromSeconds(routeDetail.route?.durationTotal)}
                       </div>
                     </div>
 
-                    <div className="text-center p-2 bg-yellow-50 rounded-md">
-                      <MapPin className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-yellow-600 mx-auto mb-0.5" />
+                    <div className="text-center p-2 bg-amber-50 rounded-md">
+                      <MapPin className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-600 mx-auto mb-0.5" />
                       <div className="text-[10px] sm:text-[11px] text-gray-500">Paradas</div>
-                      <div className="font-semibold text-yellow-600 text-xs sm:text-sm">
+                      <div className="font-semibold text-amber-700 text-xs sm:text-sm">
                         {routeDetail.route?.stopsCount}
                       </div>
                     </div>

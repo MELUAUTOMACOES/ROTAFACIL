@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import { buildApiUrl } from "@/lib/api-config";
+import { normalizeItems } from "@/lib/normalize";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -41,7 +42,7 @@ export default function AccessSchedules() {
   });
 
   // Query para buscar tabelas de horário
-  const { data: schedules = [], isLoading } = useQuery({
+  const { data: schedulesData, isLoading } = useQuery({
     queryKey: ["/api/access-schedules"],
     queryFn: async () => {
       const response = await fetch(buildApiUrl("/api/access-schedules"), {
@@ -50,10 +51,10 @@ export default function AccessSchedules() {
       if (!response.ok) {
         throw new Error('Erro ao carregar tabelas de horário');
       }
-      const data = await response.json();
-      return Array.isArray(data) ? data : [];
+      return await response.json();
     },
   });
+  const schedules = normalizeItems<AccessSchedule>(schedulesData);
 
   // Mutation para deletar tabela de horário
   const deleteMutation = useMutation({

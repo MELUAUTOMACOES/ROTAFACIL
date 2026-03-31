@@ -809,41 +809,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createVehicle(insertVehicle: InsertVehicle, userId: number, companyId: number): Promise<Vehicle> {
-    // 🔒 Validar unicidade: apenas 1 veículo por técnico/equipe
-    if (insertVehicle.technicianId) {
-      const [existing] = await db
-        .select()
-        .from(vehicles)
-        .where(
-          and(
-            eq(vehicles.technicianId, insertVehicle.technicianId),
-            this.byCompany(vehicles, companyId)
-          )
-        )
-        .limit(1);
-
-      if (existing) {
-        throw new Error(`Este técnico já está vinculado ao veículo: ${existing.plate}`);
-      }
-    }
-
-    if (insertVehicle.teamId) {
-      const [existing] = await db
-        .select()
-        .from(vehicles)
-        .where(
-          and(
-            eq(vehicles.teamId, insertVehicle.teamId),
-            this.byCompany(vehicles, companyId)
-          )
-        )
-        .limit(1);
-
-      if (existing) {
-        throw new Error(`Esta equipe já está vinculada ao veículo: ${existing.plate}`);
-      }
-    }
-
+    // ✅ Removido: validação de unicidade technicianId/teamId
+    // Agora usamos vehicleAssignments (authorizedTechnicianIds/authorizedTeamIds) para múltiplos vínculos
+    // Os campos technicianId/teamId em vehicles são mantidos apenas para compatibilidade legada (podem ficar NULL)
+    
     const [vehicle] = await db
       .insert(vehicles)
       .values({ ...insertVehicle, userId, companyId } as any)
@@ -852,42 +821,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateVehicle(id: number, vehicleData: Partial<InsertVehicle>, companyId: number): Promise<Vehicle> {
-    // 🔒 Validar unicidade: apenas 1 veículo por técnico/equipe
-    if (vehicleData.technicianId) {
-      const [existing] = await db
-        .select()
-        .from(vehicles)
-        .where(
-          and(
-            eq(vehicles.technicianId, vehicleData.technicianId),
-            this.byCompany(vehicles, companyId)
-          )
-        )
-        .limit(1);
-
-      // Permitir se for o mesmo veículo sendo atualizado
-      if (existing && existing.id !== id) {
-        throw new Error(`Este técnico já está vinculado ao veículo: ${existing.plate}`);
-      }
-    }
-
-    if (vehicleData.teamId) {
-      const [existing] = await db
-        .select()
-        .from(vehicles)
-        .where(
-          and(
-            eq(vehicles.teamId, vehicleData.teamId),
-            this.byCompany(vehicles, companyId)
-          )
-        )
-        .limit(1);
-
-      // Permitir se for o mesmo veículo sendo atualizado
-      if (existing && existing.id !== id) {
-        throw new Error(`Esta equipe já está vinculada ao veículo: ${existing.plate}`);
-      }
-    }
+    // ✅ Removido: validação de unicidade technicianId/teamId
+    // Agora usamos vehicleAssignments (authorizedTechnicianIds/authorizedTeamIds) para múltiplos vínculos
+    // Os campos technicianId/teamId em vehicles são mantidos apenas para compatibilidade legada (podem ficar NULL)
 
     const [vehicle] = await db
       .update(vehicles)
@@ -982,6 +918,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getVehiclesAvailableForTechnician(technicianId: number, companyId: number): Promise<Vehicle[]> {
+    console.log(`🔍 [getVehiclesAvailableForTechnician] Buscando veículos para technicianId=${technicianId}, companyId=${companyId}`);
+    
     // Buscar veículos autorizados diretamente para o técnico
     const directVehicles = await db
       .select({ vehicle: vehicles })
@@ -995,6 +933,8 @@ export class DatabaseStorage implements IStorage {
           eq(vehicles.companyId, companyId)
         )
       );
+    
+    console.log(`📊 [getVehiclesAvailableForTechnician] Veículos diretos encontrados: ${directVehicles.length}`);
 
     // Buscar equipes do técnico
     const technicianTeams = await db
@@ -1025,7 +965,7 @@ export class DatabaseStorage implements IStorage {
           )
         );
     }
-
+    
     // Combinar e remover duplicados
     const allVehicles = [...directVehicles, ...teamVehicles];
     const uniqueVehicles = Array.from(

@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { createUserByAdminSchema, updateUserByAdminSchema } from "@shared/schema";
 import type { User, CreateUserByAdmin, UpdateUserByAdmin, AccessSchedule } from "@shared/schema";
 import { z } from "zod";
+import { normalizeItems } from "@/lib/normalize";
 
 // Função para buscar endereço por CEP
 async function buscarEnderecoPorCep(cep: string) {
@@ -78,17 +79,17 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
   const accessScheduleId = watch("accessScheduleId");
 
   // Query para buscar tabelas de horário
-  const { data: accessSchedules = [] } = useQuery({
+  const { data: accessSchedulesData } = useQuery({
     queryKey: ["/api/access-schedules"],
     queryFn: async () => {
       const response = await fetch(buildApiUrl("/api/access-schedules"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) return [];
-      const data = await response.json();
-      return Array.isArray(data) ? data : [];
+      return await response.json();
     },
   });
+  const accessSchedules = normalizeItems<any>(accessSchedulesData);
 
   // Buscar CEP automaticamente
   const handleCepBlur = async () => {

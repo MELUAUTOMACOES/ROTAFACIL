@@ -114,25 +114,17 @@ export default function Vehicles() {
     }
   }, [vehicles]);
 
-  const getTechnician = (technicianId: number | null) => {
-    if (!technicianId) return null;
-    return technicians.find((t: Technician) => t.id === technicianId);
-  };
-
-  const getTeam = (teamId: number | null) => {
-    if (!teamId) return null;
-    return teams.find((t: Team) => t.id === teamId);
-  };
-
   // Filtragem de veículos
-  const filteredVehicles = vehicles.filter((vehicle: Vehicle) => {
+  const filteredVehicles = vehicles.filter((vehicle: any) => {
     // Busca de texto agora é server-side, então só filtramos responsabilidade
-    // Filtro de responsabilidade
-    const hasAssignment = vehicle.technicianId || vehicle.teamId;
+    // Filtro de responsabilidade baseado em autorizações
+    const hasAuthorizations = 
+      (vehicle.authorizedTechnicianIds && vehicle.authorizedTechnicianIds.length > 0) ||
+      (vehicle.authorizedTeamIds && vehicle.authorizedTeamIds.length > 0);
     const matchesResponsibility =
       vehicleResponsibility === "all" ||
-      (vehicleResponsibility === "assigned" && hasAssignment) ||
-      (vehicleResponsibility === "unassigned" && !hasAssignment);
+      (vehicleResponsibility === "assigned" && hasAuthorizations) ||
+      (vehicleResponsibility === "unassigned" && !hasAuthorizations);
 
     return matchesResponsibility;
   }).sort((a: Vehicle, b: Vehicle) => a.id - b.id);
@@ -259,8 +251,8 @@ export default function Vehicles() {
                   onChange={(e) => setVehicleResponsibility(e.target.value as any)}
                 >
                   <option value="all">Todos os veículos</option>
-                  <option value="assigned">Com Responsável</option>
-                  <option value="unassigned">Sem Responsável</option>
+                  <option value="assigned">Com Prestadores Autorizados</option>
+                  <option value="unassigned">Sem Prestadores Autorizados</option>
                 </select>
               </div>
             </div>
@@ -295,10 +287,13 @@ export default function Vehicles() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredVehicles.map((vehicle: Vehicle) => {
-                const assignedTechnician = getTechnician(vehicle.technicianId);
-                const assignedTeam = getTeam(vehicle.teamId);
-                const hasAssignment = assignedTechnician || assignedTeam;
+              {filteredVehicles.map((vehicle: any) => {
+                const hasAuthorizations = 
+                  (vehicle.authorizedTechnicianIds && vehicle.authorizedTechnicianIds.length > 0) ||
+                  (vehicle.authorizedTeamIds && vehicle.authorizedTeamIds.length > 0);
+                
+                const techNames = vehicle.authorizedTechnicianNames || [];
+                const teamNames = vehicle.authorizedTeamNames || [];
 
                 return (
                   <Card key={vehicle.id} className="hover:shadow-md transition-shadow">
@@ -334,8 +329,8 @@ export default function Vehicles() {
                           </Button>
                         </div>
                       </div>
-                      <Badge className={hasAssignment ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}>
-                        {hasAssignment ? "Atribuído" : "Sem Responsável"}
+                      <Badge className={hasAuthorizations ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}>
+                        {hasAuthorizations ? "Com Prestadores" : "Sem Prestadores"}
                       </Badge>
                     </CardHeader>
                     <CardContent className="p-6">
@@ -349,24 +344,31 @@ export default function Vehicles() {
                           <span>Ano: {vehicle.year}</span>
                         </div>
 
-                        {assignedTechnician && (
-                          <div className="flex items-center space-x-2 text-sm text-gray-600">
+                        {hasAuthorizations ? (
+                          <>
+                            {techNames.length > 0 && (
+                              <div className="flex items-start space-x-2 text-sm text-gray-600">
+                                <User className="h-4 w-4 mt-0.5" />
+                                <div>
+                                  <div className="font-medium">Técnicos autorizados:</div>
+                                  <div className="text-xs">{techNames.join(', ')}</div>
+                                </div>
+                              </div>
+                            )}
+                            {teamNames.length > 0 && (
+                              <div className="flex items-start space-x-2 text-sm text-gray-600">
+                                <Users className="h-4 w-4 mt-0.5" />
+                                <div>
+                                  <div className="font-medium">Equipes autorizadas:</div>
+                                  <div className="text-xs">{teamNames.join(', ')}</div>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="flex items-center space-x-2 text-sm text-amber-600">
                             <User className="h-4 w-4" />
-                            <span>Técnico: {assignedTechnician.name}</span>
-                          </div>
-                        )}
-
-                        {assignedTeam && (
-                          <div className="flex items-center space-x-2 text-sm text-gray-600">
-                            <Users className="h-4 w-4" />
-                            <span>Equipe: {assignedTeam.name}</span>
-                          </div>
-                        )}
-
-                        {!hasAssignment && (
-                          <div className="flex items-center space-x-2 text-sm text-red-600">
-                            <User className="h-4 w-4" />
-                            <span>Nenhum responsável atribuído</span>
+                            <span>Nenhum prestador autorizado</span>
                           </div>
                         )}
                       </div>

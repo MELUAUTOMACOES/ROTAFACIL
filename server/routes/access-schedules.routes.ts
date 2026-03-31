@@ -65,7 +65,6 @@ export function registerAccessSchedulesRoutes(app: Express, authenticateToken: a
       const allowed = isAccessAllowed(schedule);
       
       if (!allowed) {
-        console.log(`❌ [CHECK-ACCESS] Acesso negado para ${user.email} - fora do horário`);
         return res.status(403).json({ 
           allowed: false,
           message: getAccessDeniedMessage(schedule)
@@ -82,7 +81,6 @@ export function registerAccessSchedulesRoutes(app: Express, authenticateToken: a
       });
       
     } catch (error: any) {
-      console.error("❌ [CHECK-ACCESS] Erro ao verificar acesso:", error);
       res.status(500).json({ 
         allowed: true, // Em caso de erro, não bloquear
         minutesUntilEnd: null

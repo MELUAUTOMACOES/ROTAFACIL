@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { buildApiUrl } from "@/lib/api-config";
 import type { Client } from "@shared/schema";
 import { ClientSelectionModal } from "@/components/modals/ClientSelectionModal";
+import { normalizeItems } from "@/lib/normalize";
 
 interface ClientSearchProps {
   value?: number | null;
@@ -49,7 +50,7 @@ export function ClientSearch({ value, onValueChange, onSelect, placeholder = "Pe
   });
 
   // Buscar cliente selecionado para mostrar o nome inicial (usando API paginada)
-  const { data: allClients = [] } = useQuery<Client[]>({
+  const { data: allClientsData } = useQuery({
     queryKey: ['/api/clients'],
     queryFn: async () => {
       const response = await fetch(buildApiUrl('/api/clients?limit=50'), {
@@ -58,10 +59,10 @@ export function ClientSearch({ value, onValueChange, onSelect, placeholder = "Pe
         },
       });
       if (!response.ok) return [];
-      const data = await response.json();
-      return data.items || data; // Suporta formato paginado { items } ou array legado
+      return await response.json();
     },
   });
+  const allClients = normalizeItems<Client>(allClientsData);
 
   // Buscar o cliente específico pelo ID (caso não esteja no limit=50)
   const { data: specificClient } = useQuery<Client | null>({
