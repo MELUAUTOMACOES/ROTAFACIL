@@ -390,10 +390,15 @@ export default function AcceptInvite() {
                       </p>
                     </div>
                     <Button
-                      asChild
+                      onClick={() => {
+                        console.log('🔐 [ACCEPT INVITE] Salvando token para retornar após login...');
+                        console.log('   - Token:', token);
+                        localStorage.setItem('pendingInviteToken', token || '');
+                        window.location.href = '/login';
+                      }}
                       className="w-full bg-[#DAA520] hover:bg-[#B8860B]"
                     >
-                      <Link href="/login">Fazer Login</Link>
+                      Fazer Login
                     </Button>
                   </div>
                 ) : (

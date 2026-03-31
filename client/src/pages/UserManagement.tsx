@@ -44,11 +44,11 @@ export default function UserManagement() {
     ]
   });
 
-  // Query para buscar usuários
+  // Query para buscar usuários E convites pendentes
   const { data: usersData, isLoading } = useQuery({
-    queryKey: ["/api/users"],
+    queryKey: ["/api/company/users"],
     queryFn: async () => {
-      const response = await fetch(buildApiUrl("/api/users"), {
+      const response = await fetch(buildApiUrl("/api/company/users"), {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
@@ -57,7 +57,10 @@ export default function UserManagement() {
       return await response.json();
     },
   });
-  const users = normalizeItems<User>(usersData);
+  
+  // Separar usuários ativos e convites pendentes
+  const users = normalizeItems<User>(usersData?.users || []);
+  const pendingInvites = usersData?.pendingInvites || [];
 
   // Mutation para deletar usuário
   const deleteMutation = useMutation({
@@ -73,7 +76,7 @@ export default function UserManagement() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/users"] });
       toast({
         title: "Usuário deletado",
         description: "O usuário foi removido com sucesso.",
@@ -203,7 +206,7 @@ export default function UserManagement() {
                     onSuccess={() => {
                       setIsFormOpen(false);
                       setSelectedUser(null);
-                      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+                      queryClient.invalidateQueries({ queryKey: ["/api/company/users"] });
                     }}
                     onCancel={() => {
                       setIsFormOpen(false);
@@ -216,13 +219,55 @@ export default function UserManagement() {
             <CardContent>
               {isLoading ? (
                 <div className="text-center py-8">Carregando usuários...</div>
-              ) : users.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  Nenhum usuário cadastrado ainda.
-                </div>
               ) : (
                 <div className="space-y-4">
-                  {users.map((user: User) => (
+                  {/* Convites Pendentes */}
+                  {pendingInvites.length > 0 && (
+                    <div className="mb-6">
+                      <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                        <Mail className="w-4 h-4" />
+                        Convites Pendentes ({pendingInvites.length})
+                      </h3>
+                      <div className="space-y-2">
+                        {pendingInvites.map((invite: any) => (
+                          <Card key={invite.id} className="bg-yellow-50 border-yellow-200">
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-3">
+                                    <Mail className="w-5 h-5 text-yellow-600" />
+                                    <div>
+                                      <p className="font-medium">{invite.email}</p>
+                                      <p className="text-sm text-muted-foreground">
+                                        Convite enviado • Papel: {invite.role} • Aguardando aceite
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <Badge variant="outline" className="text-yellow-700 border-yellow-700">
+                                  Pendente
+                                </Badge>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Usuários Ativos */}
+                  {users.length === 0 && pendingInvites.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Nenhum usuário cadastrado ainda.
+                    </div>
+                  ) : (
+                    <>
+                      {users.length > 0 && (
+                        <h3 className="text-sm font-semibold text-muted-foreground mb-3">
+                          Usuários Ativos ({users.length})
+                        </h3>
+                      )}
+                      {users.map((user: User) => (
                     <Card key={user.id} className="overflow-hidden">
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between">
@@ -312,6 +357,8 @@ export default function UserManagement() {
                       </CardContent>
                     </Card>
                   ))}
+                    </>
+                  )}
                 </div>
               )}
             </CardContent>

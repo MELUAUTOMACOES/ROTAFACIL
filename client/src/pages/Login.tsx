@@ -84,6 +84,16 @@ export default function Login() {
         return;
       }
 
+      // 🔗 Verificar se existe convite pendente
+      const pendingInviteToken = localStorage.getItem('pendingInviteToken');
+      if (pendingInviteToken) {
+        console.log('🔗 [LOGIN] Convite pendente detectado após login');
+        console.log('   - Token:', pendingInviteToken.substring(0, 10) + '...');
+        localStorage.removeItem('pendingInviteToken');
+        setLocation(`/convite/${pendingInviteToken}`);
+        return;
+      }
+
       setLocation("/inicio");
     } catch (err: any) {
       setError(err.message || "Erro ao processar sua solicitação");
@@ -97,6 +107,17 @@ export default function Login() {
     try {
       await selectCompany(companySelectionData.selectionToken, companyId);
       setCompanySelectionData(null);
+      
+      // 🔗 Verificar se existe convite pendente
+      const pendingInviteToken = localStorage.getItem('pendingInviteToken');
+      if (pendingInviteToken) {
+        console.log('🔗 [COMPANY SELECT] Convite pendente detectado após seleção');
+        console.log('   - Token:', pendingInviteToken.substring(0, 10) + '...');
+        localStorage.removeItem('pendingInviteToken');
+        setLocation(`/convite/${pendingInviteToken}`);
+        return;
+      }
+      
       setLocation("/inicio");
     } catch (err: any) {
       setError(err.message || "Erro ao selecionar empresa");
