@@ -54,15 +54,28 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
     try {
       const companyId = req.user.companyId;
       
+      console.log(`📋 [LIST USERS] Admin ${req.user.email} listando usuários`);
+      console.log(`   - Company ID: ${companyId || 'N/A'}`);
+      
       if (companyId) {
         // 🔒 MULTI-TENANT: Listar usuários da empresa via memberships
+        console.log(`🔍 [LIST USERS] Buscando usuários com memberships ativas na empresa ${companyId}...`);
+        
         const companyUsers = await storage.getUsersByCompanyId(companyId);
+        
+        console.log(`✅ [LIST USERS] Encontrados ${companyUsers.length} usuários com membership ativa`);
+        console.log(`⚠️  [LIST USERS] ATENÇÃO: Esta listagem NÃO inclui convites pendentes!`);
+        console.log(`   Use GET /api/company/users para ver convites pendentes também.`);
+        
         const sanitizedUsers = companyUsers.map(({ password, emailVerificationToken, ...user }: any) => user);
         return res.json(sanitizedUsers);
       }
       
       // Fallback: Se admin não tem companyId (legado), usar createdBy
+      console.log(`🔍 [LIST USERS] Modo legado - buscando por createdBy=${req.user.userId}`);
       const users = await storage.getAllUsers(req.user.userId);
+      console.log(`✅ [LIST USERS] Encontrados ${users.length} usuários`);
+      
       const sanitizedUsers = users.map(({ password, emailVerificationToken, ...user }) => user);
       res.json(sanitizedUsers);
     } catch (error: any) {
@@ -84,15 +97,22 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
       const existingUser = await storage.getUserByEmail(userData.email);
       
       if (existingUser) {
+        console.log(`📋 [USER MANAGEMENT] E-mail já existe no sistema: ${existingUser.email} (ID: ${existingUser.id})`);
+        console.log(`   - Email verificado: ${existingUser.emailVerified}`);
+        console.log(`   - Ativo: ${existingUser.isActive}`);
+        
         // 🏢 MULTI-TENANT: Usuário já existe — verificar isolamento por empresa
         if (adminCompanyId) {
           // 1. Já é membro desta empresa?
           const existingMembership = await storage.getMembership(existingUser.id, adminCompanyId);
           if (existingMembership) {
+            console.log(`⚠️ [USER MANAGEMENT] Usuário já possui membership na empresa ${adminCompanyId}`);
             return res.status(400).json({ 
               message: "Este usuário já pertence à sua empresa." 
             });
           }
+          
+          console.log(`🔍 [USER MANAGEMENT] Usuário existe em outra empresa. Verificando convites...`);
           
           // 2. Usuário existe em OUTRA empresa — NÃO criar membership diretamente.
           // ✅ Fluxo correto: criar convite pendente e enviar e-mail para aceite.
@@ -104,6 +124,7 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
             inv => inv.email === existingUser.email && inv.status === 'pending'
           );
           if (pendingInvite) {
+            console.log(`⚠️ [USER MANAGEMENT] Convite pendente já existe (ID: ${pendingInvite.id})`);
             return res.status(400).json({
               message: "Já existe um convite pendente para este e-mail nesta empresa. Aguarde o usuário aceitar.",
             });
@@ -120,7 +141,12 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
           const expiresAt = new Date();
           expiresAt.setDate(expiresAt.getDate() + 7); // Válido por 7 dias
           
-          await storage.createInvitation({
+          console.log(`📧 [USER MANAGEMENT] Criando convite para usuário existente...`);
+          console.log(`   - Email: ${existingUser.email}`);
+          console.log(`   - Empresa: ${adminCompanyId}`);
+          console.log(`   - Role: ${inviteRole}`);
+          
+          const invitation = await storage.createInvitation({
             companyId: adminCompanyId,
             email: existingUser.email,
             role: inviteRole,
@@ -129,6 +155,8 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
             expiresAt,
             invitedBy: req.user.userId,
           });
+          
+          console.log(`✅ [USER MANAGEMENT] Convite criado com sucesso (ID: ${invitation.id})`);
           
           // Enviar e-mail de convite para o usuário
           const company = await storage.getCompanyById(adminCompanyId);
@@ -141,13 +169,23 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
           
           if (!emailResult.success) {
             console.warn(`⚠️ [USER MANAGEMENT] Convite criado mas e-mail não foi enviado: ${emailResult.error}`);
+          } else {
+            console.log(`✅ [USER MANAGEMENT] E-mail de convite enviado com sucesso`);
           }
           
           console.log(`📧 [USER MANAGEMENT] Convite enviado para ${existingUser.email} → empresa ${adminCompanyId}. Aguardando aceite.`);
+          console.log(`🔗 [USER MANAGEMENT] Token do convite: ${inviteToken.substring(0, 8)}...`);
           
           return res.json({ 
             message: 'Este e-mail já possui conta na plataforma. Um convite foi enviado para que o usuário aceite o vínculo com sua empresa.',
             inviteSent: true,
+            invitation: {
+              id: invitation.id,
+              email: invitation.email,
+              role: invitation.role,
+              status: invitation.status,
+              expiresAt: invitation.expiresAt,
+            }
           });
         }
         

@@ -442,22 +442,32 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
       const { token } = req.params;
       const data = acceptInvitationNewUserSchema.parse(req.body);
 
-      console.log(`🎫 [ACCEPT INVITE] Novo usuário aceitando convite: ${token.substring(0, 8)}...`);
+      console.log(`🎫 [ACCEPT INVITE NEW] Novo usuário aceitando convite: ${token.substring(0, 8)}...`);
 
       const invitation = await storage.getInvitationByToken(data.token);
 
       if (!invitation || invitation.status !== 'pending' || invitation.expiresAt < new Date()) {
+        console.log(`❌ [ACCEPT INVITE NEW] Convite inválido ou expirado`);
         return res.status(400).json({ message: "Convite inválido ou expirado" });
       }
+
+      console.log(`📋 [ACCEPT INVITE NEW] Convite encontrado:`);
+      console.log(`   - ID: ${invitation.id}`);
+      console.log(`   - Email: ${invitation.email}`);
+      console.log(`   - Empresa: ${invitation.companyId}`);
+      console.log(`   - Role: ${invitation.role}`);
 
       // Verificar se já existe usuário com este email
       const existingUser = await storage.getUserByEmail(invitation.email);
       if (existingUser) {
+        console.log(`⚠️ [ACCEPT INVITE NEW] Usuário já existe (ID: ${existingUser.id})`);
         return res.status(400).json({
           message: "Este email já possui uma conta. Use a opção de login."
         });
       }
 
+      console.log(`📝 [ACCEPT INVITE NEW] Criando novo usuário...`);
+      
       // Criar usuário
       const user = await storage.createUser({
         username: invitation.email.split('@')[0],
@@ -469,16 +479,23 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
         role: 'user',
       });
 
+      console.log(`✅ [ACCEPT INVITE NEW] Usuário criado (ID: ${user.id})`);
+      console.log(`📝 [ACCEPT INVITE NEW] Criando membership...`);
+
       // Criar membership
-      await storage.createMembership({
+      const membership = await storage.createMembership({
         userId: user.id,
         companyId: invitation.companyId,
         role: invitation.role,
         isActive: true,
       });
 
+      console.log(`✅ [ACCEPT INVITE NEW] Membership criada (ID: ${membership.id})`);
+
       // Marcar convite como aceito
       await storage.updateInvitationStatus(invitation.id, 'accepted');
+
+      console.log(`✅ [ACCEPT INVITE NEW] Convite marcado como aceito`);
 
       // Gerar token JWT
       const getSystemVersion = () => process.env.SYSTEM_VERSION || "1.0.0";
@@ -494,7 +511,11 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
         { expiresIn: '7d' }
       );
 
-      console.log(`✅ [ACCEPT INVITE] Usuário criado e convite aceito: ${user.email}`);
+      console.log(`✅ [ACCEPT INVITE NEW] Usuário criado e convite aceito: ${user.email}`);
+      console.log(`   - User ID: ${user.id}`);
+      console.log(`   - Empresa: ${invitation.companyId}`);
+      console.log(`   - Role: ${invitation.role}`);
+      console.log(`   - Membership ID: ${membership.id}`);
 
       res.json({
         message: 'Conta criada com sucesso!',
@@ -523,52 +544,168 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
   app.post("/api/invitations/:token/accept-existing", authenticateToken, async (req: any, res) => {
     try {
       const { token } = req.params;
+      
+      console.log(`\n========================================`);
+      console.log(`🎫 [ACCEPT EXISTING] REQUEST RECEBIDO`);
+      console.log(`========================================`);
+      console.log(`📍 IP: ${req.ip || req.headers['x-forwarded-for']}`);
+      console.log(`📍 User-Agent: ${req.headers['user-agent']}`);
+      console.log(`📍 Token do params: ${token}`);
+      console.log(`📍 Body recebido:`, req.body);
+      console.log(`📍 User autenticado:`, {
+        userId: req.user.userId,
+        email: req.user.email,
+        companyId: req.user.companyId,
+        companyRole: req.user.companyRole
+      });
+      
       const data = acceptInvitationExistingUserSchema.parse(req.body);
+      console.log(`✅ [ACCEPT EXISTING] Schema validado com sucesso`);
 
-      console.log(`🎫 [ACCEPT INVITE] Usuário existente aceitando convite`);
+      console.log(`🎫 [ACCEPT EXISTING] Usuário existente aceitando convite`);
+      console.log(`   - User ID: ${req.user.userId}`);
+      console.log(`   - Email: ${req.user.email}`);
 
+      console.log(`🔍 [ACCEPT EXISTING] Buscando convite no banco...`);
+      console.log(`   - Token: ${data.token.substring(0, 10)}...`);
+      
       const invitation = await storage.getInvitationByToken(data.token);
 
-      if (!invitation || invitation.status !== 'pending' || invitation.expiresAt < new Date()) {
-        return res.status(400).json({ message: "Convite inválido ou expirado" });
+      if (!invitation) {
+        console.log(`❌ [ACCEPT EXISTING] ERRO: Convite não encontrado no banco!`);
+        console.log(`   - Token usado: ${data.token.substring(0, 10)}...`);
+        return res.status(400).json({ message: "Convite não encontrado" });
+      }
+
+      console.log(`✅ [ACCEPT EXISTING] Convite encontrado no banco!`);
+      console.log(`📋 [ACCEPT EXISTING] Dados do convite:`);
+      console.log(`   - ID: ${invitation.id}`);
+      console.log(`   - Email convite: ${invitation.email}`);
+      console.log(`   - Empresa: ${invitation.companyId}`);
+      console.log(`   - Role: ${invitation.role}`);
+      console.log(`   - Status: ${invitation.status}`);
+      console.log(`   - Expira em: ${invitation.expiresAt}`);
+      console.log(`   - Agora: ${new Date()}`);
+      
+      if (invitation.status !== 'pending') {
+        console.log(`❌ [ACCEPT EXISTING] ERRO: Convite já foi usado!`);
+        console.log(`   - Status atual: ${invitation.status}`);
+        return res.status(400).json({ message: "Este convite já foi utilizado" });
+      }
+      
+      if (invitation.expiresAt < new Date()) {
+        console.log(`❌ [ACCEPT EXISTING] ERRO: Convite expirado!`);
+        console.log(`   - Expirou em: ${invitation.expiresAt}`);
+        console.log(`   - Data atual: ${new Date()}`);
+        return res.status(400).json({ message: "Este convite expirou" });
       }
 
       // Verificar se o email do convite corresponde ao usuário logado
+      console.log(`🔍 [ACCEPT EXISTING] Validando email...`);
+      console.log(`   - Email do convite: ${invitation.email}`);
+      console.log(`   - Email do usuário: ${req.user.email}`);
+      console.log(`   - Match: ${invitation.email === req.user.email}`);
+      
       if (invitation.email !== req.user.email) {
+        console.log(`❌ [ACCEPT EXISTING] ERRO: Email não corresponde!`);
+        console.log(`   - Convite para: ${invitation.email}`);
+        console.log(`   - Usuário logado: ${req.user.email}`);
         return res.status(403).json({
           message: "Este convite não foi enviado para você."
         });
       }
 
+      console.log(`✅ [ACCEPT EXISTING] Email validado!`);
+
       // Verificar se já é membro
+      console.log(`🔍 [ACCEPT EXISTING] Verificando membership existente...`);
+      console.log(`   - User ID: ${req.user.userId}`);
+      console.log(`   - Company ID: ${invitation.companyId}`);
+      
       const existingMembership = await storage.getMembership(req.user.userId, invitation.companyId);
+      
       if (existingMembership) {
+        console.log(`⚠️ [ACCEPT EXISTING] ERRO: Usuário já possui membership!`);
+        console.log(`   - Membership ID: ${existingMembership.id}`);
+        console.log(`   - Role: ${existingMembership.role}`);
+        console.log(`   - Ativo: ${existingMembership.isActive}`);
         return res.status(400).json({
           message: "Você já faz parte desta empresa."
         });
       }
 
+      console.log(`✅ [ACCEPT EXISTING] Nenhuma membership existente encontrada`);
+      console.log(`📝 [ACCEPT EXISTING] INICIANDO CRIAÇÃO DA MEMBERSHIP...`);
+      
       // Criar membership
-      await storage.createMembership({
+      console.log(`🏗️ [ACCEPT EXISTING] Dados para criar membership:`);
+      console.log(`   - userId: ${req.user.userId}`);
+      console.log(`   - companyId: ${invitation.companyId}`);
+      console.log(`   - role: ${invitation.role}`);
+      console.log(`   - isActive: true`);
+      
+      const membership = await storage.createMembership({
         userId: req.user.userId,
         companyId: invitation.companyId,
         role: invitation.role,
         isActive: true,
       });
 
+      console.log(`✅ [ACCEPT EXISTING] MEMBERSHIP CRIADA COM SUCESSO!`);
+      console.log(`   - Membership ID: ${membership.id}`);
+      console.log(`   - User ID: ${membership.userId}`);
+      console.log(`   - Company ID: ${membership.companyId}`);
+      console.log(`   - Role: ${membership.role}`);
+      console.log(`   - Ativo: ${membership.isActive}`);
+
       // Marcar convite como aceito
-      await storage.updateInvitationStatus(invitation.id, 'accepted');
+      console.log(`🔄 [ACCEPT EXISTING] Atualizando status do convite...`);
+      console.log(`   - Invitation ID: ${invitation.id}`);
+      console.log(`   - Status atual: ${invitation.status}`);
+      console.log(`   - Novo status: accepted`);
+      
+      const updatedInvitation = await storage.updateInvitationStatus(invitation.id, 'accepted');
 
-      console.log(`✅ [ACCEPT INVITE] Convite aceito por usuário existente: ${req.user.email}`);
+      console.log(`✅ [ACCEPT EXISTING] CONVITE ATUALIZADO COM SUCESSO!`);
+      console.log(`   - Invitation ID: ${updatedInvitation.id}`);
+      console.log(`   - Novo status: ${updatedInvitation.status}`);
 
-      res.json({
+      console.log(`\n========================================`);
+      console.log(`✅ [ACCEPT EXISTING] PROCESSO CONCLUÍDO COM SUCESSO!`);
+      console.log(`========================================`);
+      console.log(`   - Usuário: ${req.user.email}`);
+      console.log(`   - Empresa: ${invitation.companyId}`);
+      console.log(`   - Membership ID: ${membership.id}`);
+      console.log(`   - Invitation atualizada: ${updatedInvitation.id}`);
+      console.log(`========================================\n`);
+
+      console.log(`📤 [ACCEPT EXISTING] Enviando resposta para o frontend...`);
+      
+      const response = {
         message: 'Convite aceito com sucesso!',
         companyId: invitation.companyId,
-      });
+        membership: {
+          id: membership.id,
+          companyId: membership.companyId,
+          role: membership.role,
+          isActive: membership.isActive,
+        }
+      };
+      
+      console.log(`📤 [ACCEPT EXISTING] Response body:`, response);
+      
+      res.json(response);
     } catch (error: any) {
-      console.error("❌ Erro ao aceitar convite:", error);
+      console.error(`\n========================================`);
+      console.error(`❌ [ACCEPT EXISTING] ERRO CAPTURADO!`);
+      console.error(`========================================`);
+      console.error(`   - Tipo: ${error.name}`);
+      console.error(`   - Mensagem: ${error.message}`);
+      console.error(`   - Stack:`, error.stack);
+      console.error(`========================================\n`);
 
       if (error.name === 'ZodError') {
+        console.error(`❌ [ACCEPT EXISTING] Erro de validação Zod:`, error.errors);
         return res.status(400).json({
           message: "Dados inválidos.",
           errors: error.errors

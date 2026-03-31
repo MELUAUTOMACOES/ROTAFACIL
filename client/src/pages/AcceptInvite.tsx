@@ -19,6 +19,10 @@ import { Link } from "wouter";
 export default function AcceptInvite() {
   const { token } = useParams<{ token: string }>();
   const [, setLocation] = useLocation();
+  
+  // 🔍 LOG: Token capturado da URL
+  console.log('🎫 [ACCEPT INVITE] Componente montado');
+  console.log('🎫 [ACCEPT INVITE] Token da URL:', token);
   const [isValidating, setIsValidating] = useState(true);
   const [inviteData, setInviteData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,15 +49,30 @@ export default function AcceptInvite() {
   useEffect(() => {
     const validateInvite = async () => {
       try {
-        const response = await fetch(buildApiUrl(`/api/invitations/${token}`));
+        const url = buildApiUrl(`/api/invitations/${token}`);
+        console.log('🔍 [VALIDATE INVITE] Validando convite...');
+        console.log('🔍 [VALIDATE INVITE] URL:', url);
+        
+        const response = await fetch(url);
+        console.log('🔍 [VALIDATE INVITE] Status:', response.status);
+        
         const data = await response.json();
+        console.log('🔍 [VALIDATE INVITE] Response:', data);
 
         if (!response.ok) {
+          console.error('❌ [VALIDATE INVITE] Erro na validação:', data.message);
           throw new Error(data.message || "Convite inválido");
         }
 
+        console.log('✅ [VALIDATE INVITE] Convite válido!');
+        console.log('   - Email:', data.invitation?.email);
+        console.log('   - Empresa:', data.invitation?.company?.name);
+        console.log('   - Role:', data.invitation?.role);
+        console.log('   - Usuário já tem conta?', data.hasAccount);
+        
         setInviteData(data);
       } catch (err: any) {
+        console.error('❌ [VALIDATE INVITE] Erro capturado:', err);
         setError(err.message || "Erro ao validar convite");
       } finally {
         setIsValidating(false);
@@ -69,38 +88,68 @@ export default function AcceptInvite() {
   const acceptWithExistingAccount = async () => {
     try {
       setIsAccepting(true);
+      
+      console.log('🎯 [ACCEPT EXISTING] Iniciando aceite de convite');
+      console.log('🎯 [ACCEPT EXISTING] Token:', token);
+      console.log('🎯 [ACCEPT EXISTING] User email:', user?.email);
+      console.log('🎯 [ACCEPT EXISTING] Invite email:', inviteData?.invitation?.email);
 
-      const response = await fetch(buildApiUrl(`/api/invitations/${token}/accept-existing`), {
+      const url = buildApiUrl(`/api/invitations/${token}/accept-existing`);
+      const headers = {
+        ...getAuthHeaders(),
+        "Content-Type": "application/json",
+      };
+      const payload = { token };
+      
+      console.log('📤 [ACCEPT EXISTING] Request details:');
+      console.log('   - Method: POST');
+      console.log('   - URL:', url);
+      console.log('   - Headers:', headers);
+      console.log('   - Body:', JSON.stringify(payload));
+      
+      const response = await fetch(url, {
         method: "POST",
-        headers: {
-          ...getAuthHeaders(),
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ token }),
+        headers: headers,
+        body: JSON.stringify(payload),
       });
 
+      console.log('📥 [ACCEPT EXISTING] Response status:', response.status);
+      console.log('📥 [ACCEPT EXISTING] Response headers:', Object.fromEntries(response.headers.entries()));
+      
       const data = await response.json();
+      console.log('📥 [ACCEPT EXISTING] Response body:', data);
 
       if (!response.ok) {
+        console.error('❌ [ACCEPT EXISTING] Erro no aceite:', data.message);
         throw new Error(data.message || "Erro ao aceitar convite");
       }
+      
+      console.log('✅ [ACCEPT EXISTING] Convite aceito com sucesso!');
+      console.log('   - Membership criada:', data.membership);
 
       toast({
         title: "✅ Convite aceito!",
         description: `Você agora faz parte de ${inviteData.invitation.company.name}`,
       });
 
+      console.log('🔄 [ACCEPT EXISTING] Redirecionando para dashboard em 1s...');
+      
       // Redirecionar para dashboard após 1 segundo
       setTimeout(() => {
+        console.log('🔄 [ACCEPT EXISTING] Redirecionando agora...');
         setLocation("/");
       }, 1000);
     } catch (err: any) {
+      console.error('❌ [ACCEPT EXISTING] Erro capturado:', err);
+      console.error('❌ [ACCEPT EXISTING] Stack:', err.stack);
+      
       toast({
         variant: "destructive",
         title: "❌ Erro ao aceitar convite",
         description: err.message,
       });
     } finally {
+      console.log('🏁 [ACCEPT EXISTING] Finalizando processo');
       setIsAccepting(false);
     }
   };
@@ -109,21 +158,38 @@ export default function AcceptInvite() {
   const onSubmitNewUser = async (data: AcceptInvitationNewUserData) => {
     try {
       setIsAccepting(true);
+      
+      console.log('🆕 [ACCEPT NEW] Criando novo usuário e aceitando convite');
+      console.log('🆕 [ACCEPT NEW] Token:', token);
+      console.log('🆕 [ACCEPT NEW] Nome:', data.name);
 
-      const response = await fetch(buildApiUrl(`/api/invitations/${token}/accept-new`), {
+      const url = buildApiUrl(`/api/invitations/${token}/accept-new`);
+      console.log('📤 [ACCEPT NEW] Request URL:', url);
+      console.log('📤 [ACCEPT NEW] Payload:', { ...data, password: '***', confirmPassword: '***' });
+      
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
 
+      console.log('📥 [ACCEPT NEW] Response status:', response.status);
+      
       const result = await response.json();
+      console.log('📥 [ACCEPT NEW] Response:', result);
 
       if (!response.ok) {
+        console.error('❌ [ACCEPT NEW] Erro ao criar usuário:', result.message);
         throw new Error(result.message || "Erro ao aceitar convite");
       }
 
+      console.log('✅ [ACCEPT NEW] Usuário criado com sucesso!');
+      console.log('   - User ID:', result.user?.id);
+      console.log('   - Token JWT recebido:', result.token ? 'SIM' : 'NÃO');
+      
       // Salvar token de autenticação
       localStorage.setItem("token", result.token);
+      console.log('💾 [ACCEPT NEW] Token salvo no localStorage');
 
       setSuccess(true);
       toast({
@@ -131,17 +197,24 @@ export default function AcceptInvite() {
         description: "Redirecionando para o sistema...",
       });
 
+      console.log('🔄 [ACCEPT NEW] Redirecionando para dashboard em 2s...');
+      
       // Redirecionar para dashboard após 2 segundos
       setTimeout(() => {
+        console.log('🔄 [ACCEPT NEW] Redirecionando agora...');
         window.location.href = "/";
       }, 2000);
     } catch (err: any) {
+      console.error('❌ [ACCEPT NEW] Erro capturado:', err);
+      console.error('❌ [ACCEPT NEW] Stack:', err.stack);
+      
       toast({
         variant: "destructive",
         title: "❌ Erro ao aceitar convite",
         description: err.message,
       });
     } finally {
+      console.log('🏁 [ACCEPT NEW] Finalizando processo');
       setIsAccepting(false);
     }
   };

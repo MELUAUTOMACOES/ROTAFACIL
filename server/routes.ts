@@ -1439,6 +1439,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Buscar memberships do usuário (multiempresa)
       const memberships = await storage.getMembershipsByUserId(user.id);
+      
+      console.log(`🔍 [LOGIN] Usuário ${user.email} (ID: ${user.id})`);
+      console.log(`   - Memberships ativas: ${memberships.length}`);
+      memberships.forEach(m => {
+        console.log(`     • Empresa ${m.companyId} - Role: ${m.role} - Ativo: ${m.isActive}`);
+      });
 
       // 🏢 MULTI-TENANT: Se usuário tem 2+ empresas, exigir seleção
       if (memberships.length > 1) {
