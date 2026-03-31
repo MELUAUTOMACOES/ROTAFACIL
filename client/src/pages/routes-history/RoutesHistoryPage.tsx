@@ -429,8 +429,8 @@ export default function RoutesHistoryPage() {
     }
   }, [routesData, match, params]);
 
-  console.log('✅ Página Histórico de Rotas carregada');
-  console.log('🔍 [ROUTES HISTORY] Aplicando filtros:', filters);
+  /* console.log('✅ Página Histórico de Rotas carregada'); */
+  /* console.log('🔍 [ROUTES HISTORY] Aplicando filtros:', filters); */
 
   // Query para pendências (agendamentos não concluídos de rotas finalizadas)
   const { pendingAppointments, isLoading: isLoadingPending } = usePendingAppointments();
@@ -541,9 +541,11 @@ export default function RoutesHistoryPage() {
   };
 
   // (opcional) debug
+  /*
   console.log("[ADD-APPTS] disponíveis do back:", appointmentsAll?.length || 0,
     "| fallback:", fallbackFromAll.length,
     "| exibindo:", availableList.length);
+  */
 
   // Função para confirmar adição das paradas selecionadas
   const confirmAddStops = () => {
@@ -1876,7 +1878,7 @@ export default function RoutesHistoryPage() {
 
 
 
-  console.log('📋 [ROUTES HISTORY] Componente montado/atualizado');
+  /* console.log('📋 [ROUTES HISTORY] Componente montado/atualizado'); */
 
   const getStartAddressText = (route?: Route) => {
     if (!route) return "";
@@ -2792,6 +2794,7 @@ export default function RoutesHistoryPage() {
                           .slice()
                           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
+                        /*
                         console.log("🔄 [RoutesHistory] Estado do mapa:", {
                           isLocalReordered,
                           sourceStopsCount: sourceStops.length,
@@ -2800,6 +2803,7 @@ export default function RoutesHistoryPage() {
                           localStart,
                           apiStart: (routeDetail as any)?.start,
                         });
+                        */
 
                         // 2) Waypoints (somente clientes) – filtra inválidos
                         const stopsAsWaypoints = orderedStops
@@ -2818,6 +2822,7 @@ export default function RoutesHistoryPage() {
                         //    Preferimos não desenhar o pino até termos a empresa (evita o bug visual).
                         const startForMap = derivedStart || null;
 
+                        /*
                         console.log("📍 [RoutesHistory] Ponto inicial calculado:", {
                           startForMap,
                           derivedStart,
@@ -2825,6 +2830,7 @@ export default function RoutesHistoryPage() {
                           usandoApiStart: !localStart && !!apiStart,
                           usandoGetStartCoords: !localStart && !apiStart,
                         });
+                        */
 
                         // 4) GeoJSON vindo do back (quando existir)
                         let rawBackendGeoJson: any =
@@ -2866,6 +2872,7 @@ export default function RoutesHistoryPage() {
                         const keyForMap = `${routeDetail.route?.id}-${isLocalReordered ? "local" : "server"}-${mapVersion}`;
 
                         // LOG FINAL: Verificar o que está sendo enviado para o mapa
+                        /*
                         console.log("🎯 [RENDER MAP] Dados finais para o mapa:", {
                           keyForMap,
                           isLocalReordered,
@@ -2875,6 +2882,7 @@ export default function RoutesHistoryPage() {
                           hasGeoJson: !!routeGeoJson,
                           geoJsonFirstCoord: routeGeoJson?.coordinates?.[0],
                         });
+                        */
 
                         return (
                           <OptimizedRouteMap

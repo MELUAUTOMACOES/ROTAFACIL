@@ -616,7 +616,7 @@ export function registerRoutesAPI(app: Express) {
     },
   );
 
-  // Endpoint para atualizar a DATA da rota
+  // Endpoint para atualizar a DATA da rota + agendamentos vinculados
   app.patch("/api/routes/:id/date", authenticateToken, async (req: any, res: Response) => {
     try {
       const routeId = req.params.id;
@@ -631,11 +631,15 @@ export function registerRoutesAPI(app: Express) {
         return res.status(400).json({ message: "Data é obrigatória" });
       }
 
-      const newDate = new Date(date);
+      // Usar T12:00:00-03:00 para evitar shift de fuso horário
+      const newDate = new Date(date + 'T12:00:00-03:00');
       if (isNaN(newDate.getTime())) {
         return res.status(400).json({ message: "Data inválida" });
       }
 
+      console.log(`📅 [UPDATE-ROUTE-DATE] Rota ${routeId}: alterando data para ${date} (${newDate.toISOString()})`);
+
+      // 1. Atualizar data da rota
       const [updatedRoute] = await db
         .update(routesTbl)
         .set({ date: newDate, updatedAt: new Date() })
@@ -646,12 +650,34 @@ export function registerRoutesAPI(app: Express) {
         return res.status(404).json({ message: "Rota não encontrada" });
       }
 
+      // 2. Buscar agendamentos vinculados a esta rota (via routeStops)
+      const stopsWithAppointments = await db
+        .select({ appointmentNumericId: stopsTbl.appointmentNumericId })
+        .from(stopsTbl)
+        .where(eq(stopsTbl.routeId, routeId));
+
+      const appointmentIds = stopsWithAppointments
+        .map(s => s.appointmentNumericId)
+        .filter((id): id is number => id !== null && id !== undefined);
+
+      // 3. Atualizar scheduledDate de todos os agendamentos vinculados
+      if (appointmentIds.length > 0) {
+        await db
+          .update(appointments)
+          .set({ scheduledDate: newDate })
+          .where(inArray(appointments.id, appointmentIds));
+
+        console.log(`📅 [UPDATE-ROUTE-DATE] ${appointmentIds.length} agendamentos atualizados: [${appointmentIds.join(', ')}]`);
+      } else {
+        console.log(`⚠️ [UPDATE-ROUTE-DATE] Nenhum agendamento vinculado à rota`);
+      }
+
       // Registrar auditoria
       await createRouteAudit(
         routeId,
         req.user.userId,
         "update_date",
-        `Alterou a data da rota para ${newDate.toLocaleDateString()}`
+        `Alterou a data da rota para ${date}. ${appointmentIds.length} agendamentos atualizados.`
       );
 
       res.json(updatedRoute);
@@ -3396,7 +3422,7 @@ export function registerRoutesAPI(app: Express) {
             }
           }
         } else if (status === 'draft' || status === 'cancelado') {
-          console.log(`🔄 [REVERT] Rota indo para ${status}. Verificando agendamentos para reverter.`);
+          /* console.log(`🔄 [REVERT] Rota indo para ${status}. Verificando agendamentos para reverter.`); */
           
           const stopsThisRoute = await db
             .select({ appointmentNumericId: stopsTbl.appointmentNumericId })
@@ -3419,12 +3445,12 @@ export function registerRoutesAPI(app: Express) {
               .map(a => a.id);
 
             if (idsToRevert.length > 0) {
-              console.log(`🔄 [REVERT] Atualizando ${idsToRevert.length} agendamentos de volta para 'scheduled'`);
+              /* console.log(`🔄 [REVERT] Atualizando ${idsToRevert.length} agendamentos de volta para 'scheduled'`); */
               await db
                 .update(appointments)
                 .set({ status: 'scheduled' })
                 .where(inArray(appointments.id, idsToRevert));
-              console.log(`✅ [REVERT] Agendamentos revertidos com sucesso`);
+              /* console.log(`✅ [REVERT] Agendamentos revertidos com sucesso`); */
             }
           }
         }

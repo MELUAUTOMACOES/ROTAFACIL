@@ -23,9 +23,9 @@ export function logEgressSize(req: any, body: any): void {
                 ? ` (${body.items.length} items)`
                 : '';
 
-        console.log(`📊 [EGRESS] ${req.method} ${req.path} → ${sizeKB} KB${arrayLength}`);
+        /* console.log(`📊 [EGRESS] ${req.method} ${req.path} → ${sizeKB} KB${arrayLength}`); */
     } catch (err) {
         // Se falhar, não quebra a resposta - apenas loga o erro
-        console.error('❌ [EGRESS] Erro ao calcular tamanho:', err);
+        /* console.error('❌ [EGRESS] Erro ao calcular tamanho:', err); */
     }
 }

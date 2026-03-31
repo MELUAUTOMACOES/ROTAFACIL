@@ -126,6 +126,7 @@ export default function OptimizedRouteMap({
   waypoints?: Waypoint[];               // paradas numeradas
   startWaypoint?: { lat: number; lon?: number; lng?: number } | null; // ponto inicial separado
 }) {
+  /*
   // 🔍 Debug: Log dos dados recebidos
   console.log("🗺️ [OptimizedRouteMap] Renderizando mapa com:", {
     startWaypoint,
@@ -134,6 +135,7 @@ export default function OptimizedRouteMap({
     hasGeoJson: !!routeGeoJson,
     geoJsonType: routeGeoJson?.type,
   });
+  */
 
   const numberedIcon = (n: number) =>
     new DivIcon({
@@ -162,7 +164,7 @@ export default function OptimizedRouteMap({
     if (Array.isArray(c) && c.length >= 2) {
       const [lon, lat] = c;
       if (Number.isFinite(lat) && Number.isFinite(lon)) {
-        console.log("🎯 Extraído do GeoJSON:", { lat: Number(lat), lon: Number(lon) });
+        /* console.log("🎯 Extraído do GeoJSON:", { lat: Number(lat), lon: Number(lon) }); */
         return { lat: Number(lat), lon: Number(lon) };
       }
     }
@@ -189,16 +191,18 @@ export default function OptimizedRouteMap({
   
   const derivedStart = hasValidStartProp ? startWaypoint : getStartFromGeo(routeGeoJson);
   
+  /*
   console.log("📍 Pin inicial será colocado em:", {
     hasValidStartProp,
     derivedStart,
     usandoGeoJson: !hasValidStartProp && !!derivedStart,
   });
+  */
 
   // lista final numerada (sem o início)
   const numberedStops = (waypoints || []).filter((w) => !samePoint(w, derivedStart));
-  
-  console.log("🔢 Paradas numeradas (excluindo início):", numberedStops.length);
+
+  /* console.log("🔢 Paradas numeradas (excluindo início):", numberedStops.length); */
 
   return (
     // ⬇️ Altura herda do pai (preencha o container externo)

@@ -191,7 +191,6 @@ export interface IStorage {
     executionEndLocation?: any;
   }, userId: number): Promise<Appointment>;
   finalizeRoute(id: string, status: string, userId: number): Promise<Route>;
-  updateRouteDate(id: string, date: Date, companyId: number): Promise<Route>;
   getRouteStops(routeId: string): Promise<RouteStop[]>;
   getPendingAppointments(companyId: number): Promise<any[]>;
   getAppointmentHistory(appointmentId: number): Promise<AppointmentHistory[]>;
@@ -449,15 +448,6 @@ export class DatabaseStorage implements IStorage {
       .returning();
 
     return updatedUser;
-  }
-
-  async updateRouteDate(id: string, date: Date, companyId: number): Promise<Route> {
-    const [route] = await db
-      .update(routes)
-      .set({ date, updatedAt: new Date() })
-      .where(and(eq(routes.id, id), this.byCompany(routes, companyId)))
-      .returning();
-    return route;
   }
 
   async getAppointmentHistory(appointmentId: number): Promise<AppointmentHistory[]> {
@@ -918,23 +908,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getVehiclesAvailableForTechnician(technicianId: number, companyId: number): Promise<Vehicle[]> {
-    console.log(`🔍 [getVehiclesAvailableForTechnician] Buscando veículos para technicianId=${technicianId}, companyId=${companyId}`);
+    /* console.log(`🔍 [getVehiclesAvailableForTechnician] Buscando veículos para technicianId=${technicianId}, companyId=${companyId}`); */
     
     // Buscar veículos autorizados diretamente para o técnico
     const directVehicles = await db
-      .select({ vehicle: vehicles })
+      .select({ vehicleId: vehicleAssignments.vehicleId })
       .from(vehicleAssignments)
-      .innerJoin(vehicles, eq(vehicleAssignments.vehicleId, vehicles.id))
       .where(
         and(
-          eq(vehicleAssignments.technicianId, technicianId),
-          eq(vehicleAssignments.companyId, companyId),
-          eq(vehicleAssignments.isActive, true),
-          eq(vehicles.companyId, companyId)
+          eq(vehicleAssignments.entityType, 'technician'),
+          eq(vehicleAssignments.entityId, technicianId),
+          eq(vehicleAssignments.companyId, companyId)
         )
       );
     
-    console.log(`📊 [getVehiclesAvailableForTechnician] Veículos diretos encontrados: ${directVehicles.length}`);
+    /* console.log(`📊 [getVehiclesAvailableForTechnician] Veículos diretos encontrados: ${directVehicles.length}`); */
 
     // Buscar equipes do técnico
     const technicianTeams = await db

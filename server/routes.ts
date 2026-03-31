@@ -61,6 +61,7 @@ import {
 } from "./osrm-distance-helper";
 import { getPlanLimits } from "@shared/plan-limits";
 import { companies } from "@shared/schema";
+import { logEgressSize } from "./utils/egressLogger";
 
 // 🛡️ Rate Limiting para Login (previne brute force)
 const loginRateLimiter = rateLimit({
@@ -298,47 +299,6 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// ==================== EGRESS LOGGING UTILITY ====================
-// 📊 Helper para medir tamanho das respostas JSON (instrumentação temporária)
-function logEgressSize(req: any, body: any): void {
-  try {
-    // Se body é undefined/null, não faz sentido medir
-    if (body === undefined || body === null) {
-      console.log(`📊 [EGRESS] ${req?.method || 'GET'} ${req?.path || '?'} → (empty)`);
-      return;
-    }
-
-    // Tenta serializar, silenciando erros de circular structure
-    let jsonStr: string;
-    try {
-      jsonStr = JSON.stringify(body);
-    } catch {
-      // Estrutura circular ou não serializável
-      console.log(`📊 [EGRESS] ${req?.method || 'GET'} ${req?.path || '?'} → (não serializável)`);
-      return;
-    }
-
-    const sizeBytes = jsonStr ? jsonStr.length : 0;
-    const sizeKB = (sizeBytes / 1024).toFixed(2);
-
-    // Detectar item count: array direto, {items: []}, ou {data: []}
-    let itemInfo = '';
-    if (Array.isArray(body)) {
-      itemInfo = ` (${body.length} items)`;
-    } else if (body && Array.isArray(body.items)) {
-      itemInfo = ` (${body.items.length} items)`;
-    } else if (body && Array.isArray(body.data)) {
-      itemInfo = ` (${body.data.length} items)`;
-    }
-
-    console.log(`📊 [EGRESS] ${req?.method || 'GET'} ${req?.path || '?'} → ${sizeKB} KB${itemInfo}`);
-  } catch {
-    // Se tudo falhar, silencia - não queremos quebrar a response
-  }
-}
-
-// =================================================================
-
 export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== PUBLIC ROUTES (NO AUTH) ====================
 
@@ -423,13 +383,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Se passar routeId (admin selecionando rota específica)
       if (req.query.routeId) {
         const routeId = req.query.routeId as string;
-        console.log(`🔎 [PROVIDER] Buscando rota por ID explícito: ${routeId}`);
+        /* console.log(`🔎 [PROVIDER] Buscando rota por ID explícito: ${routeId}`); */
 
         // Verifica permissão: admin ou dono da rota
         const [targetRoute] = await db.select().from(routes).where(eq(routes.id, routeId));
 
         if (targetRoute) {
-          console.log(`✅ [PROVIDER] Rota encontrada no DB: ${targetRoute.id} (Status: ${targetRoute.status})`);
+          /* console.log(`✅ [PROVIDER] Rota encontrada no DB: ${targetRoute.id} (Status: ${targetRoute.status})`); */
           // Se não for admin e não for o dono, checar se é o responsável
           if (req.user.role !== 'admin') {
             const isOwner = targetRoute.userId === req.user.userId;
@@ -440,13 +400,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Por enquanto mantendo a lógica original restritiva para não quebrar outros fluxos
             // e permitindo apenas se for o criador (userId). O provider real usa o endpoint sem routeId.
             if (targetRoute.userId !== req.user.userId) {
-              console.log(`🚫 [PROVIDER] Acesso negado. User ${req.user.userId} não é dono da rota ${targetRoute.userId}`);
+              /* console.log(`🚫 [PROVIDER] Acesso negado. User ${req.user.userId} não é dono da rota ${targetRoute.userId}`); */
               // return res.status(403).json({ message: "Acesso negado a esta rota" });
             }
           }
           route = targetRoute;
         } else {
-          console.log(`❌ [PROVIDER] Rota ID ${routeId} não encontrada no banco.`);
+          /* console.log(`❌ [PROVIDER] Rota ID ${routeId} não encontrada no banco.`); */
         }
       } else {
         // Comportamento padrão: busca rota ativa do usuário
@@ -459,11 +419,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!route) {
-        console.log(`🚚 [PROVIDER] Nenhuma rota encontrada`);
+        /* console.log(`🚚 [PROVIDER] Nenhuma rota encontrada`); */
         return res.json(null); // Retorna null se não tiver rota, front trata
       }
 
-      console.log(`🚚 [PROVIDER] Rota encontrada: ${route.id} - ${route.title}`);
+      /* console.log(`🚚 [PROVIDER] Rota encontrada: ${route.id} - ${route.title}`); */
 
       // Buscar paradas (agendamentos) da rota
       // Precisamos buscar os routeStops e depois os appointments completos
@@ -573,7 +533,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // 🌎 Usar horário de São Paulo (UTC-3) para comparação de data
       const dateParam = req.query.date ? new Date(req.query.date) : nowInSaoPaulo();
       const dateStrSP = formatDateForSQLComparison(dateParam);
-      console.log(`🔍 [PROVIDER] Buscando rotas ativas para data: ${dateStrSP} (São Paulo) - UTC: ${dateParam.toISOString()}`);
+      /* console.log(`🔍 [PROVIDER] Buscando rotas ativas para data: ${dateStrSP} (São Paulo) - UTC: ${dateParam.toISOString()}`); */
 
       // Buscar todas as rotas do dia que estão confirmadas ou finalizadas (não mostra rascunhos)
       const activeRoutesWithId = await db
@@ -594,7 +554,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           )
         ));
 
-      console.log(`🔍 [PROVIDER] Rotas encontradas: ${activeRoutesWithId.length}`);
+      /* console.log(`🔍 [PROVIDER] Rotas encontradas: ${activeRoutesWithId.length}`); */
 
       const result = await Promise.all(activeRoutesWithId.map(async (r) => {
         let name = "Desconhecido";
@@ -705,7 +665,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(404).json({ message: "Veículo não encontrado" });
           }
           console.log(`⏱️ [START-ROUTE] Etapa 2 (validar veículo): ${Date.now() - stepStart}ms`);
-          console.log(`🚗 [PROVIDER] Rota ${id} será iniciada com veículo: ${vehicle.plate}`);
+          /* console.log(`🚗 [PROVIDER] Rota ${id} será iniciada com veículo: ${vehicle.plate}`); */
         }
       }
 
@@ -769,7 +729,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const totalTime = Date.now() - startTime;
-      console.log(`✅ [PROVIDER] Rota ${id} iniciada às ${route.routeStartedAt}`);
+      /* console.log(`✅ [PROVIDER] Rota ${id} iniciada às ${route.routeStartedAt}`); */
       console.log(`⏱️ [START-ROUTE] TEMPO TOTAL: ${totalTime}ms`);
       res.json(route);
     } catch (error: any) {
@@ -1087,15 +1047,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Endpoint para gerar matriz do OSRM
   app.post('/api/rota/matrix', async (req, res) => {
-    console.log("==== LOG INÍCIO: /api/rota/matrix ====");
-    console.log("Dados recebidos no req.body:");
-    console.log(JSON.stringify(req.body, null, 2));
+    /* console.log("==== LOG INÍCIO: /api/rota/matrix ===="); */
+    /* console.log("Dados recebidos no req.body:"); */
+    /* console.log(JSON.stringify(req.body, null, 2)); */
 
     const { coords } = req.body; // Ex: [[lon, lat], [lon, lat], ...]
     if (!coords || !Array.isArray(coords) || coords.length < 2) {
-      console.log("❌ ERRO: Coordenadas inválidas");
-      console.log("Coordenadas recebidas:", coords);
-      console.log("==== LOG FIM: /api/rota/matrix (ERRO) ====");
+      /* console.log("❌ ERRO: Coordenadas inválidas"); */
+      /* console.log("Coordenadas recebidas:", coords); */
+      /* console.log("==== LOG FIM: /api/rota/matrix (ERRO) ===="); */
       return res.status(400).json({ error: 'Coordenadas inválidas' });
     }
 
@@ -1111,8 +1071,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log("🌐 OSRM_URL configurado:", OSRM_URL);
 
     if (!OSRM_URL) {
-      console.log("❌ ERRO: OSRM_URL não configurado");
-      console.log("==== LOG FIM: /api/rota/matrix (ERRO CONFIG) ====");
+      /* console.log("❌ ERRO: OSRM_URL não configurado"); */
+      /* console.log("==== LOG FIM: /api/rota/matrix (ERRO CONFIG) ===="); */
       return res.status(500).json({ error: "Endereço OSRM não configurado. Crie/atualize o arquivo osrm_url.txt." });
     }
 
@@ -1129,16 +1089,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(JSON.stringify(data, null, 2));
 
       if (!data.durations || !data.distances) {
-        console.log("❌ ERRO: OSRM não retornou durations ou distances");
-        console.log("==== LOG FIM: /api/rota/matrix (ERRO OSRM) ====");
+        /* console.log("❌ ERRO: OSRM não retornou durations ou distances"); */
+        /* console.log("==== LOG FIM: /api/rota/matrix (ERRO OSRM) ===="); */
         return res.status(500).json({ error: 'OSRM não respondeu corretamente - durations ou distances não encontradas' });
       }
 
-      console.log("✅ Matriz de durações extraída:");
-      console.log(JSON.stringify(data.durations, null, 2));
-      console.log("✅ Matriz de distâncias extraída:");
-      console.log(JSON.stringify(data.distances, null, 2));
-      console.log("==== LOG FIM: /api/rota/matrix (SUCESSO) ====");
+      /* console.log("✅ Matriz de tempos extraída:"); */
+      /* console.log(JSON.stringify(data.durations, null, 2)); */
+      /* console.log("✅ Matriz de distâncias extraída:"); */
+      /* console.log(JSON.stringify(data.distances, null, 2)); */
+      /* console.log("==== LOG FIM: /api/rota/matrix (SUCESSO) ===="); */
 
       return res.json({
         matrix: data.durations,
@@ -1157,15 +1117,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Endpoint para resolver TSP via Python
   app.post('/api/rota/tsp', async (req, res) => {
-    console.log("==== LOG INÍCIO: /api/rota/tsp ====");
-    console.log("Dados recebidos no req.body:");
-    console.log(JSON.stringify(req.body, null, 2));
+    /* console.log("==== LOG INÍCIO: /api/rota/tsp ===="); */
+    /* console.log("Dados recebidos no req.body:"); */
+    /* console.log(JSON.stringify(req.body, null, 2)); */
 
     const { matrix, terminarNoPontoInicial } = req.body;
     if (!matrix || !Array.isArray(matrix)) {
-      console.log("❌ ERRO: Matriz inválida");
-      console.log("Matriz recebida:", matrix);
-      console.log("==== LOG FIM: /api/rota/tsp (ERRO) ====");
+      /* console.log("❌ ERRO: Matriz inválida"); */
+      /* console.log("Matriz recebida:", matrix); */
+      /* console.log("==== LOG FIM: /api/rota/tsp (ERRO) ===="); */
       return res.status(400).json({ error: 'Matriz inválida' });
     }
 
@@ -1191,8 +1151,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     // Verifica se o executável Python existe
     if (!fs.existsSync(pyBin)) {
-      console.log("❌ ERRO: Executável Python não encontrado:", pyBin);
-      console.log("==== LOG FIM: /api/rota/tsp (ERRO) ====");
+      /* console.log("❌ ERRO: Executável Python não encontrado:", pyBin); */
+      /* console.log("==== LOG FIM: /api/rota/tsp (ERRO) ===="); */
       return res.status(500).json({
         error: 'Executável Python não encontrado',
         path: pyBin,
@@ -1202,8 +1162,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     // Verifica se o script TSP existe
     if (!fs.existsSync(tspScript)) {
-      console.log("❌ ERRO: Script TSP não encontrado:", tspScript);
-      console.log("==== LOG FIM: /api/rota/tsp (ERRO) ====");
+      /* console.log("❌ ERRO: Script TSP não encontrado:", tspScript); */
+      /* console.log("==== LOG FIM: /api/rota/tsp (ERRO) ===="); */
       return res.status(500).json({
         error: 'Script TSP não encontrado',
         path: tspScript
@@ -1221,8 +1181,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       py = spawn(pyBin, [tspScript], { stdio: ["pipe", "pipe", "pipe"] });
     } catch (spawnError: any) {
-      console.log("❌ ERRO ao iniciar processo Python:", spawnError.message);
-      console.log("==== LOG FIM: /api/rota/tsp (ERRO SPAWN) ====");
+      /* console.log("❌ ERRO ao iniciar processo Python:", spawnError.message); */
+      /* console.log("==== LOG FIM: /api/rota/tsp (ERRO SPAWN) ===="); */
       return res.status(500).json({
         error: 'Falha ao iniciar processo Python',
         details: spawnError.message,
@@ -1257,8 +1217,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     py.on('error', (spawnError: any) => {
       clearTimeout(killTimer);
-      console.log("❌ ERRO no processo Python:", spawnError.message);
-      console.log("==== LOG FIM: /api/rota/tsp (ERRO PROCESSO) ====");
+      /* console.log("❌ ERRO no processo Python:", spawnError.message); */
+      /* console.log("==== LOG FIM: /api/rota/tsp (ERRO PROCESSO) ===="); */
       if (!res.headersSent) {
         return res.status(500).json({
           error: 'Erro no processo Python',
@@ -1277,7 +1237,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Se o processo foi morto por timeout
       if (processKilled) {
-        console.log("==== LOG FIM: /api/rota/tsp (TIMEOUT) ====");
+        /* console.log("==== LOG FIM: /api/rota/tsp (TIMEOUT) ===="); */
         if (!res.headersSent) {
           return res.status(500).json({
             error: 'Timeout: Processo Python excedeu 15 segundos',
@@ -1290,7 +1250,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Se Python saiu com erro, devolva JSON contendo stderr e stdout
       if (code !== 0) {
-        console.log("==== LOG FIM: /api/rota/tsp (ERRO PYTHON) ====");
+        /* console.log("==== LOG FIM: /api/rota/tsp (ERRO PYTHON) ===="); */
         if (!res.headersSent) {
           return res.status(500).json({
             error: 'Erro no Python',
@@ -1306,8 +1266,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const result = output ? JSON.parse(output) : null;
         if (!result) {
-          console.log("❌ STDOUT vazio - JSON ausente");
-          console.log("==== LOG FIM: /api/rota/tsp (ERRO PARSE) ====");
+          /* console.log("❌ STDOUT vazio - JSON ausente"); */
+          /* console.log("==== LOG FIM: /api/rota/tsp (ERRO PARSE) ===="); */
           if (!res.headersSent) {
             return res.status(500).json({
               error: 'Erro no Python',
@@ -1318,16 +1278,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           return;
         }
-        console.log("✅ Resultado TSP parseado:");
-        console.log(JSON.stringify(result, null, 2));
-        console.log("==== LOG FIM: /api/rota/tsp (SUCESSO) ====");
+        /* console.log("✅ Resultado TSP parseado:"); */
+        /* console.log(JSON.stringify(result, null, 2)); */
+        /* console.log("==== LOG FIM: /api/rota/tsp (SUCESSO) ===="); */
         if (!res.headersSent) {
           return res.json(result);
         }
       } catch (e: any) {
-        console.log("❌ ERRO ao parsear JSON do Python:", e.message);
-        console.log("Output original:", output);
-        console.log("==== LOG FIM: /api/rota/tsp (ERRO PARSE) ====");
+        /* console.log("❌ ERRO ao parsear JSON do Python:", e.message); */
+        /* console.log("Output original:", output); */
+        /* console.log("==== LOG FIM: /api/rota/tsp (ERRO PARSE) ===="); */
         if (!res.headersSent) {
           return res.status(500).json({
             error: 'Erro no Python',
@@ -2220,18 +2180,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/technicians", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
-    console.log("==== LOG INÍCIO: POST /api/technicians ====");
-    console.log("Dados recebidos:");
-    console.log(JSON.stringify(req.body, null, 2));
+    /* console.log("==== LOG INÍCIO: POST /api/technicians ===="); */
+    /* console.log("Dados recebidos:"); */
+    /* console.log(JSON.stringify(req.body, null, 2)); */
 
     try {
       const technicianData = insertTechnicianSchema.parse(req.body);
       console.log(" Dados validados pelo schema");
 
       const technician = await storage.createTechnician(technicianData, req.user.userId, req.user.companyId); // userId kept for INSERT
-      console.log(" Técnico criado com sucesso:");
-      console.log(`ID: ${technician.id}, Nome: ${technician.name}`);
-      console.log("==== LOG FIM: POST /api/technicians (SUCESSO) ====");
+      /* console.log(" Técnico criado com sucesso:"); */
+      /* console.log(`ID: ${technician.id}, Nome: ${technician.name}`); */
+      /* console.log("==== LOG FIM: POST /api/technicians (SUCESSO) ===="); */
 
       trackFeatureUsage(req.user.userId, "technicians", "create", req.user.companyId, { id: technician.id });
       res.json(technician);
@@ -2243,7 +2203,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log("Erros de validação:");
         console.log(JSON.stringify(error.errors, null, 2));
       }
-      console.log("==== LOG FIM: POST /api/technicians (ERRO) ====");
+      /* console.log("==== LOG FIM: POST /api/technicians (ERRO) ===="); */
 
       res.status(400).json({ message: error.message });
     }
@@ -4203,9 +4163,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch("/api/appointments/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
-    console.log(`==== LOG INÍCIO: PATCH /api/appointments/${req.params.id} ====`);
-    console.log("Dados recebidos:");
-    console.log(JSON.stringify(req.body, null, 2));
+    /* console.log(`==== LOG INÍCIO: PATCH /api/appointments/${req.params.id} ====`); */
+    /* console.log("Dados recebidos:"); */
+    /* console.log(JSON.stringify(req.body, null, 2)); */
 
     try {
       const id = parseInt(req.params.id);
@@ -4229,7 +4189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`🔄 [PATCH] Data parseada: ${appointmentData.scheduledDate}`);
           } catch (dateError: any) {
             console.log(`❌ [PATCH] Erro ao processar data:`, dateError);
-            console.log("==== LOG FIM: PATCH /api/appointments (ERRO DATA) ====");
+            /* console.log("==== LOG FIM: PATCH /api/appointments (ERRO DATA) ===="); */
             return res.status(400).json({ message: `Data inválida: ${appointmentData.scheduledDate}` });
           }
         }

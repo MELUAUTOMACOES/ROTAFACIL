@@ -237,7 +237,7 @@ export default function Appointments() {
 
     try {
       const decoded = JSON.parse(atob(decodeURIComponent(raw)));
-      console.log("🧩 [APPOINTMENTS] Prefill recebido:", decoded);
+      /* console.log("🧩 [APPOINTMENTS] Prefill recebido:", decoded); */
 
       setPrefilledData(decoded);
       setIsFormOpen(true);
@@ -245,7 +245,7 @@ export default function Appointments() {
       // limpa a query para não reabrir ao recarregar
       window.history.replaceState({}, "", window.location.pathname);
     } catch (e) {
-      console.error("❌ [APPOINTMENTS] Erro ao ler prefill:", e);
+      /* console.error("❌ [APPOINTMENTS] Erro ao ler prefill:", e); */
     }
   }, []);
 
@@ -260,6 +260,7 @@ export default function Appointments() {
     }
   }, [JSON.stringify(selectedAppointmentIds), isRouteDrawerOpen]);
 
+  /*
   // Logs para monitorar uso dos filtros
   useEffect(() => {
     console.log("🔍 [FILTER] Filtros aplicados:", {
@@ -278,6 +279,7 @@ export default function Appointments() {
     selectedStatuses,
     inRouteFilter,
   ]);
+  */
 
   // Verificar parâmetros da URL ao carregar a página
   useEffect(() => {
@@ -370,9 +372,9 @@ export default function Appointments() {
       const items = data.items || [];
       const withRouteInfo = items.filter((apt: any) => apt.routeInfo);
       if (withRouteInfo.length > 0) {
-        console.log(`🚚 [APPOINTMENTS] ${withRouteInfo.length} agendamentos com romaneio:`,
+        /* console.log(`🚚 [APPOINTMENTS] ${withRouteInfo.length} agendamentos com romaneio:`,
           withRouteInfo.map((apt: any) => `#${apt.id} -> Romaneio ${apt.routeInfo.status} #${apt.routeInfo.displayNumber}`)
-        );
+        ); */
       }
 
       return data;
@@ -746,9 +748,9 @@ export default function Appointments() {
   const handleFormClose = () => {
     // Usa o hook seguro para verificar se é seguro operar
     if (!isSafeToOperate()) {
-      console.log(
+      /* console.log(
         "⚠️ [APPOINTMENTS] Componente desmontado, operação cancelada",
-      );
+      ); */
       return;
     }
 
@@ -1371,18 +1373,22 @@ export default function Appointments() {
   const filteredAppointments = useMemo(() => {
     if (!appointments || appointments.length === 0) return [];
 
+    /*
     console.log("🔍 [FILTER] Aplicando filtros nos agendamentos...");
     console.log("🔍 [FILTER] Total de agendamentos:", appointments.length);
+    */
 
     const filtered = appointments.filter((apt: Appointment) => {
       // Filter by date
       if (selectedDate) {
         const aptDate = new Date(apt.scheduledDate).toLocaleDateString("en-CA"); // YYYY-MM-DD format
+        /*
         console.log(
           `🔍 [FILTER] Comparando datas - selectedDate: ${selectedDate}, aptDate: ${aptDate}`,
         );
+        */
         if (aptDate !== selectedDate) {
-          console.log(`🔍 [FILTER] Agendamento ${apt.id} filtrado por data`);
+          /* console.log(`🔍 [FILTER] Agendamento ${apt.id} filtrado por data`); */
           return false;
         }
       }
@@ -1392,13 +1398,17 @@ export default function Appointments() {
         const client = getClient(apt.clientId);
         const clientName = client?.name?.toLowerCase() || "";
         const searchLower = searchTerm.toLowerCase();
+        /*
         console.log(
           `🔍 [FILTER] Pesquisando "${searchTerm}" em "${clientName}"`,
         );
+        */
         if (!clientName.includes(searchLower)) {
+          /*
           console.log(
             `🔍 [FILTER] Agendamento ${apt.id} filtrado por busca de cliente`,
           );
+          */
           return false;
         }
       }
@@ -1439,9 +1449,11 @@ export default function Appointments() {
       return true;
     });
 
+    /*
     console.log(
       `🔍 [FILTER] Resultado da filtragem: ${filtered.length} de ${appointments.length} agendamentos`,
     );
+    */
     return filtered;
   }, [
     appointments,
