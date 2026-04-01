@@ -100,12 +100,25 @@ app.use((req, res, next) => {
 
   await registerRoutes(app);
 
+  // ⚠️ Middleware global de erro: captura erros de rotas/middlewares
+  // NÃO deve derrubar o processo, apenas logar e responder JSON
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    // Log do erro no console para debug
+    console.error('❌ Erro capturado pelo middleware global:', {
+      status,
+      message,
+      stack: err.stack,
+    });
+
+    // Responder JSON apenas se headers ainda não foram enviados
+    if (!res.headersSent) {
+      res.status(status).json({ message });
+    }
+
+    // NÃO relançar erro - isso derrubaria o processo
   });
 
   // 🔧 Vite middleware APENAS em desenvolvimento
@@ -133,4 +146,15 @@ app.use((req, res, next) => {
       console.log(`🚀 API rodando na porta ${port}`);
     });
   }
-})();
+})().catch((err: any) => {
+  // 🚨 Erro fatal durante inicialização do servidor
+  console.error('');
+  console.error('═══════════════════════════════════════════════════════════');
+  console.error('🚨 ERRO FATAL: Falha na inicialização do servidor');
+  console.error('═══════════════════════════════════════════════════════════');
+  console.error('Erro:', err.message);
+  console.error('Stack:', err.stack);
+  console.error('═══════════════════════════════════════════════════════════');
+  console.error('');
+  process.exit(1);
+});
