@@ -391,7 +391,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (targetRoute) {
           /* console.log(`✅ [PROVIDER] Rota encontrada no DB: ${targetRoute.id} (Status: ${targetRoute.status})`); */
           // Se não for admin e não for o dono, checar se é o responsável
-          if (req.user.role !== 'admin') {
+          const userRole = (req.user.companyRole || req.user.role || '').toLowerCase();
+          if (userRole !== 'admin') {
             const isOwner = targetRoute.userId === req.user.userId;
             const isResponsible =
               (targetRoute.responsibleType === 'technician' && Number(targetRoute.responsibleId) === req.user.id) || // Assumindo map technician->user ou technician table logic
@@ -412,7 +413,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Comportamento padrão: busca rota ativa do usuário
         let targetUserId = req.user.userId;
         // Se for admin e passar userId, permite ver rota de outro usuário (mantendo compatibilidade com o plano anterior)
-        if (req.query.userId && req.user.role === 'admin') {
+        const userRole = (req.user.companyRole || req.user.role || '').toLowerCase();
+        if (req.query.userId && userRole === 'admin') {
           targetUserId = parseInt(req.query.userId as string);
         }
         route = await storage.getProviderActiveRoute(targetUserId, dateParam, companyId);
@@ -525,9 +527,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // 1.1 Listar prestadores com rotas ativas hoje (apenas admin)
   app.get("/api/provider/active-today", authenticateToken, async (req: any, res) => {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ message: "Acesso negado" });
+    console.log(`🔍 [ACTIVE-TODAY] Requisição recebida`);
+    console.log(`📋 [ACTIVE-TODAY] User:`, {
+      userId: req.user?.userId,
+      email: req.user?.email,
+      companyRole: req.user?.companyRole,
+      role: req.user?.role,
+      companyId: req.user?.companyId
+    });
+
+    const userRole = (req.user?.companyRole || req.user?.role || '').toLowerCase();
+    console.log(`🔐 [ACTIVE-TODAY] Role normalizada: "${userRole}" (companyRole: "${req.user?.companyRole}", role: "${req.user?.role}")`);
+    
+    if (userRole !== 'admin') {
+      console.error(`❌ [ACTIVE-TODAY] Acesso negado. Role "${userRole}" !== "admin"`);
+      return res.status(403).json({ message: "Acesso negado", currentRole: req.user?.companyRole || req.user?.role, requiredRole: "admin" });
     }
+    
+    console.log(`✅ [ACTIVE-TODAY] Permissão concedida`);
 
     try {
       // 🌎 Usar horário de São Paulo (UTC-3) para comparação de data
@@ -976,8 +993,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Criar registro de abastecimento
-  app.post("/api/fuel-records", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  // Criar registro de abastecimento (prestador/tecnico podem registrar via ocorrência de rota)
+  app.post("/api/fuel-records", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico']), async (req: any, res) => {
     try {
       const { vehicleId, fuelType, liters, pricePerLiter, totalCost, odometerKm, notes, fuelDate, occurrenceId } = req.body;
 
@@ -2355,7 +2372,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== VEHICLES ROUTES ====================
 
-  app.get("/api/vehicles", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.get("/api/vehicles", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico']), async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2427,14 +2444,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Caso contrário, Express interpreta "available-for-me" como um :id
   app.get("/api/vehicles/available-for-me", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico']), async (req: any, res) => {
     try {
+      console.log(`🔍 [VEHICLES-AVAILABLE] Requisição recebida`);
+      console.log(`📋 [VEHICLES-AVAILABLE] User:`, {
+        userId: req.user?.userId,
+        email: req.user?.email,
+        role: req.user?.role,
+        companyId: req.user?.companyId
+      });
+
       if (!req.user?.companyId) {
+        console.error(`❌ [VEHICLES-AVAILABLE] CompanyId ausente no token`);
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
       }
 
+      console.log(`🔎 [VEHICLES-AVAILABLE] Buscando veículos para userId=${req.user.userId}, companyId=${req.user.companyId}`);
       const availableVehicles = await storage.getVehiclesAvailableForUser(req.user.userId, req.user.companyId);
+      console.log(`✅ [VEHICLES-AVAILABLE] Encontrados ${availableVehicles.length} veículos`);
       res.json(availableVehicles);
     } catch (error: any) {
-      console.error(`❌ [VEHICLES] Erro ao buscar veículos disponíveis:`, error);
+      console.error(`❌ [VEHICLES-AVAILABLE] Erro ao buscar veículos disponíveis:`, error);
+      console.error(`❌ [VEHICLES-AVAILABLE] Stack:`, error.stack);
       res.status(500).json({ message: error.message });
     }
   });

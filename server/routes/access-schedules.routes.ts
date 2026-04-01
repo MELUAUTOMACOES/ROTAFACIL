@@ -3,27 +3,24 @@ import { storage } from "../storage";
 import { insertAccessScheduleSchema } from "@shared/schema";
 import { isAccessAllowed, getMinutesUntilEndOfShift, getAccessDeniedMessage } from "../access-schedule-validator";
 
-// Middleware para verificar se é admin com companyId válido
+// Middleware para verificar se é admin da empresa atual com companyId válido (case-insensitive)
 function requireAdmin(req: any, res: any, next: any) {
   if (!req.user) {
-    return res.status(403).json({ message: 'Acesso negado. Você precisa estar autenticado.' });
+    return res.status(401).json({ message: 'Autenticação necessária' });
   }
-  
-  if (req.user.role !== 'admin') {
+
+  const userRole = (req.user.companyRole || req.user.role || '').toLowerCase();
+  if (userRole !== 'admin') {
     return res.status(403).json({ 
       message: 'Acesso negado. Apenas administradores podem gerenciar tabelas de horário.',
-      currentRole: req.user.role,
-      requiredRole: 'admin'
+      currentRole: req.user.companyRole || req.user.role
     });
   }
 
-  // 🔑 Garante que o companyId está presente — OBRIGATÓRIO para isolamento multi-tenant
   if (!req.user.companyId) {
-    return res.status(403).json({
-      message: 'Acesso negado. Empresa não identificada no token.',
-    });
+    return res.status(403).json({ message: 'Empresa inválida. Faça login novamente.' });
   }
-  
+
   next();
 }
 

@@ -145,10 +145,20 @@ export default function UserManagement() {
   };
 
   const getRoleBadge = (role: string) => {
-    if (role === 'admin') {
-      return <Badge className="bg-purple-500"><Shield className="w-3 h-3 mr-1" />Admin</Badge>;
-    }
-    return <Badge variant="secondary">Usuário</Badge>;
+    const roleLabels: Record<string, { label: string; color: string }> = {
+      admin: { label: 'Administrador', color: 'bg-purple-500' },
+      operador: { label: 'Operador', color: 'bg-blue-500' },
+      tecnico: { label: 'Técnico', color: 'bg-teal-500' },
+      prestador: { label: 'Prestador', color: 'bg-orange-500' },
+      user: { label: 'Usuário', color: 'bg-gray-500' },
+    };
+    const roleInfo = roleLabels[role] || { label: role, color: 'bg-gray-500' };
+    return (
+      <Badge className={roleInfo.color}>
+        {role === 'admin' && <Shield className="w-3 h-3 mr-1" />}
+        {roleInfo.label}
+      </Badge>
+    );
   };
 
   const getPlanBadge = (plan: string) => {

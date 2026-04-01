@@ -10,10 +10,14 @@ import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 
 export function registerAuditRoutes(app: Express, authenticateToken: any) {
 
-    // Middleware para verificar se é admin
-    function requireAdmin(req: any, res: Response, next: any) {
-        if (req.user?.role !== 'admin') {
-            return res.status(403).json({ message: "Acesso restrito a administradores" });
+    // Middleware para verificar se é admin da empresa atual (case-insensitive)
+    function requireAdmin(req: any, res: Response, next: NextFunction) {
+        const userRole = (req.user?.companyRole || req.user?.role || '').toLowerCase();
+        if (userRole !== 'admin') {
+            return res.status(403).json({ 
+                message: "Acesso restrito a administradores",
+                currentRole: req.user?.companyRole || req.user?.role
+            });
         }
         next();
     }

@@ -13,30 +13,31 @@ import {
   resetPasswordSchema
 } from "@shared/schema";
 
-// Middleware para verificar se é admin
+// Middleware para verificar se é admin da empresa atual (aceita maiúsculo ou minúsculo)
 function requireAdmin(req: any, res: any, next: any) {
-  console.log('🔐 [AUTH] Verificando permissão de admin...');
-  console.log('📋 [AUTH] Usuário na requisição:', req.user ? {
-    id: req.user.id,
-    email: req.user.email,
-    role: req.user.role
-  } : 'NENHUM USUÁRIO');
-  
+  console.log(`🔐 [AUTH] Verificando permissão de admin...`);
+  console.log(`📋 [AUTH] Usuário na requisição:`, { id: req.user?.id, email: req.user?.email, companyRole: req.user?.companyRole, role: req.user?.role });
+
   if (!req.user) {
-    console.log('❌ [AUTH] Falha: Nenhum usuário autenticado');
-    return res.status(403).json({ message: 'Acesso negado. Você precisa estar autenticado.' });
-  }
-  
-  if (req.user.role !== 'admin') {
-    console.log(`❌ [AUTH] Falha: Usuário ${req.user.email} tem role="${req.user.role}" mas precisa ser "admin"`);
-    return res.status(403).json({ 
-      message: 'Acesso negado. Apenas administradores podem realizar esta ação.',
-      currentRole: req.user.role,
-      requiredRole: 'admin'
+    console.error(`❌ [AUTH] req.user não existe`);
+    return res.status(401).json({
+      message: "Autenticação necessária. Faça login novamente.",
+      requiredRole: "ADMIN"
     });
   }
-  
-  console.log(`✅ [AUTH] Sucesso: Usuário ${req.user.email} é admin`);
+
+  // Usa companyRole (role da empresa atual) com fallback para role global
+  const userRole = (req.user.companyRole || req.user.role || '').toLowerCase();
+  if (userRole !== 'admin') {
+    console.error(`❌ [AUTH] Falha: CompanyRole "${req.user.companyRole}" (fallback role: "${req.user.role}") não é admin`);
+    return res.status(403).json({
+      message: "Acesso negado. Apenas administradores podem realizar esta ação.",
+      currentRole: req.user.companyRole || req.user.role,
+      requiredRole: "ADMIN"
+    });
+  }
+
+  console.log(`✅ [AUTH] Sucesso: Usuário ${req.user.email} é admin da empresa ${req.user.companyId}`);
   next();
 }
 
@@ -250,11 +251,22 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
   app.put("/api/users/:id", authenticateToken, requireAdmin, async (req: any, res) => {
     try {
       const userId = parseInt(req.params.id);
+      const adminCompanyId = req.user.companyId;
       console.log(`📝 [USER MANAGEMENT] Atualizando usuário ID: ${userId}`);
       
       const userData = updateUserByAdminSchema.parse(req.body);
       
       const user = await storage.updateUserByAdmin(userId, userData);
+      
+      // Sincronizar role na membership da empresa atual (se existir)
+      if (adminCompanyId && userData.role) {
+        try {
+          await storage.updateMembershipRole(userId, adminCompanyId, userData.role);
+          console.log(`✅ [USER MANAGEMENT] Membership atualizada: role=${userData.role} para user ${userId} na empresa ${adminCompanyId}`);
+        } catch (membershipError: any) {
+          console.warn(`⚠️ [USER MANAGEMENT] Não foi possível atualizar membership: ${membershipError.message}`);
+        }
+      }
       
       console.log(`✅ [USER MANAGEMENT] Usuário atualizado: ${user.email}`);
       

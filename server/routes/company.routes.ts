@@ -32,7 +32,7 @@ const resendVerificationRateLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Middleware para verificar se usuário tem papel ADMIN na empresa
+// Middleware para verificar se usuário tem papel ADMIN na empresa (case-insensitive)
 function requireCompanyAdmin(req: any, res: any, next: any) {
   if (!req.user) {
     return res.status(401).json({ message: 'Autenticação necessária' });
@@ -46,7 +46,8 @@ function requireCompanyAdmin(req: any, res: any, next: any) {
     return res.status(403).json({ message: 'Acesso negado. Você não está vinculado a uma empresa.' });
   }
 
-  if (req.user.companyRole !== 'ADMIN') {
+  const companyRole = (req.user.companyRole || '').toLowerCase();
+  if (companyRole !== 'admin') {
     return res.status(403).json({
       message: 'Acesso negado. Apenas administradores podem realizar esta ação.',
       currentRole: req.user.companyRole,
@@ -274,10 +275,20 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
           // Retornar TODOS os campos do usuário + role da membership
           const { password, emailVerificationToken, ...userWithoutSensitiveData } = user;
           
+          // Mapear role da membership (ADMIN, OPERADOR, ADMINISTRATIVO) para formato do frontend (admin, operador, user)
+          const roleMap: Record<string, string> = {
+            'ADMIN': 'admin',
+            'OPERADOR': 'operador',
+            'ADMINISTRATIVO': 'user',
+            'TECNICO': 'tecnico',
+            'PRESTADOR': 'prestador',
+          };
+          const normalizedRole = roleMap[membership.role] || membership.role.toLowerCase();
+          
           return {
             ...userWithoutSensitiveData,
             name: membership.displayName || user.name,  // Nome específico da empresa ou nome global
-            role: membership.role,  // Role específica da empresa (da membership)
+            role: normalizedRole,  // Role normalizada para o frontend (minúsculo)
             isActive: membership.isActive,  // Status específico da empresa (da membership)
           };
         })

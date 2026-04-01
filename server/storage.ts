@@ -908,21 +908,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getVehiclesAvailableForTechnician(technicianId: number, companyId: number): Promise<Vehicle[]> {
-    /* console.log(`🔍 [getVehiclesAvailableForTechnician] Buscando veículos para technicianId=${technicianId}, companyId=${companyId}`); */
+    console.log(`🔍 [STORAGE] getVehiclesAvailableForTechnician - technicianId=${technicianId}, companyId=${companyId}`);
     
-    // Buscar veículos autorizados diretamente para o técnico
+    // Buscar veículos autorizados diretamente para o técnico (via technicianId)
     const directVehicles = await db
-      .select({ vehicleId: vehicleAssignments.vehicleId })
+      .select({ vehicle: vehicles })
       .from(vehicleAssignments)
+      .innerJoin(vehicles, eq(vehicleAssignments.vehicleId, vehicles.id))
       .where(
         and(
-          eq(vehicleAssignments.entityType, 'technician'),
-          eq(vehicleAssignments.entityId, technicianId),
-          eq(vehicleAssignments.companyId, companyId)
+          eq(vehicleAssignments.technicianId, technicianId),
+          eq(vehicleAssignments.companyId, companyId),
+          eq(vehicleAssignments.isActive, true),
+          eq(vehicles.companyId, companyId)
         )
       );
-    
-    /* console.log(`📊 [getVehiclesAvailableForTechnician] Veículos diretos encontrados: ${directVehicles.length}`); */
+
+    console.log(`📊 [STORAGE] Veículos diretos (technicianId): ${directVehicles.length}`);
 
     // Buscar equipes do técnico
     const technicianTeams = await db
@@ -936,6 +938,7 @@ export class DatabaseStorage implements IStorage {
       );
 
     const teamIds = technicianTeams.map(t => t.teamId);
+    console.log(`👥 [STORAGE] Técnico pertence a ${technicianTeams.length} equipe(s): [${teamIds.join(', ')}]`);
 
     // Buscar veículos autorizados para as equipes do técnico
     let teamVehicles: { vehicle: Vehicle }[] = [];
@@ -952,6 +955,9 @@ export class DatabaseStorage implements IStorage {
             eq(vehicles.companyId, companyId)
           )
         );
+      console.log(`📊 [STORAGE] Veículos via equipes: ${teamVehicles.length}`);
+    } else {
+      console.log(`⚠️ [STORAGE] Técnico não pertence a nenhuma equipe`);
     }
     
     // Combinar e remover duplicados
@@ -960,26 +966,43 @@ export class DatabaseStorage implements IStorage {
       new Map(allVehicles.map(v => [v.vehicle.id, v.vehicle])).values()
     );
 
+    console.log(`✅ [STORAGE] Total de veículos únicos disponíveis: ${uniqueVehicles.length}`);
+    if (uniqueVehicles.length > 0) {
+      console.log(`📋 [STORAGE] Placas: ${uniqueVehicles.map(v => v.plate).join(', ')}`);
+    } else {
+      console.warn(`⚠️ [STORAGE] NENHUM veículo disponível para technicianId=${technicianId}`);
+      console.warn(`⚠️ [STORAGE] Verifique se há registros em vehicle_assignments para este técnico ou suas equipes`);
+    }
+
     return uniqueVehicles;
   }
 
   async getVehiclesAvailableForUser(userId: number, companyId: number): Promise<Vehicle[]> {
+    console.log(`🔍 [STORAGE] getVehiclesAvailableForUser - userId=${userId}, companyId=${companyId}`);
+    
     // Buscar técnico vinculado ao usuário
+    // PRIORIZA linkedUserId (conta real de login) e usa userId (criador) como fallback
     const [technician] = await db
       .select()
       .from(technicians)
       .where(
         and(
-          eq(technicians.userId, userId),
+          or(
+            eq(technicians.linkedUserId, userId),
+            eq(technicians.userId, userId)
+          ),
           eq(technicians.companyId, companyId)
         )
       )
       .limit(1);
 
     if (!technician) {
+      console.warn(`⚠️ [STORAGE] Nenhum técnico encontrado para userId=${userId}, companyId=${companyId}`);
+      console.warn(`⚠️ [STORAGE] Isso significa que o usuário não tem registro na tabela 'technicians'`);
       return [];
     }
 
+    console.log(`✅ [STORAGE] Técnico encontrado: technicianId=${technician.id}, name=${technician.name}`);
     return await this.getVehiclesAvailableForTechnician(technician.id, companyId);
   }
 
