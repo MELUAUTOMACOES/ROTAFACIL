@@ -2425,7 +2425,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // 🆕 IMPORTANTE: Esta rota DEVE vir ANTES de /api/vehicles/:id
   // Caso contrário, Express interpreta "available-for-me" como um :id
-  app.get("/api/vehicles/available-for-me", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.get("/api/vehicles/available-for-me", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico']), async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -4905,8 +4905,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Business Rules routes
-  app.get("/api/business-rules", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  // Business Rules routes (prestador/tecnico precisam ler para tela de prestadores)
+  app.get("/api/business-rules", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico']), async (req: any, res) => {
     try {
       const businessRules = await storage.getBusinessRules(req.user.companyId);
       res.json(businessRules || {});

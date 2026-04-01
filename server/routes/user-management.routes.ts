@@ -150,6 +150,7 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
             companyId: adminCompanyId,
             email: existingUser.email,
             role: inviteRole,
+            displayName: userData.name, // Usar o nome fornecido no formulário
             token: inviteToken,
             status: 'pending',
             expiresAt,

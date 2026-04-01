@@ -271,14 +271,14 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
           const user = await storage.getUserById(membership.userId);
           if (!user) return null;
 
+          // Retornar TODOS os campos do usuário + role da membership
+          const { password, emailVerificationToken, ...userWithoutSensitiveData } = user;
+          
           return {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            phone: user.phone,
-            role: membership.role,
-            isActive: membership.isActive,
-            emailVerified: user.emailVerified,
+            ...userWithoutSensitiveData,
+            name: membership.displayName || user.name,  // Nome específico da empresa ou nome global
+            role: membership.role,  // Role específica da empresa (da membership)
+            isActive: membership.isActive,  // Status específico da empresa (da membership)
           };
         })
       );
@@ -347,6 +347,7 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
         companyId,
         email: inviteData.email,
         role: inviteData.role,
+        displayName: inviteData.displayName, // Nome específico para esta empresa
         token,
         status: 'pending',
         expiresAt,
@@ -642,12 +643,14 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
       console.log(`   - userId: ${req.user.userId}`);
       console.log(`   - companyId: ${invitation.companyId}`);
       console.log(`   - role: ${invitation.role}`);
+      console.log(`   - displayName: ${invitation.displayName || 'null (usa users.name)'}`);
       console.log(`   - isActive: true`);
       
       const membership = await storage.createMembership({
         userId: req.user.userId,
         companyId: invitation.companyId,
         role: invitation.role,
+        displayName: invitation.displayName, // Nome específico da empresa
         isActive: true,
       });
 

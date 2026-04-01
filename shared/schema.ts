@@ -33,6 +33,7 @@ export const memberships = pgTable("memberships", {
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   companyId: integer("company_id").notNull().references(() => companies.id, { onDelete: 'cascade' }),
   role: text("role").notNull(), // ADMIN, ADMINISTRATIVO, OPERADOR
+  displayName: text("display_name"), // Nome específico do usuário nesta empresa (opcional, usa users.name se null)
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -43,6 +44,7 @@ export const invitations = pgTable("invitations", {
   companyId: integer("company_id").notNull().references(() => companies.id, { onDelete: 'cascade' }),
   email: text("email").notNull(),
   role: text("role").notNull(), // ADMIN, ADMINISTRATIVO, OPERADOR
+  displayName: text("display_name"), // Nome que será usado na empresa (opcional)
   token: text("token").notNull().unique(),
   status: text("status").notNull().default("pending"), // pending, accepted, expired
   expiresAt: timestamp("expires_at").notNull(),
@@ -1058,6 +1060,7 @@ export const signupCompanySchema = z.object({
 export const createInvitationSchema = z.object({
   email: z.string().email("Email inválido"),
   role: roleEnum,
+  displayName: z.string().min(3, "Nome deve ter no mínimo 3 caracteres").optional(),
 });
 
 // Schema para aceitar convite (usuário novo)
