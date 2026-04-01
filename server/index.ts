@@ -6,6 +6,11 @@ import { registerRoutes } from "./routes";
 import { log } from "./vite";
 
 const app = express();
+
+// 🔒 Trust proxy: Express está atrás de Nginx em produção
+// Permite leitura correta de X-Forwarded-For para rate limiting por IP real
+app.set('trust proxy', 1);
+
 const isProduction = process.env.NODE_ENV === "production";
 
 // 🛡️ Security Headers (Helmet)
@@ -119,20 +124,10 @@ app.use((req, res, next) => {
       console.log(`🚀 API rodando na porta ${port}`);
     });
   } else {
-    console.log('🚀 Modo produção: Servindo frontend estático + API');
+    console.log('🚀 Modo produção: API apenas (frontend servido por Nginx)');
 
-    // 📁 Servir arquivos estáticos do build (JS, CSS, imagens, etc.)
-    const distPath = new URL('../dist/public', import.meta.url).pathname;
-    app.use(express.static(distPath));
-
-    // 🔄 SPA Fallback: retornar index.html para todas as rotas não-API
-    // Isso permite navegação direta e refresh em qualquer rota do frontend
-    app.get('*', (_req, res) => {
-      const indexPath = new URL('../dist/public/index.html', import.meta.url).pathname;
-      res.sendFile(indexPath);
-    });
-
-    // Em produção, usar app.listen() diretamente
+    // Em produção, o frontend é servido por container Nginx separado
+    // Backend serve APENAS rotas /api (já registradas via registerRoutes)
     const port = Number(process.env.PORT) || 5000;
     app.listen(port, "0.0.0.0", () => {
       console.log(`🚀 API rodando na porta ${port}`);
