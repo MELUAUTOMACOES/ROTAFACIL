@@ -322,11 +322,13 @@ export async function updateDailyAvailability(
   };
 
   if (existingAvailability) {
+    console.log(`♻️ [AVAILABILITY] Atualizando disponibilidade existente para ${responsibleType} #${responsibleId} em ${date.toISOString().split('T')[0]}: ${availableMinutes}min disponíveis (${usedMinutes}/${totalMinutes} usado)`);
     await db
       .update(dailyAvailability)
       .set(availabilityData)
       .where(eq(dailyAvailability.id, existingAvailability.id));
-
+  } else {
+    console.log(`✨ [AVAILABILITY] Criando NOVA disponibilidade para ${responsibleType} #${responsibleId} em ${date.toISOString().split('T')[0]}: ${availableMinutes}min disponíveis (${usedMinutes}/${totalMinutes} usado)`);
     await db.insert(dailyAvailability).values({
       ...availabilityData,
       createdAt: new Date(),

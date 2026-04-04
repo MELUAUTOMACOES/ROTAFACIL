@@ -108,20 +108,38 @@ export const clients = pgTable("clients", {
   phone1: text("phone1"),
   phone2: text("phone2"),
   cpf: text("cpf").notNull(),
-  cep: text("cep").notNull(),
-  bairro: text("bairro").notNull(),
-  cidade: text("cidade").notNull(),
-  logradouro: text("logradouro").notNull(),
-  numero: text("numero").notNull(),
-  complemento: text("complemento"),
+  cep: text("cep").notNull(), // LEGADO: mantido para compatibilidade temporária
+  bairro: text("bairro").notNull(), // LEGADO: mantido para compatibilidade temporária
+  cidade: text("cidade").notNull(), // LEGADO: mantido para compatibilidade temporária
+  logradouro: text("logradouro").notNull(), // LEGADO: mantido para compatibilidade temporária
+  numero: text("numero").notNull(), // LEGADO: mantido para compatibilidade temporária
+  complemento: text("complemento"), // LEGADO: mantido para compatibilidade temporária
   observacoes: text("observacoes"),
-  lat: doublePrecision("lat"),   // latitude (ex.: -25.4284)
-  lng: doublePrecision("lng"),   // longitude (ex.: -49.2733)
+  lat: doublePrecision("lat"), // LEGADO: mantido para compatibilidade temporária
+  lng: doublePrecision("lng"), // LEGADO: mantido para compatibilidade temporária
   userId: integer("user_id").notNull().references(() => users.id),
   companyId: integer("company_id").references(() => companies.id),
   createdAt: timestamp("created_at").defaultNow().notNull()
 });
 
+// Client Addresses table - Suporte a múltiplos endereços por cliente (até 5)
+export const clientAddresses = pgTable("client_addresses", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: 'cascade' }),
+  label: text("label"), // "Matriz", "Filial 1", "Depósito", etc.
+  cep: text("cep").notNull(),
+  logradouro: text("logradouro").notNull(),
+  numero: text("numero").notNull(),
+  complemento: text("complemento"),
+  bairro: text("bairro").notNull(),
+  cidade: text("cidade").notNull(),
+  estado: text("estado").notNull(), // UF - campo novo não existente em clients
+  lat: doublePrecision("lat"),
+  lng: doublePrecision("lng"),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  companyId: integer("company_id").notNull().references(() => companies.id),
+  createdAt: timestamp("created_at").defaultNow().notNull()
+});
 
 // Services table
 export const services = pgTable("services", {
@@ -556,10 +574,25 @@ export const insertUserSchema = createInsertSchema(users).omit({
   createdAt: true,
 });
 
+// CEP validation schema (declarado antes de qualquer uso)
+export const cepSchema = z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no formato XXXXX-XXX");
+
 export const insertClientSchema = createInsertSchema(clients).omit({
   id: true,
   userId: true,
   createdAt: true,
+});
+
+export const insertClientAddressSchema = createInsertSchema(clientAddresses).omit({
+  id: true,
+  clientId: true,
+  companyId: true,
+  createdAt: true,
+}).extend({
+  cep: cepSchema,
+  estado: z.string().length(2, "Estado deve ter 2 caracteres (UF)"),
+  numero: z.string().regex(/^\d+$/, "Número deve conter apenas dígitos"),
+  label: z.string().max(100, "Label muito longo").optional(),
 });
 
 export const insertServiceSchema = createInsertSchema(services).omit({
@@ -856,9 +889,6 @@ export const resetPasswordSchema = z.object({
   message: "As senhas não coincidem",
   path: ["confirmPassword"],
 });
-
-// CEP validation schema
-export const cepSchema = z.string().regex(/^\d{5}-?\d{3}$/, "CEP deve estar no formato XXXXX-XXX");
 
 // Client schema with extended validation
 export const extendedInsertClientSchema = insertClientSchema.extend({
@@ -1374,6 +1404,8 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Client = typeof clients.$inferSelect;
 export type InsertClient = z.infer<typeof insertClientSchema>;
+export type ClientAddress = typeof clientAddresses.$inferSelect;
+export type InsertClientAddress = z.infer<typeof insertClientAddressSchema>;
 export type Service = typeof services.$inferSelect;
 export type InsertService = z.infer<typeof insertServiceSchema>;
 export type Technician = typeof technicians.$inferSelect;

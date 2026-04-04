@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { buscarEnderecoPorCep } from "@/lib/cep";
-import { Loader2, Building2, User, Mail, Phone, MapPin, Briefcase, MessageSquare, Truck, Check } from "lucide-react";
+import { Loader2, Building2, User, Mail, Phone, MapPin, Briefcase, MessageSquare, Truck, Check, Search } from "lucide-react";
 import { Link, useSearch } from "wouter";
 import logoImg from "@assets/SEM FUNDO_1750819798590.png";
 import { buildApiUrl } from "@/lib/api-config";
@@ -26,6 +26,7 @@ interface PinData {
 
 export default function SignupCompany() {
   const [isLoading, setIsLoading] = useState(false);
+  const [isCnpjLoading, setIsCnpjLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const { toast } = useToast();
@@ -91,6 +92,69 @@ export default function SignupCompany() {
         title: "CEP não encontrado",
         description: "Verifique o CEP digitado ou preencha manualmente.",
       });
+    }
+  };
+
+  const handleBuscarCnpj = async () => {
+    const cnpj = watch("company.cnpj");
+    const cleanCnpj = cnpj?.replace(/\D/g, "") || "";
+
+    if (cleanCnpj.length !== 14) {
+      toast({
+        variant: "destructive",
+        title: "CNPJ inválido",
+        description: "Informe um CNPJ válido com 14 dígitos para buscar.",
+      });
+      return;
+    }
+
+    console.log("🔍 [CNPJ] Iniciando busca para:", cleanCnpj);
+    setIsCnpjLoading(true);
+
+    try {
+      const url = buildApiUrl(`/api/cnpj/${cleanCnpj}`);
+      const response = await fetch(url);
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        console.warn("⚠️ [CNPJ] Falha na consulta:", result.message);
+        toast({
+          variant: "destructive",
+          title: "CNPJ não encontrado",
+          description: result.message || "Não foi possível consultar o CNPJ. Continue preenchendo manualmente.",
+        });
+        return;
+      }
+
+      const data = result.data;
+      console.log("✅ [CNPJ] Dados recebidos:", data.razaoSocial);
+
+      // Preencher campos apenas se virem com valor
+      if (data.nomeFantasia || data.razaoSocial) {
+        setValue("company.name", data.nomeFantasia || data.razaoSocial);
+      }
+      if (data.telefone) setValue("company.telefone", data.telefone);
+      if (data.email) setValue("company.email", data.email);
+      if (data.cep) setValue("company.cep", data.cep);
+      if (data.logradouro) setValue("company.logradouro", data.logradouro);
+      if (data.numero) setValue("company.numero", data.numero);
+      if (data.cidade) setValue("company.cidade", data.cidade);
+      if (data.uf) setValue("company.estado", data.uf);
+
+      toast({
+        title: "Dados preenchidos!",
+        description: "Revise os dados antes de continuar o cadastro.",
+      });
+
+    } catch (error: any) {
+      console.error("❌ [CNPJ] Erro ao buscar:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao buscar CNPJ",
+        description: "Não foi possível consultar o CNPJ. Continue preenchendo manualmente.",
+      });
+    } finally {
+      setIsCnpjLoading(false);
     }
   };
 
@@ -286,6 +350,48 @@ export default function SignupCompany() {
                 <CardContent className="space-y-4">
                   <div className="grid md:grid-cols-2 gap-4">
                     <div>
+                      <Label htmlFor="company.cnpj" className="text-slate-200">CNPJ *</Label>
+                      <div className="space-y-2">
+                        <InputMask
+                          mask="99.999.999/9999-99"
+                          {...register("company.cnpj")}
+                        >
+                          {((inputProps: any) => (
+                            <Input
+                              {...inputProps}
+                              id="company.cnpj"
+                              placeholder="00.000.000/0000-00"
+                              className="bg-zinc-800 border-zinc-700 text-white placeholder:text-slate-500 focus:border-amber-500"
+                            />
+                          )) as any}
+                        </InputMask>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleBuscarCnpj}
+                          disabled={isCnpjLoading}
+                          className="w-full sm:w-auto bg-zinc-800 border-zinc-700 text-slate-200 hover:bg-zinc-700 hover:text-white"
+                        >
+                          {isCnpjLoading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Buscando...
+                            </>
+                          ) : (
+                            <>
+                              <Search className="h-4 w-4 mr-2" />
+                              Buscar dados do CNPJ
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      {errors.company?.cnpj && (
+                        <p className="text-sm text-red-400 mt-1">{errors.company.cnpj.message}</p>
+                      )}
+                    </div>
+
+                    <div>
                       <Label htmlFor="company.name" className="text-slate-200">Nome da Empresa *</Label>
                       <Input
                         id="company.name"
@@ -295,26 +401,6 @@ export default function SignupCompany() {
                       />
                       {errors.company?.name && (
                         <p className="text-sm text-red-400 mt-1">{errors.company.name.message}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <Label htmlFor="company.cnpj" className="text-slate-200">CNPJ *</Label>
-                      <InputMask
-                        mask="99.999.999/9999-99"
-                        {...register("company.cnpj")}
-                      >
-                        {((inputProps: any) => (
-                          <Input
-                            {...inputProps}
-                            id="company.cnpj"
-                            placeholder="00.000.000/0000-00"
-                            className="bg-zinc-800 border-zinc-700 text-white placeholder:text-slate-500 focus:border-amber-500"
-                          />
-                        )) as any}
-                      </InputMask>
-                      {errors.company?.cnpj && (
-                        <p className="text-sm text-red-400 mt-1">{errors.company.cnpj.message}</p>
                       )}
                     </div>
 

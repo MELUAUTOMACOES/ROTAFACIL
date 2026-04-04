@@ -130,6 +130,14 @@ Checklist antes de finalizar:
 - build/check sem erro?
 - risco de quebrar multiempresa?
 
+17. ARQUITETURA DE DEPLOY
+
+⚠️ Em caso de dúvidas sobre containers, Nginx, backend, proxy ou fluxo de requisição em produção, consultar o arquivo:
+"Arquitetura de Deploy — RotaFácil (Produção).md"
+
+❌ Não assumir comportamento de monolito (frontend + backend juntos)
+✅ Considerar sempre arquitetura com containers separados (frontend, backend, proxy)
+
 11. COMANDOS ÚTEIS
 - pnpm dev
 - pnpm dev:api

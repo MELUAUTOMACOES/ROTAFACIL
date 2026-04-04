@@ -2835,20 +2835,20 @@ export default function Appointments() {
                                       <div className="flex items-center space-x-2">
                                         <MapPin className="h-4 w-4" />
                                         <span>
-                                          {client ? (
+                                          {appointment.logradouro ? (
                                             <>
-                                              {client.logradouro || "Logradouro não informado"}
-                                              {client.numero ? `, ${client.numero}` : ""}
-                                              {client.bairro ? `, ${client.bairro}` : ""}
-                                              {client.cidade ? `, ${client.cidade}` : ""}
-                                              {client.cep ? ` - ${client.cep}` : ""}
-                                              {client.complemento
-                                                ? `, ${client.complemento.toUpperCase()}`
+                                              {appointment.logradouro}
+                                              {appointment.numero ? `, ${appointment.numero}` : ""}
+                                              {appointment.bairro ? `, ${appointment.bairro}` : ""}
+                                              {appointment.cidade ? `, ${appointment.cidade}` : ""}
+                                              {appointment.cep ? ` - ${appointment.cep}` : ""}
+                                              {appointment.complemento
+                                                ? `, ${appointment.complemento.toUpperCase()}`
                                                 : ""}
                                             </>
                                           ) : (
                                             <span style={{ color: "red" }}>
-                                              Cliente não encontrado
+                                              Endereço não informado
                                             </span>
                                           )}
                                         </span>

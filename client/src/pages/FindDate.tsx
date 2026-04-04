@@ -55,6 +55,10 @@ export default function FindDate() {
   const [isFetchingCep, setIsFetchingCep] = useState(false);
   const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
 
+  // Estados para múltiplos endereços
+  const [clientAddresses, setClientAddresses] = useState<any[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
+
   const { data: servicesData, isLoading: isLoadingServices, error: errorServices } = useQuery({
     queryKey: ["/api/services"],
     queryFn: async () => {
@@ -150,22 +154,74 @@ export default function FindDate() {
     form.setValue("numero", numbersOnly);
   };
 
-  const handleClientSelect = (client: Client | null) => {
+  const fillAddressFields = (address: any) => {
+    console.log("📋 [FIND-DATE] Preenchendo campos com endereço:", address);
+    
+    form.setValue("cep", address.cep || "");
+    form.setValue("numero", address.numero || "");
+    form.setValue("logradouro", address.logradouro || "");
+    form.setValue("bairro", address.bairro || "");
+    form.setValue("cidade", address.cidade || "");
+    form.setValue("estado", address.estado || "");
+  };
+
+  const handleAddressChange = (addressId: string) => {
+    const address = clientAddresses.find(addr => addr.id === parseInt(addressId));
+    if (address) {
+      setSelectedAddressId(address.id);
+      fillAddressFields(address);
+    }
+  };
+
+  const handleClientSelect = async (client: Client | null) => {
     form.setValue("clientId", client?.id);
 
     if (client) {
-      form.setValue("cep", client.cep);
-      form.setValue("numero", client.numero);
-      form.setValue("logradouro", client.logradouro);
-      form.setValue("bairro", client.bairro);
-      form.setValue("cidade", client.cidade);
-
-      buscarEnderecoPorCep(client.cep)
-        .then((data) => {
-          if (data.uf) form.setValue("estado", data.uf);
-        })
-        .catch((err) => console.error("Erro ao buscar UF do cliente:", err));
+      console.log("📋 [FIND-DATE] Cliente selecionado:", client.id, client.name);
+      
+      // Buscar endereços do cliente
+      try {
+        const response = await fetch(buildApiUrl(`/api/clients/${client.id}`), {
+          headers: getAuthHeaders(),
+        });
+        
+        if (response.ok) {
+          const clientData = await response.json();
+          const addresses = clientData.addresses || [];
+          
+          console.log("📋 [FIND-DATE] Endereços do cliente:", addresses.length);
+          setClientAddresses(addresses);
+          
+          // Selecionar endereço principal por padrão
+          const primaryAddress = addresses.find((addr: any) => addr.isPrimary);
+          const addressToUse = primaryAddress || addresses[0];
+          
+          if (addressToUse) {
+            setSelectedAddressId(addressToUse.id || null);
+            fillAddressFields(addressToUse);
+          }
+        }
+      } catch (error) {
+        console.error("❌ [FIND-DATE] Erro ao buscar endereços:", error);
+        // Fallback para campos legados
+        form.setValue("cep", client.cep);
+        form.setValue("numero", client.numero);
+        form.setValue("logradouro", client.logradouro);
+        form.setValue("bairro", client.bairro);
+        form.setValue("cidade", client.cidade);
+        
+        // Buscar estado via CEP
+        buscarEnderecoPorCep(client.cep)
+          .then((data) => {
+            if (data.uf) form.setValue("estado", data.uf);
+          })
+          .catch((err) => console.error("Erro ao buscar UF do cliente:", err));
+      }
     } else {
+      // Limpar TUDO ao desselecionar cliente
+      console.log("📋 [FIND-DATE] Limpando dados do cliente anterior");
+      setClientAddresses([]);
+      setSelectedAddressId(null);
       form.setValue("cep", "");
       form.setValue("numero", "");
       form.setValue("logradouro", "");
@@ -369,6 +425,33 @@ export default function FindDate() {
                   <MapPin className="h-4 w-4 text-[#DAA520]" />
                   <h3 className="text-sm font-semibold">Endereço do atendimento</h3>
                 </div>
+
+                {/* Seletor de Endereço (apenas se cliente tiver 2+ endereços) */}
+                {form.watch("clientId") && clientAddresses.length > 1 && (
+                  <div className="mb-4 space-y-2">
+                    <Label htmlFor="addressSelector">Endereço para buscar disponibilidade *</Label>
+                    <Select
+                      value={selectedAddressId?.toString() || ""}
+                      onValueChange={handleAddressChange}
+                    >
+                      <SelectTrigger id="addressSelector" className={fieldClass}>
+                        <SelectValue placeholder="Selecione o endereço" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clientAddresses.map((addr: any) => (
+                          <SelectItem key={addr.id} value={addr.id.toString()}>
+                            {addr.isPrimary && "✓ "}
+                            {addr.label || "Endereço"} - {addr.logradouro}, {addr.numero}
+                            {addr.isPrimary && " (Principal)"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {clientAddresses.length} endereços cadastrados. A busca de datas considerará este endereço.
+                    </p>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">

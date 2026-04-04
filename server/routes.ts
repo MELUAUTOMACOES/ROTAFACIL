@@ -6,7 +6,7 @@ import { storage } from "./storage";
 import crypto from "node:crypto"; // para randomUUID
 import { db } from "./db"; // ajuste o caminho se o seu db estiver noutro arquivo
 import {
-  routes, routeStops, appointments, clients, users, dailyAvailability, vehicleChecklists, vehicleChecklistItems, teamMembers, pendingResolutions, appointmentHistory,
+  routes, routeStops, appointments, clients, clientAddresses, users, dailyAvailability, vehicleChecklists, vehicleChecklistItems, teamMembers, pendingResolutions, appointmentHistory,
   routeOccurrences,
   trackingLocations,
   businessRules,
@@ -24,6 +24,7 @@ import {
   insertTeamMemberSchema, extendedInsertAppointmentSchema,
   insertVehicleChecklistSchema, insertVehicleChecklistItemSchema,
   insertVehicleMaintenanceSchema,
+  insertClientAddressSchema,
   type InsertVehicle
 } from "@shared/schema";
 import {
@@ -271,28 +272,69 @@ function composeFullAddressFromAppointment(a: any) {
 }
 
 // Chama Nominatim e retorna { lat, lng } (numbers)
-async function geocodeWithNominatim(fullAddress: string) {
+async function geocodeWithNominatim(fullAddress: string, maxRetries: number = 3) {
   const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}&limit=1`;
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": "RotaFacil/1.0 (contato: suporte@rotafacil.app)",
-      "Accept-Language": "pt-BR"
+  
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": "RotaFacil/1.0 (contato: suporte@rotafacil.app)",
+          "Accept-Language": "pt-BR"
+        }
+      });
+      
+      if (!res.ok) {
+        throw new Error(`Nominatim error ${res.status}`);
+      }
+      
+      const arr = await res.json();
+      if (!Array.isArray(arr) || arr.length === 0) {
+        throw new Error("Nenhum resultado do Nominatim");
+      }
+      
+      const { lat, lon } = arr[0];
+      const latNum = Number(lat);
+      const lngNum = Number(lon);
+      
+      if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
+        throw new Error("Coordenadas inválidas do Nominatim");
+      }
+      
+      // Sucesso - retornar coordenadas
+      if (attempt > 1) {
+        console.log(`✅ [GEOCODE] Sucesso na tentativa ${attempt}/${maxRetries}`);
+      }
+      return { lat: latNum, lng: lngNum };
+      
+    } catch (error: any) {
+      lastError = error;
+      
+      // Se for erro de rede (ENOTFOUND, ETIMEDOUT, etc) e não for a última tentativa, retry
+      const isNetworkError = error.code === 'ENOTFOUND' || 
+                            error.code === 'ETIMEDOUT' || 
+                            error.code === 'ECONNREFUSED' ||
+                            error.message?.includes('fetch failed');
+      
+      if (isNetworkError && attempt < maxRetries) {
+        const delayMs = 1000 * attempt; // 1s, 2s, 3s
+        console.log(`⚠️ [GEOCODE] Tentativa ${attempt}/${maxRetries} falhou (${error.message}). Aguardando ${delayMs}ms antes de tentar novamente...`);
+        await sleep(delayMs);
+        continue;
+      }
+      
+      // Não é erro de rede OU é a última tentativa - propagar erro
+      if (attempt === maxRetries) {
+        console.log(`❌ [GEOCODE] Falha após ${maxRetries} tentativas`);
+      }
+      throw error;
     }
-  });
-  if (!res.ok) {
-    throw new Error(`Nominatim error ${res.status}`);
   }
-  const arr = await res.json();
-  if (!Array.isArray(arr) || arr.length === 0) {
-    throw new Error("Nenhum resultado do Nominatim");
-  }
-  const { lat, lon } = arr[0];
-  const latNum = Number(lat);
-  const lngNum = Number(lon);
-  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
-    throw new Error("Coordenadas inválidas do Nominatim");
-  }
-  return { lat: latNum, lng: lngNum };
+  
+  // Não deveria chegar aqui, mas por segurança
+  throw lastError || new Error("Geocoding falhou");
 }
 
 function sleep(ms: number) {
@@ -1873,7 +1915,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (search && search.trim() !== '') {
         result = await storage.searchClients(search.trim(), req.user.companyId, page, limit);
       } else {
-        result = await storage.getClients(req.user.companyId, page, limit);
+        // NOVO: Usar dual-read para retornar primaryAddress + addressCount
+        result = await storage.getClientsWithPrimaryAddress(req.user.companyId, page, limit);
       }
 
       // 🔄 Transformar {data, total} em {items, pagination} para compatibilidade com frontend
@@ -1919,7 +1962,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(clientId)) {
         return res.status(400).json({ message: "ID de cliente inválido" });
       }
-      const client = await storage.getClient(clientId, req.user.companyId);
+      // NOVO: Dual-read - retorna cliente com addresses unificado
+      const client = await storage.getClientWithAddresses(clientId, req.user.companyId);
       if (!client) {
         return res.status(404).json({ message: "Cliente não encontrado" });
       }
@@ -1958,19 +2002,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/clients", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
-      const clientData = insertClientSchema.parse(req.body);
-      const client = await storage.createClient(clientData, req.user.userId, req.user.companyId);
-      trackFeatureUsage(req.user.userId, "clients", "create", req.user.companyId, { id: client.id });
+      const { addresses, ...clientData } = req.body;
+
+      // Validar dados do cliente (sem endereços)
+      const validatedClient = insertClientSchema.partial({ 
+        cep: true, logradouro: true, numero: true, bairro: true, cidade: true, complemento: true, lat: true, lng: true 
+      }).parse(clientData);
+
+      // Validar endereços (obrigatório ter pelo menos 1)
+      if (!addresses || !Array.isArray(addresses) || addresses.length === 0) {
+        return res.status(400).json({ message: "Cliente deve ter pelo menos 1 endereço" });
+      }
+      if (addresses.length > 5) {
+        return res.status(400).json({ message: "Cliente pode ter no máximo 5 endereços" });
+      }
+
+      // Tipo explícito para endereço CREATE (sem id)
+      type ValidatedAddressCreate = {
+        cep: string;
+        logradouro: string;
+        numero: string;
+        cidade: string;
+        estado: string;
+        bairro: string;
+        lat?: number | null;
+        complemento?: string | null;
+        lng?: number | null;
+        label?: string;
+        isPrimary?: boolean;
+      };
+
+      // Validar cada endereço
+      const validatedAddresses: ValidatedAddressCreate[] = addresses.map((addr: any) => 
+        insertClientAddressSchema.parse(addr)
+      );
+
+      // Validar que exatamente 1 endereço é principal
+      const primaryCount = validatedAddresses.filter((a) => a.isPrimary).length;
+      if (primaryCount !== 1) {
+        return res.status(400).json({ message: "Cliente deve ter exatamente 1 endereço principal" });
+      }
+
+      // Identificar endereço principal para sincronizar com campos legados
+      const primaryAddress = validatedAddresses.find((a) => a.isPrimary);
+      
+      // GUARD: primaryAddress deve existir (validação já garantiu que existe exatamente 1)
+      if (!primaryAddress) {
+        return res.status(500).json({ message: "Erro interno: endereço principal não encontrado" });
+      }
+
+      // Criar cliente + endereços em transação
+      const result = await db.transaction(async (tx) => {
+        // 1. Criar cliente (SINCRONIZAR campos legados com endereço principal)
+        const [client] = await tx.insert(clients).values({
+          ...validatedClient,
+          // COMPATIBILIDADE TEMPORÁRIA: sincronizar campos legados
+          cep: primaryAddress.cep,
+          logradouro: primaryAddress.logradouro,
+          numero: primaryAddress.numero,
+          complemento: primaryAddress.complemento ?? "",
+          bairro: primaryAddress.bairro,
+          cidade: primaryAddress.cidade,
+          lat: primaryAddress.lat ?? null,
+          lng: primaryAddress.lng ?? null,
+          userId: req.user.userId,
+          companyId: req.user.companyId,
+        }).returning();
+
+        // 2. Criar endereços (montando objeto explicitamente)
+        const createdAddresses = [];
+        for (const addr of validatedAddresses) {
+          const [newAddress] = await tx.insert(clientAddresses).values({
+            clientId: client.id,
+            companyId: req.user.companyId,
+            label: addr.label ?? null,
+            cep: addr.cep,
+            logradouro: addr.logradouro,
+            numero: addr.numero,
+            complemento: addr.complemento ?? null,
+            bairro: addr.bairro,
+            cidade: addr.cidade,
+            estado: addr.estado,
+            lat: addr.lat ?? null,
+            lng: addr.lng ?? null,
+            isPrimary: addr.isPrimary ?? false,
+          }).returning();
+          createdAddresses.push(newAddress);
+        }
+
+        return { client, addresses: createdAddresses };
+      });
+
+      trackFeatureUsage(req.user.userId, "clients", "create", req.user.companyId, { id: result.client.id });
       trackCompanyAudit({
         userId: req.user.userId,
         companyId: req.user.companyId,
         feature: "clients",
         action: "create",
-        resourceId: client.id,
-        description: `Criou cliente "${client.name}"`
+        resourceId: result.client.id,
+        description: `Criou cliente "${result.client.name}" com ${result.addresses.length} endereço(s)`
       });
-      res.json(client);
+
+      res.json({ ...result.client, addresses: result.addresses });
     } catch (error: any) {
+      console.error("❌ [POST /clients] erro:", error);
       res.status(400).json({ message: error.message });
     }
   });
@@ -1978,10 +2113,186 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/clients/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      console.log("📝 [PUT /clients] payload recebido:", req.body); // <- vê se lat/lng estão vindo
-      const clientData = insertClientSchema.partial().parse(req.body);
-      console.log("📝 [PUT /clients] payload após Zod:", clientData); // <- confirma que lat/lng passaram
-      const client = await storage.updateClient(id, clientData, req.user.companyId);
+      const { addresses, ...clientData } = req.body;
+
+      console.log("📝 [PUT /clients] payload recebido:", { id, hasAddresses: !!addresses, addressesCount: addresses?.length });
+
+      // Validar dados do cliente
+      const validatedClient = insertClientSchema.partial().parse(clientData);
+
+      // Se addresses foi enviado, validar e atualizar
+      if (addresses && Array.isArray(addresses)) {
+        if (addresses.length === 0) {
+          return res.status(400).json({ message: "Cliente deve ter pelo menos 1 endereço" });
+        }
+        if (addresses.length > 5) {
+          return res.status(400).json({ message: "Cliente pode ter no máximo 5 endereços" });
+        }
+
+        // Tipos explícitos para endereços
+        type ValidatedAddressCreate = {
+          cep: string;
+          logradouro: string;
+          numero: string;
+          cidade: string;
+          estado: string;
+          bairro: string;
+          lat?: number | null;
+          complemento?: string | null;
+          lng?: number | null;
+          label?: string;
+          isPrimary?: boolean;
+        };
+
+        type ValidatedAddressUpdate = ValidatedAddressCreate & {
+          id: number;
+        };
+
+        type ValidatedAddress = ValidatedAddressCreate | ValidatedAddressUpdate;
+
+        // Type guard para detectar endereço com id
+        const hasId = (addr: ValidatedAddress): addr is ValidatedAddressUpdate => {
+          return 'id' in addr && typeof addr.id === 'number';
+        };
+
+        // Validar cada endereço (preservando id quando existir)
+        const validatedAddresses: ValidatedAddress[] = addresses.map((addr: any) => {
+          if (addr.id) {
+            // UPDATE: validar campos, mas preservar id
+            const validated = insertClientAddressSchema.partial().parse(addr);
+            return { ...validated, id: addr.id } as ValidatedAddressUpdate;
+          } else {
+            // INSERT: validar campos completos
+            return insertClientAddressSchema.parse(addr) as ValidatedAddressCreate;
+          }
+        });
+
+        // Validar que exatamente 1 endereço é principal
+        const primaryCount = validatedAddresses.filter((a) => a.isPrimary).length;
+        if (primaryCount !== 1) {
+          return res.status(400).json({ message: "Cliente deve ter exatamente 1 endereço principal" });
+        }
+
+        // Identificar endereço principal para sincronizar com campos legados
+        const primaryAddress = validatedAddresses.find((a) => a.isPrimary);
+        
+        // GUARD: primaryAddress deve existir
+        if (!primaryAddress) {
+          return res.status(500).json({ message: "Erro interno: endereço principal não encontrado" });
+        }
+
+        // Atualizar cliente + endereços em transação
+        const result = await db.transaction(async (tx) => {
+          // 1. Atualizar dados principais do cliente + SINCRONIZAR campos legados
+          const [updatedClient] = await tx.update(clients)
+            .set({
+              ...validatedClient,
+              // COMPATIBILIDADE TEMPORÁRIA: sincronizar campos legados com endereço principal
+              cep: primaryAddress.cep,
+              logradouro: primaryAddress.logradouro,
+              numero: primaryAddress.numero,
+              complemento: primaryAddress.complemento ?? "",
+              bairro: primaryAddress.bairro,
+              cidade: primaryAddress.cidade,
+              lat: primaryAddress.lat ?? null,
+              lng: primaryAddress.lng ?? null,
+            })
+            .where(and(eq(clients.id, id), eq(clients.companyId, req.user.companyId)))
+            .returning();
+
+          if (!updatedClient) {
+            throw new Error("Cliente não encontrado");
+          }
+
+          // 2. Buscar endereços existentes (VALIDAR company_id + clientId)
+          const existing = await tx.select().from(clientAddresses)
+            .where(and(
+              eq(clientAddresses.clientId, id),
+              eq(clientAddresses.companyId, req.user.companyId)
+            ));
+
+          const existingIds = existing.map(e => e.id);
+          const incomingIds = validatedAddresses.filter(hasId).map((a) => a.id);
+
+          // 3. DELETE endereços removidos (VALIDAR company_id)
+          const toDelete = existingIds.filter(eid => !incomingIds.includes(eid));
+          if (toDelete.length > 0) {
+            await tx.delete(clientAddresses).where(and(
+              inArray(clientAddresses.id, toDelete),
+              eq(clientAddresses.companyId, req.user.companyId)
+            ));
+            console.log(`🗑️ Removidos ${toDelete.length} endereço(s)`);
+          }
+
+          // 4. INSERT novos, UPDATE existentes
+          const updatedAddresses = [];
+          for (const addr of validatedAddresses) {
+            if (hasId(addr)) {
+              // UPDATE (VALIDAR company_id + clientId) - montando objeto explicitamente
+              const [updated] = await tx.update(clientAddresses)
+                .set({
+                  label: addr.label ?? null,
+                  cep: addr.cep,
+                  logradouro: addr.logradouro,
+                  numero: addr.numero,
+                  complemento: addr.complemento ?? null,
+                  bairro: addr.bairro,
+                  cidade: addr.cidade,
+                  estado: addr.estado,
+                  lat: addr.lat ?? null,
+                  lng: addr.lng ?? null,
+                  isPrimary: addr.isPrimary ?? false,
+                })
+                .where(and(
+                  eq(clientAddresses.id, addr.id),
+                  eq(clientAddresses.clientId, id),
+                  eq(clientAddresses.companyId, req.user.companyId)
+                ))
+                .returning();
+              
+              if (!updated) {
+                throw new Error(`Endereço ${addr.id} não encontrado ou não pertence a este cliente/empresa`);
+              }
+              updatedAddresses.push(updated);
+            } else {
+              // INSERT - montando objeto explicitamente
+              const [newAddr] = await tx.insert(clientAddresses).values({
+                clientId: id,
+                companyId: req.user.companyId,
+                label: addr.label ?? null,
+                cep: addr.cep,
+                logradouro: addr.logradouro,
+                numero: addr.numero,
+                complemento: addr.complemento ?? null,
+                bairro: addr.bairro,
+                cidade: addr.cidade,
+                estado: addr.estado,
+                lat: addr.lat ?? null,
+                lng: addr.lng ?? null,
+                isPrimary: addr.isPrimary ?? false,
+              }).returning();
+              updatedAddresses.push(newAddr);
+            }
+          }
+
+          return { client: updatedClient, addresses: updatedAddresses };
+        });
+
+        trackFeatureUsage(req.user.userId, "clients", "update", req.user.companyId, { id: result.client.id });
+        trackCompanyAudit({
+          userId: req.user.userId,
+          companyId: req.user.companyId,
+          feature: "clients",
+          action: "update",
+          resourceId: result.client.id,
+          description: `Atualizou cliente "${result.client.name}" (${result.addresses.length} endereço(s))`
+        });
+
+        return res.json({ ...result.client, addresses: result.addresses });
+      }
+
+      // Se não enviou addresses, atualizar apenas dados principais (compatibilidade legado)
+      const client = await storage.updateClient(id, validatedClient, req.user.companyId);
       trackFeatureUsage(req.user.userId, "clients", "update", req.user.companyId, { id: client.id });
       trackCompanyAudit({
         userId: req.user.userId,
@@ -1991,6 +2302,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resourceId: client.id,
         description: `Atualizou cliente "${client.name}"`
       });
+
       res.json(client);
     } catch (error: any) {
       console.error("❌ [PUT /clients] erro:", error);
@@ -3500,18 +3812,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         // Buscar todos os técnicos compatíveis
         const allTechnicians = await storage.getTechnicians(companyId);
+        
+        console.log(`\n [FIND-DATE][LOAD] Técnicos carregados do banco: ${allTechnicians.length}`);
+        console.log(` [FIND-DATE][FILTER] Serviço solicitado ID: ${serviceId} (tipo: ${typeof serviceId})`);
+        
         for (const tech of allTechnicians) {
-          if (tech.serviceIds?.includes(serviceId.toString()) && tech.isActive) {
-            responsibles.push({ type: 'technician', id: tech.id, name: tech.name });
+          const serviceIdStr = serviceId.toString();
+          const serviceIdsArray = Array.isArray(tech.serviceIds) ? tech.serviceIds : [];
+          const hasServiceIds = serviceIdsArray.length > 0;
+          const includesService = hasServiceIds && serviceIdsArray.includes(serviceIdStr);
+          const isActive = tech.isActive === true;
+          
+          console.log(`\n  [TÉCNICO] ${tech.name} (ID: ${tech.id})`);
+          console.log(`     - serviceIds: ${hasServiceIds ? `[${serviceIdsArray.join(', ')}]` : 'null/undefined'}`);
+          console.log(`     - isActive: ${tech.isActive}`);
+          console.log(`     - linkedUserId: ${tech.linkedUserId || 'null'}`);
+          console.log(`     - Inclui serviço ${serviceIdStr}? ${includesService}`);
+          
+          if (!isActive) {
+            console.log(`     [DESCARTADO] Técnico está inativo (isActive = ${tech.isActive})`);
+            continue;
           }
+          
+          if (!hasServiceIds) {
+            console.log(`     [DESCARTADO] Sem serviços vinculados (serviceIds = ${tech.serviceIds ?? 'null'})`);
+            continue;
+          }
+          
+          if (!includesService) {
+            console.log(`     [DESCARTADO] Não atende o serviço ${serviceIdStr}. Serviços: [${serviceIdsArray.join(', ')}]`);
+            continue;
+          }
+          
+          console.log(`     [INCLUÍDO] Técnico elegível para o serviço`);
+          responsibles.push({ type: 'technician', id: tech.id, name: tech.name });
         }
 
         // Buscar todas as equipes compatíveis
         const allTeams = await storage.getTeams(companyId);
+        
+        console.log(`\n [FIND-DATE][LOAD] Equipes carregadas do banco: ${allTeams.length}`);
+        
         for (const team of allTeams) {
-          if (team.serviceIds?.includes(serviceId.toString())) {
-            responsibles.push({ type: 'team', id: team.id, name: team.name });
+          const serviceIdStr = serviceId.toString();
+          const serviceIdsArray = Array.isArray(team.serviceIds) ? team.serviceIds : [];
+          const hasServiceIds = serviceIdsArray.length > 0;
+          const includesService = hasServiceIds && serviceIdsArray.includes(serviceIdStr);
+          
+          console.log(`\n  [EQUIPE] ${team.name} (ID: ${team.id})`);
+          console.log(`     - serviceIds: ${hasServiceIds ? `[${serviceIdsArray.join(', ')}]` : 'null/undefined'}`);
+          console.log(`     - Inclui serviço ${serviceIdStr}? ${includesService}`);
+          
+          if (!hasServiceIds) {
+            console.log(`     [DESCARTADO] Sem serviços vinculados`);
+            continue;
           }
+          
+          if (!includesService) {
+            console.log(`     ❌ [DESCARTADO] Não atende o serviço ${serviceIdStr}. Serviços: [${serviceIdsArray.join(', ')}]`);
+            continue;
+          }
+          
+          console.log(`     ✅ [INCLUÍDO] Equipe elegível para o serviço`);
+          responsibles.push({ type: 'team', id: team.id, name: team.name });
         }
       }
 
@@ -4020,6 +4383,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           candidates.push(candidate);
           addedDays.add(dateKey);
           res.write(`data: ${JSON.stringify(candidate)}\n\n`);
+          
+          // 🚀 PERFORMANCE: Parar imediatamente após 10 resultados
+          if (addedDays.size >= 10) {
+            console.log(`\n🎯 [FIND-DATE] Limite de 10 datas atingido. Parando busca.`);
+            break;
+          }
         } else {
           console.log(`  ❌ [DIA DESCARTADO] ${dateKey} - Nenhum responsável atende aos critérios`);
         }
@@ -5711,6 +6080,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Critical error in CEP endpoint:", error);
       res.status(500).json({ message: "Erro interno ao buscar CEP" });
+    }
+  });
+
+  // CNPJ Proxy to avoid CORS
+  app.get("/api/cnpj/:cnpj", async (req, res) => {
+    try {
+      const { cnpj } = req.params;
+      const cleanCnpj = cnpj.replace(/\D/g, '');
+
+      if (cleanCnpj.length !== 14) {
+        return res.status(400).json({ 
+          success: false,
+          message: "CNPJ inválido. Informe um CNPJ com 14 dígitos." 
+        });
+      }
+
+      console.log(`🔍 [CNPJ] Iniciando consulta: ${cleanCnpj}`);
+
+      // Consultar BrasilAPI com timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      try {
+        const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`, {
+          signal: controller.signal,
+          headers: { 'User-Agent': 'RotaFacil/1.0' }
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          console.warn(`⚠️ [CNPJ] BrasilAPI retornou status ${response.status} para ${cleanCnpj}`);
+          return res.status(404).json({ 
+            success: false,
+            message: "CNPJ não encontrado na base de dados da Receita Federal." 
+          });
+        }
+
+        const data = await response.json();
+
+        console.log(`✅ [CNPJ] Consulta bem-sucedida: ${data.razao_social || 'N/A'}`);
+
+        // Mapear para formato padronizado
+        return res.json({
+          success: true,
+          data: {
+            razaoSocial: data.razao_social || "",
+            nomeFantasia: data.nome_fantasia || "",
+            cnpj: data.cnpj || cleanCnpj,
+            email: data.email || "",
+            telefone: data.ddd_telefone_1 ? `(${data.ddd_telefone_1}) ${data.telefone_1 || ""}`.trim() : "",
+            cep: data.cep || "",
+            logradouro: data.logradouro || "",
+            numero: data.numero || "",
+            bairro: data.bairro || "",
+            cidade: data.municipio || "",
+            uf: data.uf || "",
+            situacao: data.descricao_situacao_cadastral || "",
+            cnaePrincipal: data.cnae_fiscal_descricao || ""
+          }
+        });
+
+      } catch (error: any) {
+        clearTimeout(timeoutId);
+
+        if (error.name === 'AbortError') {
+          console.error(`⏱️ [CNPJ] Timeout na consulta de ${cleanCnpj}`);
+          return res.status(504).json({ 
+            success: false,
+            message: "Tempo de consulta excedido. Tente novamente." 
+          });
+        }
+
+        console.error(`❌ [CNPJ] Erro ao consultar BrasilAPI para ${cleanCnpj}:`, error.message);
+        return res.status(500).json({ 
+          success: false,
+          message: "Não foi possível consultar o CNPJ no momento." 
+        });
+      }
+
+    } catch (error: any) {
+      console.error("❌ [CNPJ] Erro crítico no endpoint:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Erro interno ao buscar CNPJ." 
+      });
     }
   });
 

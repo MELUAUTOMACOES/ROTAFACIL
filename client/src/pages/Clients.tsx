@@ -561,12 +561,39 @@ export default function Clients() {
 
                     <div className="flex items-start space-x-2 text-sm text-gray-600 dark:text-zinc-400">
                       <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                      <span className="leading-relaxed">
-                        {client.logradouro}, {client.numero}, {client.bairro}, {client.cidade}
-                        {client.complemento && `, ${client.complemento}`}
-                        <br />
-                        CEP: {client.cep}
-                      </span>
+                      <div className="leading-relaxed flex-1">
+                        {/* Exibir primaryAddress quando disponível (novo formato) */}
+                        {(client as any).primaryAddress ? (
+                          <>
+                            <span>
+                              {(client as any).primaryAddress.logradouro}, {(client as any).primaryAddress.numero}
+                              {(client as any).primaryAddress.bairro && ` - ${(client as any).primaryAddress.bairro}`}
+                            </span>
+                            <br />
+                            <span className="text-xs text-gray-500">
+                              CEP: {(client as any).primaryAddress.cep}
+                            </span>
+                            {/* Mostrar contador quando houver múltiplos endereços */}
+                            {(client as any).addressCount > 1 && (
+                              <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                                + {(client as any).addressCount - 1} endereço{(client as any).addressCount - 1 > 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          /* Fallback para formato legado */
+                          <>
+                            <span>
+                              {client.logradouro}, {client.numero}, {client.bairro}, {client.cidade}
+                              {client.complemento && `, ${client.complemento}`}
+                            </span>
+                            <br />
+                            <span className="text-xs text-gray-500">
+                              CEP: {client.cep}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -620,7 +647,7 @@ export default function Clients() {
 
       {/* Centralized Dialog for All Client Forms */}
       <Dialog open={isFormOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <ClientForm
             client={selectedClient}
             onClose={handleFormClose}

@@ -82,6 +82,10 @@ export default function AppointmentForm({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Estados para múltiplos endereços
+  const [clientAddresses, setClientAddresses] = useState<any[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
+
   // Verificar se o formulário foi aberto a partir do fluxo "Encontre uma Data"
   const isFromFindDate = !!prefilledData && !appointment;
   console.log("📝 [DEBUG] AppointmentForm - isFromFindDate:", isFromFindDate);
@@ -165,21 +169,49 @@ export default function AppointmentForm({
   const selectedServiceId = form.watch("serviceId");
   const selectedService = services.find((s) => s.id === selectedServiceId);
 
-  // Effect to update address fields whenever the selected client changes or clients data is updated
+  // Buscar endereços do cliente ao abrir agendamento existente
   useEffect(() => {
-    if (selectedClient && appointment) {
-      const currentClient = clients.find(c => c.id === selectedClient);
-      if (currentClient) {
-        console.log("🔄 [DEBUG] Atualizando campos de endereço automaticamente:", currentClient);
-        form.setValue("cep", currentClient.cep);
-        form.setValue("logradouro", currentClient.logradouro);
-        form.setValue("numero", currentClient.numero);
-        form.setValue("complemento", currentClient.complemento || "");
-        form.setValue("bairro", currentClient.bairro || "Não informado");
-        form.setValue("cidade", currentClient.cidade || "Não informado");
+    const loadClientAddresses = async () => {
+      if (appointment && selectedClient) {
+        try {
+          const response = await fetch(buildApiUrl(`/api/clients/${selectedClient}`), {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            },
+          });
+          
+          if (response.ok) {
+            const clientData = await response.json();
+            const addresses = clientData.addresses || [];
+            setClientAddresses(addresses);
+            
+            // Detectar qual endereço está sendo usado no agendamento
+            const appointmentAddress = addresses.find((addr: any) => 
+              addr.cep === appointment.cep &&
+              addr.logradouro === appointment.logradouro &&
+              addr.numero === appointment.numero
+            );
+            
+            if (appointmentAddress) {
+              setSelectedAddressId(appointmentAddress.id);
+              console.log("✅ Endereço do agendamento detectado:", appointmentAddress.label || appointmentAddress.logradouro);
+            } else {
+              // Fallback: usar endereço principal
+              const primaryAddress = addresses.find((addr: any) => addr.isPrimary);
+              if (primaryAddress) {
+                setSelectedAddressId(primaryAddress.id);
+                console.log("⚠️ Endereço não encontrado, usando principal:", primaryAddress.label || primaryAddress.logradouro);
+              }
+            }
+          }
+        } catch (error) {
+          console.error("❌ Erro ao buscar endereços do agendamento:", error);
+        }
       }
-    }
-  }, [selectedClient, clients, appointment]);
+    };
+    
+    loadClientAddresses();
+  }, [appointment, selectedClient]);
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertAppointment) => {
@@ -395,69 +427,104 @@ export default function AppointmentForm({
     }
   };
 
-  const handleClientCreated = (client: Client) => {
+  const handleClientCreated = async (client: Client) => {
     setSelectedClient(client.id);
     form.setValue("clientId", client.id);
-    // Auto-fill address fields from client
-    form.setValue("cep", client.cep);
-    form.setValue("logradouro", client.logradouro);
-    form.setValue("numero", client.numero);
-    form.setValue("complemento", client.complemento || "");
-    form.setValue("bairro", client.bairro || "Não informado");
-    form.setValue("cidade", client.cidade || "Não informado");
+    
+    // Buscar endereços do cliente recém-criado
+    try {
+      const response = await fetch(buildApiUrl(`/api/clients/${client.id}`), {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      
+      if (response.ok) {
+        const clientData = await response.json();
+        const addresses = clientData.addresses || [];
+        setClientAddresses(addresses);
+        
+        const primaryAddress = addresses.find((addr: any) => addr.isPrimary);
+        const addressToUse = primaryAddress || addresses[0];
+        
+        if (addressToUse) {
+          setSelectedAddressId(addressToUse.id || null);
+          fillAddressFields(addressToUse);
+        }
+      }
+    } catch (error) {
+      console.error("❌ Erro ao buscar endereços do cliente criado:", error);
+    }
   };
 
-  const handleClientChange = (clientId: string) => {
+  const handleClientChange = async (clientId: string) => {
     const client = clients.find(c => c.id === parseInt(clientId));
     if (client) {
-      console.log("📋 [AUTO-FILL] Cliente selecionado:", {
-        id: client.id,
-        nome: client.name,
-        cep: client.cep,
-        logradouro: client.logradouro,
-        numero: client.numero,
-        bairro: client.bairro,
-        cidade: client.cidade,
-        complemento: client.complemento
-      });
-
+      console.log("📋 [AUTO-FILL] Cliente selecionado:", client.id, client.name);
       setSelectedClient(client.id);
       
-      // Auto-fill address fields from selected client
-      // Validação defensiva: só preencher se o campo não estiver vazio/null
-      const cepValue = client.cep || "";
-      const logradouroValue = client.logradouro || "";
-      const numeroValue = client.numero || "";
-      const complementoValue = client.complemento || "";
-      const bairroValue = client.bairro || "Não informado";
-      const cidadeValue = client.cidade || "Não informado";
-
-      console.log("📋 [AUTO-FILL] Preenchendo campos:", {
-        cep: cepValue,
-        logradouro: logradouroValue,
-        numero: numeroValue,
-        complemento: complementoValue,
-        bairro: bairroValue,
-        cidade: cidadeValue
-      });
-
-      form.setValue("cep", cepValue);
-      form.setValue("logradouro", logradouroValue);
-      form.setValue("numero", numeroValue);
-      form.setValue("complemento", complementoValue);
-      form.setValue("bairro", bairroValue);
-      form.setValue("cidade", cidadeValue);
-
-      // Avisar se algum campo crítico está vazio
-      if (!cepValue || !logradouroValue || !cidadeValue) {
-        console.warn("⚠️ [AUTO-FILL] Cliente com dados incompletos:", {
-          semCep: !cepValue,
-          semLogradouro: !logradouroValue,
-          semCidade: !cidadeValue
+      // Buscar endereços do cliente
+      try {
+        const response = await fetch(buildApiUrl(`/api/clients/${client.id}`), {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
         });
+        
+        if (response.ok) {
+          const clientData = await response.json();
+          const addresses = clientData.addresses || [];
+          
+          console.log("📋 [ADDRESSES] Endereços do cliente:", addresses.length);
+          setClientAddresses(addresses);
+          
+          // Selecionar endereço principal por padrão
+          const primaryAddress = addresses.find((addr: any) => addr.isPrimary);
+          const addressToUse = primaryAddress || addresses[0];
+          
+          if (addressToUse) {
+            setSelectedAddressId(addressToUse.id || null);
+            fillAddressFields(addressToUse);
+          }
+        }
+      } catch (error) {
+        console.error("❌ [ADDRESSES] Erro ao buscar endereços:", error);
+        // Fallback para campos legados
+        const cepValue = client.cep || "";
+        const logradouroValue = client.logradouro || "";
+        const numeroValue = client.numero || "";
+        const complementoValue = client.complemento || "";
+        const bairroValue = client.bairro || "Não informado";
+        const cidadeValue = client.cidade || "Não informado";
+        
+        form.setValue("cep", cepValue);
+        form.setValue("logradouro", logradouroValue);
+        form.setValue("numero", numeroValue);
+        form.setValue("complemento", complementoValue);
+        form.setValue("bairro", bairroValue);
+        form.setValue("cidade", cidadeValue);
       }
     } else {
       console.warn("⚠️ [AUTO-FILL] Cliente não encontrado para ID:", clientId);
+    }
+  };
+
+  const fillAddressFields = (address: any) => {
+    console.log("📋 [AUTO-FILL] Preenchendo campos com endereço:", address);
+    
+    form.setValue("cep", address.cep || "");
+    form.setValue("logradouro", address.logradouro || "");
+    form.setValue("numero", address.numero || "");
+    form.setValue("complemento", address.complemento || "");
+    form.setValue("bairro", address.bairro || "Não informado");
+    form.setValue("cidade", address.cidade || "Não informado");
+  };
+
+  const handleAddressChange = (addressId: string) => {
+    const address = clientAddresses.find(addr => addr.id === parseInt(addressId));
+    if (address) {
+      setSelectedAddressId(address.id);
+      fillAddressFields(address);
     }
   };
 
@@ -834,6 +901,36 @@ export default function AppointmentForm({
                 <AlertCircle className="h-4 w-4 text-amber-600" />
                 <p className="text-sm text-amber-800">
                   Selecione um cliente para ver o endereço do atendimento
+                </p>
+              </div>
+            )}
+
+            {/* Seletor de Endereço (apenas se cliente tiver 2+ endereços) */}
+            {selectedClient && clientAddresses.length > 1 && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">
+                  Endereço para este atendimento *
+                </label>
+                <Select
+                  value={selectedAddressId?.toString() || ""}
+                  onValueChange={handleAddressChange}
+                  disabled={isReadOnly}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o endereço" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientAddresses.map((addr: any) => (
+                      <SelectItem key={addr.id} value={addr.id.toString()}>
+                        {addr.isPrimary && "✓ "}
+                        {addr.label || "Endereço"} - {addr.logradouro}, {addr.numero}
+                        {addr.isPrimary && " (Principal)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {clientAddresses.length} endereços cadastrados. Selecione o endereço onde será realizado este atendimento.
                 </p>
               </div>
             )}

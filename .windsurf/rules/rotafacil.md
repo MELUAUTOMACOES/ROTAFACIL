@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 ✅ PROJECT RULES — ROTA FÁCIL
 
 1. CONTEXTO E OBJETIVO
@@ -126,7 +130,15 @@ Checklist antes de finalizar:
 - build/check sem erro?
 - risco de quebrar multiempresa?
 
-11. COMANDOS ÚTEIS
+11. ARQUITETURA DE DEPLOY
+
+⚠️ Em caso de dúvidas sobre containers, Nginx, backend, proxy ou fluxo de requisição em produção, consultar o arquivo:
+"Arquitetura de Deploy — RotaFácil (Produção).md"
+
+❌ Não assumir comportamento de monolito (frontend + backend juntos)
+✅ Considerar sempre arquitetura com containers separados (frontend, backend, proxy)
+
+12. COMANDOS ÚTEIS
 - pnpm dev
 - pnpm dev:api
 - pnpm dev:web
@@ -135,7 +147,7 @@ Checklist antes de finalizar:
 - pnpm db:push
 - pnpm check
 
-12. ESTILO DAS RESPOSTAS
+13. ESTILO DAS RESPOSTAS
 ✅ Começar com resumo curto.
 ✅ Explicar decisões não triviais.
 ✅ Mostrar antes/depois quando útil.
@@ -144,7 +156,7 @@ Checklist antes de finalizar:
 ✅ Quando houver suposição, sinalizar: “Inferência:”, “Assumindo que...”, “Provavelmente...”.
 ✅ Pode usar: ✅ ❌ 🔧 ⚠️ 📝
 
-13. PRIORIDADES
+14. PRIORIDADES
 1. Segurança
 2. Integridade dos dados
 3. Isolamento multiempresa
@@ -153,21 +165,21 @@ Checklist antes de finalizar:
 6. Performance
 7. Nova feature
 
-14. ROTEIRIZAÇÃO
+15. ROTEIRIZAÇÃO
 ⚠️ osrm_url.txt é crítico; não alterar automaticamente.
 ⚠️ Não remover delays/rate limit de geocodificação sem análise.
 ⚠️ Não alterar contrato de entrada/saída do solve_tsp.py sem ajustar quem chama.
 ⚠️ Se faltar Python/OR-Tools, apenas alertar; não inventar workaround arriscado.
 ⚠️ Redirects antigos de rotas só podem ser removidos após revisar impacto nos fluxos existentes.
 
-15. MODO AUTOMÁTICO POR TIPO DE TAREFA
+16. MODO AUTOMÁTICO POR TIPO DE TAREFA
 - Bug, inconsistência, regressão, vazamento, auth ou multiempresa -> modo INVESTIGAÇÃO: achar causa raiz antes de corrigir.
 - Nova feature ou ajuste localizado -> modo IMPLEMENTAÇÃO CIRÚRGICA: mexer só no necessário.
 - Cadastro, edição, listagem, CSV, vínculo entre cliente/técnico/equipe/veículo/agendamento -> modo REVISÃO CRUD: revisar front + back + schema + storage quando necessário.
 - Schema, migration, company_id, constraints, índices, duplicidade -> modo IMPACTO DE BANCO: mapear tabelas afetadas, risco de dados legados e validação.
 - Pedido de prompt para outro agente -> modo PROMPT BUILDER: gerar prompt claro, específico, em PT-BR e com restrição de escopo.
 
-16. USO AUTOMÁTICO DE SKILLS
+17. USO AUTOMÁTICO DE SKILLS
 Estas rules são sempre a base principal. As skills apenas complementam a execução conforme o tipo da tarefa.
 
 - BUG / INCONSISTÊNCIA / REGRESSÃO / VAZAMENTO / AUTH / MULTIEMPRESA
@@ -191,3 +203,13 @@ Se a tarefa envolver mais de uma natureza, combinar as skills de forma lógica, 
 3. Isolamento multiempresa
 4. Rules do projeto
 5. Skill especializada
+
+18. Docs-internos
+Sempre que uma alteração impactar alguma funcionalidade documentada em `docs-internos`, você deve:
+
+1. identificar quais arquivos `.md` daquela área podem ter ficado desatualizados;
+2. avisar explicitamente quais documentos precisam ser revisados;
+3. propor a atualização desses arquivos junto com a implementação;
+4. não assumir que a documentação continua válida após mudanças estruturais.
+
+Se a alteração envolver clientes, endereços, agendamentos com endereço, roteirização dependente do endereço do cliente ou a tela "Encontre uma Data", revise obrigatoriamente os arquivos `.md` relacionados a essa área.

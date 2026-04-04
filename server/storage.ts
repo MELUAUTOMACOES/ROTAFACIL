@@ -1,6 +1,7 @@
 import {
   type User, type InsertUser,
   type Client, type InsertClient,
+  type ClientAddress, type InsertClientAddress,
   type Service, type InsertService,
   type Technician, type InsertTechnician,
   type Vehicle, type InsertVehicle,
@@ -25,7 +26,7 @@ import {
   type FuelRecord, type InsertFuelRecord,
   type AnalyticsEvent, type InsertAnalyticsEvent,
   type Lead, type InsertLead,
-  users, clients, services, technicians, vehicles, vehicleAssignments, appointments, appointmentHistory, checklists, businessRules, teams, teamMembers, accessSchedules,
+  users, clients, clientAddresses, services, technicians, vehicles, vehicleAssignments, appointments, appointmentHistory, checklists, businessRules, teams, teamMembers, accessSchedules,
   companies, memberships, invitations,
   dateRestrictions,
   routes, routeStops,
@@ -73,6 +74,18 @@ export interface IStorage {
   updateClient(id: number, client: Partial<InsertClient>, companyId: number): Promise<Client>;
   deleteClient(id: number, companyId: number): Promise<boolean>;
   searchClients(query: string, companyId: number, page?: number, limit?: number): Promise<{ data: Client[], total: number }>;
+
+  // Client Addresses — novo suporte a múltiplos endereços
+  getClientAddresses(clientId: number, companyId: number): Promise<ClientAddress[]>;
+  getClientAddress(id: number, companyId: number): Promise<ClientAddress | undefined>;
+  createClientAddress(address: InsertClientAddress, clientId: number, companyId: number): Promise<ClientAddress>;
+  updateClientAddress(id: number, address: Partial<InsertClientAddress>, companyId: number): Promise<ClientAddress>;
+  deleteClientAddress(id: number, companyId: number): Promise<boolean>;
+  hasClientAddresses(clientId: number): Promise<boolean>;
+  
+  // Client com endereços (dual-read)
+  getClientWithAddresses(id: number, companyId: number): Promise<any>;
+  getClientsWithPrimaryAddress(companyId: number, page?: number, limit?: number): Promise<{ data: any[], total: number }>;
 
   // Services
   getServices(companyId: number): Promise<Service[]>;
@@ -491,29 +504,125 @@ export class DatabaseStorage implements IStorage {
 
   async getClients(companyId: number, page: number = 1, limit: number = 20): Promise<{ data: Client[], total: number }> {
     const offset = (page - 1) * limit;
-    const filter = this.byCompany(clients, companyId);
 
-    const [countResult] = await db
-      .select({ count: sql<number>`count(*)` })
+    const [{ count }] = await db.select({ count: sql<number>`count(*)::int` })
       .from(clients)
-      .where(filter);
+      .where(this.byCompany(clients, companyId));
 
-    const total = Number(countResult?.count || 0);
-
-    const data = await db
-      .select()
-      .from(clients)
-      .where(filter)
+    const data = await db.select().from(clients)
+      .where(this.byCompany(clients, companyId))
       .orderBy(sql`${clients.createdAt} DESC`)
       .limit(limit)
       .offset(offset);
 
-    return { data, total };
+    return { data, total: count };
+  }
+
+  async getClientsWithPrimaryAddress(
+    companyId: number,
+    page: number = 1,
+    limit: number = 20
+  ): Promise<{ data: any[], total: number }> {
+    const offset = (page - 1) * limit;
+
+    // Count total
+    const [{ count }] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(clients)
+      .where(this.byCompany(clients, companyId));
+
+    // Buscar clientes
+    const clientsList = await db.select().from(clients)
+      .where(this.byCompany(clients, companyId))
+      .orderBy(sql`${clients.createdAt} DESC`)
+      .limit(limit)
+      .offset(offset);
+
+    // Para cada cliente, buscar endereço principal ou construir fallback
+    const data = await Promise.all(clientsList.map(async (client) => {
+      // Buscar endereço principal da nova tabela
+      const [primaryAddress] = await db.select().from(clientAddresses)
+        .where(and(
+          eq(clientAddresses.clientId, client.id),
+          eq(clientAddresses.isPrimary, true)
+        ));
+
+      // Contar endereços
+      const [{ addressCount }] = await db.select({ addressCount: sql<number>`count(*)::int` })
+        .from(clientAddresses)
+        .where(eq(clientAddresses.clientId, client.id));
+
+      // FALLBACK: Se não houver endereço principal na nova tabela, construir do legado
+      let finalPrimaryAddress = primaryAddress;
+      let finalAddressCount = addressCount;
+
+      if (!primaryAddress && client.cep) {
+        finalPrimaryAddress = {
+          id: null,
+          label: "Endereço Principal",
+          cep: client.cep,
+          logradouro: client.logradouro,
+          numero: client.numero,
+          bairro: client.bairro,
+          cidade: client.cidade,
+          estado: null,
+        };
+        finalAddressCount = 1;
+      }
+
+      return {
+        id: client.id,
+        name: client.name,
+        cpf: client.cpf,
+        email: client.email,
+        phone1: client.phone1,
+        phone2: client.phone2,
+        primaryAddress: finalPrimaryAddress,
+        addressCount: finalAddressCount,
+      };
+    }));
+
+    return { data, total: count };
   }
 
   async getClient(id: number, companyId: number): Promise<Client | undefined> {
-    const [client] = await db.select().from(clients).where(and(eq(clients.id, id), this.byCompany(clients, companyId)));
+    const [client] = await db.select().from(clients)
+      .where(and(eq(clients.id, id), this.byCompany(clients, companyId)));
     return client || undefined;
+  }
+
+  // NOVO: Dual-read - retorna cliente com addresses unificado (legado ou novo)
+  async getClientWithAddresses(id: number, companyId: number): Promise<any> {
+    const client = await this.getClient(id, companyId);
+    if (!client) return undefined;
+
+    // Buscar endereços da nova tabela
+    let addresses = await this.getClientAddresses(id, companyId);
+
+    // FALLBACK: Se não houver endereços na nova tabela, construir do legado
+    if (addresses.length === 0 && client.cep) {
+      addresses = [{
+        id: null, // Indica que é legado
+        clientId: client.id,
+        label: "Endereço Principal",
+        cep: client.cep,
+        logradouro: client.logradouro,
+        numero: client.numero,
+        complemento: client.complemento,
+        bairro: client.bairro,
+        cidade: client.cidade,
+        estado: null, // Não existe em legado
+        lat: client.lat,
+        lng: client.lng,
+        isPrimary: true,
+        companyId: client.companyId,
+        createdAt: client.createdAt,
+      }];
+    }
+
+    return {
+      ...client,
+      addresses, // SEMPRE retorna array
+    };
   }
 
   async getClientByCpf(cpf: string, companyId: number): Promise<Client | undefined> {
@@ -592,6 +701,79 @@ export class DatabaseStorage implements IStorage {
 
     console.log(`Resultados encontrados para "${query}":`, total);
     return { data, total };
+  }
+
+  // Client Addresses
+  async getClientAddresses(clientId: number, companyId: number): Promise<ClientAddress[]> {
+    return await db
+      .select()
+      .from(clientAddresses)
+      .where(and(
+        eq(clientAddresses.clientId, clientId),
+        eq(clientAddresses.companyId, companyId)
+      ))
+      .orderBy(desc(clientAddresses.isPrimary), clientAddresses.createdAt);
+  }
+
+  async getClientAddress(id: number, companyId: number): Promise<ClientAddress | undefined> {
+    const [address] = await db
+      .select()
+      .from(clientAddresses)
+      .where(and(
+        eq(clientAddresses.id, id),
+        eq(clientAddresses.companyId, companyId)
+      ));
+    return address || undefined;
+  }
+
+  async createClientAddress(
+    address: InsertClientAddress,
+    clientId: number,
+    companyId: number
+  ): Promise<ClientAddress> {
+    const [newAddress] = await db
+      .insert(clientAddresses)
+      .values({
+        ...address,
+        clientId,
+        companyId,
+      })
+      .returning();
+    return newAddress;
+  }
+
+  async updateClientAddress(
+    id: number,
+    address: Partial<InsertClientAddress>,
+    companyId: number
+  ): Promise<ClientAddress> {
+    const [updatedAddress] = await db
+      .update(clientAddresses)
+      .set(address)
+      .where(and(
+        eq(clientAddresses.id, id),
+        eq(clientAddresses.companyId, companyId)
+      ))
+      .returning();
+    return updatedAddress;
+  }
+
+  async deleteClientAddress(id: number, companyId: number): Promise<boolean> {
+    const result = await db
+      .delete(clientAddresses)
+      .where(and(
+        eq(clientAddresses.id, id),
+        eq(clientAddresses.companyId, companyId)
+      ));
+    return (result.rowCount || 0) > 0;
+  }
+
+  async hasClientAddresses(clientId: number): Promise<boolean> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(clientAddresses)
+      .where(eq(clientAddresses.clientId, clientId));
+    return (result?.count || 0) > 0;
   }
 
   // Services
