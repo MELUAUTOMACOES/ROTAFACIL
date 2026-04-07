@@ -108,10 +108,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed = false, toggleCo
 
   // State for open submenus
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    "Operações": true, // Default open
+    "Operações": false,
     "Cadastros": false,
     "Administração": false,
-    "Super Admin": true
+    "Super Admin": false
   });
 
   const toggleGroup = (groupTitle: string) => {
