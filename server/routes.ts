@@ -2684,7 +2684,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== VEHICLES ROUTES ====================
 
-  app.get("/api/vehicles", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico']), async (req: any, res) => {
+  // 🔒 administrativo incluído para permitir acesso à tela de Prestadores quando vinculado a técnico
+  app.get("/api/vehicles", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico', 'administrativo']), async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2754,7 +2755,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // 🆕 IMPORTANTE: Esta rota DEVE vir ANTES de /api/vehicles/:id
   // Caso contrário, Express interpreta "available-for-me" como um :id
-  app.get("/api/vehicles/available-for-me", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico']), async (req: any, res) => {
+  // 🔒 administrativo incluído para permitir acesso à tela de Prestadores quando vinculado a técnico
+  app.get("/api/vehicles/available-for-me", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico', 'administrativo']), async (req: any, res) => {
     const requestTimestamp = new Date().toISOString();
     try {
       console.log(`\n${'='.repeat(80)}`);
@@ -5330,7 +5332,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Business Rules routes (prestador/tecnico precisam ler para tela de prestadores)
-  app.get("/api/business-rules", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico']), async (req: any, res) => {
+  // 🔒 administrativo incluído para permitir acesso à tela de Prestadores
+  app.get("/api/business-rules", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico', 'administrativo']), async (req: any, res) => {
     try {
       const businessRules = await storage.getBusinessRules(req.user.companyId);
       res.json(businessRules || {});

@@ -72,8 +72,8 @@ export default function PrestadoresPage() {
     });
     const vehicles = normalizeItems(vehiclesData);
 
-    // 🚗 Buscar veículos disponíveis para o prestador (somente se for prestador/driver)
-    const isVehicleQueryEnabled = user?.role === 'prestador' || user?.role === 'tecnico' || user?.role === 'admin';
+    // 🚗 Buscar veículos disponíveis para o prestador (somente se for prestador/driver/administrativo vinculado a técnico)
+    const isVehicleQueryEnabled = user?.role === 'prestador' || user?.role === 'tecnico' || user?.role === 'admin' || user?.role === 'administrativo';
     
     const { data: availableVehiclesData, isLoading: isLoadingVehicles, error: vehiclesError } = useQuery({
         queryKey: ['/api/vehicles/available-for-me'],
