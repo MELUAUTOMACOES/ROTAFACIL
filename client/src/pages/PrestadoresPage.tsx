@@ -78,13 +78,41 @@ export default function PrestadoresPage() {
     const { data: availableVehiclesData, isLoading: isLoadingVehicles, error: vehiclesError } = useQuery({
         queryKey: ['/api/vehicles/available-for-me'],
         queryFn: async () => {
+            console.log('[VEHICLE_AUTH][FRONT] 🔍 Buscando veículos disponíveis para usuário:', {
+                userId: user?.id,
+                userEmail: user?.email,
+                userRole: user?.role,
+                companyId: user?.companyId,
+                timestamp: new Date().toISOString()
+            });
             const res = await apiRequest("GET", "/api/vehicles/available-for-me");
-            return res.json();
+            const data = await res.json();
+            console.log('[VEHICLE_AUTH][FRONT] 📦 Resposta bruta da API:', data);
+            console.log('[VEHICLE_AUTH][FRONT] 📊 Total de veículos retornados:', Array.isArray(data) ? data.length : 'não é array');
+            if (Array.isArray(data) && data.length > 0) {
+                console.log('[VEHICLE_AUTH][FRONT] 🚗 Veículos:', data.map(v => ({
+                    id: v.id,
+                    plate: v.plate,
+                    model: v.model,
+                    brand: v.brand
+                })));
+            }
+            return data;
         },
         enabled: isVehicleQueryEnabled,
         staleTime: 2 * 60_000,
     });
     const availableVehicles = normalizeItems(availableVehiclesData);
+
+    // 🔍 Log após normalização
+    React.useEffect(() => {
+        if (availableVehiclesData !== undefined) {
+            console.log('[VEHICLE_AUTH][FRONT] ✅ Veículos após normalização:', {
+                count: availableVehicles?.length || 0,
+                vehicles: availableVehicles
+            });
+        }
+    }, [availableVehiclesData, availableVehicles]);
 
     // Buscar lista de prestadores ativos (apenas admin)
     const { data: activeProviders } = useQuery({
@@ -401,9 +429,31 @@ export default function PrestadoresPage() {
     };
 
     const handleStartRoute = async () => {
+        console.log('[VEHICLE_AUTH][FRONT] 🚀 Tentando iniciar rota');
+        console.log('[VEHICLE_AUTH][FRONT] 📋 Estado do usuário:', {
+            userId: user?.id,
+            userEmail: user?.email,
+            userRole: user?.role,
+            companyId: user?.companyId
+        });
+        console.log('[VEHICLE_AUTH][FRONT] 🚗 Veículos disponíveis:', {
+            availableVehicles,
+            count: availableVehicles?.length || 0,
+            isArray: Array.isArray(availableVehicles),
+            isEmpty: !availableVehicles || availableVehicles.length === 0
+        });
+        
         if (routeData?.route?.id) {
             // ✅ Veículo é OBRIGATÓRIO - validar se há veículos disponíveis
             if (!availableVehicles || availableVehicles.length === 0) {
+                console.error('[VEHICLE_AUTH][FRONT] ❌ BLOQUEIO: Nenhum veículo autorizado encontrado');
+                console.error('[VEHICLE_AUTH][FRONT] ❌ Dados do contexto:', {
+                    user,
+                    availableVehiclesData,
+                    availableVehicles,
+                    isLoadingVehicles,
+                    vehiclesError
+                });
                 toast({
                     title: "Nenhum veículo autorizado",
                     description: "Você precisa ter pelo menos 1 veículo autorizado para iniciar uma rota. Contate o administrador.",
@@ -412,6 +462,7 @@ export default function PrestadoresPage() {
                 return;
             }
             
+            console.log('[VEHICLE_AUTH][FRONT] ✅ Validação passou - abrindo modal de seleção de veículo');
             // Mostrar modal de seleção (obrigatório)
             setShowVehicleSelectionModal(true);
         }

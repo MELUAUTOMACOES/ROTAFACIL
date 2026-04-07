@@ -485,6 +485,20 @@ export default function AppointmentForm({
           if (addressToUse) {
             setSelectedAddressId(addressToUse.id || null);
             fillAddressFields(addressToUse);
+          } else {
+            // Fallback: API retornou sem addresses (legado ou versão antiga em produção)
+            // Os campos de endereço estão disponíveis diretamente no root do objeto
+            console.log("📋 [AUTO-FILL] Sem addresses no retorno, usando campos do root (legado)");
+            if (clientData.cep || clientData.logradouro) {
+              fillAddressFields({
+                cep: clientData.cep || "",
+                logradouro: clientData.logradouro || "",
+                numero: clientData.numero || "",
+                complemento: clientData.complemento || "",
+                bairro: clientData.bairro || "Não informado",
+                cidade: clientData.cidade || "Não informado",
+              });
+            }
           }
         }
       } catch (error) {

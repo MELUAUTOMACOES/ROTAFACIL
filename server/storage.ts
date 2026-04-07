@@ -1090,9 +1090,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getVehiclesAvailableForTechnician(technicianId: number, companyId: number): Promise<Vehicle[]> {
-    console.log(`🔍 [STORAGE] getVehiclesAvailableForTechnician - technicianId=${technicianId}, companyId=${companyId}`);
+    console.log(`\n${'─'.repeat(80)}`);
+    console.log(`[VEHICLE_AUTH][STORAGE] 🔍 getVehiclesAvailableForTechnician - INÍCIO`);
+    console.log(`[VEHICLE_AUTH][STORAGE] 📥 Parâmetros recebidos:`, {
+      technicianId,
+      companyId,
+      timestamp: new Date().toISOString()
+    });
     
-    // Buscar veículos autorizados diretamente para o técnico (via technicianId)
+    // ═══════════════════════════════════════════════════════════════
+    // ETAPA 1: Buscar veículos autorizados DIRETAMENTE para o técnico
+    // ═══════════════════════════════════════════════════════════════
+    console.log(`[VEHICLE_AUTH][STORAGE] 🔎 ETAPA 1: Buscando veículos diretos em 'vehicle_assignments'`);
+    console.log(`[VEHICLE_AUTH][STORAGE] Query:`, {
+      table: 'vehicle_assignments JOIN vehicles',
+      where: {
+        'vehicle_assignments.technician_id': technicianId,
+        'vehicle_assignments.company_id': companyId,
+        'vehicle_assignments.is_active': true,
+        'vehicles.company_id': companyId
+      }
+    });
+    
     const directVehicles = await db
       .select({ vehicle: vehicles })
       .from(vehicleAssignments)
@@ -1106,9 +1125,30 @@ export class DatabaseStorage implements IStorage {
         )
       );
 
-    console.log(`📊 [STORAGE] Veículos diretos (technicianId): ${directVehicles.length}`);
+    console.log(`[VEHICLE_AUTH][STORAGE] ✅ Veículos diretos encontrados: ${directVehicles.length}`);
+    if (directVehicles.length > 0) {
+      console.log(`[VEHICLE_AUTH][STORAGE] 🚗 Veículos diretos:`, directVehicles.map(v => ({
+        id: v.vehicle.id,
+        plate: v.vehicle.plate,
+        model: v.vehicle.model,
+        brand: v.vehicle.brand
+      })));
+    } else {
+      console.warn(`[VEHICLE_AUTH][STORAGE] ⚠️ NENHUM veículo direto encontrado para technicianId=${technicianId}`);
+    }
 
-    // Buscar equipes do técnico
+    // ═══════════════════════════════════════════════════════════════
+    // ETAPA 2: Buscar equipes do técnico
+    // ═══════════════════════════════════════════════════════════════
+    console.log(`[VEHICLE_AUTH][STORAGE] 🔎 ETAPA 2: Buscando equipes do técnico em 'team_members'`);
+    console.log(`[VEHICLE_AUTH][STORAGE] Query:`, {
+      table: 'team_members',
+      where: {
+        'team_members.technician_id': technicianId,
+        'team_members.company_id': companyId
+      }
+    });
+    
     const technicianTeams = await db
       .select({ teamId: teamMembers.teamId })
       .from(teamMembers)
@@ -1120,11 +1160,29 @@ export class DatabaseStorage implements IStorage {
       );
 
     const teamIds = technicianTeams.map(t => t.teamId);
-    console.log(`👥 [STORAGE] Técnico pertence a ${technicianTeams.length} equipe(s): [${teamIds.join(', ')}]`);
+    console.log(`[VEHICLE_AUTH][STORAGE] ✅ Técnico pertence a ${technicianTeams.length} equipe(s)`);
+    if (teamIds.length > 0) {
+      console.log(`[VEHICLE_AUTH][STORAGE] 👥 Team IDs: [${teamIds.join(', ')}]`);
+    } else {
+      console.warn(`[VEHICLE_AUTH][STORAGE] ⚠️ Técnico NÃO pertence a nenhuma equipe`);
+    }
 
-    // Buscar veículos autorizados para as equipes do técnico
+    // ═══════════════════════════════════════════════════════════════
+    // ETAPA 3: Buscar veículos autorizados para as equipes do técnico
+    // ═══════════════════════════════════════════════════════════════
     let teamVehicles: { vehicle: Vehicle }[] = [];
     if (teamIds.length > 0) {
+      console.log(`[VEHICLE_AUTH][STORAGE] 🔎 ETAPA 3: Buscando veículos via equipes em 'vehicle_assignments'`);
+      console.log(`[VEHICLE_AUTH][STORAGE] Query:`, {
+        table: 'vehicle_assignments JOIN vehicles',
+        where: {
+          'vehicle_assignments.team_id': `IN [${teamIds.join(', ')}]`,
+          'vehicle_assignments.company_id': companyId,
+          'vehicle_assignments.is_active': true,
+          'vehicles.company_id': companyId
+        }
+      });
+      
       teamVehicles = await db
         .select({ vehicle: vehicles })
         .from(vehicleAssignments)
@@ -1137,33 +1195,74 @@ export class DatabaseStorage implements IStorage {
             eq(vehicles.companyId, companyId)
           )
         );
-      console.log(`📊 [STORAGE] Veículos via equipes: ${teamVehicles.length}`);
+      
+      console.log(`[VEHICLE_AUTH][STORAGE] ✅ Veículos via equipes encontrados: ${teamVehicles.length}`);
+      if (teamVehicles.length > 0) {
+        console.log(`[VEHICLE_AUTH][STORAGE] 🚗 Veículos via equipes:`, teamVehicles.map(v => ({
+          id: v.vehicle.id,
+          plate: v.vehicle.plate,
+          model: v.vehicle.model,
+          brand: v.vehicle.brand
+        })));
+      }
     } else {
-      console.log(`⚠️ [STORAGE] Técnico não pertence a nenhuma equipe`);
+      console.log(`[VEHICLE_AUTH][STORAGE] ⏭️ ETAPA 3: PULADA (técnico não tem equipes)`);
     }
     
-    // Combinar e remover duplicados
+    // ═══════════════════════════════════════════════════════════════
+    // ETAPA 4: Combinar e remover duplicados
+    // ═══════════════════════════════════════════════════════════════
+    console.log(`[VEHICLE_AUTH][STORAGE] 🔄 ETAPA 4: Combinando e removendo duplicados`);
     const allVehicles = [...directVehicles, ...teamVehicles];
+    console.log(`[VEHICLE_AUTH][STORAGE] Total antes de deduplicar: ${allVehicles.length}`);
+    
     const uniqueVehicles = Array.from(
       new Map(allVehicles.map(v => [v.vehicle.id, v.vehicle])).values()
     );
 
-    console.log(`✅ [STORAGE] Total de veículos únicos disponíveis: ${uniqueVehicles.length}`);
+    console.log(`[VEHICLE_AUTH][STORAGE] ✅ Total de veículos ÚNICOS disponíveis: ${uniqueVehicles.length}`);
     if (uniqueVehicles.length > 0) {
-      console.log(`📋 [STORAGE] Placas: ${uniqueVehicles.map(v => v.plate).join(', ')}`);
+      console.log(`[VEHICLE_AUTH][STORAGE] � Veículos finais (únicos):`, uniqueVehicles.map(v => ({
+        id: v.id,
+        plate: v.plate,
+        model: v.model,
+        brand: v.brand
+      })));
+      console.log(`[VEHICLE_AUTH][STORAGE] 📋 Placas: ${uniqueVehicles.map(v => v.plate).join(', ')}`);
     } else {
-      console.warn(`⚠️ [STORAGE] NENHUM veículo disponível para technicianId=${technicianId}`);
-      console.warn(`⚠️ [STORAGE] Verifique se há registros em vehicle_assignments para este técnico ou suas equipes`);
+      console.error(`[VEHICLE_AUTH][STORAGE] ❌ NENHUM veículo disponível para technicianId=${technicianId}`);
+      console.error(`[VEHICLE_AUTH][STORAGE] ❌ Resumo da busca:`);
+      console.error(`[VEHICLE_AUTH][STORAGE]    - Veículos diretos: ${directVehicles.length}`);
+      console.error(`[VEHICLE_AUTH][STORAGE]    - Equipes do técnico: ${teamIds.length}`);
+      console.error(`[VEHICLE_AUTH][STORAGE]    - Veículos via equipes: ${teamVehicles.length}`);
+      console.error(`[VEHICLE_AUTH][STORAGE] ❌ Verifique:`);
+      console.error(`[VEHICLE_AUTH][STORAGE]    1. Se há registros em 'vehicle_assignments' para technicianId=${technicianId}`);
+      console.error(`[VEHICLE_AUTH][STORAGE]    2. Se os registros estão com is_active=true`);
+      console.error(`[VEHICLE_AUTH][STORAGE]    3. Se o técnico pertence a alguma equipe em 'team_members'`);
+      console.error(`[VEHICLE_AUTH][STORAGE]    4. Se as equipes têm veículos autorizados em 'vehicle_assignments'`);
     }
+
+    console.log(`[VEHICLE_AUTH][STORAGE] 📤 Retornando ${uniqueVehicles.length} veículo(s)`);
+    console.log(`${'─'.repeat(80)}\n`);
 
     return uniqueVehicles;
   }
 
   async getVehiclesAvailableForUser(userId: number, companyId: number): Promise<Vehicle[]> {
-    console.log(`🔍 [STORAGE] getVehiclesAvailableForUser - userId=${userId}, companyId=${companyId}`);
+    console.log(`\n${'─'.repeat(80)}`);
+    console.log(`[VEHICLE_AUTH][STORAGE] 🔍 getVehiclesAvailableForUser - INÍCIO`);
+    console.log(`[VEHICLE_AUTH][STORAGE] 📥 Parâmetros recebidos:`, {
+      userId,
+      companyId,
+      timestamp: new Date().toISOString()
+    });
     
     // Buscar técnico vinculado ao usuário
     // PRIORIZA linkedUserId (conta real de login) e usa userId (criador) como fallback
+    console.log(`[VEHICLE_AUTH][STORAGE] 🔎 Buscando técnico na tabela 'technicians' com critérios:`);
+    console.log(`[VEHICLE_AUTH][STORAGE]    - (linked_user_id = ${userId} OR user_id = ${userId})`);
+    console.log(`[VEHICLE_AUTH][STORAGE]    - AND company_id = ${companyId}`);
+    
     const [technician] = await db
       .select()
       .from(technicians)
@@ -1179,12 +1278,40 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
 
     if (!technician) {
-      console.warn(`⚠️ [STORAGE] Nenhum técnico encontrado para userId=${userId}, companyId=${companyId}`);
-      console.warn(`⚠️ [STORAGE] Isso significa que o usuário não tem registro na tabela 'technicians'`);
+      console.error(`[VEHICLE_AUTH][STORAGE] ❌ NENHUM TÉCNICO ENCONTRADO`);
+      console.error(`[VEHICLE_AUTH][STORAGE] ❌ Busca falhou para userId=${userId}, companyId=${companyId}`);
+      console.error(`[VEHICLE_AUTH][STORAGE] ❌ Isso significa que o usuário NÃO tem registro na tabela 'technicians'`);
+      console.error(`[VEHICLE_AUTH][STORAGE] ❌ Possíveis causas:`);
+      console.error(`[VEHICLE_AUTH][STORAGE]    1. O técnico não foi criado`);
+      console.error(`[VEHICLE_AUTH][STORAGE]    2. O linked_user_id do técnico não corresponde ao userId do token`);
+      console.error(`[VEHICLE_AUTH][STORAGE]    3. O user_id (criador) também não corresponde`);
+      console.error(`[VEHICLE_AUTH][STORAGE]    4. O company_id do técnico é diferente do token`);
+      console.log(`[VEHICLE_AUTH][STORAGE] 📤 Retornando array vazio []`);
+      console.log(`${'─'.repeat(80)}\n`);
       return [];
     }
 
-    console.log(`✅ [STORAGE] Técnico encontrado: technicianId=${technician.id}, name=${technician.name}`);
+    console.log(`[VEHICLE_AUTH][STORAGE] ✅ TÉCNICO ENCONTRADO com sucesso!`);
+    console.log(`[VEHICLE_AUTH][STORAGE] 📋 Dados do técnico:`, {
+      technicianId: technician.id,
+      name: technician.name,
+      linkedUserId: technician.linkedUserId,
+      userId: technician.userId,
+      companyId: technician.companyId,
+      email: technician.email,
+      phone: technician.phone
+    });
+    
+    // Verificar qual campo fez o match
+    if (technician.linkedUserId === userId) {
+      console.log(`[VEHICLE_AUTH][STORAGE] ✅ Match encontrado via 'linked_user_id' (campo moderno)`);
+    } else if (technician.userId === userId) {
+      console.log(`[VEHICLE_AUTH][STORAGE] ⚠️ Match encontrado via 'user_id' (campo legado/criador)`);
+    }
+    
+    console.log(`[VEHICLE_AUTH][STORAGE] 🔄 Chamando getVehiclesAvailableForTechnician(${technician.id}, ${companyId})`);
+    console.log(`${'─'.repeat(80)}\n`);
+    
     return await this.getVehiclesAvailableForTechnician(technician.id, companyId);
   }
 

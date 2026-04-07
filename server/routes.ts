@@ -2755,27 +2755,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 🆕 IMPORTANTE: Esta rota DEVE vir ANTES de /api/vehicles/:id
   // Caso contrário, Express interpreta "available-for-me" como um :id
   app.get("/api/vehicles/available-for-me", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico']), async (req: any, res) => {
+    const requestTimestamp = new Date().toISOString();
     try {
-      console.log(`🔍 [VEHICLES-AVAILABLE] Requisição recebida`);
-      console.log(`📋 [VEHICLES-AVAILABLE] User:`, {
+      console.log(`\n${'='.repeat(80)}`);
+      console.log(`[VEHICLE_AUTH][ROUTE] 🔍 INÍCIO - Requisição recebida em ${requestTimestamp}`);
+      console.log(`[VEHICLE_AUTH][ROUTE] 📋 Dados do token JWT:`, {
         userId: req.user?.userId,
         email: req.user?.email,
         role: req.user?.role,
-        companyId: req.user?.companyId
+        companyId: req.user?.companyId,
+        fullUser: req.user
       });
 
       if (!req.user?.companyId) {
-        console.error(`❌ [VEHICLES-AVAILABLE] CompanyId ausente no token`);
+        console.error(`[VEHICLE_AUTH][ROUTE] ❌ ERRO: CompanyId ausente no token`);
+        console.error(`[VEHICLE_AUTH][ROUTE] ❌ Token completo:`, req.user);
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
       }
 
-      console.log(`🔎 [VEHICLES-AVAILABLE] Buscando veículos para userId=${req.user.userId}, companyId=${req.user.companyId}`);
+      console.log(`[VEHICLE_AUTH][ROUTE] 🔎 Chamando storage.getVehiclesAvailableForUser com:`, {
+        userId: req.user.userId,
+        companyId: req.user.companyId
+      });
+      
       const availableVehicles = await storage.getVehiclesAvailableForUser(req.user.userId, req.user.companyId);
-      console.log(`✅ [VEHICLES-AVAILABLE] Encontrados ${availableVehicles.length} veículos`);
+      
+      console.log(`[VEHICLE_AUTH][ROUTE] ✅ Storage retornou ${availableVehicles.length} veículos`);
+      if (availableVehicles.length > 0) {
+        console.log(`[VEHICLE_AUTH][ROUTE] 🚗 Veículos encontrados:`, availableVehicles.map(v => ({
+          id: v.id,
+          plate: v.plate,
+          model: v.model,
+          brand: v.brand
+        })));
+      } else {
+        console.warn(`[VEHICLE_AUTH][ROUTE] ⚠️ NENHUM veículo autorizado encontrado para userId=${req.user.userId}, companyId=${req.user.companyId}`);
+      }
+      
+      console.log(`[VEHICLE_AUTH][ROUTE] 📤 Enviando resposta ao frontend`);
+      console.log(`${'='.repeat(80)}\n`);
+      
       res.json(availableVehicles);
     } catch (error: any) {
-      console.error(`❌ [VEHICLES-AVAILABLE] Erro ao buscar veículos disponíveis:`, error);
-      console.error(`❌ [VEHICLES-AVAILABLE] Stack:`, error.stack);
+      console.error(`\n${'='.repeat(80)}`);
+      console.error(`[VEHICLE_AUTH][ROUTE] ❌ ERRO ao buscar veículos disponíveis:`, error.message);
+      console.error(`[VEHICLE_AUTH][ROUTE] ❌ Stack:`, error.stack);
+      console.error(`[VEHICLE_AUTH][ROUTE] ❌ Request user:`, req.user);
+      console.error(`${'='.repeat(80)}\n`);
       res.status(500).json({ message: error.message });
     }
   });
