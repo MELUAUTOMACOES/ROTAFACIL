@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import UserForm from "@/components/forms/UserForm";
-import { Plus, Edit, Trash2, Mail, Shield, CheckCircle, XCircle, RefreshCw } from "lucide-react";
+import { Plus, Edit, Trash2, Mail, Shield, CheckCircle, XCircle, RefreshCw, UserX, UserCheck } from "lucide-react";
 import { useSafeNavigation } from "@/hooks/useSafeNavigation";
 import type { User } from "@shared/schema";
 import {
@@ -28,7 +28,7 @@ import AccessSchedules from "./AccessSchedules";
 export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [userToDeactivate, setUserToDeactivate] = useState<User | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -44,7 +44,7 @@ export default function UserManagement() {
     ]
   });
 
-  // Query para buscar usuários E convites pendentes
+  // Query para buscar usuários (3 grupos)
   const { data: usersData, isLoading } = useQuery({
     queryKey: ["/api/company/users"],
     queryFn: async () => {
@@ -58,30 +58,60 @@ export default function UserManagement() {
     },
   });
   
-  // Separar usuários ativos e convites pendentes
-  const users = normalizeItems<User>(usersData?.users || []);
+  // Separar os 3 grupos
+  const activeUsers = normalizeItems<User>(usersData?.activeUsers || []);
+  const inactiveUsers = normalizeItems<User>(usersData?.inactiveUsers || []);
   const pendingInvites = usersData?.pendingInvites || [];
 
-  // Mutation para deletar usuário
-  const deleteMutation = useMutation({
+  // Mutation para desativar usuário
+  const deactivateMutation = useMutation({
     mutationFn: async (userId: number) => {
-      const response = await fetch(buildApiUrl(`/api/users/${userId}`), {
-        method: "DELETE",
+      const response = await fetch(buildApiUrl(`/api/company/users/${userId}/deactivate`), {
+        method: "PATCH",
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Erro ao deletar usuário');
+        throw new Error(error.message || 'Erro ao desativar usuário');
       }
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/company/users"] });
       toast({
-        title: "Usuário deletado",
-        description: "O usuário foi removido com sucesso.",
+        title: "Usuário desativado",
+        description: "O acesso do usuário foi desativado nesta empresa.",
       });
-      setUserToDelete(null);
+      setUserToDeactivate(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erro",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation para reativar usuário
+  const reactivateMutation = useMutation({
+    mutationFn: async (userId: number) => {
+      const response = await fetch(buildApiUrl(`/api/company/users/${userId}/reactivate`), {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Erro ao reativar usuário');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/users"] });
+      toast({
+        title: "Usuário reativado",
+        description: "O acesso do usuário foi reativado nesta empresa.",
+      });
     },
     onError: (error: Error) => {
       toast({
@@ -130,14 +160,18 @@ export default function UserManagement() {
     setIsFormOpen(true);
   };
 
-  const handleDelete = (user: User) => {
-    setUserToDelete(user);
+  const handleDeactivate = (user: User) => {
+    setUserToDeactivate(user);
   };
 
-  const confirmDelete = () => {
-    if (userToDelete) {
-      deleteMutation.mutate(userToDelete.id);
+  const confirmDeactivate = () => {
+    if (userToDeactivate) {
+      deactivateMutation.mutate(userToDeactivate.id);
     }
+  };
+
+  const handleReactivate = (userId: number) => {
+    reactivateMutation.mutate(userId);
   };
 
   const handleResendEmail = (userId: number) => {
@@ -230,54 +264,16 @@ export default function UserManagement() {
               {isLoading ? (
                 <div className="text-center py-8">Carregando usuários...</div>
               ) : (
-                <div className="space-y-4">
-                  {/* Convites Pendentes */}
-                  {pendingInvites.length > 0 && (
-                    <div className="mb-6">
+                <div className="space-y-6">
+                  {/* Usuários Ativos */}
+                  {activeUsers.length > 0 && (
+                    <div>
                       <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-                        <Mail className="w-4 h-4" />
-                        Convites Pendentes ({pendingInvites.length})
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        Usuários Ativos ({activeUsers.length})
                       </h3>
                       <div className="space-y-2">
-                        {pendingInvites.map((invite: any) => (
-                          <Card key={invite.id} className="bg-yellow-50 border-yellow-200">
-                            <CardContent className="p-4">
-                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-start gap-3">
-                                    <Mail className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
-                                    <div className="min-w-0">
-                                      <p className="font-medium truncate">{invite.email}</p>
-                                      <p className="text-sm text-muted-foreground line-clamp-2">
-                                        Convite enviado • Papel: {invite.role} • Aguardando aceite
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                                <Badge variant="outline" className="text-yellow-700 border-yellow-700 shrink-0">
-                                  Pendente
-                                </Badge>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Usuários Ativos */}
-                  {users.length === 0 && pendingInvites.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      Nenhum usuário cadastrado ainda.
-                    </div>
-                  ) : (
-                    <>
-                      {users.length > 0 && (
-                        <h3 className="text-sm font-semibold text-muted-foreground mb-3">
-                          Usuários Ativos ({users.length})
-                        </h3>
-                      )}
-                      {users.map((user: User) => (
+                        {activeUsers.map((user: User) => (
                     <Card key={user.id} className="overflow-hidden">
                       <CardContent className="p-4 min-w-0">
                         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
@@ -361,18 +357,106 @@ export default function UserManagement() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleDelete(user)}
-                              className="flex-1 lg:flex-none text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                              onClick={() => handleDeactivate(user)}
+                              className="flex-1 lg:flex-none text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200"
                             >
-                              <Trash2 className="w-4 h-4" />
-                              <span className="lg:hidden ml-2">Excluir</span>
+                              <UserX className="w-4 h-4" />
+                              <span className="lg:hidden ml-2">Desativar</span>
                             </Button>
                           </div>
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
-                    </>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Usuários Inativos */}
+                  {inactiveUsers.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                        <XCircle className="w-4 h-4 text-red-600" />
+                        Usuários Desativados ({inactiveUsers.length})
+                      </h3>
+                      <div className="space-y-2">
+                        {inactiveUsers.map((user: User) => (
+                          <Card key={user.id} className="bg-gray-50 border-gray-200">
+                            <CardContent className="p-4">
+                              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                                    <h3 className="font-semibold text-lg max-w-full truncate">{user.name}</h3>
+                                    {getRoleBadge(user.role)}
+                                    <Badge variant="outline" className="text-red-600 border-red-600 shrink-0">
+                                      <XCircle className="w-3 h-3 mr-1" />
+                                      INATIVO
+                                    </Badge>
+                                  </div>
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-muted-foreground">
+                                    <div className="flex items-center gap-1 min-w-0">
+                                      <Mail className="w-4 h-4 shrink-0" />
+                                      <span className="truncate">{user.email}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleReactivate(user.id)}
+                                  disabled={reactivateMutation.isPending}
+                                  className="w-full lg:w-auto text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200"
+                                >
+                                  <UserCheck className="w-4 h-4" />
+                                  <span className="ml-2">Reativar Acesso</span>
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Convites Pendentes */}
+                  {pendingInvites.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                        <Mail className="w-4 h-4" />
+                        Convites Pendentes ({pendingInvites.length})
+                      </h3>
+                      <div className="space-y-2">
+                        {pendingInvites.map((invite: any) => (
+                          <Card key={invite.id} className="bg-yellow-50 border-yellow-200">
+                            <CardContent className="p-4">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start gap-3">
+                                    <Mail className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
+                                    <div className="min-w-0">
+                                      <p className="font-medium truncate">{invite.email}</p>
+                                      <p className="text-sm text-muted-foreground line-clamp-2">
+                                        Convite enviado • Papel: {invite.role} • Aguardando aceite
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <Badge variant="outline" className="text-yellow-700 border-yellow-700 shrink-0">
+                                  Pendente
+                                </Badge>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Mensagem de vazio */}
+                  {activeUsers.length === 0 && inactiveUsers.length === 0 && pendingInvites.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Nenhum usuário cadastrado ainda.
+                    </div>
                   )}
                 </div>
               )}
@@ -385,23 +469,23 @@ export default function UserManagement() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog de confirmação de exclusão */}
-      <AlertDialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>
+      {/* Dialog de confirmação de desativação */}
+      <AlertDialog open={!!userToDeactivate} onOpenChange={() => setUserToDeactivate(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar Desativação</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir o usuário <strong>{userToDelete?.name}</strong>?
-              Esta ação não pode ser desfeita e todos os dados associados serão removidos.
+              Tem certeza que deseja desativar o acesso de <strong>{userToDeactivate?.name}</strong> nesta empresa?
+              O usuário não poderá mais acessar o sistema desta empresa, mas poderá ser reativado a qualquer momento.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700"
+              onClick={confirmDeactivate}
+              className="bg-orange-600 hover:bg-orange-700"
             >
-              Excluir
+              Desativar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

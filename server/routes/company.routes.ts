@@ -265,57 +265,77 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
     try {
       const companyId = req.user.companyId;
 
-      // Buscar memberships da empresa
-      const memberships = await storage.getMembershipsByCompanyId(companyId);
+      console.log(`📋 [COMPANY USERS] Listando usuários da empresa ${companyId}...`);
 
-      // Buscar dados dos usuários
-      const usersWithRoles = await Promise.all(
-        memberships.map(async (membership) => {
-          const user = await storage.getUserById(membership.userId);
-          if (!user) return null;
+      // Buscar TODAS as memberships da empresa (ativas E inativas)
+      const allMemberships = await storage.getAllMembershipsByCompanyId(companyId);
 
-          // Retornar TODOS os campos do usuário + role da membership
-          const { password, emailVerificationToken, ...userWithoutSensitiveData } = user;
-          
-          // Mapear role da membership (ADMIN, OPERADOR, ADMINISTRATIVO) para formato do frontend (admin, operador, user)
-          const roleMap: Record<string, string> = {
-            'ADMIN': 'admin',
-            'OPERADOR': 'operador',
-            'ADMINISTRATIVO': 'user',
-            'TECNICO': 'tecnico',
-            'PRESTADOR': 'prestador',
-          };
-          const normalizedRole = roleMap[membership.role] || membership.role.toLowerCase();
-          
-          return {
-            ...userWithoutSensitiveData,
-            name: membership.displayName || user.name,  // Nome específico da empresa ou nome global
-            role: normalizedRole,  // Role normalizada para o frontend (minúsculo)
-            isActive: membership.isActive,  // Status específico da empresa (da membership)
-          };
-        })
+      console.log(`✅ [COMPANY USERS] Total de memberships: ${allMemberships.length}`);
+
+      // Separar memberships ativas e inativas
+      const activeMemberships = allMemberships.filter(m => m.isActive);
+      const inactiveMemberships = allMemberships.filter(m => !m.isActive);
+
+      console.log(`   - Ativas: ${activeMemberships.length}`);
+      console.log(`   - Inativas: ${inactiveMemberships.length}`);
+
+      // Função helper para mapear membership em user data
+      const mapMembershipToUser = async (membership: any) => {
+        const user = await storage.getUserById(membership.userId);
+        if (!user) return null;
+
+        const { password, emailVerificationToken, ...userWithoutSensitiveData } = user;
+        
+        const roleMap: Record<string, string> = {
+          'ADMIN': 'admin',
+          'OPERADOR': 'operador',
+          'ADMINISTRATIVO': 'user',
+          'TECNICO': 'tecnico',
+          'PRESTADOR': 'prestador',
+        };
+        const normalizedRole = roleMap[membership.role] || membership.role.toLowerCase();
+        
+        return {
+          ...userWithoutSensitiveData,
+          name: membership.displayName || user.name,
+          role: normalizedRole,
+          isActive: membership.isActive,
+        };
+      };
+
+      // Buscar dados dos usuários ativos
+      const activeUsersData = await Promise.all(
+        activeMemberships.map(mapMembershipToUser)
       );
 
-      // Buscar convites pendentes E expirados (excluíndo apenas accepted e cancelled)
+      // Buscar dados dos usuários inativos
+      const inactiveUsersData = await Promise.all(
+        inactiveMemberships.map(mapMembershipToUser)
+      );
+
+      // Buscar convites pendentes
       const invitations = await storage.getInvitationsByCompanyId(companyId);
       const now = new Date();
       const pendingInvites = invitations
-        .filter(inv => inv.status === 'pending') // pending inclui expirados (derivado)
+        .filter(inv => inv.status === 'pending')
         .map(inv => ({
           id: inv.id,
           email: inv.email,
-          displayName: inv.displayName, // Nome pré-cadastrado pelo admin
+          displayName: inv.displayName,
           role: inv.role,
           phone: inv.phone,
-          status: inv.expiresAt < now ? 'expired' : 'pending', // Estado derivado para o frontend
+          status: inv.expiresAt < now ? 'expired' : 'pending',
           expiresAt: inv.expiresAt,
           createdAt: inv.createdAt,
           resentAt: inv.resentAt,
           preRegistered: inv.preRegistered,
         }));
 
+      console.log(`   - Convites pendentes: ${pendingInvites.length}`);
+
       res.json({
-        users: usersWithRoles.filter(Boolean),
+        activeUsers: activeUsersData.filter(Boolean),
+        inactiveUsers: inactiveUsersData.filter(Boolean),
         pendingInvites,
       });
     } catch (error: any) {
@@ -529,6 +549,86 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
     } catch (error: any) {
       console.error('❌ Erro ao cancelar convite:', error);
       res.status(500).json({ message: error.message || 'Erro ao cancelar convite' });
+    }
+  });
+
+  // ==================== DESATIVAÇÃO E REATIVAÇÃO DE USUÁRIOS ====================
+
+  // Desativar acesso de usuário na empresa (soft delete na membership)
+  app.patch("/api/company/users/:userId/deactivate", authenticateToken, requireCompanyAdmin, async (req: any, res) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const companyId = req.user.companyId;
+      const adminUserId = req.user.userId;
+
+      if (isNaN(userId)) {
+        return res.status(400).json({ message: 'ID de usuário inválido.' });
+      }
+
+      // Não permitir desativar a si mesmo
+      if (userId === adminUserId) {
+        return res.status(400).json({ 
+          message: "Você não pode desativar sua própria conta." 
+        });
+      }
+
+      // Verificar se membership existe e está ativa
+      const membership = await storage.getMembership(userId, companyId);
+      if (!membership) {
+        return res.status(404).json({ 
+          message: "Usuário não encontrado nesta empresa." 
+        });
+      }
+
+      // Desativar membership (soft delete - NÃO mexe em users.is_active)
+      await storage.deactivateMembership(userId, companyId);
+
+      console.log(`🚫 [DEACTIVATE] Membership desativada: user ${userId} na empresa ${companyId}`);
+
+      res.json({ 
+        message: "Acesso do usuário desativado nesta empresa com sucesso." 
+      });
+    } catch (error: any) {
+      console.error('❌ Erro ao desativar usuário:', error);
+      res.status(500).json({ message: error.message || 'Erro ao desativar usuário' });
+    }
+  });
+
+  // Reativar acesso de usuário na empresa
+  app.patch("/api/company/users/:userId/reactivate", authenticateToken, requireCompanyAdmin, async (req: any, res) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const companyId = req.user.companyId;
+
+      if (isNaN(userId)) {
+        return res.status(400).json({ message: 'ID de usuário inválido.' });
+      }
+
+      // Buscar membership (inclusive inativa)
+      const membership = await storage.getMembershipIncludingInactive(userId, companyId);
+      if (!membership) {
+        return res.status(404).json({ 
+          message: "Usuário não encontrado nesta empresa." 
+        });
+      }
+
+      if (membership.isActive) {
+        return res.status(400).json({ 
+          message: "Este usuário já está ativo nesta empresa." 
+        });
+      }
+
+      // Reativar membership (NÃO mexe em users.is_active)
+      await storage.reactivateMembership(userId, companyId);
+
+      console.log(`✅ [REACTIVATE] Membership reativada: user ${userId} na empresa ${companyId}`);
+
+      res.json({ 
+        message: "Acesso do usuário reativado nesta empresa com sucesso." 
+      });
+    } catch (error: any) {
+      console.error('❌ Erro ao reativar usuário:', error);
+      res.status(500).json({ message: error.message || 'Erro ao reativar usuário' });
     }
   });
 
@@ -812,55 +912,74 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
 
       console.log(`✅ [ACCEPT EXISTING] Email validado!`);
 
-      // Verificar se já é membro
+      // Verificar se já é membro (inclusive memberships inativas)
       console.log(`🔍 [ACCEPT EXISTING] Verificando membership existente...`);
       console.log(`   - User ID: ${req.user.userId}`);
       console.log(`   - Company ID: ${invitation.companyId}`);
       
-      const existingMembership = await storage.getMembership(req.user.userId, invitation.companyId);
+      const existingMembership = await storage.getMembershipIncludingInactive(req.user.userId, invitation.companyId);
       
-      if (existingMembership) {
-        console.log(`⚠️ [ACCEPT EXISTING] ERRO: Usuário já possui membership!`);
+      if (existingMembership && existingMembership.isActive) {
+        console.log(`⚠️ [ACCEPT EXISTING] ERRO: Usuário já possui membership ATIVA!`);
         console.log(`   - Membership ID: ${existingMembership.id}`);
         console.log(`   - Role: ${existingMembership.role}`);
-        console.log(`   - Ativo: ${existingMembership.isActive}`);
         return res.status(400).json({
           message: "Você já faz parte desta empresa."
         });
       }
 
-      console.log(`✅ [ACCEPT EXISTING] Nenhuma membership existente encontrada`);
-      console.log(`📝 [ACCEPT EXISTING] INICIANDO CRIAÇÃO DA MEMBERSHIP...`);
-      
-      // Criar membership — protegida por uniqueIndex (sem duplicata possível)
       let membership: any;
       let updatedInvitation: any;
 
       // 🔒 TRANSAÇÃO ATÔMICA: membership + invitation
       await db.transaction(async (trx) => {
-        const [createdMembership] = await trx.insert(
-          (await import('@shared/schema')).memberships
-        ).values({
-          userId: req.user.userId,
-          companyId: invitation.companyId,
-          role: invitation.role,
-          displayName: invitation.displayName,
-          isActive: true,
-        }).returning();
-        membership = createdMembership;
+        const { memberships: membershipsTable, invitations: invitationsTable } = await import('@shared/schema');
+        const { eq: eqFn, and: andFn } = await import('drizzle-orm');
 
-        const [updated] = await trx.update(
-          (await import('@shared/schema')).invitations
-        ).set({ status: 'accepted', acceptedAt: new Date() }).where(
-          (await import('drizzle-orm')).eq(
-            (await import('@shared/schema')).invitations.id,
-            invitation.id
-          )
-        ).returning();
+        if (existingMembership && !existingMembership.isActive) {
+          // CASO 2: Membership inativa já existe → REATIVAR
+          console.log(`� [ACCEPT EXISTING] Membership inativa encontrada → REATIVANDO...`);
+          console.log(`   - Membership ID: ${existingMembership.id}`);
+          
+          const [reactivatedMembership] = await trx.update(membershipsTable)
+            .set({ 
+              isActive: true,
+              role: invitation.role,  // Atualizar role se mudou
+              displayName: invitation.displayName  // Atualizar nome se mudou
+            })
+            .where(andFn(
+              eqFn(membershipsTable.userId, req.user.userId),
+              eqFn(membershipsTable.companyId, invitation.companyId)
+            ))
+            .returning();
+          membership = reactivatedMembership;
+
+          console.log(`✅ [ACCEPT EXISTING] Membership reativada (ID: ${membership.id})`);
+        } else {
+          // CASO 3: Membership não existe → CRIAR NOVA
+          console.log(`📝 [ACCEPT EXISTING] Nenhuma membership existente → CRIANDO NOVA...`);
+          
+          const [createdMembership] = await trx.insert(membershipsTable).values({
+            userId: req.user.userId,
+            companyId: invitation.companyId,
+            role: invitation.role,
+            displayName: invitation.displayName,
+            isActive: true,
+          }).returning();
+          membership = createdMembership;
+
+          console.log(`✅ [ACCEPT EXISTING] Membership criada (ID: ${membership.id})`);
+        }
+
+        // Marcar convite como aceito
+        const [updated] = await trx.update(invitationsTable)
+          .set({ status: 'accepted', acceptedAt: new Date() })
+          .where(eqFn(invitationsTable.id, invitation.id))
+          .returning();
         updatedInvitation = updated;
       });
 
-      console.log(`✅ [ACCEPT EXISTING] Membership criada (ID: ${membership.id}), convite aceito`);
+      console.log(`✅ [ACCEPT EXISTING] Processo concluído: user ${req.user.email} na empresa ${invitation.companyId}`);
 
       console.log(`✅ [ACCEPT EXISTING] Processo concluído: user ${req.user.email} na empresa ${invitation.companyId}`);
 

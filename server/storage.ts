@@ -178,8 +178,12 @@ export interface IStorage {
   createMembership(membership: InsertMembership): Promise<Membership>;
   getMembershipsByUserId(userId: number): Promise<Membership[]>;
   getMembershipsByCompanyId(companyId: number): Promise<Membership[]>;
+  getAllMembershipsByCompanyId(companyId: number): Promise<Membership[]>;
   getMembership(userId: number, companyId: number): Promise<Membership | undefined>;
+  getMembershipIncludingInactive(userId: number, companyId: number): Promise<Membership | undefined>;
   updateMembershipRole(userId: number, companyId: number, role: string): Promise<Membership>;
+  deactivateMembership(userId: number, companyId: number): Promise<Membership>;
+  reactivateMembership(userId: number, companyId: number): Promise<Membership>;
   deleteMembership(userId: number, companyId: number): Promise<boolean>;
 
   // Invitations
@@ -187,6 +191,7 @@ export interface IStorage {
   getInvitationByToken(token: string): Promise<Invitation | undefined>;
   getInvitationById(id: number): Promise<Invitation | undefined>;
   getInvitationsByCompanyId(companyId: number): Promise<Invitation[]>;
+  getInvitationsByEmail(email: string): Promise<Invitation[]>;
   updateInvitationStatus(id: number, status: string): Promise<Invitation>;
   cancelInvitation(id: number, cancelledBy: number): Promise<Invitation>;
   resendInvitation(id: number, newToken: string, newExpiresAt: Date): Promise<Invitation>;
@@ -1918,6 +1923,44 @@ export class DatabaseStorage implements IStorage {
     return (result.rowCount || 0) > 0;
   }
 
+  async getAllMembershipsByCompanyId(companyId: number): Promise<Membership[]> {
+    return await db.select().from(memberships)
+      .where(eq(memberships.companyId, companyId));
+    // SEM filtro de isActive - retorna todas (ativas e inativas)
+  }
+
+  async getMembershipIncludingInactive(userId: number, companyId: number): Promise<Membership | undefined> {
+    const [membership] = await db.select().from(memberships)
+      .where(and(
+        eq(memberships.userId, userId),
+        eq(memberships.companyId, companyId)
+      ));
+    // SEM filtro de isActive - retorna inclusive inativas
+    return membership || undefined;
+  }
+
+  async deactivateMembership(userId: number, companyId: number): Promise<Membership> {
+    const [membership] = await db.update(memberships)
+      .set({ isActive: false })
+      .where(and(
+        eq(memberships.userId, userId),
+        eq(memberships.companyId, companyId)
+      ))
+      .returning();
+    return membership;
+  }
+
+  async reactivateMembership(userId: number, companyId: number): Promise<Membership> {
+    const [membership] = await db.update(memberships)
+      .set({ isActive: true })
+      .where(and(
+        eq(memberships.userId, userId),
+        eq(memberships.companyId, companyId)
+      ))
+      .returning();
+    return membership;
+  }
+
   // Date Restrictions (feriados / indisponibilidades por técnico/equipe)
   async getDateRestrictions(companyId: number, start?: Date, end?: Date): Promise<DateRestriction[]> {
     const baseWhere = this.byCompany(dateRestrictions, companyId);
@@ -1979,6 +2022,12 @@ export class DatabaseStorage implements IStorage {
   async getInvitationsByCompanyId(companyId: number): Promise<Invitation[]> {
     return await db.select().from(invitations)
       .where(eq(invitations.companyId, companyId));
+  }
+
+  async getInvitationsByEmail(email: string): Promise<Invitation[]> {
+    return await db.select().from(invitations)
+      .where(eq(invitations.email, email));
+    // Email já vem normalizado (lowercase) do JWT
   }
 
   async updateInvitationStatus(id: number, status: string): Promise<Invitation> {

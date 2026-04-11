@@ -38,6 +38,7 @@ import LgpdAccept from "./pages/LgpdAccept";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import CookiePolicy from "./pages/CookiePolicy";
 import AgendarDemonstracao from "./pages/AgendarDemonstracao";
+import AccessPending from "./pages/AccessPending";
 import Layout from "./components/Layout";
 import NotFound from "@/pages/not-found";
 
@@ -82,6 +83,15 @@ function AppRoutes() {
   // @ts-ignore - lgpdAccepted será retornado pelo /api/auth/me
   if (!user.lgpdAccepted) {
     return <LgpdAccept />;
+  }
+
+  // 🏢 Multiempresa: Se usuário não tem empresa ativa, redirecionar para tela neutra
+  // EXCETO se está em rota de aceite de convite (precisa completar o fluxo)
+  const [location] = useLocation();
+  const isConviteRoute = location.startsWith('/convite/');
+  
+  if (!user.companyId && !isConviteRoute) {
+    return <AccessPending />;
   }
 
   // Rotas autenticadas

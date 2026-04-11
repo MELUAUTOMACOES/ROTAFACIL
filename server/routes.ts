@@ -1897,6 +1897,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 🏢 Multiempresa - Buscar convites pendentes do usuário autenticado
+  app.get("/api/auth/my-invitations", authenticateToken, async (req: any, res) => {
+    try {
+      const userEmail = req.user.email; // Email do JWT (já vem normalizado)
+
+      console.log(`📧 [MY INVITATIONS] Buscando convites para: ${userEmail}`);
+
+      // Buscar todos os convites para este email
+      const invitations = await storage.getInvitationsByEmail(userEmail);
+
+      // Filtrar apenas pendentes e não expirados
+      const now = new Date();
+      const validInvitations = invitations.filter(inv => 
+        inv.status === 'pending' && inv.expiresAt > now
+      );
+
+      console.log(`✅ [MY INVITATIONS] Encontrados ${validInvitations.length} convites válidos`);
+
+      // Enriquecer com dados da empresa
+      const enrichedInvitations = await Promise.all(
+        validInvitations.map(async (inv) => {
+          const company = await storage.getCompanyById(inv.companyId);
+          return {
+            id: inv.id,
+            token: inv.token,
+            email: inv.email,
+            role: inv.role,
+            company: company ? {
+              id: company.id,
+              name: company.name,
+              cnpj: company.cnpj,
+            } : null,
+            displayName: inv.displayName,
+            expiresAt: inv.expiresAt,
+            createdAt: inv.createdAt,
+            isExpired: false, // Já filtrado acima
+          };
+        })
+      );
+
+      res.json({
+        invitations: enrichedInvitations,
+      });
+    } catch (error: any) {
+      console.error("❌ [MY INVITATIONS] Erro:", error);
+      res.status(500).json({ message: error.message || "Erro ao buscar convites" });
+    }
+  });
+
   // Clients routes
   app.get("/api/clients", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
