@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import UserForm from "@/components/forms/UserForm";
-import { Plus, Edit, Trash2, Mail, Shield, CheckCircle, XCircle, RefreshCw, UserX, UserCheck } from "lucide-react";
+import { Plus, Edit, Trash2, Mail, Shield, CheckCircle, XCircle, RefreshCw, UserX, UserCheck, X, Send, Clock, Calendar } from "lucide-react";
 import { useSafeNavigation } from "@/hooks/useSafeNavigation";
 import type { User } from "@shared/schema";
 import {
@@ -122,6 +122,64 @@ export default function UserManagement() {
     },
   });
 
+  // Mutation para reenviar convite pendente
+  const resendInviteMutation = useMutation({
+    mutationFn: async (invitationId: number) => {
+      const response = await fetch(buildApiUrl(`/api/invitations/${invitationId}/resend`), {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Erro ao reenviar convite');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/users"] });
+      toast({
+        title: "Convite reenviado",
+        description: "O convite foi reenviado com sucesso.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erro",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation para cancelar convite pendente
+  const cancelInviteMutation = useMutation({
+    mutationFn: async (invitationId: number) => {
+      const response = await fetch(buildApiUrl(`/api/invitations/${invitationId}/cancel`), {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Erro ao cancelar convite');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/users"] });
+      toast({
+        title: "Convite cancelado",
+        description: "O convite foi cancelado com sucesso.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erro",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // Mutation para reenviar email de verificação
   const resendEmailMutation = useMutation({
     mutationFn: async (userId: number) => {
@@ -176,6 +234,14 @@ export default function UserManagement() {
 
   const handleResendEmail = (userId: number) => {
     resendEmailMutation.mutate(userId);
+  };
+
+  const handleResendInvite = (invitationId: number) => {
+    resendInviteMutation.mutate(invitationId);
+  };
+
+  const handleCancelInvite = (invitationId: number) => {
+    cancelInviteMutation.mutate(invitationId);
   };
 
   const getRoleBadge = (role: string) => {
@@ -429,21 +495,69 @@ export default function UserManagement() {
                         {pendingInvites.map((invite: any) => (
                           <Card key={invite.id} className="bg-yellow-50 border-yellow-200">
                             <CardContent className="p-4">
-                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-start gap-3">
-                                    <Mail className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
-                                    <div className="min-w-0">
-                                      <p className="font-medium truncate">{invite.email}</p>
-                                      <p className="text-sm text-muted-foreground line-clamp-2">
-                                        Convite enviado • Papel: {invite.role} • Aguardando aceite
-                                      </p>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Mail className="w-5 h-5 text-yellow-600 shrink-0" />
+                                    <h3 className="font-semibold text-lg truncate">{invite.displayName || invite.email}</h3>
+                                    <Badge variant="outline" className="text-yellow-700 border-yellow-700 shrink-0">
+                                      Pendente
+                                    </Badge>
+                                  </div>
+
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-muted-foreground">
+                                    <div className="flex items-center gap-1 min-w-0">
+                                      <Mail className="w-4 h-4 shrink-0" />
+                                      <span className="truncate">{invite.email}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Shield className="w-4 h-4 shrink-0" />
+                                      <span>{getRoleBadge(invite.role)}</span>
                                     </div>
                                   </div>
+
+                                  <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted-foreground">
+                                    <div className="flex items-center gap-1">
+                                      <Calendar className="w-3 h-3 shrink-0" />
+                                      <span>Criado: {new Date(invite.createdAt).toLocaleDateString('pt-BR')}</span>
+                                    </div>
+                                    {invite.resentAt && (
+                                      <div className="flex items-center gap-1">
+                                        <RefreshCw className="w-3 h-3 shrink-0" />
+                                        <span>Reenviado: {new Date(invite.resentAt).toLocaleDateString('pt-BR')}</span>
+                                      </div>
+                                    )}
+                                    {invite.expiresAt && (
+                                      <div className="flex items-center gap-1">
+                                        <Clock className="w-3 h-3 shrink-0" />
+                                        <span>Expira: {new Date(invite.expiresAt).toLocaleDateString('pt-BR')}</span>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                                <Badge variant="outline" className="text-yellow-700 border-yellow-700 shrink-0">
-                                  Pendente
-                                </Badge>
+
+                                <div className="flex items-center gap-2 w-full lg:w-auto justify-end border-t lg:border-t-0 pt-3 lg:pt-0">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleResendInvite(invite.id)}
+                                    disabled={resendInviteMutation.isPending}
+                                    className="flex-1 lg:flex-none"
+                                  >
+                                    <Send className={`w-4 h-4 ${resendInviteMutation.isPending ? 'animate-pulse' : ''}`} />
+                                    <span className="lg:hidden ml-2">Reenviar</span>
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleCancelInvite(invite.id)}
+                                    disabled={cancelInviteMutation.isPending}
+                                    className="flex-1 lg:flex-none text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                                  >
+                                    <X className="w-4 h-4" />
+                                    <span className="lg:hidden ml-2">Cancelar</span>
+                                  </Button>
+                                </div>
                               </div>
                             </CardContent>
                           </Card>

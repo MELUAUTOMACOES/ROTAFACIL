@@ -6,6 +6,9 @@ async function throwIfResNotOk(res: Response) {
     const text = (await res.text()) || res.statusText;
     let errorMessage = `${res.status}: ${text}`;
     let code = undefined;
+    let errorCode = undefined;
+    let companyId = undefined;
+    
     try {
       const parsed = JSON.parse(text);
       if (parsed.message) {
@@ -14,10 +17,28 @@ async function throwIfResNotOk(res: Response) {
         errorMessage = parsed.error;
       }
       code = parsed.code;
+      errorCode = parsed.error; // Backend retorna: { error: "MEMBERSHIP_INACTIVE", message: "...", companyId: 2 }
+      companyId = parsed.companyId;
     } catch (e) {
       // Not JSON, keep default format
     }
     
+    // 🔒 MEMBERSHIP INVÁLIDA: Tratar diferente de logout genérico
+    // Preserva autenticação global, mas redireciona para Hall
+    if (res.status === 403 && (errorCode === "MEMBERSHIP_INACTIVE" || errorCode === "MEMBERSHIP_NOT_FOUND")) {
+      console.warn(`⚠️ [MEMBERSHIP] Empresa atual inválida detectada pelo backend:`, errorCode);
+      const event = new CustomEvent("membership-invalidated", { 
+        detail: { 
+          message: errorMessage, 
+          errorCode,
+          companyId 
+        } 
+      });
+      window.dispatchEvent(event);
+      throw new Error(errorMessage);
+    }
+    
+    // 🔐 UNAUTHORIZED genérico (401): Logout padrão
     if (res.status === 401) {
        const event = new CustomEvent("unauthorized", { detail: { message: errorMessage, code } });
        window.dispatchEvent(event);

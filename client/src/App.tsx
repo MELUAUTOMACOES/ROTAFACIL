@@ -47,9 +47,19 @@ function AppRoutes() {
   const [forceAccessPending, setForceAccessPending] = useState(false);
 
   useEffect(() => {
-    // 🔒 Escutar evento de empresa invalidada
+    // 🔒 Escutar evento de empresa invalidada (por polling do /api/auth/me)
     const handleCompanyInvalidated = () => {
-      console.log('[APP] Evento company-invalidated recebido. Forçando AccessPending...');
+      console.log('[APP] Evento company-invalidated recebido (polling). Forçando AccessPending...');
+      setForceAccessPending(true);
+      // Invalidar queries para limpar dados da empresa antiga
+      import('./lib/queryClient').then(({ queryClient }) => {
+        queryClient.clear();
+      });
+    };
+
+    // 🔒 Escutar evento de forçar AccessPending (erro 403 do backend)
+    const handleForceAccessPending = () => {
+      console.log('[APP] Evento force-access-pending recebido (erro backend). Forçando AccessPending...');
       setForceAccessPending(true);
       // Invalidar queries para limpar dados da empresa antiga
       import('./lib/queryClient').then(({ queryClient }) => {
@@ -58,7 +68,12 @@ function AppRoutes() {
     };
 
     window.addEventListener('company-invalidated', handleCompanyInvalidated as EventListener);
-    return () => window.removeEventListener('company-invalidated', handleCompanyInvalidated as EventListener);
+    window.addEventListener('force-access-pending', handleForceAccessPending as EventListener);
+    
+    return () => {
+      window.removeEventListener('company-invalidated', handleCompanyInvalidated as EventListener);
+      window.removeEventListener('force-access-pending', handleForceAccessPending as EventListener);
+    };
   }, []);
 
   if (isLoading) {

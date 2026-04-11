@@ -64,6 +64,7 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
       }
     }, 30000); // 30 segundos
 
+    // 🔐 UNAUTHORIZED genérico (401): Logout global
     const handleUnauthorized = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.code === "SYSTEM_UPDATED") {
@@ -79,9 +80,38 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
       }, 500);
     };
 
+    // 🔒 MEMBERSHIP INVÁLIDA (403 do backend): Preservar autenticação, limpar empresa, ir para Hall
+    const handleMembershipInvalidated = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      console.warn('⚠️ [AUTH] Membership invalidada pelo backend:', detail);
+      
+      toast({
+        title: "Acesso à empresa removido",
+        description: detail.message || "Seu acesso a esta empresa foi desativado. Selecione outra empresa ou entre em contato com o administrador.",
+        variant: "destructive",
+      });
+
+      // Atualizar contexto para limpar empresa atual (mantém autenticação global)
+      setUser(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          companyId: undefined,
+          companyRole: undefined,
+          company: undefined,
+        };
+      });
+
+      // Disparar evento para App.tsx forçar AccessPending
+      window.dispatchEvent(new CustomEvent('force-access-pending'));
+    };
+
     window.addEventListener("unauthorized", handleUnauthorized);
+    window.addEventListener("membership-invalidated", handleMembershipInvalidated as EventListener);
+    
     return () => {
       window.removeEventListener("unauthorized", handleUnauthorized);
+      window.removeEventListener("membership-invalidated", handleMembershipInvalidated as EventListener);
       clearInterval(intervalId);
     };
   }, [user]);
