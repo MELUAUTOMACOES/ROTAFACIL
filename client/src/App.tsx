@@ -2,6 +2,7 @@ import { Switch, Route, useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "./lib/auth.tsx";
@@ -45,11 +46,17 @@ import NotFound from "@/pages/not-found";
 function AppRoutes() {
   const { user, isLoading, requirePasswordChange } = useAuth();
   const [forceAccessPending, setForceAccessPending] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     // 🔒 Escutar evento de empresa invalidada (por polling do /api/auth/me)
     const handleCompanyInvalidated = () => {
       console.log('[APP] Evento company-invalidated recebido (polling). Forçando AccessPending...');
+      toast({
+        title: "Acesso à empresa removido",
+        description: "Seu acesso a esta empresa foi desativado. Selecione outra empresa ou entre em contato com o administrador.",
+        variant: "destructive",
+      });
       setForceAccessPending(true);
       // Invalidar queries para limpar dados da empresa antiga
       import('./lib/queryClient').then(({ queryClient }) => {
@@ -74,7 +81,7 @@ function AppRoutes() {
       window.removeEventListener('company-invalidated', handleCompanyInvalidated as EventListener);
       window.removeEventListener('force-access-pending', handleForceAccessPending as EventListener);
     };
-  }, []);
+  }, [toast]);
 
   if (isLoading) {
     return (

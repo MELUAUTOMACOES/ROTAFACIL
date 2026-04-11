@@ -1,9 +1,9 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { apiRequest } from "./queryClient";
 import { buildApiUrl } from "./api-config";
 import type { User } from "../../../shared/schema";
 import type { CompanyOption } from "@/components/CompanySelector";
-import { toast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/use-toast";
 
 // Tipo estendido com campos multi-tenant retornados pelo backend (não estão na tabela users)
 export interface AuthUser extends User {
@@ -51,72 +51,17 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
   const [isLoading, setIsLoading] = useState(true);
   const [userCompanies, setUserCompanies] = useState<CompanyOption[]>([]);
   const [previousCompanyId, setPreviousCompanyId] = useState<number | undefined>();
+  const { toast: showToast } = useToast();
 
-  useEffect(() => {
-    checkAuth();
+  // ✅ Estabilizar logout com useCallback
+  const logout = useCallback(() => {
+    localStorage.removeItem("token");
+    setUser(null);
+    setUserCompanies([]);
+  }, []);
 
-    // 🔄 REVALIDAÇÃO PERIÓDICA: Verificar a cada 30s se a empresa atual ainda é válida
-    const intervalId = setInterval(() => {
-      const token = localStorage.getItem("token");
-      if (token) {
-        console.log('[AUTH] Revalidando sessão...');
-        checkAuth();
-      }
-    }, 30000); // 30 segundos
-
-    // 🔐 UNAUTHORIZED genérico (401): Logout global
-    const handleUnauthorized = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.code === "SYSTEM_UPDATED") {
-        toast({
-          title: "Sistema Atualizado",
-          description: detail.message || "Sua sessão expirou devido a uma atualização do sistema. Faça login novamente.",
-          variant: "destructive",
-        });
-      }
-      setTimeout(() => {
-        logout();
-        window.location.href = '/login';
-      }, 500);
-    };
-
-    // 🔒 MEMBERSHIP INVÁLIDA (403 do backend): Preservar autenticação, limpar empresa, ir para Hall
-    const handleMembershipInvalidated = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      console.warn('⚠️ [AUTH] Membership invalidada pelo backend:', detail);
-      
-      toast({
-        title: "Acesso à empresa removido",
-        description: detail.message || "Seu acesso a esta empresa foi desativado. Selecione outra empresa ou entre em contato com o administrador.",
-        variant: "destructive",
-      });
-
-      // Atualizar contexto para limpar empresa atual (mantém autenticação global)
-      setUser(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          companyId: undefined,
-          companyRole: undefined,
-          company: undefined,
-        };
-      });
-
-      // Disparar evento para App.tsx forçar AccessPending
-      window.dispatchEvent(new CustomEvent('force-access-pending'));
-    };
-
-    window.addEventListener("unauthorized", handleUnauthorized);
-    window.addEventListener("membership-invalidated", handleMembershipInvalidated as EventListener);
-    
-    return () => {
-      window.removeEventListener("unauthorized", handleUnauthorized);
-      window.removeEventListener("membership-invalidated", handleMembershipInvalidated as EventListener);
-      clearInterval(intervalId);
-    };
-  }, []); // ✅ Sem dependências - listeners registrados apenas uma vez
-
-  const checkAuth = async () => {
+  // ✅ Estabilizar checkAuth com useCallback
+  const checkAuth = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
@@ -140,12 +85,6 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
         if (hadCompanyId && !hasCompanyId) {
           // Empresa atual PERDEU VALIDADE durante a sessão
           console.warn('⚠️ [AUTH] Empresa atual ficou INVÁLIDA. Redirecionando para Hall...');
-          
-          toast({
-            title: "Acesso à empresa removido",
-            description: "Seu acesso a esta empresa foi desativado. Selecione outra empresa ou entre em contato com o administrador.",
-            variant: "destructive",
-          });
           
           // Disparar evento personalizado para App.tsx interceptar
           window.dispatchEvent(new CustomEvent('company-invalidated', {
@@ -178,7 +117,72 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [previousCompanyId]);
+
+  // ✅ useEffect com listeners estáveis
+  useEffect(() => {
+    checkAuth();
+
+    // 🔄 REVALIDAÇÃO PERIÓDICA: Verificar a cada 30s se a empresa atual ainda é válida
+    const intervalId = setInterval(() => {
+      const token = localStorage.getItem("token");
+      if (token) {
+        console.log('[AUTH] Revalidando sessão...');
+        checkAuth();
+      }
+    }, 30000); // 30 segundos
+
+    // 🔐 UNAUTHORIZED genérico (401): Logout global
+    const handleUnauthorized = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.code === "SYSTEM_UPDATED") {
+        showToast({
+          title: "Sistema Atualizado",
+          description: detail.message || "Sua sessão expirou devido a uma atualização do sistema. Faça login novamente.",
+          variant: "destructive",
+        });
+      }
+      setTimeout(() => {
+        logout();
+        window.location.href = '/login';
+      }, 500);
+    };
+
+    // 🔒 MEMBERSHIP INVÁLIDA (403 do backend): Preservar autenticação, limpar empresa, ir para Hall
+    const handleMembershipInvalidated = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      console.warn('⚠️ [AUTH] Membership invalidada pelo backend:', detail);
+      
+      showToast({
+        title: "Acesso à empresa removido",
+        description: detail.message || "Seu acesso a esta empresa foi desativado. Selecione outra empresa ou entre em contato com o administrador.",
+        variant: "destructive",
+      });
+
+      // Atualizar contexto para limpar empresa atual (mantém autenticação global)
+      setUser(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          companyId: undefined,
+          companyRole: undefined,
+          company: undefined,
+        };
+      });
+
+      // Disparar evento para App.tsx forçar AccessPending
+      window.dispatchEvent(new CustomEvent('force-access-pending'));
+    };
+
+    window.addEventListener("unauthorized", handleUnauthorized);
+    window.addEventListener("membership-invalidated", handleMembershipInvalidated as EventListener);
+    
+    return () => {
+      window.removeEventListener("unauthorized", handleUnauthorized);
+      window.removeEventListener("membership-invalidated", handleMembershipInvalidated as EventListener);
+      clearInterval(intervalId);
+    };
+  }, [checkAuth, logout, showToast]);
 
   const login = async (email: string, password: string): Promise<CompanySelectionData | void> => {
     // 🔄 Retry logic para erros de pooler/cold start
@@ -251,11 +255,7 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
     setUser(data.user);
   };
 
-  const logout = () => {
-    localStorage.removeItem("token");
-    setUser(null);
-    setUserCompanies([]);
-  };
+  // logout já definido acima com useCallback
 
   const requirePasswordChange = user?.requirePasswordChange || false;
 
