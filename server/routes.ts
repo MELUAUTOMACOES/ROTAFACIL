@@ -50,6 +50,7 @@ import { trackCompanyAudit, getAuditDescription } from "./audit.helpers";
 import { isAccessAllowed, getAccessDeniedMessage } from "./access-schedule-validator";
 import { requireLgpdAccepted } from "./middleware/lgpd.middleware";
 import { requireRole } from "./middleware/role.middleware";
+import { validateActiveMembership } from "./middleware/membership.middleware";
 import { LGPD_VERSION } from "@shared/constants";
 import { formatDateForSQLComparison, nowInSaoPaulo } from "./timezone-helper";
 import {
@@ -239,6 +240,29 @@ function authenticateToken(req: any, res: any, next: any) {
   });
 }
 
+/**
+ * 🔒 MIDDLEWARE COMPOSTO PARA ROTAS DE EMPRESA
+ * 
+ * Combina authenticateToken + validateActiveMembership em uma única chamada.
+ * Garante que:
+ * 1. JWT é válido (authenticateToken)
+ * 2. Membership na empresa atual está ATIVA no banco (validateActiveMembership)
+ * 
+ * USO (substituir authenticateToken em rotas de empresa):
+ * 
+ * ANTES:
+ * app.get("/api/clients", authenticateToken, (req, res) => { ... });
+ * 
+ * DEPOIS:
+ * app.get("/api/clients", authenticateCompany, (req, res) => { ... });
+ * 
+ * ⚠️ IMPORTANTE:
+ * - Usar APENAS em rotas que dependem de req.user.companyId
+ * - Para rotas globais (ex: /api/auth/me), continuar usando apenas authenticateToken
+ * - Bloqueia imediatamente se membership inativa (não espera polling)
+ */
+const authenticateCompany = [authenticateToken, validateActiveMembership(storage)];
+
 // ==================== GEO HELPERS (NOMINATIM) ====================
 
 // Normaliza CEP para formato "12345-678" (aceita com ou sem traço)
@@ -413,7 +437,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== PROVIDER ROUTES ====================
 
   // 1. Obter rota ativa do prestador (Hoje)
-  app.get("/api/provider/route", authenticateToken, async (req: any, res) => {
+  app.get("/api/provider/route", authenticateCompany, async (req: any, res) => {
     try {
       const companyId = requireCompanyId(req, res);
       if (!companyId) return;
@@ -568,7 +592,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // 1.1 Listar prestadores com rotas ativas hoje (apenas admin)
-  app.get("/api/provider/active-today", authenticateToken, async (req: any, res) => {
+  app.get("/api/provider/active-today", authenticateCompany, async (req: any, res) => {
     console.log(`🔍 [ACTIVE-TODAY] Requisição recebida`);
     console.log(`📋 [ACTIVE-TODAY] User:`, {
       userId: req.user?.userId,
@@ -639,7 +663,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: error.message });
     }
   });
-  app.put("/api/provider/appointments/:id", authenticateToken, async (req: any, res) => {
+  app.put("/api/provider/appointments/:id", authenticateCompany, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const { status, feedback, photos, signature, executionStatus, executionNotes, executionStartedAt, executionFinishedAt, executionStartLocation, executionEndLocation, paymentStatus, paymentAmountPaid, paymentNotes, paymentConfirmedAt } = req.body;
@@ -689,7 +713,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // 2.5 Iniciar rota (registrar routeStartedAt)
-  app.patch("/api/routes/:id/start", authenticateToken, async (req: any, res) => {
+  app.patch("/api/routes/:id/start", authenticateCompany, async (req: any, res) => {
     try {
       const startTime = Date.now();
       const { id } = req.params; // UUID
@@ -798,7 +822,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // 3. Finalizar rota
-  app.post("/api/provider/route/:id/finalize", authenticateToken, async (req: any, res) => {
+  app.post("/api/provider/route/:id/finalize", authenticateCompany, async (req: any, res) => {
     try {
       const { id } = req.params; // UUID
       const { status, motivo, routeEndLocation, endLocationData } = req.body; // endLocationData: { lat, lng, address, timestamp }
@@ -864,7 +888,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   // 3.5 Registrar ocorrência na rota (pausas como almoço, abastecimento, etc.)
-  app.post("/api/provider/route/:id/occurrence", authenticateToken, async (req: any, res) => {
+  app.post("/api/provider/route/:id/occurrence", authenticateCompany, async (req: any, res) => {
     try {
       const { id } = req.params; // UUID da rota
       const { type, notes, approximateTime, durationMinutes } = req.body;
@@ -899,7 +923,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // 3.6 Listar ocorrências da rota
-  app.get("/api/provider/route/:id/occurrences", authenticateToken, async (req: any, res) => {
+  app.get("/api/provider/route/:id/occurrences", authenticateCompany, async (req: any, res) => {
     try {
       const { id } = req.params;
 
@@ -916,7 +940,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // 🛰️ GEOLOCALIZAÇÃO: Receber Tracking Points
-  app.post("/api/tracking/location", authenticateToken, async (req: any, res) => {
+  app.post("/api/tracking/location", authenticateCompany, async (req: any, res) => {
     try {
       const companyId = requireCompanyId(req, res);
       if (!companyId) return;
@@ -955,7 +979,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // 🛰️ GEOLOCALIZAÇÃO: Buscar rota percorrida
-  app.get("/api/tracking/route/:routeId", authenticateToken, async (req: any, res) => {
+  app.get("/api/tracking/route/:routeId", authenticateCompany, async (req: any, res) => {
     try {
       const companyId = requireCompanyId(req, res);
       if (!companyId) return;
@@ -975,7 +999,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // 3.7 Finalizar ocorrência (marcar hora de fim)
-  app.patch("/api/provider/occurrence/:id/finish", authenticateToken, async (req: any, res) => {
+  app.patch("/api/provider/occurrence/:id/finish", authenticateCompany, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
 
@@ -996,7 +1020,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // 4. Listar pendências (agendamentos não concluídos de rotas finalizadas)
-  app.get("/api/pending-appointments", authenticateToken, async (req: any, res) => {
+  app.get("/api/pending-appointments", authenticateCompany, async (req: any, res) => {
     try {
       const pendencias = await storage.getPendingAppointments(req.user.companyId);
       logEgressSize(req, pendencias); // 📊 Instrumentação
@@ -1010,7 +1034,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== FUEL RECORDS (ABASTECIMENTO) ====================
 
   // Listar registros de abastecimento (com filtros opcionais)
-  app.get("/api/fuel-records", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.get("/api/fuel-records", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const { vehicleId, startDate, endDate } = req.query;
 
@@ -1036,7 +1060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Criar registro de abastecimento (prestador/tecnico podem registrar via ocorrência de rota)
-  app.post("/api/fuel-records", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico']), async (req: any, res) => {
+  app.post("/api/fuel-records", authenticateCompany, requireRole(['admin', 'operador', 'prestador', 'tecnico']), async (req: any, res) => {
     try {
       const { vehicleId, fuelType, liters, pricePerLiter, totalCost, odometerKm, notes, fuelDate, occurrenceId } = req.body;
 
@@ -1065,7 +1089,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Estatísticas de consumo por veículo
-  app.get("/api/fuel-records/vehicle/:id/stats", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.get("/api/fuel-records/vehicle/:id/stats", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const vehicleId = parseInt(req.params.id);
       const stats = await storage.getVehicleFuelStats(vehicleId, req.user.companyId);
@@ -1077,7 +1101,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dashboard: Fleet fuel statistics (with optional filters)
-  app.get("/api/dashboard/fuel-stats", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.get("/api/dashboard/fuel-stats", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const { vehicleIds, fuelTypes, startDate, endDate } = req.query;
 
@@ -1825,13 +1849,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Buscar memberships do usuário
+      // Buscar memberships ATIVAS do usuário
       const memberships = await storage.getMembershipsByUserId(user.id);
 
-      // Buscar dados da empresa se tiver companyId no token
+      // 🔒 VALIDAÇÃO CRÍTICA: Verificar se o companyId do JWT ainda é válido
+      let validatedCompanyId: number | undefined;
+      let validatedCompanyRole: string | undefined;
       let company: any | undefined;
+
       if (req.user.companyId) {
-        company = await storage.getCompanyById(req.user.companyId);
+        // Verificar se a membership ainda está ativa
+        const currentMembership = memberships.find(m => m.companyId === req.user.companyId);
+        
+        if (currentMembership) {
+          // Membership ainda ativa - usar dados do JWT
+          validatedCompanyId = req.user.companyId;
+          validatedCompanyRole = req.user.companyRole;
+          company = await storage.getCompanyById(req.user.companyId);
+          
+          console.log(`✅ [AUTH/ME] Empresa atual validada: user ${user.id} → empresa ${validatedCompanyId}`);
+        } else {
+          // Membership INATIVA ou REMOVIDA - invalidar contexto de empresa
+          validatedCompanyId = undefined;
+          validatedCompanyRole = undefined;
+          company = undefined;
+          
+          console.log(`⚠️ [AUTH/ME] Empresa atual INVÁLIDA: user ${user.id} → JWT tinha empresa ${req.user.companyId}, mas membership não está mais ativa`);
+          console.log(`   - Memberships ativas do usuário: ${memberships.map(m => m.companyId).join(', ') || 'nenhuma'}`);
+        }
       }
 
       res.json({
@@ -1844,8 +1889,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         emailVerified: user.emailVerified,
         requirePasswordChange: user.requirePasswordChange,
         isActive: user.isActive,
-        companyId: req.user.companyId,
-        companyRole: req.user.companyRole,
+        companyId: validatedCompanyId,  // ← VALIDADO: null se membership inativa
+        companyRole: validatedCompanyRole,
         company: company ? {
           id: company.id,
           name: company.name,
@@ -1947,7 +1992,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Clients routes
-  app.get("/api/clients", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.get("/api/clients", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       // Se não houver parâmetros de paginação, retorna todos os clientes (compatibilidade)
       if (!req.query.page && !req.query.limit && !req.query.search) {
@@ -1987,7 +2032,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/clients/search", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.get("/api/clients/search", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const { q } = req.query;
       const page = parseInt(req.query.page as string) || 1;
@@ -2005,7 +2050,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/clients/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.get("/api/clients/:id", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const clientId = parseInt(req.params.id);
       if (isNaN(clientId)) {
@@ -2022,7 +2067,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/clients/validate-cpf", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.get("/api/clients/validate-cpf", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const cpf = req.query.cpf as string;
       console.log("Validação de CPF:", cpf);
@@ -2049,7 +2094,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/clients", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.post("/api/clients", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const { addresses, ...clientData } = req.body;
 
@@ -2159,7 +2204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/clients/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.put("/api/clients/:id", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const { addresses, ...clientData } = req.body;
@@ -2360,7 +2405,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
 
-  app.post("/api/clients/import", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.post("/api/clients/import", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const { clients } = req.body;
       if (!Array.isArray(clients)) {
@@ -2456,7 +2501,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/clients/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.delete("/api/clients/:id", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const success = await storage.deleteClient(id, req.user.companyId);
@@ -2478,7 +2523,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Services routes
-  app.get("/api/services", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.get("/api/services", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const page = Math.max(1, parseInt(req.query.page as string) || 1);
       const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string) || 25));
@@ -2494,7 +2539,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/services", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.post("/api/services", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const serviceData = insertServiceSchema.parse(req.body);
       const service = await storage.createService(serviceData, req.user.userId, req.user.companyId); // userId kept for INSERT
@@ -2513,7 +2558,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/services/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.put("/api/services/:id", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const serviceData = insertServiceSchema.partial().parse(req.body);
@@ -2524,7 +2569,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/services/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.delete("/api/services/:id", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const success = await storage.deleteService(id, req.user.companyId);
@@ -2546,7 +2591,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Technicians routes
-  app.get("/api/technicians", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.get("/api/technicians", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const page = Math.max(1, parseInt(req.query.page as string) || 1);
       const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string) || 25));
@@ -2563,7 +2608,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/technicians", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.post("/api/technicians", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     /* console.log("==== LOG INÍCIO: POST /api/technicians ===="); */
     /* console.log("Dados recebidos:"); */
     /* console.log(JSON.stringify(req.body, null, 2)); */
@@ -2593,7 +2638,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/technicians/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.put("/api/technicians/:id", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const technicianData = insertTechnicianSchema.partial().parse(req.body);
@@ -2604,7 +2649,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/technicians/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.delete("/api/technicians/:id", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const success = await storage.deleteTechnician(id, req.user.companyId);
@@ -2619,7 +2664,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== TEAMS ROUTES ====================
 
-  app.get("/api/teams", authenticateToken, async (req: any, res) => {
+  app.get("/api/teams", authenticateCompany, async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2637,7 +2682,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/teams/:id", authenticateToken, async (req: any, res) => {
+  app.get("/api/teams/:id", authenticateCompany, async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2653,7 +2698,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/teams", authenticateToken, async (req: any, res) => {
+  app.post("/api/teams", authenticateCompany, async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2675,7 +2720,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/teams/:id", authenticateToken, async (req: any, res) => {
+  app.patch("/api/teams/:id", authenticateCompany, async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2697,7 +2742,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/teams/:id", authenticateToken, async (req: any, res) => {
+  app.delete("/api/teams/:id", authenticateCompany, async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2722,7 +2767,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Team Members
-  app.get("/api/team-members", authenticateToken, async (req: any, res) => {
+  app.get("/api/team-members", authenticateCompany, async (req: any, res) => {
     try {
       const teamMembers = await storage.getAllTeamMembers(req.user.companyId);
       res.json(teamMembers);
@@ -2734,7 +2779,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== VEHICLES ROUTES ====================
 
   // 🔒 administrativo incluído para permitir acesso à tela de Prestadores quando vinculado a técnico
-  app.get("/api/vehicles", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico', 'administrativo']), async (req: any, res) => {
+  app.get("/api/vehicles", authenticateCompany, requireRole(['admin', 'operador', 'prestador', 'tecnico', 'administrativo']), async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2805,7 +2850,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 🆕 IMPORTANTE: Esta rota DEVE vir ANTES de /api/vehicles/:id
   // Caso contrário, Express interpreta "available-for-me" como um :id
   // 🔒 administrativo incluído para permitir acesso à tela de Prestadores quando vinculado a técnico
-  app.get("/api/vehicles/available-for-me", authenticateToken, requireRole(['admin', 'operador', 'prestador', 'tecnico', 'administrativo']), async (req: any, res) => {
+  app.get("/api/vehicles/available-for-me", authenticateCompany, requireRole(['admin', 'operador', 'prestador', 'tecnico', 'administrativo']), async (req: any, res) => {
     const requestTimestamp = new Date().toISOString();
     try {
       console.log(`\n${'='.repeat(80)}`);
@@ -2857,7 +2902,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/vehicles/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.get("/api/vehicles/:id", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2876,7 +2921,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/vehicles", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.post("/api/vehicles", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });
@@ -2919,7 +2964,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/vehicles/:id", authenticateToken, requireRole(['admin', 'operador']), async (req: any, res) => {
+  app.put("/api/vehicles/:id", authenticateCompany, requireRole(['admin', 'operador']), async (req: any, res) => {
     try {
       if (!req.user?.companyId) {
         return res.status(403).json({ message: "Empresa inválida. Faça login novamente." });

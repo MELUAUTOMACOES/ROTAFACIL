@@ -1,5 +1,5 @@
 import { Switch, Route, useLocation } from "wouter";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -44,6 +44,22 @@ import NotFound from "@/pages/not-found";
 
 function AppRoutes() {
   const { user, isLoading, requirePasswordChange } = useAuth();
+  const [forceAccessPending, setForceAccessPending] = useState(false);
+
+  useEffect(() => {
+    // 🔒 Escutar evento de empresa invalidada
+    const handleCompanyInvalidated = () => {
+      console.log('[APP] Evento company-invalidated recebido. Forçando AccessPending...');
+      setForceAccessPending(true);
+      // Invalidar queries para limpar dados da empresa antiga
+      import('./lib/queryClient').then(({ queryClient }) => {
+        queryClient.clear();
+      });
+    };
+
+    window.addEventListener('company-invalidated', handleCompanyInvalidated as EventListener);
+    return () => window.removeEventListener('company-invalidated', handleCompanyInvalidated as EventListener);
+  }, []);
 
   if (isLoading) {
     return (
@@ -85,13 +101,13 @@ function AppRoutes() {
     return <LgpdAccept />;
   }
 
-  // 🏢 Multiempresa: Se usuário não tem empresa ativa, redirecionar para tela neutra
+  // 🏢 Multiempresa: Se usuário não tem empresa ativa ou foi forçado, redirecionar para tela neutra
   // EXCETO se está em rota de aceite de convite (precisa completar o fluxo)
   const [location] = useLocation();
   const isConviteRoute = location.startsWith('/convite/');
   
-  if (!user.companyId && !isConviteRoute) {
-    return <AccessPending />;
+  if (((!user.companyId && !isConviteRoute) || forceAccessPending) && !isConviteRoute) {
+    return <AccessPending onCompanySelected={() => setForceAccessPending(false)} />;
   }
 
   // Rotas autenticadas

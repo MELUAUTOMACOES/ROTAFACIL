@@ -100,13 +100,28 @@ export default function AcceptInvite() {
         throw new Error(data.message || "Erro ao aceitar convite");
       }
 
+      // 🔑 ATUALIZAR CONTEXTO: Processar novo JWT retornado
+      if (data.token) {
+        console.log('✅ [ACCEPT INVITE] Novo JWT recebido. Atualizando contexto...');
+        localStorage.setItem("token", data.token);
+        
+        // Forçar revalidação do contexto de auth
+        const { queryClient } = await import("@/lib/queryClient");
+        queryClient.invalidateQueries();
+        
+        // Recarregar dados do usuário com novo token
+        window.dispatchEvent(new CustomEvent('auth-updated'));
+      }
+
       toast({
         title: "✅ Convite aceito!",
         description: `Você agora faz parte de ${inviteData.invitation.company.name}`,
       });
 
+      // Redirecionar para início (agora com empresa correta no contexto)
       setTimeout(() => {
-        setLocation("/");
+        setLocation("/inicio");
+        window.location.reload(); // Forçar reload para garantir contexto atualizado
       }, 1000);
     } catch (err: any) {
       toast({

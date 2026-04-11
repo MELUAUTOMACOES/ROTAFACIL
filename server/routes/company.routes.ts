@@ -981,10 +981,42 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
 
       console.log(`✅ [ACCEPT EXISTING] Processo concluído: user ${req.user.email} na empresa ${invitation.companyId}`);
 
-      console.log(`✅ [ACCEPT EXISTING] Processo concluído: user ${req.user.email} na empresa ${invitation.companyId}`);
+      // 🔑 NOVO JWT com companyId atualizado (contexto corrigido imediatamente)
+      const jwt = require('jsonwebtoken');
+      const JWT_SECRET = process.env.JWT_SECRET || "development_jwt_secret_key_32_characters_long_minimum_for_security_rotafacil_2025";
+      
+      // Buscar usuário completo para incluir no JWT
+      const user = await storage.getUserById(req.user.userId);
+      if (!user) {
+        return res.status(404).json({ message: "Usuário não encontrado" });
+      }
+
+      // Buscar informação de versão do sistema
+      const getSystemVersion = () => {
+        try {
+          const pkgPath = require('path').join(process.cwd(), 'package.json');
+          const pkg = require(pkgPath);
+          return pkg.version || '1.0.0';
+        } catch {
+          return '1.0.0';
+        }
+      };
+
+      // Gerar novo token com empresa atualizada
+      const newToken = jwt.sign({
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        companyId: invitation.companyId,  // ← Nova empresa
+        companyRole: membership.role,      // ← Role na nova empresa
+        sysVer: getSystemVersion()
+      }, JWT_SECRET, { expiresIn: '24h' });
+
+      console.log(`🔑 [ACCEPT EXISTING] Novo JWT emitido com empresa ${invitation.companyId}`);
 
       const response = {
         message: 'Convite aceito com sucesso!',
+        token: newToken,  // ← NOVO JWT
         companyId: invitation.companyId,
         membership: {
           id: membership.id,

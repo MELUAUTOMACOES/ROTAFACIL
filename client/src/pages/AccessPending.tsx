@@ -24,15 +24,21 @@ interface PendingInvitation {
   isExpired: boolean;
 }
 
-export default function AccessPending() {
+interface AccessPendingProps {
+  onCompanySelected?: () => void;
+}
+
+export default function AccessPending({ onCompanySelected }: AccessPendingProps = {}) {
   const [, setLocation] = useLocation();
-  const { logout } = useAuth();
+  const { logout, user, switchCompany } = useAuth();
   const { toast } = useToast();
   const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
+  const [activeCompanies, setActiveCompanies] = useState<Array<{ companyId: number; companyName: string; companyCnpj: string; role: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSwitching, setIsSwitching] = useState(false);
 
   useEffect(() => {
-    const fetchInvitations = async () => {
+    const fetchData = async () => {
       try {
         const token = localStorage.getItem("token");
         if (!token) {
@@ -40,23 +46,35 @@ export default function AccessPending() {
           return;
         }
 
-        const response = await fetch("/api/auth/my-invitations", {
+        // Buscar convites pendentes
+        const invitesResponse = await fetch("/api/auth/my-invitations", {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
 
-        if (!response.ok) {
-          throw new Error("Erro ao buscar convites");
+        if (invitesResponse.ok) {
+          const invitesData = await invitesResponse.json();
+          setInvitations(invitesData.invitations || []);
         }
 
-        const data = await response.json();
-        setInvitations(data.invitations || []);
+        // Carregar empresas ativas do usuário (do auth context)
+        if (user?.memberships) {
+          const companies = user.memberships
+            .filter(m => m.isActive)
+            .map(m => ({
+              companyId: m.companyId,
+              companyName: m.companyName || `Empresa #${m.companyId}`,
+              companyCnpj: m.companyCnpj || '',
+              role: m.role,
+            }));
+          setActiveCompanies(companies);
+        }
       } catch (error: any) {
-        console.error("Erro ao buscar convites:", error);
+        console.error("Erro ao buscar dados:", error);
         toast({
           variant: "destructive",
-          title: "Erro ao carregar convites",
+          title: "Erro ao carregar dados",
           description: error.message || "Tente novamente mais tarde",
         });
       } finally {
@@ -64,11 +82,39 @@ export default function AccessPending() {
       }
     };
 
-    fetchInvitations();
-  }, [toast]);
+    fetchData();
+  }, [toast, user]);
 
   const handleAcceptInvite = (token: string) => {
     setLocation(`/convite/${token}`);
+  };
+
+  const handleSelectCompany = async (companyId: number) => {
+    try {
+      setIsSwitching(true);
+      await switchCompany(companyId);
+      
+      toast({
+        title: "Empresa selecionada",
+        description: "Você foi redirecionado para a nova empresa.",
+      });
+      
+      // Resetar flag de forceAccessPending
+      if (onCompanySelected) {
+        onCompanySelected();
+      }
+      
+      // Redirecionar para início
+      setLocation("/inicio");
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao selecionar empresa",
+        description: error.message || "Tente novamente",
+      });
+    } finally {
+      setIsSwitching(false);
+    }
   };
 
   const handleLogout = () => {
@@ -107,29 +153,58 @@ export default function AccessPending() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Mensagem de status */}
-            {invitations.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <AlertCircle className="h-12 w-12 text-gray-400 mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                  Você não tem acesso a nenhuma empresa
+            {/* Empresas Ativas Disponíveis */}
+            {activeCompanies.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-green-600" />
+                  Empresas Disponíveis ({activeCompanies.length})
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 max-w-md">
-                  Entre em contato com o administrador da sua empresa para receber um convite de acesso.
-                </p>
-                <Button variant="outline" onClick={handleLogout}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Sair
-                </Button>
+                
+                {activeCompanies.map((company) => (
+                  <Card key={company.companyId} className="border-l-4 border-l-green-500">
+                    <CardContent className="pt-6">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Building2 className="h-4 w-4 text-gray-500" />
+                            <h4 className="font-semibold text-gray-900 dark:text-gray-100">
+                              {company.companyName}
+                            </h4>
+                          </div>
+                          
+                          {company.companyCnpj && (
+                            <p className="text-xs text-gray-500 mb-2">
+                              CNPJ: {company.companyCnpj}
+                            </p>
+                          )}
+                          
+                          <Badge variant="outline" className="text-green-700 border-green-700">
+                            {company.role}
+                          </Badge>
+                        </div>
+                        
+                        <Button
+                          onClick={() => handleSelectCompany(company.companyId)}
+                          disabled={isSwitching}
+                          className="ml-4"
+                        >
+                          {isSwitching ? 'Selecionando...' : 'Selecionar Empresa'}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-            ) : (
-              <>
-                {/* Lista de convites pendentes */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                    <Mail className="h-4 w-4" />
-                    Convites Pendentes ({invitations.length})
-                  </h3>
+            )}
+
+            {/* Lista de convites pendentes */}
+            {invitations.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  <Mail className="h-4 w-4" />
+                  Convites Pendentes ({invitations.length})
+                </h3>
                   
                   {invitations.map((invitation) => (
                     <Card key={invitation.id} className="border-l-4 border-l-burnt-yellow">
@@ -175,17 +250,29 @@ export default function AccessPending() {
                       </CardContent>
                     </Card>
                   ))}
-                </div>
-
-                {/* Botão de logout */}
-                <div className="pt-4 border-t">
-                  <Button variant="outline" onClick={handleLogout} className="w-full">
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Sair
-                  </Button>
-                </div>
-              </>
+              </div>
             )}
+
+            {/* Mensagem quando não há nada */}
+            {activeCompanies.length === 0 && invitations.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <AlertCircle className="h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                  Você não tem acesso a nenhuma empresa
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 max-w-md">
+                  Entre em contato com o administrador da sua empresa para receber um convite de acesso.
+                </p>
+              </div>
+            )}
+
+            {/* Botão de logout */}
+            <div className="pt-4 border-t">
+              <Button variant="outline" onClick={handleLogout} className="w-full">
+                <LogOut className="h-4 w-4 mr-2" />
+                Sair
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

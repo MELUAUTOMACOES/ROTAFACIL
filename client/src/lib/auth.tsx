@@ -50,9 +50,19 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [userCompanies, setUserCompanies] = useState<CompanyOption[]>([]);
+  const [previousCompanyId, setPreviousCompanyId] = useState<number | undefined>();
 
   useEffect(() => {
     checkAuth();
+
+    // 🔄 REVALIDAÇÃO PERIÓDICA: Verificar a cada 30s se a empresa atual ainda é válida
+    const intervalId = setInterval(() => {
+      const token = localStorage.getItem("token");
+      if (token && user) {
+        console.log('[AUTH] Revalidando sessão...');
+        checkAuth();
+      }
+    }, 30000); // 30 segundos
 
     const handleUnauthorized = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -70,8 +80,11 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
     };
 
     window.addEventListener("unauthorized", handleUnauthorized);
-    return () => window.removeEventListener("unauthorized", handleUnauthorized);
-  }, []);
+    return () => {
+      window.removeEventListener("unauthorized", handleUnauthorized);
+      clearInterval(intervalId);
+    };
+  }, [user]);
 
   const checkAuth = async () => {
     try {
@@ -89,17 +102,43 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
 
       if (response.ok) {
         const userData = await response.json();
-        setUser(userData);
-        // Carregar lista de empresas a partir das memberships retornadas pelo /me
-        if (userData.memberships && userData.memberships.length > 1) {
-          // Buscar nomes das empresas do cache ou usar IDs
-          const companies: CompanyOption[] = userData.memberships.map((m: any) => ({
-            companyId: m.companyId,
-            companyRole: m.role,
-            companyName: m.companyName || `Empresa #${m.companyId}`,
-            companyCnpj: m.companyCnpj || '',
+        
+        // 🔒 VALIDAÇÃO CRÍTICA: Detectar se empresa atual ficou inválida
+        const hadCompanyId = previousCompanyId !== undefined;
+        const hasCompanyId = userData.companyId !== undefined;
+        
+        if (hadCompanyId && !hasCompanyId) {
+          // Empresa atual PERDEU VALIDADE durante a sessão
+          console.warn('⚠️ [AUTH] Empresa atual ficou INVÁLIDA. Redirecionando para Hall...');
+          
+          toast({
+            title: "Acesso à empresa removido",
+            description: "Seu acesso a esta empresa foi desativado. Selecione outra empresa ou entre em contato com o administrador.",
+            variant: "destructive",
+          });
+          
+          // Disparar evento personalizado para App.tsx interceptar
+          window.dispatchEvent(new CustomEvent('company-invalidated', {
+            detail: { previousCompanyId, userData }
           }));
+        }
+        
+        setPreviousCompanyId(userData.companyId);
+        setUser(userData);
+        
+        // Carregar lista de empresas a partir das memberships retornadas pelo /me
+        if (userData.memberships && userData.memberships.length >= 1) {
+          const companies: CompanyOption[] = userData.memberships
+            .filter((m: any) => m.isActive) // Só empresas ativas
+            .map((m: any) => ({
+              companyId: m.companyId,
+              companyRole: m.role,
+              companyName: m.companyName || `Empresa #${m.companyId}`,
+              companyCnpj: m.companyCnpj || '',
+            }));
           setUserCompanies(companies);
+        } else {
+          setUserCompanies([]);
         }
       } else {
         localStorage.removeItem("token");
