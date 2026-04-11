@@ -1299,7 +1299,7 @@ export default function AppointmentForm({
 
       {/* Modal de Edição do Cliente */}
       <Dialog open={isEditClientOpen} onOpenChange={setIsEditClientOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-[600px] max-h-[85vh] p-0 overflow-hidden flex flex-col">
           {selectedClient && (
             <ClientForm
               client={getCurrentClient()}

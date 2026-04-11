@@ -647,7 +647,7 @@ export default function Clients() {
 
       {/* Centralized Dialog for All Client Forms */}
       <Dialog open={isFormOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="max-h-[90vh] overflow-hidden p-0 flex flex-col">
+        <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-hidden p-0 flex flex-col">
           <ClientForm
             client={selectedClient}
             onClose={handleFormClose}

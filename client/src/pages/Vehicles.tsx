@@ -417,7 +417,7 @@ export default function Vehicles() {
 
       {/* Dialog para Formulário de Veículo */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden p-0 flex flex-col">
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-hidden p-0 flex flex-col">
           <VehicleForm
             key={selectedVehicle?.id || 'new'}
             vehicle={selectedVehicle}
@@ -432,7 +432,7 @@ export default function Vehicles() {
 
       {/* Dialog para Formulário de Manutenção */}
       <Dialog open={isMaintenanceFormOpen} onOpenChange={setIsMaintenanceFormOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden p-0 flex flex-col">
+        <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-hidden p-0 flex flex-col">
           <VehicleMaintenanceForm
             vehicleId={selectedVehicleForMaintenance?.id}
             vehiclePlate={selectedVehicleForMaintenance?.plate}

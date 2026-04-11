@@ -260,7 +260,7 @@ export default function OnboardingBlock({ counts }: OnboardingBlockProps) {
 
             {/* Vehicle Modal */}
             <Dialog open={isVehicleModalOpen} onOpenChange={setIsVehicleModalOpen}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] p-0 overflow-hidden flex flex-col">
                     <VehicleForm
                         vehicle={null}
                         technicians={technicians}
@@ -273,9 +273,13 @@ export default function OnboardingBlock({ counts }: OnboardingBlockProps) {
 
             {/* Technician/Team Modal with Tabs */}
             <Dialog open={isTechnicianModalOpen} onOpenChange={setIsTechnicianModalOpen}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <Tabs value={technicianTab} onValueChange={(v) => setTechnicianTab(v as "technician" | "team")}>
-                        <TabsList className="grid w-full grid-cols-2 mb-4">
+                <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] p-0 overflow-hidden flex flex-col">
+                    <Tabs
+                        value={technicianTab}
+                        onValueChange={(v) => setTechnicianTab(v as "technician" | "team")}
+                        className="flex flex-col flex-1 min-h-0"
+                    >
+                        <TabsList className="grid w-full grid-cols-2 mb-4 shrink-0">
                             <TabsTrigger value="technician">
                                 <User className="w-4 h-4 mr-2" />
                                 Técnico
@@ -286,7 +290,7 @@ export default function OnboardingBlock({ counts }: OnboardingBlockProps) {
                             </TabsTrigger>
                         </TabsList>
 
-                        <TabsContent value="technician">
+                        <TabsContent value="technician" className="flex-1 min-h-0 overflow-hidden data-[state=inactive]:hidden">
                             <TechnicianForm
                                 technician={null}
                                 services={services}
@@ -294,7 +298,7 @@ export default function OnboardingBlock({ counts }: OnboardingBlockProps) {
                             />
                         </TabsContent>
 
-                        <TabsContent value="team">
+                        <TabsContent value="team" className="flex-1 min-h-0 overflow-auto data-[state=inactive]:hidden">
                             <TeamForm
                                 team={null}
                                 technicians={technicians}
@@ -308,7 +312,7 @@ export default function OnboardingBlock({ counts }: OnboardingBlockProps) {
 
             {/* Client Modal */}
             <Dialog open={isClientModalOpen} onOpenChange={setIsClientModalOpen}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] p-0 overflow-hidden flex flex-col">
                     <ClientForm client={null} onClose={handleClientClose} />
                 </DialogContent>
             </Dialog>

@@ -2460,111 +2460,117 @@ export default function Appointments() {
       }
 
       {/* New Compact Filter Bar */}
-      <div className="bg-white/95 backdrop-blur-md dark:bg-zinc-900/95 border border-border/60 dark:border-zinc-800 sticky top-4 z-10 p-3 shadow-sm rounded-xl mb-4 transition-all">
-        <div className="grid grid-cols-2 lg:flex lg:flex-wrap items-center gap-2">
-          <div className="relative w-full col-span-2 sm:col-span-1 lg:flex-1 lg:min-w-[200px] lg:max-w-xs">
-            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 h-3.5 w-3.5" />
-            <Input
-              placeholder="Buscar cliente..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-8 pl-8 text-xs bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 focus:bg-white dark:focus:bg-zinc-700 transition-colors w-full dark:text-zinc-100 dark:placeholder-zinc-500"
-            />
+      <div className="bg-white/95 backdrop-blur-md md:backdrop-blur dark:bg-zinc-900/95 border border-border/60 dark:border-zinc-800 md:sticky md:top-4 md:z-10 p-3 md:p-4 shadow-sm rounded-xl mb-4 transition-all">
+        <div className="flex flex-col gap-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="relative min-w-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 h-3.5 w-3.5" />
+              <Input
+                placeholder="Buscar cliente..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-9 pl-8 text-xs bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 focus:bg-white dark:focus:bg-zinc-700 transition-colors w-full dark:text-zinc-100 dark:placeholder-zinc-500"
+              />
+            </div>
+
+            <div className="min-w-0">
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => {
+                  setSelectedDate(e.target.value);
+                  if (e.target.value) {
+                    setAvailabilityDate(new Date(e.target.value));
+                  }
+                }}
+                className="h-9 w-full text-xs"
+              />
+            </div>
           </div>
 
-          <div className="w-full lg:flex-1 lg:min-w-[200px] lg:max-w-xs">
-            <Input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => {
-                setSelectedDate(e.target.value);
-                if (e.target.value) {
-                  setAvailabilityDate(new Date(e.target.value));
-                }
-              }}
-              className="h-8 w-full text-xs"
-            />
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="min-w-0">
+              <MultiSelectFilter
+                title="Técnicos/Equipes"
+                options={[
+                  ...technicians
+                    .filter((t: Technician) => user?.role === 'admin' || t.userId === user?.id)
+                    .map((t: Technician) => ({ label: t.name, value: t.id.toString(), icon: User })),
+                  ...teams
+                    .filter((t: any) => user?.role === 'admin' || t.userId === user?.id)
+                    .map((t: any) => ({ label: t.name, value: `team-${t.id}`, icon: User }))
+                ]}
+                selectedValues={selectedTechnicians}
+                onSelectionChange={setSelectedTechnicians}
+                className="w-full"
+              />
+            </div>
+
+            <div className="min-w-0">
+              <MultiSelectFilter
+                title="Serviços"
+                options={services.map((s: Service) => ({ label: s.name, value: s.id.toString(), icon: Wrench }))}
+                selectedValues={selectedServices}
+                onSelectionChange={setSelectedServices}
+                className="w-full"
+              />
+            </div>
+
+            <div className="min-w-0">
+              <MultiSelectFilter
+                title="Status"
+                options={[
+                  { label: "Agendado", value: "scheduled" },
+                  { label: "Confirmado", value: "confirmed" },
+                  { label: "Em Andamento", value: "in_progress" },
+                  { label: "Concluído", value: "completed" },
+                  { label: "Cancelado", value: "cancelled" },
+                  { label: "Remarcado", value: "rescheduled" },
+                ]}
+                selectedValues={selectedStatuses}
+                onSelectionChange={setSelectedStatuses}
+                className="w-full"
+              />
+            </div>
           </div>
 
-          <div className="w-full sm:w-auto">
-            <MultiSelectFilter
-              title="Técnicos/Equipes"
-              options={[
-                ...technicians
-                  .filter((t: Technician) => user?.role === 'admin' || t.userId === user?.id)
-                  .map((t: Technician) => ({ label: t.name, value: t.id.toString(), icon: User })),
-                ...teams
-                  .filter((t: any) => user?.role === 'admin' || t.userId === user?.id)
-                  .map((t: any) => ({ label: t.name, value: `team-${t.id}`, icon: User }))
-              ]}
-              selectedValues={selectedTechnicians}
-              onSelectionChange={setSelectedTechnicians}
-              className="w-full lg:w-[180px]"
-            />
-          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex-1 min-w-0">
+              <Select
+                value={inRouteFilter}
+                onValueChange={(val: 'all' | 'yes' | 'no') => setInRouteFilter(val)}
+              >
+                <SelectTrigger className="w-full h-9 text-xs">
+                  <SelectValue placeholder="Romaneio" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="yes">Com Romaneio</SelectItem>
+                  <SelectItem value="no">Sem Romaneio</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div className="w-full sm:w-auto">
-            <MultiSelectFilter
-              title="Serviços"
-              options={services.map((s: Service) => ({ label: s.name, value: s.id.toString(), icon: Wrench }))}
-              selectedValues={selectedServices}
-              onSelectionChange={setSelectedServices}
-              className="w-full lg:w-[160px]"
-            />
+            {(selectedTechnicians.length > 0 || selectedServices.length > 0 || selectedStatuses.length > 0 || searchTerm || selectedDate || inRouteFilter !== "all") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedTechnicians([]);
+                  setSelectedServices([]);
+                  setSelectedStatuses([]);
+                  setSearchTerm("");
+                  setSelectedDate("");
+                  setInRouteFilter("all");
+                }}
+                className="h-9 w-full sm:w-auto px-3 text-xs text-gray-600 hover:text-red-600 justify-center border border-transparent hover:border-red-100"
+                title="Limpar todos os filtros"
+              >
+                <FilterX className="h-3.5 w-3.5 mr-2" />
+                Limpar
+              </Button>
+            )}
           </div>
-
-          <div className="w-full sm:w-auto">
-            <MultiSelectFilter
-              title="Status"
-              options={[
-                { label: "Agendado", value: "scheduled" },
-                { label: "Confirmado", value: "confirmed" },
-                { label: "Em Andamento", value: "in_progress" },
-                { label: "Concluído", value: "completed" },
-                { label: "Cancelado", value: "cancelled" },
-                { label: "Remarcado", value: "rescheduled" },
-              ]}
-              selectedValues={selectedStatuses}
-              onSelectionChange={setSelectedStatuses}
-              className="w-full lg:w-[140px]"
-            />
-          </div>
-
-          <div className="w-full sm:w-auto">
-            <Select
-              value={inRouteFilter}
-              onValueChange={(val: 'all' | 'yes' | 'no') => setInRouteFilter(val)}
-            >
-              <SelectTrigger className="w-full lg:w-[160px] h-8 text-xs">
-                <SelectValue placeholder="Romaneio" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="yes">Com Romaneio</SelectItem>
-                <SelectItem value="no">Sem Romaneio</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {(selectedTechnicians.length > 0 || selectedServices.length > 0 || selectedStatuses.length > 0 || searchTerm || selectedDate || inRouteFilter !== "all") && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSelectedTechnicians([]);
-                setSelectedServices([]);
-                setSelectedStatuses([]);
-                setSearchTerm("");
-                setSelectedDate("");
-                setInRouteFilter("all");
-              }}
-              className="h-8 w-full sm:w-auto px-2 text-xs text-gray-500 hover:text-red-600 justify-center"
-              title="Limpar todos os filtros"
-            >
-              <FilterX className="h-3.5 w-3.5 mr-2 sm:mr-0" />
-              <span className="sm:hidden">Limpar Filtros</span>
-            </Button>
-          )}
         </div>
       </div>
 

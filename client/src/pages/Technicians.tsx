@@ -476,7 +476,7 @@ export default function Technicians() {
               handleTechnicianFormClose();
             }
           }}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden p-0 flex flex-col">
+            <DialogContent className="w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-hidden p-0 flex flex-col">
               <TechnicianForm
                 technician={selectedTechnician}
                 services={services}
@@ -652,7 +652,7 @@ export default function Technicians() {
 
           {/* Centralized Dialog for All Team Forms */}
           <Dialog open={isTeamFormOpen} onOpenChange={setIsTeamFormOpen}>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden p-0 flex flex-col">
+            <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-hidden p-0 flex flex-col">
               <TempTeamForm
                 team={selectedTeam || undefined}
                 technicians={technicians}

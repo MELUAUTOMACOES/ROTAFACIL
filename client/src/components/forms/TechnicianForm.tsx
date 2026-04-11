@@ -195,7 +195,7 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
   const isLoading = createTechnicianMutation.isPending || updateTechnicianMutation.isPending;
 
   return (
-    <div className="flex flex-col h-full h-[90vh]">
+    <div className="flex flex-col h-full max-h-[90vh] min-h-0">
       <div className="p-6 pb-4 border-b shrink-0 bg-white">
         <DialogHeader>
           <DialogTitle className="flex items-center">
@@ -207,7 +207,7 @@ export default function TechnicianForm({ technician, services, onClose }: Techni
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
 
           {/* Upload de Foto do Técnico */}
           <div className="flex items-center gap-4">

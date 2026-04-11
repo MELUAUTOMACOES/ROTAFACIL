@@ -542,7 +542,7 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
   const isLoading = createClientMutation.isPending || updateClientMutation.isPending;
 
   return (
-    <div className="flex flex-col h-full h-[90vh]">
+    <div className="flex flex-col h-full max-h-[90vh] min-h-0">
       <div className="p-6 pb-4 border-b shrink-0 bg-white">
         <DialogHeader>
           <DialogTitle className="flex items-center">
@@ -553,7 +553,7 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
       </div>
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
           <div>
           <Label htmlFor="cpf">CPF / CNPJ *</Label>
           <div className="space-y-2">
