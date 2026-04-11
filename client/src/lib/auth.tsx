@@ -3,7 +3,7 @@ import { apiRequest } from "./queryClient";
 import { buildApiUrl } from "./api-config";
 import type { User } from "../../../shared/schema";
 import type { CompanyOption } from "@/components/CompanySelector";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/hooks/use-toast";
 
 // Tipo estendido com campos multi-tenant retornados pelo backend (não estão na tabela users)
 export interface AuthUser extends User {
@@ -43,15 +43,11 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children?: ReactNode } = {}) {
-  if (!children) {
-    console.warn("[AuthProvider] Renderizado sem children!");
-    return null;
-  }
+  // ✅ TODOS OS HOOKS DEVEM FICAR AQUI — ANTES de qualquer return condicional
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [userCompanies, setUserCompanies] = useState<CompanyOption[]>([]);
   const [previousCompanyId, setPreviousCompanyId] = useState<number | undefined>();
-  const { toast: showToast } = useToast();
 
   // ✅ Estabilizar logout com useCallback
   const logout = useCallback(() => {
@@ -136,7 +132,7 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
     const handleUnauthorized = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.code === "SYSTEM_UPDATED") {
-        showToast({
+        toast({
           title: "Sistema Atualizado",
           description: detail.message || "Sua sessão expirou devido a uma atualização do sistema. Faça login novamente.",
           variant: "destructive",
@@ -153,7 +149,7 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
       const detail = (e as CustomEvent).detail;
       console.warn('⚠️ [AUTH] Membership invalidada pelo backend:', detail);
       
-      showToast({
+      toast({
         title: "Acesso à empresa removido",
         description: detail.message || "Seu acesso a esta empresa foi desativado. Selecione outra empresa ou entre em contato com o administrador.",
         variant: "destructive",
@@ -182,7 +178,7 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
       window.removeEventListener("membership-invalidated", handleMembershipInvalidated as EventListener);
       clearInterval(intervalId);
     };
-  }, [checkAuth, logout, showToast]);
+  }, [checkAuth, logout]);
 
   const login = async (email: string, password: string): Promise<CompanySelectionData | void> => {
     // 🔄 Retry logic para erros de pooler/cold start

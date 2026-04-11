@@ -44,9 +44,11 @@ import Layout from "./components/Layout";
 import NotFound from "@/pages/not-found";
 
 function AppRoutes() {
+  // ✅ TODOS OS HOOKS DEVEM FICAR AQUI — ANTES de qualquer return condicional
   const { user, isLoading, requirePasswordChange } = useAuth();
   const [forceAccessPending, setForceAccessPending] = useState(false);
   const { toast } = useToast();
+  const [location] = useLocation();
 
   useEffect(() => {
     // 🔒 Escutar evento de empresa invalidada (por polling do /api/auth/me)
@@ -83,6 +85,7 @@ function AppRoutes() {
     };
   }, [toast]);
 
+  // ✅ RETURNS CONDICIONAIS — só depois de todos os hooks
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-zinc-950">
@@ -125,7 +128,6 @@ function AppRoutes() {
 
   // 🏢 Multiempresa: Se usuário não tem empresa ativa ou foi forçado, redirecionar para tela neutra
   // EXCETO se está em rota de aceite de convite (precisa completar o fluxo)
-  const [location] = useLocation();
   const isConviteRoute = location.startsWith('/convite/');
   
   if (((!user.companyId && !isConviteRoute) || forceAccessPending) && !isConviteRoute) {
