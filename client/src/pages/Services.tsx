@@ -259,7 +259,7 @@ export default function Services() {
 
       {/* Centralized Dialog for All Service Forms */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent>
+        <DialogContent className="p-0 flex flex-col max-h-[90vh] overflow-hidden">
           <ServiceForm
             service={selectedService}
             onClose={handleFormClose}

@@ -542,16 +542,19 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
   const isLoading = createClientMutation.isPending || updateClientMutation.isPending;
 
   return (
-    <div className="space-y-6">
-      <DialogHeader>
-        <DialogTitle className="flex items-center">
-          <Users className="h-5 w-5 mr-2 text-burnt-yellow" />
-          {client ? "Editar Cliente" : "Novo Cliente"}
-        </DialogTitle>
-      </DialogHeader>
+    <div className="flex flex-col h-full h-[90vh]">
+      <div className="p-6 pb-4 border-b shrink-0 bg-white">
+        <DialogHeader>
+          <DialogTitle className="flex items-center">
+            <Users className="h-5 w-5 mr-2 text-burnt-yellow" />
+            {client ? "Editar Cliente" : "Novo Cliente"}
+          </DialogTitle>
+        </DialogHeader>
+      </div>
 
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div>
           <Label htmlFor="cpf">CPF / CNPJ *</Label>
           <div className="space-y-2">
             <Input
@@ -759,10 +762,13 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
           )}
         </div>
 
-        <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
+        </div>
+
+        <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 p-6 pt-4 border-t bg-gray-50/50 shrink-0 mt-auto">
           <Button
             type="button"
             variant="outline"
+            className="w-full sm:w-auto"
             onClick={onClose}
           >
             Cancelar
@@ -770,7 +776,7 @@ export default function ClientForm({ client, onClose }: ClientFormProps) {
           <Button
             type="submit"
             disabled={isLoading}
-            className="bg-black text-white hover:bg-gray-800"
+            className="w-full sm:w-auto bg-black text-white hover:bg-gray-800"
           >
             {isLoading ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />

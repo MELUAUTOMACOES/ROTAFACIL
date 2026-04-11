@@ -601,59 +601,62 @@ export default function AppointmentForm({
   }, [appointment]);
 
   return (
-    <div className="space-y-6">
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          <Calendar className="h-5 w-5" />
-          {appointment ? "Editar Agendamento" : "Novo Agendamento"}
-        </DialogTitle>
-      </DialogHeader>
-
-      {/* Alerta de Romaneio Confirmado/Finalizado */}
-      {isInConfirmedRoute && (
-        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5 flex-shrink-0" />
-          <div className="flex-1">
-            <h4 className="font-semibold text-orange-900 mb-1">
-              🚚 Romaneio {routeInfo.status === 'confirmado' ? 'Confirmado' : 'Finalizado'} #{routeInfo.displayNumber}
-            </h4>
-            <p className="text-sm text-orange-800">
-              Este agendamento está em um romaneio {routeInfo.status === 'confirmado' ? 'confirmado' : 'finalizado'} e não pode ser editado.
-              Para alterar este agendamento, você precisa ir na tela de <strong>Romaneios - Histórico de Rotas</strong> e alterar o status do romaneio.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Alerta de Status não editável */}
-      {isStatusBlocked && !isInConfirmedRoute && (
-        <div className="bg-gray-50 border border-gray-300 rounded-lg p-4 flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-gray-600 mt-0.5 flex-shrink-0" />
-          <div className="flex-1">
-            <h4 className="font-semibold text-gray-900 mb-1">
-              🔒 Agendamento não editável
-            </h4>
-            <p className="text-sm text-gray-700">
-              Este agendamento está com status <strong>"{appointment?.status === 'completed' ? 'Concluído' : appointment?.status === 'cancelled' ? 'Cancelado' : appointment?.status === 'in_progress' ? 'Em Andamento' : appointment?.status}"</strong> e não pode ser editado.
-              Apenas agendamentos com status "Agendado" ou "Remarcado" podem ser alterados.
-            </p>
-          </div>
-        </div>
-      )}
-
-
-      <div className="flex gap-2 mb-4">
-        <NewClientDialog onClientCreated={handleClientCreated}>
-          <Button variant="outline" size="sm" className="text-green-600 border-green-600 hover:bg-green-50" disabled={isReadOnly}>
-            <UserPlus className="h-4 w-4 mr-2" />
-            Novo Cliente
-          </Button>
-        </NewClientDialog>
+    <div className="flex flex-col h-full h-[90vh]">
+      <div className="p-6 pb-4 border-b shrink-0">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            {appointment ? "Editar Agendamento" : "Novo Agendamento"}
+          </DialogTitle>
+        </DialogHeader>
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          {/* Client Selection */}
+        <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+            {/* Alerta de Romaneio Confirmado/Finalizado */}
+            {isInConfirmedRoute && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-semibold text-orange-900 mb-1">
+                    🚚 Romaneio {routeInfo.status === 'confirmado' ? 'Confirmado' : 'Finalizado'} #{routeInfo.displayNumber}
+                  </h4>
+                  <p className="text-sm text-orange-800">
+                    Este agendamento está em um romaneio {routeInfo.status === 'confirmado' ? 'confirmado' : 'finalizado'} e não pode ser editado.
+                    Para alterar este agendamento, você precisa ir na tela de <strong>Romaneios - Histórico de Rotas</strong> e alterar o status do romaneio.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Alerta de Status não editável */}
+            {isStatusBlocked && !isInConfirmedRoute && (
+              <div className="bg-gray-50 border border-gray-300 rounded-lg p-4 flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-gray-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-semibold text-gray-900 mb-1">
+                    🔒 Agendamento não editável
+                  </h4>
+                  <p className="text-sm text-gray-700">
+                    Este agendamento está com status <strong>"{appointment?.status === 'completed' ? 'Concluído' : appointment?.status === 'cancelled' ? 'Cancelado' : appointment?.status === 'in_progress' ? 'Em Andamento' : appointment?.status}"</strong> e não pode ser editado.
+                    Apenas agendamentos com status "Agendado" ou "Remarcado" podem ser alterados.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 mb-4">
+              <NewClientDialog onClientCreated={handleClientCreated}>
+                <Button variant="outline" size="sm" className="text-green-600 border-green-600 hover:bg-green-50" disabled={isReadOnly}>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Novo Cliente
+                </Button>
+              </NewClientDialog>
+            </div>
+
+            {/* Client Selection */}
           <FormField
             control={form.control}
             name="clientId"
@@ -1272,15 +1275,16 @@ export default function AppointmentForm({
               </FormItem>
             )}
           />
+          </div>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" variant="outline" onClick={onClose}>
+          <div className="flex justify-end gap-2 p-6 pt-4 border-t bg-gray-50/50 shrink-0 flex-col-reverse sm:flex-row mt-auto">
+            <Button type="button" variant="outline" onClick={onClose} className="w-full sm:w-auto">
               Cancelar
             </Button>
             <Button
               type="submit"
               disabled={createMutation.isPending || updateMutation.isPending || isReadOnly}
-              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white w-full sm:w-auto mb-2 sm:mb-0"
             >
               {(createMutation.isPending || updateMutation.isPending) && (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />

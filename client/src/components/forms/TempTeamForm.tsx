@@ -375,13 +375,15 @@ export default function TeamForm({
   };
 
   return (
-    <div className="max-h-[80vh] overflow-y-auto">
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          {team ? "Editar Equipe" : "Cadastrar Nova Equipe"}
-        </DialogTitle>
-      </DialogHeader>
+    <div className="flex flex-col h-full h-[90vh]">
+      <div className="p-6 pb-4 border-b shrink-0 bg-white">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            {team ? "Editar Equipe" : "Cadastrar Nova Equipe"}
+          </DialogTitle>
+        </DialogHeader>
+      </div>
 
       <Form {...form}>
         <form
@@ -389,8 +391,9 @@ export default function TeamForm({
             console.log("🛎️ onSubmit disparado COM CERTEZA!", { team, data });
             onSubmit(data);
           })}
-          className="space-y-6"
+          className="flex flex-col flex-1 min-h-0"
         >
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
           {/* Nome da Equipe */}
           <FormField
@@ -730,14 +733,16 @@ export default function TeamForm({
             )}
           </div>
 
-          <div className="flex justify-end space-x-2 pt-4">
-            <Button type="button" variant="outline" onClick={onClose}>
+          </div>
+
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 p-6 pt-4 border-t bg-gray-50/50 shrink-0 mt-auto">
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={onClose}>
               Cancelar
             </Button>
             <Button
               type="submit"
               disabled={team ? updateTeamMutation.isPending : createTeamMutation.isPending}
-              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
+              className="w-full sm:w-auto bg-burnt-yellow hover:bg-burnt-yellow-dark text-white"
               onClick={() => {
                 console.log("🔘 Botão clicked! Estado do formulário:", {
                   isValid: form.formState.isValid,

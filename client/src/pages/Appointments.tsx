@@ -2461,19 +2461,18 @@ export default function Appointments() {
 
       {/* New Compact Filter Bar */}
       <div className="bg-white/95 backdrop-blur-md dark:bg-zinc-900/95 border border-border/60 dark:border-zinc-800 sticky top-4 z-10 p-4 shadow-sm rounded-xl space-y-3 mb-6 transition-all">
-        {/* Filter Row */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-3">
+          <div className="relative w-full lg:flex-1 lg:min-w-[200px] lg:max-w-xs">
             <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 h-3.5 w-3.5" />
             <Input
               placeholder="Buscar cliente..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-8 pl-8 text-xs bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 focus:bg-white dark:focus:bg-zinc-700 transition-colors dark:text-zinc-100 dark:placeholder-zinc-500"
+              className="h-8 pl-8 text-xs bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 focus:bg-white dark:focus:bg-zinc-700 transition-colors w-full dark:text-zinc-100 dark:placeholder-zinc-500"
             />
           </div>
 
-          <div className="flex-1 min-w-[200px] max-w-xs">
+          <div className="w-full lg:flex-1 lg:min-w-[200px] lg:max-w-xs">
             <Input
               type="date"
               value={selectedDate}
@@ -2487,58 +2486,65 @@ export default function Appointments() {
             />
           </div>
 
-          <MultiSelectFilter
-            title="Técnicos/Equipes"
-            options={[
-              ...technicians
-                .filter((t: Technician) => user?.role === 'admin' || t.userId === user?.id) // Filter technicians
-                .map((t: Technician) => ({ label: t.name, value: t.id.toString(), icon: User })),
-              ...teams
-                .filter((t: any) => user?.role === 'admin' || t.userId === user?.id) // Filter teams (assuming userId link)
-                .map((t: any) => ({ label: t.name, value: `team-${t.id}`, icon: User }))
-            ]}
-            selectedValues={selectedTechnicians}
-            onSelectionChange={setSelectedTechnicians}
-            className="w-[180px]"
-          />
+          <div className="w-full sm:w-auto">
+            <MultiSelectFilter
+              title="Técnicos/Equipes"
+              options={[
+                ...technicians
+                  .filter((t: Technician) => user?.role === 'admin' || t.userId === user?.id)
+                  .map((t: Technician) => ({ label: t.name, value: t.id.toString(), icon: User })),
+                ...teams
+                  .filter((t: any) => user?.role === 'admin' || t.userId === user?.id)
+                  .map((t: any) => ({ label: t.name, value: `team-${t.id}`, icon: User }))
+              ]}
+              selectedValues={selectedTechnicians}
+              onSelectionChange={setSelectedTechnicians}
+              className="w-full lg:w-[180px]"
+            />
+          </div>
 
-          <MultiSelectFilter
-            title="Serviços"
-            options={services.map((s: Service) => ({ label: s.name, value: s.id.toString(), icon: Wrench }))}
-            selectedValues={selectedServices}
-            onSelectionChange={setSelectedServices}
-            className="w-[160px]"
-          />
+          <div className="w-full sm:w-auto">
+            <MultiSelectFilter
+              title="Serviços"
+              options={services.map((s: Service) => ({ label: s.name, value: s.id.toString(), icon: Wrench }))}
+              selectedValues={selectedServices}
+              onSelectionChange={setSelectedServices}
+              className="w-full lg:w-[160px]"
+            />
+          </div>
 
-          <MultiSelectFilter
-            title="Status"
-            options={[
-              { label: "Agendado", value: "scheduled" },
-              { label: "Confirmado", value: "confirmed" },
-              { label: "Em Andamento", value: "in_progress" },
-              { label: "Concluído", value: "completed" },
-              { label: "Cancelado", value: "cancelled" },
-              { label: "Remarcado", value: "rescheduled" },
-            ]}
-            selectedValues={selectedStatuses}
-            onSelectionChange={setSelectedStatuses}
-            className="w-[140px]"
-          />
+          <div className="w-full sm:w-auto">
+            <MultiSelectFilter
+              title="Status"
+              options={[
+                { label: "Agendado", value: "scheduled" },
+                { label: "Confirmado", value: "confirmed" },
+                { label: "Em Andamento", value: "in_progress" },
+                { label: "Concluído", value: "completed" },
+                { label: "Cancelado", value: "cancelled" },
+                { label: "Remarcado", value: "rescheduled" },
+              ]}
+              selectedValues={selectedStatuses}
+              onSelectionChange={setSelectedStatuses}
+              className="w-full lg:w-[140px]"
+            />
+          </div>
 
-
-          <Select
-            value={inRouteFilter}
-            onValueChange={(val: 'all' | 'yes' | 'no') => setInRouteFilter(val)}
-          >
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Romaneio" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="yes">Com Romaneio</SelectItem>
-              <SelectItem value="no">Sem Romaneio</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="w-full sm:w-auto">
+            <Select
+              value={inRouteFilter}
+              onValueChange={(val: 'all' | 'yes' | 'no') => setInRouteFilter(val)}
+            >
+              <SelectTrigger className="w-full lg:w-[160px] h-8 text-xs">
+                <SelectValue placeholder="Romaneio" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="yes">Com Romaneio</SelectItem>
+                <SelectItem value="no">Sem Romaneio</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           {(selectedTechnicians.length > 0 || selectedServices.length > 0 || selectedStatuses.length > 0 || searchTerm || selectedDate || inRouteFilter !== "all") && (
             <Button
@@ -2552,10 +2558,11 @@ export default function Appointments() {
                 setSelectedDate("");
                 setInRouteFilter("all");
               }}
-              className="h-8 px-2 text-xs text-gray-500 hover:text-red-600"
+              className="h-8 w-full sm:w-auto px-2 text-xs text-gray-500 hover:text-red-600 justify-center"
               title="Limpar todos os filtros"
             >
-              <FilterX className="h-3.5 w-3.5" />
+              <FilterX className="h-3.5 w-3.5 mr-2 sm:mr-0" />
+              <span className="sm:hidden">Limpar Filtros</span>
             </Button>
           )}
         </div>
@@ -2875,7 +2882,7 @@ export default function Appointments() {
                                   </div>
                                 </div>
 
-                                <div className="flex space-x-2 w-full md:w-auto justify-end md:ml-4">
+                                <div className="flex space-x-2 w-full md:w-auto justify-end md:ml-4 mt-4 md:mt-0 pt-4 md:pt-0 border-t md:border-0 border-gray-100 dark:border-zinc-800">
                                   {/* Botão WhatsApp */}
                                   {client?.phone1 && generateWhatsAppLinkForAppointment(client.phone1, appointment, client, service) && (
                                     <a
@@ -3012,7 +3019,7 @@ export default function Appointments() {
 
       {/* Centralized Dialog for All Appointment Forms */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden p-0 flex flex-col">
           <AppointmentForm
             appointment={selectedAppointment}
             onClose={handleFormClose}

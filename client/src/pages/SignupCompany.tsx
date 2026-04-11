@@ -614,7 +614,7 @@ export default function SignupCompany() {
 
                   <div>
                     <Label className="text-slate-200">Serviços Oferecidos</Label>
-                    <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
                       {servicosOptions.map((servico) => (
                         <div key={servico} className="flex items-center space-x-2">
                           <Checkbox
@@ -701,7 +701,7 @@ export default function SignupCompany() {
               </div>
 
               {/* Botões */}
-              <div className="flex gap-4">
+              <div className="flex flex-col sm:flex-row gap-4">
                 <Button
                   type="button"
                   variant="outline"

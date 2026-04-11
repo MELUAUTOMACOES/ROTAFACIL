@@ -82,6 +82,16 @@ Aliases:
 ✅ Auth com useAuth() e getAuthHeaders() de client/src/lib/auth.tsx.
 ✅ Toasts com useToast().
 ✅ Mapas com a base existente em components/maps.
+✅ Em telas mobile, seguir abordagem mobile first real, priorizando usabilidade entre 320px e 430px.
+✅ Forms, modais, filtros, tabelas e barras de ação devem ser auditados também no mobile, não apenas no desktop.
+✅ Em formulários e modais longos, o padrão preferencial é:
+- cabeçalho fixo
+- rodapé fixo
+- scroll apenas no corpo do conteúdo
+✅ Evitar scroll duplo em modais e formulários.
+✅ Não aceitar overflow horizontal como solução padrão de responsividade, especialmente em forms e tabelas.
+✅ Em mobile, campos lado a lado devem empilhar quando necessário para preservar leitura, toque e preenchimento.
+✅ Se tabela ficar ruim no celular, preferir visão em cards, blocos empilhados ou reorganização real da informação, em vez de apenas adicionar rolagem lateral.
 ❌ Não introduzir nova lib de estilização, estado global ou notificação sem aprovação.
 
 7. BANCO, AUTH E MULTIEMPRESA
@@ -105,6 +115,7 @@ Aliases:
 ✅ Manter formulários limpos ao criar novo registro.
 ✅ Logs em submits, erros e fluxos críticos.
 ✅ Não deixar estado “vazando” entre criação, edição e troca de tela.
+✅ Interfaces de cadastro, edição, filtros, modais e listagens devem permanecer utilizáveis no mobile, com foco em preenchimento, leitura e ações acessíveis.
 
 9. QUALIDADE DE CÓDIGO
 ✅ Evitar any; usar types do shared/schema sempre que possível.
@@ -196,6 +207,29 @@ Usar skill de impacto de banco: mapear tabelas afetadas, risco de dados legados,
 
 - PEDIDO DE PROMPT PARA OUTRO AGENTE
 Usar skill de prompt builder: gerar prompt claro, específico, em PT-BR, com contexto, objetivo, escopo, restrições, arquivos envolvidos, cuidados com arquivos sensíveis e exigência de alterar somente o necessário.
+
+- AUDITORIA DE UI / UX / RESPONSIVIDADE / MOBILE / FORMULÁRIOS / MODAIS / TABELAS / FILTROS
+Usar a skill `mobile-first-ui-ux`: revisar a interface com foco em mobile first real, priorizando usabilidade em telas pequenas, sem quebrar desktop e sem alterar lógica de negócio.
+
+Regras obrigatórias dessa skill:
+- começar por páginas com formulários
+- identificar sobreposição, overflow horizontal, grids rígidos, botões ruins para toque e elementos fora da viewport
+- validar modais longos e formulários extensos no celular
+- adotar como padrão preferencial:
+  1. cabeçalho fixo
+  2. rodapé fixo
+  3. scroll apenas no corpo
+- evitar scroll duplo
+- não considerar `overflow-x-auto` isoladamente como solução suficiente para tabelas no mobile
+- quando necessário, transformar tabelas em cards, blocos empilhados ou visão simplificada para celular
+- preservar desktop, regras de negócio, identidade visual e componentes oficiais do projeto
+- sempre entregar:
+  - problemas encontrados
+  - arquivos afetados
+  - antes/depois
+  - explicação simples
+  - riscos restantes
+  - forma de validação
 
 Se a tarefa envolver mais de uma natureza, combinar as skills de forma lógica, sempre priorizando:
 1. Segurança

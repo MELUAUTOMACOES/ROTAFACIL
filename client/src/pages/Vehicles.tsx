@@ -417,7 +417,7 @@ export default function Vehicles() {
 
       {/* Dialog para Formulário de Veículo */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden p-0 flex flex-col">
           <VehicleForm
             key={selectedVehicle?.id || 'new'}
             vehicle={selectedVehicle}
@@ -432,19 +432,17 @@ export default function Vehicles() {
 
       {/* Dialog para Formulário de Manutenção */}
       <Dialog open={isMaintenanceFormOpen} onOpenChange={setIsMaintenanceFormOpen}>
-        <DialogContent className="max-w-3xl max-h-[95vh] flex flex-col p-0">
-          <div className="overflow-y-auto p-6">
-            <VehicleMaintenanceForm
-              vehicleId={selectedVehicleForMaintenance?.id}
-              vehiclePlate={selectedVehicleForMaintenance?.plate}
-              vehicles={vehicles}
-              maintenance={selectedMaintenance}
-              onClose={() => {
-                setIsMaintenanceFormOpen(false);
-                setSelectedMaintenance(null);
-              }}
-            />
-          </div>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden p-0 flex flex-col">
+          <VehicleMaintenanceForm
+            vehicleId={selectedVehicleForMaintenance?.id}
+            vehiclePlate={selectedVehicleForMaintenance?.plate}
+            vehicles={vehicles}
+            maintenance={selectedMaintenance}
+            onClose={() => {
+              setIsMaintenanceFormOpen(false);
+              setSelectedMaintenance(null);
+            }}
+          />
         </DialogContent>
       </Dialog>
     </div >
@@ -551,14 +549,14 @@ function MaintenanceTab({
     <div className="space-y-4">
       {/* Barra de Filtros */}
       <Card className="p-4 md:p-5 bg-muted/20 border-border/60 shadow-sm">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="w-32">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+          <div className="w-full">
             <Label htmlFor="filter-id" className="text-xs">Buscar por ID</Label>
             <div className="relative mt-1">
               <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <Input
                 id="filter-id"
-                className="pl-9 h-9"
+                className="pl-9 h-9 w-full"
                 placeholder="Ex: 123"
                 value={filters.idSearch}
                 onChange={(e) => setFilters({ ...filters, idSearch: e.target.value })}
@@ -566,7 +564,7 @@ function MaintenanceTab({
             </div>
           </div>
 
-          <div className="flex-1 min-w-[150px]">
+          <div className="w-full sm:col-span-2 lg:col-span-2">
             <Label htmlFor="filter-vehicle" className="text-xs">Veículo</Label>
             <select
               id="filter-vehicle"
@@ -583,7 +581,7 @@ function MaintenanceTab({
             </select>
           </div>
 
-          <div className="w-32">
+          <div className="w-full">
             <Label htmlFor="filter-status" className="text-xs">Status</Label>
             <select
               id="filter-status"
@@ -597,7 +595,7 @@ function MaintenanceTab({
             </select>
           </div>
 
-          <div className="w-32">
+          <div className="w-full">
             <Label htmlFor="filter-type" className="text-xs">Tipo</Label>
             <select
               id="filter-type"
@@ -613,7 +611,7 @@ function MaintenanceTab({
             </select>
           </div>
 
-          <div className="w-40">
+          <div className="w-full">
             <Label htmlFor="filter-category" className="text-xs">Categoria</Label>
             <select
               id="filter-category"
@@ -628,11 +626,12 @@ function MaintenanceTab({
             </select>
           </div>
 
-          <div className="flex gap-2 min-w-fit">
+          <div className="flex gap-2 w-full sm:col-span-2 lg:col-span-6 mt-1 sm:mt-0 justify-end">
             {hasFilters && (
               <Button
                 variant="outline"
                 size="sm"
+                className="w-full sm:w-auto"
                 onClick={() => setFilters({ vehicleId: "", status: "all", maintenanceType: "all", category: "all", idSearch: "" })}
               >
                 Limpar
@@ -640,7 +639,7 @@ function MaintenanceTab({
             )}
             <Button
               size="sm"
-              className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white whitespace-nowrap"
+              className="w-full sm:w-auto bg-burnt-yellow hover:bg-burnt-yellow-dark text-white whitespace-nowrap"
               onClick={() => {
                 if (filters.vehicleId) {
                   const v = vehicles.find((v) => v.id.toString() === filters.vehicleId);

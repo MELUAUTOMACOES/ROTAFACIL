@@ -173,8 +173,8 @@ export default function AddressCard({
 
       {isExpanded && (
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-1">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
               <Label htmlFor={`cep-${index}`}>
                 CEP <span className="text-destructive">*</span>
               </Label>
@@ -186,7 +186,7 @@ export default function AddressCard({
                 disabled={isLoadingCep}
               />
             </div>
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <Label htmlFor={`logradouro-${index}`}>
                 Logradouro <span className="text-destructive">*</span>
               </Label>
@@ -200,8 +200,8 @@ export default function AddressCard({
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-4">
-            <div className="col-span-1">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div>
               <Label htmlFor={`numero-${index}`}>
                 Número <span className="text-destructive">*</span>
               </Label>
@@ -212,7 +212,7 @@ export default function AddressCard({
                 onChange={(e) => onUpdate(index, "numero", e.target.value)}
               />
             </div>
-            <div className="col-span-3">
+            <div className="sm:col-span-3">
               <Label htmlFor={`complemento-${index}`}>Complemento</Label>
               <Input
                 id={`complemento-${index}`}
@@ -223,7 +223,7 @@ export default function AddressCard({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <Label htmlFor={`bairro-${index}`}>
                 Bairro <span className="text-destructive">*</span>
