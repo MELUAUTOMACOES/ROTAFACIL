@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
     // 🔄 REVALIDAÇÃO PERIÓDICA: Verificar a cada 30s se a empresa atual ainda é válida
     const intervalId = setInterval(() => {
       const token = localStorage.getItem("token");
-      if (token && user) {
+      if (token) {
         console.log('[AUTH] Revalidando sessão...');
         checkAuth();
       }
@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children?: ReactNode } = {}) {
       window.removeEventListener("membership-invalidated", handleMembershipInvalidated as EventListener);
       clearInterval(intervalId);
     };
-  }, [user]);
+  }, []); // ✅ Sem dependências - listeners registrados apenas uma vez
 
   const checkAuth = async () => {
     try {
