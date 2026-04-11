@@ -9,25 +9,28 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, getAuthHeaders } from "@/lib/auth";
 import { buildApiUrl } from "@/lib/api-config";
-import { Loader2, Building2, UserPlus, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Loader2, Building2, UserPlus, CheckCircle2, XCircle, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { Link } from "wouter";
+
+// Versão atual dos termos LGPD — incrementar ao atualizar os termos
+const LGPD_VERSION = "v1.0-2025-01";
 
 export default function AcceptInvite() {
   const { token } = useParams<{ token: string }>();
   const [, setLocation] = useLocation();
-  
-  // 🔍 LOG: Token capturado da URL
-  console.log('🎫 [ACCEPT INVITE] Componente montado');
-  console.log('🎫 [ACCEPT INVITE] Token da URL:', token);
+
   const [isValidating, setIsValidating] = useState(true);
   const [inviteData, setInviteData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [isAccepting, setIsAccepting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -35,44 +38,36 @@ export default function AcceptInvite() {
     register,
     handleSubmit,
     formState: { errors },
+    setValue,
     watch,
   } = useForm<AcceptInvitationNewUserData>({
     resolver: zodResolver(acceptInvitationNewUserSchema),
     defaultValues: {
       token: token || "",
+      lgpdVersion: LGPD_VERSION,
     },
   });
 
-  const password = watch("password");
+  // Pré-preenche o token e a versão LGPD quando o token muda
+  useEffect(() => {
+    if (token) setValue("token", token);
+    setValue("lgpdVersion", LGPD_VERSION);
+  }, [token, setValue]);
 
   // Validar convite ao carregar
   useEffect(() => {
     const validateInvite = async () => {
       try {
         const url = buildApiUrl(`/api/invitations/${token}`);
-        console.log('🔍 [VALIDATE INVITE] Validando convite...');
-        console.log('🔍 [VALIDATE INVITE] URL:', url);
-        
         const response = await fetch(url);
-        console.log('🔍 [VALIDATE INVITE] Status:', response.status);
-        
         const data = await response.json();
-        console.log('🔍 [VALIDATE INVITE] Response:', data);
 
         if (!response.ok) {
-          console.error('❌ [VALIDATE INVITE] Erro na validação:', data.message);
           throw new Error(data.message || "Convite inválido");
         }
 
-        console.log('✅ [VALIDATE INVITE] Convite válido!');
-        console.log('   - Email:', data.invitation?.email);
-        console.log('   - Empresa:', data.invitation?.company?.name);
-        console.log('   - Role:', data.invitation?.role);
-        console.log('   - Usuário já tem conta?', data.hasAccount);
-        
         setInviteData(data);
       } catch (err: any) {
-        console.error('❌ [VALIDATE INVITE] Erro capturado:', err);
         setError(err.message || "Erro ao validar convite");
       } finally {
         setIsValidating(false);
@@ -88,133 +83,79 @@ export default function AcceptInvite() {
   const acceptWithExistingAccount = async () => {
     try {
       setIsAccepting(true);
-      
-      console.log('🎯 [ACCEPT EXISTING] Iniciando aceite de convite');
-      console.log('🎯 [ACCEPT EXISTING] Token:', token);
-      console.log('🎯 [ACCEPT EXISTING] User email:', user?.email);
-      console.log('🎯 [ACCEPT EXISTING] Invite email:', inviteData?.invitation?.email);
 
       const url = buildApiUrl(`/api/invitations/${token}/accept-existing`);
-      const headers = {
-        ...getAuthHeaders(),
-        "Content-Type": "application/json",
-      };
-      const payload = { token };
-      
-      console.log('📤 [ACCEPT EXISTING] Request details:');
-      console.log('   - Method: POST');
-      console.log('   - URL:', url);
-      console.log('   - Headers:', headers);
-      console.log('   - Body:', JSON.stringify(payload));
-      
       const response = await fetch(url, {
         method: "POST",
-        headers: headers,
-        body: JSON.stringify(payload),
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token }),
       });
 
-      console.log('📥 [ACCEPT EXISTING] Response status:', response.status);
-      console.log('📥 [ACCEPT EXISTING] Response headers:', Object.fromEntries(response.headers.entries()));
-      
       const data = await response.json();
-      console.log('📥 [ACCEPT EXISTING] Response body:', data);
 
       if (!response.ok) {
-        console.error('❌ [ACCEPT EXISTING] Erro no aceite:', data.message);
         throw new Error(data.message || "Erro ao aceitar convite");
       }
-      
-      console.log('✅ [ACCEPT EXISTING] Convite aceito com sucesso!');
-      console.log('   - Membership criada:', data.membership);
 
       toast({
         title: "✅ Convite aceito!",
         description: `Você agora faz parte de ${inviteData.invitation.company.name}`,
       });
 
-      console.log('🔄 [ACCEPT EXISTING] Redirecionando para dashboard em 1s...');
-      
-      // Redirecionar para dashboard após 1 segundo
       setTimeout(() => {
-        console.log('🔄 [ACCEPT EXISTING] Redirecionando agora...');
         setLocation("/");
       }, 1000);
     } catch (err: any) {
-      console.error('❌ [ACCEPT EXISTING] Erro capturado:', err);
-      console.error('❌ [ACCEPT EXISTING] Stack:', err.stack);
-      
       toast({
         variant: "destructive",
         title: "❌ Erro ao aceitar convite",
         description: err.message,
       });
     } finally {
-      console.log('🏁 [ACCEPT EXISTING] Finalizando processo');
       setIsAccepting(false);
     }
   };
 
-  // Se usuário não tem conta, criar nova
+  // Novo usuário: define username + senha + aceita LGPD
   const onSubmitNewUser = async (data: AcceptInvitationNewUserData) => {
     try {
       setIsAccepting(true);
-      
-      console.log('🆕 [ACCEPT NEW] Criando novo usuário e aceitando convite');
-      console.log('🆕 [ACCEPT NEW] Token:', token);
-      console.log('🆕 [ACCEPT NEW] Nome:', data.name);
 
       const url = buildApiUrl(`/api/invitations/${token}/accept-new`);
-      console.log('📤 [ACCEPT NEW] Request URL:', url);
-      console.log('📤 [ACCEPT NEW] Payload:', { ...data, password: '***', confirmPassword: '***' });
-      
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
 
-      console.log('📥 [ACCEPT NEW] Response status:', response.status);
-      
       const result = await response.json();
-      console.log('📥 [ACCEPT NEW] Response:', result);
 
       if (!response.ok) {
-        console.error('❌ [ACCEPT NEW] Erro ao criar usuário:', result.message);
         throw new Error(result.message || "Erro ao aceitar convite");
       }
 
-      console.log('✅ [ACCEPT NEW] Usuário criado com sucesso!');
-      console.log('   - User ID:', result.user?.id);
-      console.log('   - Token JWT recebido:', result.token ? 'SIM' : 'NÃO');
-      
       // Salvar token de autenticação
       localStorage.setItem("token", result.token);
-      console.log('💾 [ACCEPT NEW] Token salvo no localStorage');
 
       setSuccess(true);
       toast({
-        title: "✅ Conta criada e convite aceito!",
+        title: "✅ Conta ativada!",
         description: "Redirecionando para o sistema...",
       });
 
-      console.log('🔄 [ACCEPT NEW] Redirecionando para dashboard em 2s...');
-      
-      // Redirecionar para dashboard após 2 segundos
       setTimeout(() => {
-        console.log('🔄 [ACCEPT NEW] Redirecionando agora...');
         window.location.href = "/";
       }, 2000);
     } catch (err: any) {
-      console.error('❌ [ACCEPT NEW] Erro capturado:', err);
-      console.error('❌ [ACCEPT NEW] Stack:', err.stack);
-      
       toast({
         variant: "destructive",
-        title: "❌ Erro ao aceitar convite",
+        title: "❌ Erro ao ativar conta",
         description: err.message,
       });
     } finally {
-      console.log('🏁 [ACCEPT NEW] Finalizando processo');
       setIsAccepting(false);
     }
   };
@@ -261,6 +202,7 @@ export default function AcceptInvite() {
                 <ul className="text-sm text-yellow-800 mt-2 space-y-1 list-disc list-inside">
                   <li>O convite expirou (válido por 7 dias)</li>
                   <li>O convite já foi usado</li>
+                  <li>O convite foi cancelado pelo administrador</li>
                   <li>O link está incorreto</li>
                 </ul>
               </div>
@@ -284,7 +226,7 @@ export default function AcceptInvite() {
             </div>
             <CardTitle className="text-2xl">Bem-vindo!</CardTitle>
             <CardDescription>
-              Conta criada com sucesso. Redirecionando...
+              Conta ativada com sucesso. Redirecionando...
             </CardDescription>
           </CardHeader>
         </Card>
@@ -294,7 +236,7 @@ export default function AcceptInvite() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-lg">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-[#DAA520] bg-opacity-10 flex items-center justify-center">
             <Building2 className="h-8 w-8 text-[#DAA520]" />
@@ -326,6 +268,15 @@ export default function AcceptInvite() {
                   {inviteData?.invitation?.email}
                 </span>
               </div>
+              {/* Dados pré-cadastrados pelo admin (somente leitura) */}
+              {inviteData?.invitation?.displayName && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-blue-700">Nome:</span>
+                  <span className="font-semibold text-blue-900">
+                    {inviteData.invitation.displayName}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Se usuário já está logado */}
@@ -380,7 +331,7 @@ export default function AcceptInvite() {
                 )}
               </div>
             ) : (
-              /* Se usuário não tem conta, mostrar formulário de cadastro */
+              /* Se usuário não tem conta, mostrar formulário de ativação */
               <div>
                 {inviteData?.hasAccount ? (
                   <div className="space-y-4">
@@ -391,8 +342,6 @@ export default function AcceptInvite() {
                     </div>
                     <Button
                       onClick={() => {
-                        console.log('🔐 [ACCEPT INVITE] Salvando token para retornar após login...');
-                        console.log('   - Token:', token);
                         localStorage.setItem('pendingInviteToken', token || '');
                         window.location.href = '/login';
                       }}
@@ -403,39 +352,81 @@ export default function AcceptInvite() {
                   </div>
                 ) : (
                   <form onSubmit={handleSubmit(onSubmitNewUser)} className="space-y-4">
+                    {/* Hidden fields */}
+                    <input type="hidden" {...register("token")} />
+                    <input type="hidden" {...register("lgpdVersion")} />
+
+                    {/* Dados pré-cadastrados pelo admin (informativo, não editável) */}
+                    {inviteData?.invitation?.preRegistered && inviteData?.invitation?.displayName && (
+                      <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                        <p className="text-xs text-gray-500 mb-1">Dados cadastrados pelo administrador:</p>
+                        <p className="text-sm font-medium text-gray-800">{inviteData.invitation.displayName}</p>
+                        {inviteData.invitation.cidade && (
+                          <p className="text-xs text-gray-600">
+                            {inviteData.invitation.cidade}{inviteData.invitation.estado ? ` — ${inviteData.invitation.estado}` : ""}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Username */}
                     <div>
-                      <Label htmlFor="name">Nome Completo *</Label>
+                      <Label htmlFor="username">Nome de usuário *</Label>
                       <Input
-                        id="name"
-                        {...register("name")}
-                        placeholder="João Silva"
+                        id="username"
+                        {...register("username")}
+                        placeholder="joao.silva"
+                        autoComplete="username"
                       />
-                      {errors.name && (
-                        <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>
+                      <p className="text-xs text-gray-500 mt-1">Apenas letras minúsculas, números, ponto ou underscore (3–30 caracteres)</p>
+                      {errors.username && (
+                        <p className="text-sm text-red-500 mt-1">{errors.username.message}</p>
                       )}
                     </div>
 
+                    {/* Senha */}
                     <div>
                       <Label htmlFor="password">Senha *</Label>
-                      <Input
-                        id="password"
-                        type="password"
-                        {...register("password")}
-                        placeholder="Mínimo 8 caracteres"
-                      />
+                      <div className="relative">
+                        <Input
+                          id="password"
+                          type={showPassword ? "text" : "password"}
+                          {...register("password")}
+                          placeholder="Mínimo 8 caracteres"
+                          autoComplete="new-password"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          onClick={() => setShowPassword((v) => !v)}
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
                       {errors.password && (
                         <p className="text-sm text-red-500 mt-1">{errors.password.message}</p>
                       )}
                     </div>
 
+                    {/* Confirmar Senha */}
                     <div>
                       <Label htmlFor="confirmPassword">Confirmar Senha *</Label>
-                      <Input
-                        id="confirmPassword"
-                        type="password"
-                        {...register("confirmPassword")}
-                        placeholder="Digite a senha novamente"
-                      />
+                      <div className="relative">
+                        <Input
+                          id="confirmPassword"
+                          type={showConfirmPassword ? "text" : "password"}
+                          {...register("confirmPassword")}
+                          placeholder="Digite a senha novamente"
+                          autoComplete="new-password"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          onClick={() => setShowConfirmPassword((v) => !v)}
+                        >
+                          {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
                       {errors.confirmPassword && (
                         <p className="text-sm text-red-500 mt-1">
                           {errors.confirmPassword.message}
@@ -443,6 +434,7 @@ export default function AcceptInvite() {
                       )}
                     </div>
 
+                    {/* Requisitos de senha */}
                     <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
                       <p className="text-xs text-gray-700">
                         <strong>Requisitos de senha:</strong>
@@ -455,6 +447,33 @@ export default function AcceptInvite() {
                       </ul>
                     </div>
 
+                    {/* Aceite LGPD */}
+                    <div className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <Checkbox
+                        id="lgpdAccepted"
+                        onCheckedChange={(checked) => {
+                          // Zod espera literal true — set só quando marcado
+                          if (checked === true) {
+                            setValue("lgpdAccepted", true, { shouldValidate: true });
+                          }
+                        }}
+                      />
+                      <Label htmlFor="lgpdAccepted" className="text-sm leading-relaxed cursor-pointer">
+                        Li e aceito os{" "}
+                        <a href="/termos-de-uso" target="_blank" className="text-[#DAA520] underline">
+                          Termos de Uso
+                        </a>{" "}
+                        e a{" "}
+                        <a href="/politica-de-privacidade" target="_blank" className="text-[#DAA520] underline">
+                          Política de Privacidade (LGPD)
+                        </a>
+                        .
+                      </Label>
+                    </div>
+                    {errors.lgpdAccepted && (
+                      <p className="text-sm text-red-500 -mt-2">{errors.lgpdAccepted.message}</p>
+                    )}
+
                     <Button
                       type="submit"
                       className="w-full bg-[#DAA520] hover:bg-[#B8860B]"
@@ -463,12 +482,12 @@ export default function AcceptInvite() {
                       {isAccepting ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Criando conta...
+                          Ativando conta...
                         </>
                       ) : (
                         <>
                           <UserPlus className="mr-2 h-4 w-4" />
-                          Criar Conta e Aceitar Convite
+                          Ativar Conta e Acessar
                         </>
                       )}
                     </Button>

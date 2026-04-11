@@ -193,20 +193,20 @@ export default function UserManagement() {
 
         <TabsContent value="users" className="space-y-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-              <CardTitle className="text-2xl font-bold flex items-center gap-2">
-                <Shield className="w-6 h-6" />
-                Gerenciamento de Usuários
+            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-4 sm:space-y-0 pb-4">
+              <CardTitle className="text-xl sm:text-2xl font-bold flex items-center gap-2 w-full sm:w-auto break-words">
+                <Shield className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
+                <span>Gerenciamento de Usuários</span>
               </CardTitle>
               <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
                 <DialogTrigger asChild>
-                  <Button onClick={handleNew}>
+                  <Button onClick={handleNew} className="w-full sm:w-auto shrink-0">
                     <Plus className="w-4 h-4 mr-2" />
                     Novo Usuário
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                  <DialogHeader>
+                <DialogContent className="max-w-2xl max-h-[90dvh] sm:max-h-[90vh] overflow-hidden p-0 flex flex-col">
+                  <DialogHeader className="p-6 pb-4 border-b shrink-0">
                     <DialogTitle>
                       {selectedUser ? 'Editar Usuário' : 'Novo Usuário'}
                     </DialogTitle>
@@ -242,19 +242,19 @@ export default function UserManagement() {
                         {pendingInvites.map((invite: any) => (
                           <Card key={invite.id} className="bg-yellow-50 border-yellow-200">
                             <CardContent className="p-4">
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-3">
-                                    <Mail className="w-5 h-5 text-yellow-600" />
-                                    <div>
-                                      <p className="font-medium">{invite.email}</p>
-                                      <p className="text-sm text-muted-foreground">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start gap-3">
+                                    <Mail className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
+                                    <div className="min-w-0">
+                                      <p className="font-medium truncate">{invite.email}</p>
+                                      <p className="text-sm text-muted-foreground line-clamp-2">
                                         Convite enviado • Papel: {invite.role} • Aguardando aceite
                                       </p>
                                     </div>
                                   </div>
                                 </div>
-                                <Badge variant="outline" className="text-yellow-700 border-yellow-700">
+                                <Badge variant="outline" className="text-yellow-700 border-yellow-700 shrink-0">
                                   Pendente
                                 </Badge>
                               </div>
@@ -279,32 +279,32 @@ export default function UserManagement() {
                       )}
                       {users.map((user: User) => (
                     <Card key={user.id} className="overflow-hidden">
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1 space-y-2">
-                            <div className="flex items-center gap-3">
-                              <h3 className="font-semibold text-lg">{user.name}</h3>
+                      <CardContent className="p-4 min-w-0">
+                        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                          <div className="flex-1 space-y-3 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-semibold text-lg max-w-full truncate">{user.name}</h3>
                               {getRoleBadge(user.role)}
                               {getPlanBadge(user.plan)}
                               {user.isActive ? (
-                                <Badge variant="outline" className="text-green-600 border-green-600">
+                                <Badge variant="outline" className="text-green-600 border-green-600 shrink-0">
                                   <CheckCircle className="w-3 h-3 mr-1" />
                                   Ativo
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="text-red-600 border-red-600">
+                                <Badge variant="outline" className="text-red-600 border-red-600 shrink-0">
                                   <XCircle className="w-3 h-3 mr-1" />
                                   Inativo
                                 </Badge>
                               )}
                             </div>
 
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <div className="flex items-center gap-1">
-                                <Mail className="w-4 h-4" />
-                                {user.email}
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-muted-foreground">
+                              <div className="flex items-center gap-1 min-w-0">
+                                <Mail className="w-4 h-4 shrink-0" />
+                                <span className="truncate">{user.email}</span>
                               </div>
-                              <div>
+                              <div className="min-w-0 truncate">
                                 Username: <span className="font-mono">{user.username}</span>
                               </div>
                             </div>
@@ -312,12 +312,12 @@ export default function UserManagement() {
                             <div className="flex items-center gap-2 flex-wrap">
                               {user.emailVerified ? (
                                 <Badge variant="outline" className="text-green-600 border-green-600">
-                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  <CheckCircle className="w-3 h-3 mr-1 shrink-0" />
                                   Email Verificado
                                 </Badge>
                               ) : (
                                 <Badge variant="outline" className="text-orange-600 border-orange-600">
-                                  <Mail className="w-3 h-3 mr-1" />
+                                  <Mail className="w-3 h-3 mr-1 shrink-0" />
                                   Email Pendente
                                 </Badge>
                               )}
@@ -336,31 +336,36 @@ export default function UserManagement() {
                             )}
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 w-full lg:w-auto justify-end border-t lg:border-t-0 pt-3 lg:pt-0">
                             {!user.emailVerified && (
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleResendEmail(user.id)}
                                 disabled={resendEmailMutation.isPending}
+                                className="flex-1 lg:flex-none"
                               >
                                 <RefreshCw className={`w-4 h-4 ${resendEmailMutation.isPending ? 'animate-spin' : ''}`} />
+                                <span className="lg:hidden ml-2">Reenviar</span>
                               </Button>
                             )}
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
                               onClick={() => handleEdit(user)}
+                              className="flex-1 lg:flex-none"
                             >
                               <Edit className="w-4 h-4" />
+                              <span className="lg:hidden ml-2">Editar</span>
                             </Button>
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
                               onClick={() => handleDelete(user)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              className="flex-1 lg:flex-none text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
                             >
                               <Trash2 className="w-4 h-4" />
+                              <span className="lg:hidden ml-2">Excluir</span>
                             </Button>
                           </div>
                         </div>

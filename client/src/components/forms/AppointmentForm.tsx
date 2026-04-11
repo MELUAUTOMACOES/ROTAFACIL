@@ -601,7 +601,7 @@ export default function AppointmentForm({
   }, [appointment]);
 
   return (
-    <div className="flex flex-col h-full h-[90vh]">
+    <div className="flex flex-col flex-1 w-full h-full min-h-0">
       <div className="p-6 pb-4 border-b shrink-0">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

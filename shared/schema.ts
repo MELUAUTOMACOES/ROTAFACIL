@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, uuid, jsonb, doublePrecision, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, uuid, jsonb, doublePrecision, varchar, uniqueIndex } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -36,20 +36,48 @@ export const memberships = pgTable("memberships", {
   displayName: text("display_name"), // Nome específico do usuário nesta empresa (opcional, usa users.name se null)
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Garante que um usuário não pode ter membership duplicada na mesma empresa
+  userCompanyUnique: uniqueIndex("memberships_user_company_unique").on(table.userId, table.companyId),
+}));
 
 // Invitations table - Convites para usuários entrarem em empresas
+// Ampliada para suportar pré-cadastro administrativo completo (preRegistered = true)
 export const invitations = pgTable("invitations", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").notNull().references(() => companies.id, { onDelete: 'cascade' }),
+
+  // === Dados do convite (sempre presentes) ===
   email: text("email").notNull(),
   role: text("role").notNull(), // ADMIN, ADMINISTRATIVO, OPERADOR
-  displayName: text("display_name"), // Nome que será usado na empresa (opcional)
   token: text("token").notNull().unique(),
-  status: text("status").notNull().default("pending"), // pending, accepted, expired
+  status: text("status").notNull().default("pending"), // pending | accepted | cancelled
+  // Expirado é estado derivado: status='pending' + expiresAt < now()
   expiresAt: timestamp("expires_at").notNull(),
   invitedBy: integer("invited_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+
+  // === Campos preenchidos pelo admin no pré-cadastro ===
+  // Quando preRegistered = true, estes campos carregam os dados pré-cadastrados
+  preRegistered: boolean("pre_registered").notNull().default(false),
+  displayName: text("display_name"),          // Nome completo da pessoa (obrigatório no pré-cadastro)
+  phone: text("phone"),                       // Telefone de contato
+  // FK real para access_schedules; ON DELETE SET NULL: se a tabela for excluída, o convite não é invalidado
+  accessScheduleId: integer("access_schedule_id").references(() => accessSchedules.id, { onDelete: 'set null' }),
+  // Endereço definido pelo admin — NÃO editável pelo convidado no aceite
+  cep: text("cep"),
+  logradouro: text("logradouro"),
+  numero: text("numero"),
+  complemento: text("complemento"),
+  bairro: text("bairro"),
+  cidade: text("cidade"),
+  estado: text("estado"),
+
+  // === Campos de controle interno do ciclo de vida ===
+  resentAt: timestamp("resent_at"),           // Último reenvio pelo admin
+  acceptedAt: timestamp("accepted_at"),       // Quando o convite foi aceito (auditoria)
+  cancelledAt: timestamp("cancelled_at"),     // Quando o admin cancelou o convite
+  cancelledBy: integer("cancelled_by").references(() => users.id), // Admin que cancelou
 });
 
 // Users table
@@ -1086,30 +1114,57 @@ export const signupCompanySchema = z.object({
   }),
 });
 
-// Schema para criar convite
+// Schema para criar convite / pré-cadastro (usado pelo admin)
 export const createInvitationSchema = z.object({
   email: z.string().email("Email inválido"),
   role: roleEnum,
-  displayName: z.string().min(3, "Nome deve ter no mínimo 3 caracteres").optional(),
+  // Campos do pré-cadastro (preRegistered = true quando displayName é fornecido)
+  displayName: z.string().min(3, "Nome deve ter no mínimo 3 caracteres"),
+  phone: z.string().optional(),
+  accessScheduleId: z.number().int().positive().optional().nullable(),
+  // Endereço definido pelo admin — não editável pelo convidado
+  cep: z.string().optional(),
+  logradouro: z.string().optional(),
+  numero: z.string().optional(),
+  complemento: z.string().optional(),
+  bairro: z.string().optional(),
+  cidade: z.string().optional(),
+  estado: z.string().optional(),
 });
 
-// Schema para aceitar convite (usuário novo)
+// Schema para aceitar convite — NOVO USUÁRIO
+// O convidado define: username, password, confirmPassword e aceite LGPD
+// Nome, endereço, telefone vêm do pré-cadastro do admin (não editáveis)
 export const acceptInvitationNewUserSchema = z.object({
   token: z.string().min(1, "Token é obrigatório"),
-  name: z.string().min(3, "Nome deve ter no mínimo 3 caracteres"),
+  username: z.string()
+    .min(3, "Nome de usuário deve ter no mínimo 3 caracteres")
+    .max(30, "Nome de usuário deve ter no máximo 30 caracteres")
+    .regex(/^[a-z0-9_.]+$/, "Nome de usuário deve conter apenas letras minúsculas, números, ponto ou underscore")
+    .transform(val => val.toLowerCase()),
   password: z.string().min(8, "Senha deve ter no mínimo 8 caracteres")
     .regex(/[A-Z]/, "Senha deve conter pelo menos uma letra maiúscula")
     .regex(/[a-z]/, "Senha deve conter pelo menos uma letra minúscula")
     .regex(/[0-9]/, "Senha deve conter pelo menos um número"),
   confirmPassword: z.string(),
+  lgpdAccepted: z.literal(true, {
+    errorMap: () => ({ message: "É necessário aceitar os Termos de Uso e Política de Privacidade" }),
+  }),
+  lgpdVersion: z.string().min(1, "Versão dos termos é obrigatória"),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "As senhas não coincidem",
   path: ["confirmPassword"],
 });
 
-// Schema para aceitar convite (usuário existente)
+// Schema para aceitar convite (usuário existente — apenas token)
 export const acceptInvitationExistingUserSchema = z.object({
   token: z.string().min(1, "Token é obrigatório"),
+});
+
+// Schema para reenvio de convite pelo admin
+export const resendInvitationSchema = z.object({
+  // Sem campos de body obrigatório — apenas o id na URL
+  // Mantido como schema para extensibilidade futura
 });
 
 // Audit Logs - Registro de ações do sistema para segurança e compliance
@@ -1398,6 +1453,7 @@ export type SignupCompanyData = z.infer<typeof signupCompanySchema>;
 export type CreateInvitationData = z.infer<typeof createInvitationSchema>;
 export type AcceptInvitationNewUserData = z.infer<typeof acceptInvitationNewUserSchema>;
 export type AcceptInvitationExistingUserData = z.infer<typeof acceptInvitationExistingUserSchema>;
+export type ResendInvitationData = z.infer<typeof resendInvitationSchema>;
 export type RoleType = z.infer<typeof roleEnum>;
 
 export type User = typeof users.$inferSelect;

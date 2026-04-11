@@ -161,7 +161,8 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Nome */}
         <div className="space-y-2">
@@ -437,17 +438,24 @@ export default function UserForm({ user, onSuccess, onCancel }: UserFormProps) {
         </div>
       )}
 
+      </div>
+
       {/* Botões */}
-      <div className="flex justify-end gap-3 pt-4">
+      <div className="flex justify-end gap-3 p-6 pt-4 border-t bg-gray-50/50 shrink-0 flex-col-reverse sm:flex-row mt-auto">
         <Button
           type="button"
           variant="outline"
           onClick={onCancel}
           disabled={isSubmitting}
+          className="w-full sm:w-auto"
         >
           Cancelar
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button 
+          type="submit" 
+          disabled={isSubmitting}
+          className="w-full sm:w-auto mb-2 sm:mb-0"
+        >
           {isSubmitting
             ? "Salvando..."
             : isEditing

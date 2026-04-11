@@ -197,42 +197,66 @@ export function registerUserManagementRoutes(app: Express, authenticateToken: an
         });
       }
       
-      // Usuário NÃO existe — criar user + membership
-      const user = await storage.createUserByAdmin(userData, req.user.userId);
-      
-      // 🏢 MULTI-TENANT: Criar membership na empresa do admin
-      if (adminCompanyId) {
-        await storage.createMembership({
-          userId: user.id,
-          companyId: adminCompanyId,
-          role: userData.role === 'admin' ? 'ADMIN' : userData.role === 'operador' ? 'OPERADOR' : (userData.role === 'prestador' || userData.role === 'tecnico') ? 'OPERADOR' : 'ADMINISTRATIVO',
-        });
-        console.log(`🏢 [USER MANAGEMENT] Membership criada para user ${user.id} na empresa ${adminCompanyId}`);
-      }
-      
-      // Gerar token de verificação de email
-      const token = generateVerificationToken();
-      const expiry = new Date();
-      expiry.setHours(expiry.getHours() + 24); // Token válido por 24 horas
-      
-      await storage.setEmailVerificationToken(user.id, token, expiry);
-      
-      // Enviar email de verificação
-      const emailResult = await sendVerificationEmail(user.email, user.name, token, false);
-      
-      if (!emailResult.success) {
-        console.warn(`⚠️ [USER MANAGEMENT] Usuário criado mas email não foi enviado: ${emailResult.error}`);
-      }
-      
-      console.log(`✅ [USER MANAGEMENT] Usuário criado: ${user.email} (ID: ${user.id})`);
-      
-      // Não enviar password no response
-      const { password, emailVerificationToken, ...sanitizedUser } = user;
-      
-      res.json({ 
-        user: sanitizedUser,
-        message: 'Usuário criado com sucesso. Um email de verificação foi enviado.' 
+      // Usuário NÃO existe — criar convite em vez de usuário diretamente
+      // Isso garante que o usuário define sua própria senha e aceita LGPD antes de ser criado
+      console.log(`📧 [USER MANAGEMENT] E-mail novo. Criando convite (pré-cadastro) em vez de usuário direto.`);
+
+      const inviteRole = userData.role === 'admin' ? 'ADMIN'
+        : userData.role === 'operador' ? 'OPERADOR'
+        : (userData.role === 'prestador' || userData.role === 'tecnico') ? 'OPERADOR'
+        : 'ADMINISTRATIVO';
+
+      const inviteToken = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+
+      const invitation = await storage.createInvitation({
+        companyId: adminCompanyId,
+        email: userData.email.toLowerCase(),
+        role: inviteRole,
+        token: inviteToken,
+        status: 'pending',
+        expiresAt,
+        invitedBy: req.user.userId,
+        preRegistered: true,
+        displayName: userData.name,
+        phone: userData.phone || null,
+        accessScheduleId: userData.accessScheduleId || null,
+        cep: userData.cep || null,
+        logradouro: userData.logradouro || null,
+        numero: userData.numero || null,
+        complemento: userData.complemento || null,
+        bairro: userData.bairro || null,
+        cidade: userData.cidade || null,
+        estado: userData.estado || null,
       });
+
+      const company = await storage.getCompanyById(adminCompanyId);
+      const emailResult = await sendInvitationEmail(
+        userData.email,
+        company?.name || 'sua empresa',
+        inviteRole,
+        inviteToken
+      );
+
+      if (!emailResult.success) {
+        console.warn(`⚠️ [USER MANAGEMENT] Convite criado mas e-mail não foi enviado: ${emailResult.error}`);
+      }
+
+      console.log(`✅ [USER MANAGEMENT] Convite de pré-cadastro enviado para: ${userData.email}`);
+
+      res.json({
+        message: 'Convite enviado com sucesso! A pessoa receberá um e-mail para ativar sua conta.',
+        inviteSent: true,
+        invitation: {
+          id: invitation.id,
+          email: invitation.email,
+          displayName: invitation.displayName,
+          role: invitation.role,
+          expiresAt: invitation.expiresAt,
+        }
+      });
+
     } catch (error: any) {
       console.error("❌ Erro ao criar usuário:", error);
       

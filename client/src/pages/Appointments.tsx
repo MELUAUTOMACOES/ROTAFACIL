@@ -2409,27 +2409,27 @@ export default function Appointments() {
     <div className="space-y-6">
       {/* Action Buttons - Stack on mobile */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end md:gap-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+        <div className="flex gap-2 w-full md:w-auto order-2 md:order-1">
           <Button
             variant="ghost"
             onClick={downloadCSVTemplate}
-            className="text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-50 w-full sm:w-auto"
+            className="flex-1 md:flex-none text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-50"
           >
-            Baixar CSV Modelo
+            Baixar Modelo
           </Button>
 
           <Button
             variant="outline"
             onClick={handleImportCSV}
-            className="border-blue-600 text-blue-600 hover:bg-blue-50 w-full sm:w-auto"
+            className="flex-1 md:flex-none border-blue-600 text-blue-600 hover:bg-blue-50"
           >
-            <Upload className="h-4 w-4 mr-2" />
-            Importar CSV
+            <Upload className="h-4 w-4 mr-1 md:mr-2" />
+            Importar
           </Button>
         </div>
 
         <Button
-          className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white w-full md:w-auto"
+          className="bg-burnt-yellow hover:bg-burnt-yellow-dark text-white w-full md:w-auto order-1 md:order-2"
           onClick={() => {
             console.log("🆕 [DEBUG] Novo Agendamento - Botão clicado");
             console.log(
@@ -2460,9 +2460,9 @@ export default function Appointments() {
       }
 
       {/* New Compact Filter Bar */}
-      <div className="bg-white/95 backdrop-blur-md dark:bg-zinc-900/95 border border-border/60 dark:border-zinc-800 sticky top-4 z-10 p-4 shadow-sm rounded-xl space-y-3 mb-6 transition-all">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-3">
-          <div className="relative w-full lg:flex-1 lg:min-w-[200px] lg:max-w-xs">
+      <div className="bg-white/95 backdrop-blur-md dark:bg-zinc-900/95 border border-border/60 dark:border-zinc-800 sticky top-4 z-10 p-3 shadow-sm rounded-xl mb-4 transition-all">
+        <div className="grid grid-cols-2 lg:flex lg:flex-wrap items-center gap-2">
+          <div className="relative w-full col-span-2 sm:col-span-1 lg:flex-1 lg:min-w-[200px] lg:max-w-xs">
             <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 h-3.5 w-3.5" />
             <Input
               placeholder="Buscar cliente..."

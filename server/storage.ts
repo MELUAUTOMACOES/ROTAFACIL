@@ -49,6 +49,7 @@ export interface IStorage {
   // Users
   createUser(user: InsertUser): Promise<User>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
   getUserById(id: number): Promise<User | undefined>;
   getUserByVerificationToken(token: string): Promise<User | undefined>;
   validateUser(email: string, password: string): Promise<User | null>;
@@ -184,9 +185,11 @@ export interface IStorage {
   // Invitations
   createInvitation(invitation: InsertInvitation): Promise<Invitation>;
   getInvitationByToken(token: string): Promise<Invitation | undefined>;
+  getInvitationById(id: number): Promise<Invitation | undefined>;
   getInvitationsByCompanyId(companyId: number): Promise<Invitation[]>;
   updateInvitationStatus(id: number, status: string): Promise<Invitation>;
-  updateInvitationStatus(id: number, status: string): Promise<Invitation>;
+  cancelInvitation(id: number, cancelledBy: number): Promise<Invitation>;
+  resendInvitation(id: number, newToken: string, newExpiresAt: Date): Promise<Invitation>;
   deleteInvitation(id: number): Promise<boolean>;
 
   // Provider Flow (userId = identidade do prestador / ator — legítimo)
@@ -278,6 +281,11 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username.toLowerCase()));
     return user || undefined;
   }
 
@@ -1962,6 +1970,12 @@ export class DatabaseStorage implements IStorage {
     return invitation || undefined;
   }
 
+  async getInvitationById(id: number): Promise<Invitation | undefined> {
+    const [invitation] = await db.select().from(invitations)
+      .where(eq(invitations.id, id));
+    return invitation || undefined;
+  }
+
   async getInvitationsByCompanyId(companyId: number): Promise<Invitation[]> {
     return await db.select().from(invitations)
       .where(eq(invitations.companyId, companyId));
@@ -1975,6 +1989,50 @@ export class DatabaseStorage implements IStorage {
     return invitation;
   }
 
+  // Cancelamento lógico — preserva auditoria, desativa o token
+  async cancelInvitation(id: number, cancelledBy: number): Promise<Invitation> {
+    const [invitation] = await db.update(invitations)
+      .set({
+        status: 'cancelled',
+        cancelledAt: new Date(),
+        cancelledBy,
+      })
+      .where(and(
+        eq(invitations.id, id),
+        eq(invitations.status, 'pending'), // Só cancela se ainda pendente
+      ))
+      .returning();
+    if (!invitation) {
+      throw new Error('Convite não encontrado ou já foi aceito/cancelado.');
+    }
+    return invitation;
+  }
+
+  // Reenvio — gera novo token e renova expiresAt, preserva todos os dados do admin
+  async resendInvitation(id: number, newToken: string, newExpiresAt: Date): Promise<Invitation> {
+    const [invitation] = await db.update(invitations)
+      .set({
+        token: newToken,
+        expiresAt: newExpiresAt,
+        resentAt: new Date(),
+        status: 'pending', // Garante que volta para pending se estava expirado
+      })
+      .where(and(
+        eq(invitations.id, id),
+        // Permite reenviar se pending (mesmo expirado) ou se por algum motivo estiver expirado no campo
+        // NÃO permite reenviar se já foi aceito ou cancelado
+        or(
+          eq(invitations.status, 'pending'),
+        ),
+      ))
+      .returning();
+    if (!invitation) {
+      throw new Error('Convite não encontrado, já foi aceito ou cancelado.');
+    }
+    return invitation;
+  }
+
+  // Delete físico — mantido para uso interno do sistema (ex: cleanup)
   async deleteInvitation(id: number): Promise<boolean> {
     const result = await db.delete(invitations).where(eq(invitations.id, id));
     return (result.rowCount || 0) > 0;

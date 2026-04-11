@@ -9,7 +9,9 @@ import {
   createInvitationSchema,
   acceptInvitationNewUserSchema,
   acceptInvitationExistingUserSchema,
+  resendInvitationSchema,
 } from "@shared/schema";
+import { db } from "../db";
 import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "development_jwt_secret_key_32_characters_long_minimum_for_security_rotafacil_2025";
@@ -294,17 +296,22 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
         })
       );
 
-      // Buscar convites pendentes
+      // Buscar convites pendentes E expirados (excluíndo apenas accepted e cancelled)
       const invitations = await storage.getInvitationsByCompanyId(companyId);
+      const now = new Date();
       const pendingInvites = invitations
-        .filter(inv => inv.status === 'pending')
+        .filter(inv => inv.status === 'pending') // pending inclui expirados (derivado)
         .map(inv => ({
           id: inv.id,
           email: inv.email,
+          displayName: inv.displayName, // Nome pré-cadastrado pelo admin
           role: inv.role,
-          status: inv.status,
+          phone: inv.phone,
+          status: inv.expiresAt < now ? 'expired' : 'pending', // Estado derivado para o frontend
           expiresAt: inv.expiresAt,
           createdAt: inv.createdAt,
+          resentAt: inv.resentAt,
+          preRegistered: inv.preRegistered,
         }));
 
       res.json({
@@ -318,15 +325,17 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
   });
 
   // Convidar usuário para empresa (apenas admin)
+  // Este endpoint é o único caminho oficial de entrada de novos usuários
+  // Para e-mail já existente em outra empresa: convite é criado silenciosamente (sem revelar ao admin)
   app.post("/api/company/users/invite", authenticateToken, requireCompanyAdmin, async (req: any, res) => {
     try {
-      console.log("📧 [INVITE] Criando convite");
+      console.log("📧 [INVITE] Criando pré-cadastro e convite");
 
       const companyId = req.user.companyId;
       const invitedBy = req.user.userId;
       const inviteData = createInvitationSchema.parse(req.body);
 
-      // Verificar se o email já está na empresa
+      // --- Verificação 1: Usuário já é membro desta empresa? ---
       const existingUser = await storage.getUserByEmail(inviteData.email);
       if (existingUser) {
         const existingMembership = await storage.getMembership(existingUser.id, companyId);
@@ -335,40 +344,53 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
             message: "Este usuário já faz parte da empresa."
           });
         }
+        // Usuário existe em OUTRA empresa — tratamento silencioso (regra de privacidade)
+        // Fluxo interno difere (accept-existing), mas a resposta ao admin é idêntica
+        console.log(`🔒 [INVITE] E-mail existente em outra empresa. Convite criado silenciosamente.`);
       }
 
-      // Verificar se já existe um convite pendente para este email
+      // --- Verificação 2: Já existe convite PENDING para esse e-mail nesta empresa? ---
       const existingInvitations = await storage.getInvitationsByCompanyId(companyId);
       const pendingInvite = existingInvitations.find(
-        inv => inv.email === inviteData.email && inv.status === 'pending'
+        inv => inv.email.toLowerCase() === inviteData.email.toLowerCase() && inv.status === 'pending'
       );
-
       if (pendingInvite) {
         return res.status(400).json({
-          message: "Já existe um convite pendente para este email."
+          message: "Já existe um convite pendente para este e-mail nesta empresa."
         });
       }
 
-      // Criar convite
+      // --- Criar convite com dados do pré-cadastro ---
       const token = crypto.randomBytes(32).toString('hex');
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7); // Convite válido por 7 dias
+      expiresAt.setDate(expiresAt.getDate() + 7); // 7 dias
 
       const invitation = await storage.createInvitation({
         companyId,
-        email: inviteData.email,
+        email: inviteData.email.toLowerCase(),
         role: inviteData.role,
-        displayName: inviteData.displayName, // Nome específico para esta empresa
         token,
         status: 'pending',
         expiresAt,
         invitedBy,
+        // Dados do pré-cadastro do admin
+        preRegistered: true,
+        displayName: inviteData.displayName,
+        phone: inviteData.phone || null,
+        accessScheduleId: inviteData.accessScheduleId || null,
+        cep: inviteData.cep || null,
+        logradouro: inviteData.logradouro || null,
+        numero: inviteData.numero || null,
+        complemento: inviteData.complemento || null,
+        bairro: inviteData.bairro || null,
+        cidade: inviteData.cidade || null,
+        estado: inviteData.estado || null,
       });
 
-      // Buscar dados da empresa
+      // Buscar dados da empresa para o e-mail
       const company = await storage.getCompanyById(companyId);
 
-      // Enviar email de convite
+      // Enviar e-mail de convite
       const emailResult = await sendInvitationEmail(
         inviteData.email,
         company!.name,
@@ -380,12 +402,15 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
         console.warn(`⚠️ [INVITE] Convite criado mas email não foi enviado: ${emailResult.error}`);
       }
 
-      console.log(`✅ [INVITE] Convite criado e enviado para: ${inviteData.email}`);
+      console.log(`✅ [INVITE] Convite criado para: ${inviteData.email} (empresa ${companyId})`);
 
+      // Resposta idêntica independente de o e-mail já existir ou não (privacidade)
       res.json({
-        message: 'Convite enviado com sucesso!',
+        message: 'Convite enviado com sucesso! A pessoa receberá um e-mail para ativar a conta.',
         invitation: {
+          id: invitation.id,
           email: invitation.email,
+          displayName: invitation.displayName,
           role: invitation.role,
           expiresAt: invitation.expiresAt,
         }
@@ -404,9 +429,112 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
     }
   });
 
+  // ==================== REENVIO E CANCELAMENTO DE CONVITES ====================
+
+  // Reenviar convite pendente (admin)
+  app.patch("/api/invitations/:id/resend", authenticateToken, requireCompanyAdmin, async (req: any, res) => {
+    try {
+      const invitationId = parseInt(req.params.id);
+      const companyId = req.user.companyId;
+
+      if (isNaN(invitationId)) {
+        return res.status(400).json({ message: 'ID de convite inválido.' });
+      }
+
+      // Buscar e validar o convite (garante isolamento por empresa)
+      const invitation = await storage.getInvitationById(invitationId);
+
+      if (!invitation || invitation.companyId !== companyId) {
+        return res.status(404).json({ message: 'Convite não encontrado.' });
+      }
+
+      if (invitation.status === 'accepted') {
+        return res.status(400).json({ message: 'Este convite já foi aceito e não pode ser reenviado.' });
+      }
+
+      if (invitation.status === 'cancelled') {
+        return res.status(400).json({ message: 'Este convite foi cancelado e não pode ser reenviado.' });
+      }
+
+      // Gerar novo token e renovar expiração
+      const newToken = crypto.randomBytes(32).toString('hex');
+      const newExpiresAt = new Date();
+      newExpiresAt.setDate(newExpiresAt.getDate() + 7);
+
+      const updatedInvitation = await storage.resendInvitation(invitationId, newToken, newExpiresAt);
+
+      // Buscar dados da empresa para o e-mail
+      const company = await storage.getCompanyById(companyId);
+
+      // Enviar novo e-mail
+      const emailResult = await sendInvitationEmail(
+        invitation.email,
+        company!.name,
+        invitation.role,
+        newToken
+      );
+
+      if (!emailResult.success) {
+        console.warn(`⚠️ [RESEND] Convite atualizado mas novo e-mail não foi enviado: ${emailResult.error}`);
+      }
+
+      console.log(`✅ [RESEND] Convite reenviado: ID ${invitationId} para ${invitation.email}`);
+
+      res.json({
+        message: 'Convite reenviado com sucesso!',
+        invitation: {
+          id: updatedInvitation.id,
+          email: updatedInvitation.email,
+          expiresAt: updatedInvitation.expiresAt,
+          resentAt: updatedInvitation.resentAt,
+        }
+      });
+    } catch (error: any) {
+      console.error('❌ Erro ao reenviar convite:', error);
+      res.status(500).json({ message: error.message || 'Erro ao reenviar convite' });
+    }
+  });
+
+  // Cancelar convite pendente (admin)
+  app.patch("/api/invitations/:id/cancel", authenticateToken, requireCompanyAdmin, async (req: any, res) => {
+    try {
+      const invitationId = parseInt(req.params.id);
+      const companyId = req.user.companyId;
+      const cancelledBy = req.user.userId;
+
+      if (isNaN(invitationId)) {
+        return res.status(400).json({ message: 'ID de convite inválido.' });
+      }
+
+      // Buscar e validar o convite (garante isolamento por empresa)
+      const invitation = await storage.getInvitationById(invitationId);
+
+      if (!invitation || invitation.companyId !== companyId) {
+        return res.status(404).json({ message: 'Convite não encontrado.' });
+      }
+
+      if (invitation.status === 'accepted') {
+        return res.status(400).json({ message: 'Este convite já foi aceito e não pode ser cancelado.' });
+      }
+
+      if (invitation.status === 'cancelled') {
+        return res.status(400).json({ message: 'Este convite já foi cancelado.' });
+      }
+
+      await storage.cancelInvitation(invitationId, cancelledBy);
+
+      console.log(`✅ [CANCEL] Convite cancelado: ID ${invitationId} por user ${cancelledBy}`);
+
+      res.json({ message: 'Convite cancelado. O link de ativação foi desativado.' });
+    } catch (error: any) {
+      console.error('❌ Erro ao cancelar convite:', error);
+      res.status(500).json({ message: error.message || 'Erro ao cancelar convite' });
+    }
+  });
+
   // ==================== ACEITAÇÃO DE CONVITES ====================
 
-  // Validar convite (rota pública)
+  // Validar convite (rota pública) — retorna dados do pré-cadastro para exibição na tela de aceite
   app.get("/api/invitations/:token", async (req, res) => {
     try {
       const { token } = req.params;
@@ -414,27 +542,42 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
       const invitation = await storage.getInvitationByToken(token);
 
       if (!invitation) {
-        return res.status(404).json({ message: "Convite não encontrado" });
+        return res.status(404).json({ message: "Convite não encontrado ou link inválido." });
       }
 
-      if (invitation.status !== 'pending') {
-        return res.status(400).json({ message: "Este convite já foi utilizado" });
+      if (invitation.status === 'cancelled') {
+        return res.status(400).json({ message: "Este convite foi cancelado. Entre em contato com o administrador da empresa.", code: "INVITATION_CANCELLED" });
+      }
+
+      if (invitation.status === 'accepted') {
+        return res.status(400).json({ message: "Este convite já foi utilizado.", code: "INVITATION_ALREADY_ACCEPTED" });
       }
 
       if (invitation.expiresAt < new Date()) {
-        return res.status(400).json({ message: "Este convite expirou" });
+        return res.status(400).json({ message: "Este convite expirou. Entre em contato com o administrador para receber um novo convite.", code: "INVITATION_EXPIRED" });
       }
 
       // Buscar dados da empresa
       const company = await storage.getCompanyById(invitation.companyId);
 
-      // Verificar se o email já tem usuário
+      // Verificar se o email já tem usuário ativo (hasAccount guia o frontend para fluxo correto)
       const existingUser = await storage.getUserByEmail(invitation.email);
 
       res.json({
         invitation: {
           email: invitation.email,
           role: invitation.role,
+          // Dados do pré-cadastro (somente leitura para o convidado)
+          displayName: invitation.displayName,
+          phone: invitation.phone,
+          cep: invitation.cep,
+          logradouro: invitation.logradouro,
+          numero: invitation.numero,
+          complemento: invitation.complemento,
+          bairro: invitation.bairro,
+          cidade: invitation.cidade,
+          estado: invitation.estado,
+          preRegistered: invitation.preRegistered,
           company: {
             id: company!.id,
             name: company!.name,
@@ -448,7 +591,9 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
     }
   });
 
-  // Aceitar convite - usuário novo (rota pública)
+  // Aceitar convite — usuário NOVO (rota pública)
+  // O convidado define username, senha e aceita LGPD
+  // Dados do admin (nome, endereço, telefone) vêm do pré-cadastro na invitation
   app.post("/api/invitations/:token/accept-new", async (req, res) => {
     try {
       const { token } = req.params;
@@ -458,58 +603,100 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
 
       const invitation = await storage.getInvitationByToken(data.token);
 
-      if (!invitation || invitation.status !== 'pending' || invitation.expiresAt < new Date()) {
-        console.log(`❌ [ACCEPT INVITE NEW] Convite inválido ou expirado`);
-        return res.status(400).json({ message: "Convite inválido ou expirado" });
+      if (!invitation) {
+        return res.status(400).json({ message: "Convite inválido ou não encontrado.", code: "INVITATION_INVALID" });
       }
 
-      console.log(`📋 [ACCEPT INVITE NEW] Convite encontrado:`);
-      console.log(`   - ID: ${invitation.id}`);
-      console.log(`   - Email: ${invitation.email}`);
-      console.log(`   - Empresa: ${invitation.companyId}`);
-      console.log(`   - Role: ${invitation.role}`);
+      if (invitation.status === 'cancelled') {
+        return res.status(400).json({ message: "Este convite foi cancelado.", code: "INVITATION_CANCELLED" });
+      }
 
-      // Verificar se já existe usuário com este email
+      if (invitation.status === 'accepted') {
+        return res.status(400).json({ message: "Este convite já foi utilizado.", code: "INVITATION_ALREADY_ACCEPTED" });
+      }
+
+      if (invitation.expiresAt < new Date()) {
+        return res.status(400).json({ message: "Este convite expirou. Solicite um novo convite ao administrador.", code: "INVITATION_EXPIRED" });
+      }
+
+      // Verificar se já existe usuário com este email (race condition protection)
       const existingUser = await storage.getUserByEmail(invitation.email);
       if (existingUser) {
-        console.log(`⚠️ [ACCEPT INVITE NEW] Usuário já existe (ID: ${existingUser.id})`);
         return res.status(400).json({
-          message: "Este email já possui uma conta. Use a opção de login."
+          message: "Este e-mail já possui uma conta. Use a opção de login."
         });
       }
 
-      console.log(`📝 [ACCEPT INVITE NEW] Criando novo usuário...`);
-      
-      // Criar usuário
-      const user = await storage.createUser({
-        username: invitation.email.split('@')[0],
-        email: invitation.email,
-        password: data.password,
-        name: data.name,
-        emailVerified: true, // Email já foi validado pelo convite
-        plan: 'basic',
-        role: 'user',
+      // Verificar unicidade do username
+      const existingUsername = await storage.getUserByUsername(data.username);
+      if (existingUsername) {
+        return res.status(400).json({
+          message: "Este nome de usuário já está em uso. Escolha outro.",
+          code: "USERNAME_TAKEN",
+        });
+      }
+
+      console.log(`📝 [ACCEPT INVITE NEW] Iniciando transação atômica...`);
+
+      // 🔒 TRANSAÇÃO ATÔMICA: users + memberships + invitations
+      let user: any;
+      let membership: any;
+
+      await db.transaction(async (trx) => {
+        const { users: usersTable, memberships: membershipsTable, invitations: invitationsTable } = await import('@shared/schema');
+        const { eq: eqFn } = await import('drizzle-orm');
+        const bcrypt = (await import('bcryptjs')).default;
+
+        // 1. Criar usuário com dados do admin + credenciais do convidado
+        const [createdUser] = await trx.insert(usersTable).values({
+          username: data.username,
+          email: invitation.email,
+          password: await bcrypt.hash(data.password, 10),
+          name: invitation.displayName || invitation.email.split('@')[0],
+          phone: invitation.phone || null,
+          // Endereço do admin — NÃO editável pelo convidado
+          cep: invitation.cep || null,
+          logradouro: invitation.logradouro || null,
+          numero: invitation.numero || null,
+          complemento: invitation.complemento || null,
+          bairro: invitation.bairro || null,
+          cidade: invitation.cidade || null,
+          estado: invitation.estado || null,
+          // Status de acesso: link clicado = e-mail verificado, senha definida pelo próprio usuário
+          emailVerified: true,
+          requirePasswordChange: false,
+          isActive: true,
+          plan: 'basic',
+          role: 'user',
+          // Tabela de horário de acesso definida pelo admin
+          accessScheduleId: invitation.accessScheduleId || null,
+          // LGPD: aceito pelo convidado no momento do aceite
+          lgpdAccepted: true,
+          lgpdAcceptedAt: new Date(),
+          lgpdVersion: data.lgpdVersion,
+          createdBy: invitation.invitedBy,
+        }).returning();
+        user = createdUser;
+
+        // 2. Criar membership
+        const [createdMembership] = await trx.insert(membershipsTable).values({
+          userId: createdUser.id,
+          companyId: invitation.companyId,
+          role: invitation.role,
+          displayName: invitation.displayName,
+          isActive: true,
+        }).returning();
+        membership = createdMembership;
+
+        // 3. Marcar convite como aceito (com timestamp de auditoria)
+        await trx.update(invitationsTable)
+          .set({ status: 'accepted', acceptedAt: new Date() })
+          .where(eqFn(invitationsTable.id, invitation.id));
       });
 
-      console.log(`✅ [ACCEPT INVITE NEW] Usuário criado (ID: ${user.id})`);
-      console.log(`📝 [ACCEPT INVITE NEW] Criando membership...`);
+      console.log(`✅ [ACCEPT INVITE NEW] Usuário criado (ID: ${user.id}), membership (ID: ${membership.id})`);
 
-      // Criar membership
-      const membership = await storage.createMembership({
-        userId: user.id,
-        companyId: invitation.companyId,
-        role: invitation.role,
-        isActive: true,
-      });
-
-      console.log(`✅ [ACCEPT INVITE NEW] Membership criada (ID: ${membership.id})`);
-
-      // Marcar convite como aceito
-      await storage.updateInvitationStatus(invitation.id, 'accepted');
-
-      console.log(`✅ [ACCEPT INVITE NEW] Convite marcado como aceito`);
-
-      // Gerar token JWT
+      // Gerar JWT
       const getSystemVersion = () => process.env.SYSTEM_VERSION || "1.0.0";
       const jwtToken = jwt.sign(
         {
@@ -523,19 +710,14 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
         { expiresIn: '7d' }
       );
 
-      console.log(`✅ [ACCEPT INVITE NEW] Usuário criado e convite aceito: ${user.email}`);
-      console.log(`   - User ID: ${user.id}`);
-      console.log(`   - Empresa: ${invitation.companyId}`);
-      console.log(`   - Role: ${invitation.role}`);
-      console.log(`   - Membership ID: ${membership.id}`);
-
       res.json({
-        message: 'Conta criada com sucesso!',
+        message: 'Conta ativada com sucesso!',
         token: jwtToken,
         user: {
           id: user.id,
           name: user.name,
           email: user.email,
+          username: user.username,
         },
       });
     } catch (error: any) {
@@ -551,6 +733,7 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
       res.status(500).json({ message: error.message || "Erro ao aceitar convite" });
     }
   });
+
 
   // Aceitar convite - usuário existente (requer autenticação)
   app.post("/api/invitations/:token/accept-existing", authenticateToken, async (req: any, res) => {
@@ -649,52 +832,38 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
       console.log(`✅ [ACCEPT EXISTING] Nenhuma membership existente encontrada`);
       console.log(`📝 [ACCEPT EXISTING] INICIANDO CRIAÇÃO DA MEMBERSHIP...`);
       
-      // Criar membership
-      console.log(`🏗️ [ACCEPT EXISTING] Dados para criar membership:`);
-      console.log(`   - userId: ${req.user.userId}`);
-      console.log(`   - companyId: ${invitation.companyId}`);
-      console.log(`   - role: ${invitation.role}`);
-      console.log(`   - displayName: ${invitation.displayName || 'null (usa users.name)'}`);
-      console.log(`   - isActive: true`);
-      
-      const membership = await storage.createMembership({
-        userId: req.user.userId,
-        companyId: invitation.companyId,
-        role: invitation.role,
-        displayName: invitation.displayName, // Nome específico da empresa
-        isActive: true,
+      // Criar membership — protegida por uniqueIndex (sem duplicata possível)
+      let membership: any;
+      let updatedInvitation: any;
+
+      // 🔒 TRANSAÇÃO ATÔMICA: membership + invitation
+      await db.transaction(async (trx) => {
+        const [createdMembership] = await trx.insert(
+          (await import('@shared/schema')).memberships
+        ).values({
+          userId: req.user.userId,
+          companyId: invitation.companyId,
+          role: invitation.role,
+          displayName: invitation.displayName,
+          isActive: true,
+        }).returning();
+        membership = createdMembership;
+
+        const [updated] = await trx.update(
+          (await import('@shared/schema')).invitations
+        ).set({ status: 'accepted', acceptedAt: new Date() }).where(
+          (await import('drizzle-orm')).eq(
+            (await import('@shared/schema')).invitations.id,
+            invitation.id
+          )
+        ).returning();
+        updatedInvitation = updated;
       });
 
-      console.log(`✅ [ACCEPT EXISTING] MEMBERSHIP CRIADA COM SUCESSO!`);
-      console.log(`   - Membership ID: ${membership.id}`);
-      console.log(`   - User ID: ${membership.userId}`);
-      console.log(`   - Company ID: ${membership.companyId}`);
-      console.log(`   - Role: ${membership.role}`);
-      console.log(`   - Ativo: ${membership.isActive}`);
+      console.log(`✅ [ACCEPT EXISTING] Membership criada (ID: ${membership.id}), convite aceito`);
 
-      // Marcar convite como aceito
-      console.log(`🔄 [ACCEPT EXISTING] Atualizando status do convite...`);
-      console.log(`   - Invitation ID: ${invitation.id}`);
-      console.log(`   - Status atual: ${invitation.status}`);
-      console.log(`   - Novo status: accepted`);
-      
-      const updatedInvitation = await storage.updateInvitationStatus(invitation.id, 'accepted');
+      console.log(`✅ [ACCEPT EXISTING] Processo concluído: user ${req.user.email} na empresa ${invitation.companyId}`);
 
-      console.log(`✅ [ACCEPT EXISTING] CONVITE ATUALIZADO COM SUCESSO!`);
-      console.log(`   - Invitation ID: ${updatedInvitation.id}`);
-      console.log(`   - Novo status: ${updatedInvitation.status}`);
-
-      console.log(`\n========================================`);
-      console.log(`✅ [ACCEPT EXISTING] PROCESSO CONCLUÍDO COM SUCESSO!`);
-      console.log(`========================================`);
-      console.log(`   - Usuário: ${req.user.email}`);
-      console.log(`   - Empresa: ${invitation.companyId}`);
-      console.log(`   - Membership ID: ${membership.id}`);
-      console.log(`   - Invitation atualizada: ${updatedInvitation.id}`);
-      console.log(`========================================\n`);
-
-      console.log(`📤 [ACCEPT EXISTING] Enviando resposta para o frontend...`);
-      
       const response = {
         message: 'Convite aceito com sucesso!',
         companyId: invitation.companyId,
@@ -705,8 +874,6 @@ export function registerCompanyRoutes(app: Express, authenticateToken: any) {
           isActive: membership.isActive,
         }
       };
-      
-      console.log(`📤 [ACCEPT EXISTING] Response body:`, response);
       
       res.json(response);
     } catch (error: any) {
