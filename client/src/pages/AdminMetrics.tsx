@@ -6,14 +6,14 @@ import {
 } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth";
 import { getAuthHeaders } from "@/lib/auth";
 import { buildApiUrl } from "@/lib/api-config";
-import { ArrowLeft, Users, Building2, Activity, TrendingUp, BarChart3, Calendar } from "lucide-react";
+import { Users, Building2, Activity, TrendingUp, BarChart3, Calendar } from "lucide-react";
 import Layout from "@/components/Layout";
+import { DateRangeFilter, type DateRangeFilterState } from "@/components/superadmin/DateRangeFilter";
 
 type PeriodType = "7d" | "30d" | "90d" | "365d";
 
@@ -66,7 +66,11 @@ const actionLabels: Record<string, string> = {
 export default function AdminMetrics() {
     const { user } = useAuth();
     const [, navigate] = useLocation();
-    const [period, setPeriod] = useState<PeriodType>("30d");
+    const [dateFilter, setDateFilter] = useState<DateRangeFilterState>({
+        period: "30d",
+        startDate: undefined,
+        endDate: undefined,
+    });
 
     // Redireciona se não for superadmin
     // Redireciona se não for superadmin (verifica flag OU email)
@@ -89,9 +93,9 @@ export default function AdminMetrics() {
 
     // Buscar top features
     const { data: topFeatures, isLoading: loadingTopFeatures } = useQuery<TopFeature[]>({
-        queryKey: ["metrics-top-features", period],
+        queryKey: ["metrics-top-features", dateFilter.period, dateFilter.startDate, dateFilter.endDate],
         queryFn: async () => {
-            const res = await fetch(buildApiUrl(`/api/admin/metrics/top-features?period=${period}&limit=15`), { headers: getAuthHeaders() });
+            const res = await fetch(buildApiUrl(`/api/admin/metrics/top-features?period=${dateFilter.period}&limit=15`), { headers: getAuthHeaders() });
             if (!res.ok) throw new Error("Erro ao buscar top features");
             return res.json();
         },
@@ -99,9 +103,9 @@ export default function AdminMetrics() {
 
     // Buscar atividade por dia
     const { data: usersActivity, isLoading: loadingActivity } = useQuery<UserActivity[]>({
-        queryKey: ["metrics-users-activity", period],
+        queryKey: ["metrics-users-activity", dateFilter.period, dateFilter.startDate, dateFilter.endDate],
         queryFn: async () => {
-            const res = await fetch(buildApiUrl(`/api/admin/metrics/users-activity?period=${period}`), { headers: getAuthHeaders() });
+            const res = await fetch(buildApiUrl(`/api/admin/metrics/users-activity?period=${dateFilter.period}`), { headers: getAuthHeaders() });
             if (!res.ok) throw new Error("Erro ao buscar atividade");
             return res.json();
         },
@@ -120,12 +124,6 @@ export default function AdminMetrics() {
         dateFormatted: new Date(a.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
     }));
 
-    const periodOptions = [
-        { value: "7d", label: "Últimos 7 dias" },
-        { value: "30d", label: "Últimos 30 dias" },
-        { value: "90d", label: "Últimos 90 dias" },
-        { value: "365d", label: "Último ano" },
-    ];
 
     return (
         <Layout>
@@ -140,16 +138,7 @@ export default function AdminMetrics() {
                     </div>
 
                     {/* Filtro de período */}
-                    <Select value={period} onValueChange={(v) => setPeriod(v as PeriodType)}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="Período" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {periodOptions.map(opt => (
-                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
                 </div>
 
                 {/* Cards de Overview */}

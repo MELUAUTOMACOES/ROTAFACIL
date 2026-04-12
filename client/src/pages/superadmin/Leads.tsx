@@ -1,18 +1,34 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
-import { getQueryFn } from "@/lib/queryClient";
+import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import { type Lead } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ShieldAlert, Users, Loader2, Building, Phone, Mail, Car, Briefcase } from "lucide-react";
+import { DateRangeFilter, type DateRangeFilterState } from "@/components/superadmin/DateRangeFilter";
 
 export default function LeadsOverview() {
     const { user } = useAuth();
     const isSuperAdmin = user?.isSuperAdmin || user?.email === 'lucaspmastaler@gmail.com';
+    const [dateFilter, setDateFilter] = useState<DateRangeFilterState>({
+        period: "30d",
+        startDate: undefined,
+        endDate: undefined,
+    });
 
     const { data: leads = [], isLoading, error } = useQuery<Lead[]>({
-        queryKey: ["/api/leads"],
-        queryFn: getQueryFn({ on401: "throw" }),
+        queryKey: ["/api/leads", dateFilter.period, dateFilter.startDate, dateFilter.endDate],
+        queryFn: async () => {
+            let url = buildApiUrl("/api/leads");
+            if (dateFilter.startDate && dateFilter.endDate) {
+                url += `?startDate=${dateFilter.startDate}&endDate=${dateFilter.endDate}`;
+            }
+            const res = await fetch(url, { headers: getAuthHeaders() });
+            if (!res.ok) throw new Error("Erro ao buscar leads");
+            return res.json();
+        },
         enabled: isSuperAdmin,
     });
 
@@ -39,6 +55,11 @@ export default function LeadsOverview() {
                     <p className="text-gray-500 dark:text-zinc-400 mt-2">
                         Contatos recebidos pela landing page (Agendamento de Demonstração).
                     </p>
+                </div>
+
+                {/* Filtro de período */}
+                <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4">
+                    <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
                 </div>
 
                 {isLoading ? (

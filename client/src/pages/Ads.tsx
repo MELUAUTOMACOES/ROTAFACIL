@@ -31,6 +31,7 @@ import {
     HelpCircle,
 } from "lucide-react";
 import Layout from "@/components/Layout";
+import { DateRangeFilter, type DateRangeFilterState } from "@/components/superadmin/DateRangeFilter";
 
 // ===================== TYPES =====================
 
@@ -103,26 +104,26 @@ interface WhatsAppClicksData {
 
 // ===================== API CALLS =====================
 
-async function fetchOverview(): Promise<OverviewData> {
-    const res = await fetch(buildApiUrl("/api/metrics/ads/overview"), { headers: getAuthHeaders() });
+async function fetchOverview(period: string): Promise<OverviewData> {
+    const res = await fetch(buildApiUrl(`/api/metrics/ads/overview?period=${period}`), { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Erro ao buscar overview");
     return res.json();
 }
 
-async function fetchFunnel(): Promise<FunnelData> {
-    const res = await fetch(buildApiUrl("/api/metrics/ads/funnel"), { headers: getAuthHeaders() });
+async function fetchFunnel(period: string): Promise<FunnelData> {
+    const res = await fetch(buildApiUrl(`/api/metrics/ads/funnel?period=${period}`), { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Erro ao buscar funil");
     return res.json();
 }
 
-async function fetchCampaigns(): Promise<CampaignsData> {
-    const res = await fetch(buildApiUrl("/api/metrics/ads/campaigns"), { headers: getAuthHeaders() });
+async function fetchCampaigns(period: string): Promise<CampaignsData> {
+    const res = await fetch(buildApiUrl(`/api/metrics/ads/campaigns?period=${period}`), { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Erro ao buscar campanhas");
     return res.json();
 }
 
-async function fetchBehavior(): Promise<BehaviorData> {
-    const res = await fetch(buildApiUrl("/api/metrics/ads/behavior"), { headers: getAuthHeaders() });
+async function fetchBehavior(period: string): Promise<BehaviorData> {
+    const res = await fetch(buildApiUrl(`/api/metrics/ads/behavior?period=${period}`), { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Erro ao buscar comportamento");
     return res.json();
 }
@@ -146,8 +147,8 @@ async function updateWhatsAppSettings(data: { whatsappNumber: string; defaultMes
     return res.json();
 }
 
-async function fetchWhatsAppClicks(): Promise<WhatsAppClicksData> {
-    const res = await fetch(buildApiUrl("/api/metrics/ads/whatsapp"), { headers: getAuthHeaders() });
+async function fetchWhatsAppClicks(period: string): Promise<WhatsAppClicksData> {
+    const res = await fetch(buildApiUrl(`/api/metrics/ads/whatsapp?period=${period}`), { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Erro ao buscar cliques WhatsApp");
     return res.json();
 }
@@ -518,24 +519,44 @@ function WhatsAppClicksCard({ data }: { data: WhatsAppClicksData | undefined }) 
 
 export default function Ads() {
     const queryClient = useQueryClient();
+    const [dateFilter, setDateFilter] = useState<DateRangeFilterState>({
+        period: "30d",
+        startDate: undefined,
+        endDate: undefined,
+    });
 
     const { data: overview, isLoading: loadingOverview, error: errorOverview } =
-        useQuery({ queryKey: ["ads-overview"], queryFn: fetchOverview });
+        useQuery({ 
+            queryKey: ["ads-overview", dateFilter.period], 
+            queryFn: () => fetchOverview(dateFilter.period) 
+        });
 
     const { data: funnelData, isLoading: loadingFunnel } =
-        useQuery({ queryKey: ["ads-funnel"], queryFn: fetchFunnel });
+        useQuery({ 
+            queryKey: ["ads-funnel", dateFilter.period], 
+            queryFn: () => fetchFunnel(dateFilter.period) 
+        });
 
     const { data: campaignsData, isLoading: loadingCampaigns } =
-        useQuery({ queryKey: ["ads-campaigns"], queryFn: fetchCampaigns });
+        useQuery({ 
+            queryKey: ["ads-campaigns", dateFilter.period], 
+            queryFn: () => fetchCampaigns(dateFilter.period) 
+        });
 
     const { data: behaviorData, isLoading: loadingBehavior } =
-        useQuery({ queryKey: ["ads-behavior"], queryFn: fetchBehavior });
+        useQuery({ 
+            queryKey: ["ads-behavior", dateFilter.period], 
+            queryFn: () => fetchBehavior(dateFilter.period) 
+        });
 
     const { data: whatsappSettings } =
         useQuery({ queryKey: ["ads-whatsapp-settings"], queryFn: fetchWhatsAppSettings });
 
     const { data: whatsappClicks, isLoading: loadingWhatsappClicks } =
-        useQuery({ queryKey: ["ads-whatsapp-clicks"], queryFn: fetchWhatsAppClicks });
+        useQuery({ 
+            queryKey: ["ads-whatsapp-clicks", dateFilter.period], 
+            queryFn: () => fetchWhatsAppClicks(dateFilter.period) 
+        });
 
     const saveSettingsMutation = useMutation({
         mutationFn: updateWhatsAppSettings,
@@ -560,18 +581,21 @@ export default function Ads() {
         <Layout>
             <div className="space-y-8">
                 {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                            ADS - Marketing Dashboard
-                        </h1>
-                        <p className="text-gray-500 dark:text-zinc-400 mt-1">
-                            Métricas de tráfego pago da landing page (últimos 30 dias)
-                        </p>
+                <div>
+                    <div className="flex items-center justify-between mb-4">
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                                ADS - Marketing Dashboard
+                            </h1>
+                            <p className="text-gray-500 dark:text-zinc-400 mt-1">
+                                Métricas de tráfego pago da landing page
+                            </p>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-zinc-400">
-                        <TrendingUp className="h-4 w-4" />
-                        <span>Atualizado agora</span>
+                    
+                    {/* Filtro de período */}
+                    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 mb-6">
+                        <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
                     </div>
                 </div>
 

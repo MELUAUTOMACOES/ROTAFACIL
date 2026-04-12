@@ -1,8 +1,10 @@
 import { type Express } from "express";
 import { storage } from "../storage";
-import { insertLeadSchema } from "@shared/schema";
+import { insertLeadSchema, leads } from "@shared/schema";
 import { Resend } from "resend";
 import { sendLeadWhatsappNotification } from "../integrations/evolution";
+import { db } from "../db";
+import { gte, lte, and, desc } from "drizzle-orm";
 
 export function registerLeadsRoutes(app: Express, authenticateToken: any) {
     // Public endpoint - Captura de Leads
@@ -68,8 +70,34 @@ export function registerLeadsRoutes(app: Express, authenticateToken: any) {
                 return res.status(403).json({ message: "Acesso negado. Apenas superadmins podem ver leads." });
             }
 
-            const leads = await storage.getLeads();
-            res.json(leads);
+            const startDate = req.query.startDate as string | undefined;
+            const endDate = req.query.endDate as string | undefined;
+
+            // Se ambas as datas estiverem presentes, filtrar
+            if (startDate && endDate) {
+                const startDateTime = new Date(startDate);
+                startDateTime.setHours(0, 0, 0, 0);
+                
+                const endDateTime = new Date(endDate);
+                endDateTime.setHours(23, 59, 59, 999);
+
+                const filteredLeads = await db
+                    .select()
+                    .from(leads)
+                    .where(
+                        and(
+                            gte(leads.createdAt, startDateTime),
+                            lte(leads.createdAt, endDateTime)
+                        )
+                    )
+                    .orderBy(desc(leads.createdAt));
+
+                return res.json(filteredLeads);
+            }
+
+            // Sem filtro: retornar todos
+            const allLeads = await storage.getLeads();
+            res.json(allLeads);
         } catch (error: any) {
             console.error("❌ [LEADS] Erro ao buscar leads:", error);
             res.status(500).json({ message: "Erro ao buscar leads" });

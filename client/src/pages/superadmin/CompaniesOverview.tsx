@@ -2,7 +2,8 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
-import { getQueryFn } from "@/lib/queryClient";
+import { getAuthHeaders } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/api-config";
 import {
   Building2,
   Users,
@@ -21,6 +22,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { DateRangeFilter, type DateRangeFilterState } from "@/components/superadmin/DateRangeFilter";
 import {
   Select,
   SelectContent,
@@ -120,13 +122,26 @@ export default function CompaniesOverview() {
   const [sortBy, setSortBy] = useState<SortOption>("appointments_desc");
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [minAppointments, setMinAppointments] = useState<string>("");
+  const [dateFilter, setDateFilter] = useState<DateRangeFilterState>({
+    period: "365d",
+    startDate: undefined,
+    endDate: undefined,
+  });
 
   // Proteção no frontend (backend já protege)
   const isSuperAdmin = user?.isSuperAdmin || user?.email === 'lucaspmastaler@gmail.com';
 
   const { data: companies = [], isLoading, error } = useQuery<CompanyMetrics[]>({
-    queryKey: ["/api/superadmin/companies"],
-    queryFn: getQueryFn({ on401: "throw" }),
+    queryKey: ["/api/superadmin/companies", dateFilter.period, dateFilter.startDate, dateFilter.endDate],
+    queryFn: async () => {
+      let url = buildApiUrl("/api/superadmin/companies");
+      if (dateFilter.startDate && dateFilter.endDate) {
+        url += `?startDate=${dateFilter.startDate}&endDate=${dateFilter.endDate}`;
+      }
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Erro ao buscar empresas");
+      return res.json();
+    },
     enabled: isSuperAdmin,
     staleTime: 60_000,
   });
@@ -270,6 +285,11 @@ export default function CompaniesOverview() {
 
         {/* Barra de Filtros */}
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-4 mb-6">
+          {/* Filtro de período */}
+          <div className="mb-4 pb-4 border-b border-gray-200 dark:border-zinc-800">
+            <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
+          </div>
+          
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Busca */}
             <div className="relative">

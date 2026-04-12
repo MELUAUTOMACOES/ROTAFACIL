@@ -17,7 +17,7 @@ import {
   vehicles,
   routes,
 } from "@shared/schema";
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, gte, lte, and } from "drizzle-orm";
 
 export function registerSuperadminRoutes(
   app: Express,
@@ -38,7 +38,24 @@ export function registerSuperadminRoutes(
 
         console.log("[SUPERADMIN] Listando métricas de empresas");
 
-        // 1) Buscar todas as empresas
+        const startDate = req.query.startDate as string | undefined;
+        const endDate = req.query.endDate as string | undefined;
+
+        // Preparar datas para filtro de métricas (se presente)
+        let startDateTime: Date | undefined;
+        let endDateTime: Date | undefined;
+        
+        if (startDate && endDate) {
+          startDateTime = new Date(startDate);
+          startDateTime.setHours(0, 0, 0, 0);
+          
+          endDateTime = new Date(endDate);
+          endDateTime.setHours(23, 59, 59, 999);
+          
+          console.log(`[SUPERADMIN] Filtrando métricas criadas entre ${startDate} e ${endDate}`);
+        }
+
+        // 1) Buscar TODAS as empresas (sem filtro de data)
         const allCompanies = await db.select().from(companies);
 
         // 2) Queries agregadas por company_id
@@ -63,6 +80,14 @@ export function registerSuperadminRoutes(
             })
             .from(clients)
             .leftJoin(memberships, eq(clients.userId, memberships.userId))
+            .where(
+              startDateTime && endDateTime
+                ? and(
+                    gte(clients.createdAt, startDateTime),
+                    lte(clients.createdAt, endDateTime)
+                  )
+                : undefined
+            )
             .groupBy(sql`coalesce(${clients.companyId}, ${memberships.companyId})`),
 
           // Usuários por empresa (via memberships — já funciona corretamente)
@@ -72,7 +97,15 @@ export function registerSuperadminRoutes(
               total: sql<number>`count(distinct ${memberships.userId})::int`,
             })
             .from(memberships)
-            .where(eq(memberships.isActive, true))
+            .where(
+              startDateTime && endDateTime
+                ? and(
+                    eq(memberships.isActive, true),
+                    gte(memberships.createdAt, startDateTime),
+                    lte(memberships.createdAt, endDateTime)
+                  )
+                : eq(memberships.isActive, true)
+            )
             .groupBy(memberships.companyId),
 
           // Agendamentos por empresa (via userId → memberships)
@@ -83,6 +116,14 @@ export function registerSuperadminRoutes(
             })
             .from(appointments)
             .leftJoin(memberships, eq(appointments.userId, memberships.userId))
+            .where(
+              startDateTime && endDateTime
+                ? and(
+                    gte(appointments.createdAt, startDateTime),
+                    lte(appointments.createdAt, endDateTime)
+                  )
+                : undefined
+            )
             .groupBy(sql`coalesce(${appointments.companyId}, ${memberships.companyId})`),
 
           // Equipes por empresa (via userId → memberships)
@@ -93,6 +134,14 @@ export function registerSuperadminRoutes(
             })
             .from(teams)
             .leftJoin(memberships, eq(teams.userId, memberships.userId))
+            .where(
+              startDateTime && endDateTime
+                ? and(
+                    gte(teams.createdAt, startDateTime),
+                    lte(teams.createdAt, endDateTime)
+                  )
+                : undefined
+            )
             .groupBy(sql`coalesce(${teams.companyId}, ${memberships.companyId})`),
 
           // Técnicos por empresa (via userId → memberships)
@@ -103,6 +152,14 @@ export function registerSuperadminRoutes(
             })
             .from(technicians)
             .leftJoin(memberships, eq(technicians.userId, memberships.userId))
+            .where(
+              startDateTime && endDateTime
+                ? and(
+                    gte(technicians.createdAt, startDateTime),
+                    lte(technicians.createdAt, endDateTime)
+                  )
+                : undefined
+            )
             .groupBy(sql`coalesce(${technicians.companyId}, ${memberships.companyId})`),
 
           // Veículos por empresa (via userId → memberships)
@@ -113,6 +170,14 @@ export function registerSuperadminRoutes(
             })
             .from(vehicles)
             .leftJoin(memberships, eq(vehicles.userId, memberships.userId))
+            .where(
+              startDateTime && endDateTime
+                ? and(
+                    gte(vehicles.createdAt, startDateTime),
+                    lte(vehicles.createdAt, endDateTime)
+                  )
+                : undefined
+            )
             .groupBy(sql`coalesce(${vehicles.companyId}, ${memberships.companyId})`),
 
           // Rotas por empresa (routes não tem companyId, apenas userId → memberships)
@@ -123,6 +188,14 @@ export function registerSuperadminRoutes(
             })
             .from(routes)
             .innerJoin(memberships, eq(routes.userId, memberships.userId))
+            .where(
+              startDateTime && endDateTime
+                ? and(
+                    gte(routes.createdAt, startDateTime),
+                    lte(routes.createdAt, endDateTime)
+                  )
+                : undefined
+            )
             .groupBy(memberships.companyId),
 
           // Km total por empresa (distance_total em metros → converter para km)
@@ -133,6 +206,14 @@ export function registerSuperadminRoutes(
             })
             .from(routes)
             .innerJoin(memberships, eq(routes.userId, memberships.userId))
+            .where(
+              startDateTime && endDateTime
+                ? and(
+                    gte(routes.createdAt, startDateTime),
+                    lte(routes.createdAt, endDateTime)
+                  )
+                : undefined
+            )
             .groupBy(memberships.companyId),
         ]);
 
